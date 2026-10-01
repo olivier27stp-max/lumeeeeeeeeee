@@ -611,16 +611,20 @@ const listInvoices: AgentTool = {
       type: 'object',
       properties: {
         status: { type: 'string', description: "One of: all, draft, sent_not_due, past_due, paid. Default all." },
+        query: { type: 'string', description: 'Search text: an invoice number or a client name. Finds an invoice that is not among the most recent ones.' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
     },
   },
   handler: async (args, ctx) => {
     const limit = clamp(args.limit, 15, 30);
+    // « La facture de Gagnon », « la facture 12 d'il y a six mois » : sans recherche, une facture
+    // hors des 30 plus récentes était introuvable (la RPC savait chercher, l'outil passait null).
+    const recherche = String(args.query || '').trim().slice(0, 80);
     const { data, error } = await ctx.client.rpc('rpc_list_invoices', {
       p_status: String(args.status || 'all'),
       p_range: 'all',
-      p_q: null,
+      p_q: recherche || null,
       p_sort: 'recent',
       p_limit: limit,
       p_offset: 0,
@@ -643,6 +647,124 @@ const listInvoices: AgentTool = {
         balance_cents: r.balance_cents,
         due_date: r.due_date,
       })),
+    };
+  },
+};
+
+const UUID_FICHE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Une FACTURE au complet (2026-10-01). Avant, Lumi ne voyait une facture que comme une ligne
+ * de list_invoices : numéro, client, statut, total, solde. « Qu'est-ce qu'il y a sur la
+ * facture 12 ? », « elle a payé comment ? », « est-ce qu'elle l'a ouverte ? » n'avaient pas
+ * de réponse. Le numéro affiché est accepté (la garde le résout dans l'org).
+ */
+const getInvoice: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'get_invoice',
+    description: 'One invoice in full, by its id OR displayed number: line items, subtotal, discount, taxes, total, payments received (date, method, refunds), balance, due date, when it was sent, and whether the client opened it. Use it for any question about what is ON an invoice or how it was paid; list_invoices only gives one summary line per invoice.',
+    parameters: {
+      type: 'object',
+      properties: { invoice_id: { type: 'string', description: 'The invoice id, or the invoice number shown in Lume.' } },
+      required: ['invoice_id'],
+    },
+  },
+  handler: async (args, ctx) => {
+    const id = String(args.invoice_id ?? '').trim();
+    if (!UUID_FICHE.test(id)) return { introuvable: true, message: "Aucune facture avec ce numéro dans cette entreprise. Vérifie le numéro avec l'utilisateur, ou cherche-la avec list_invoices (query)." };
+    const { data: f, error } = await ctx.client.from('invoices')
+      .select('id, invoice_number, status, subject, issued_at, due_date, sent_at, paid_at, subtotal_cents, discount_cents, tax_cents, total_cents, paid_cents, balance_cents, currency, notes, internal_notes, client_id, client_name_snapshot, client_email_snapshot, job_id, is_viewed, viewed_at, last_viewed_at, view_count, is_recurring')
+      .eq('org_id', ctx.orgId).eq('id', id).is('deleted_at', null).maybeSingle();
+    if (error) return toolError('db', error);
+    if (!f) return { introuvable: true, message: "Aucune facture avec cet identifiant dans cette entreprise (elle a peut-être été supprimée)." };
+    const [{ data: lignes }, { data: paiements }, { data: job }] = await Promise.all([
+      ctx.client.from('invoice_items').select('title, description, qty, unit_price_cents, line_total_cents, sort_order')
+        .eq('org_id', ctx.orgId).eq('invoice_id', id).is('deleted_at', null).order('sort_order', { ascending: true }).limit(100),
+      ctx.client.from('payments').select('id, amount_cents, refunded_cents, tip_cents, paid_at, payment_date, method, provider, status, card_brand, card_last4')
+        .eq('org_id', ctx.orgId).eq('invoice_id', id).is('deleted_at', null).order('paid_at', { ascending: true }).limit(50),
+      (f as any).job_id
+        ? ctx.client.from('jobs').select('job_number, title').eq('org_id', ctx.orgId).eq('id', (f as any).job_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const x: any = f;
+    return {
+      id: x.id, // interne : pour send_invoice, record_invoice_payment, void_invoice…
+      invoice_number: x.invoice_number,
+      statut: traduireStatut(x.status, STATUT_FACTURE),
+      client_id: x.client_id,
+      client_name: x.client_name_snapshot,
+      client_email: x.client_email_snapshot,
+      subject: x.subject,
+      issued_at: x.issued_at, due_date: x.due_date, sent_at: x.sent_at, paid_at: x.paid_at,
+      subtotal_cents: x.subtotal_cents, discount_cents: x.discount_cents, tax_cents: x.tax_cents,
+      total_cents: x.total_cents, paid_cents: x.paid_cents, balance_cents: x.balance_cents, currency: x.currency,
+      notes_client: x.notes, notes_internes: x.internal_notes,
+      job: job ? { job_number: (job as any).job_number, title: (job as any).title } : null,
+      recurrente: x.is_recurring === true,
+      // « L'a-t-elle ouverte ? » : la page publique de la facture compte ses ouvertures.
+      ouverte_par_le_client: x.is_viewed === true, premiere_ouverture: x.viewed_at, derniere_ouverture: x.last_viewed_at, nombre_ouvertures: x.view_count ?? 0,
+      line_items: ((lignes ?? []) as any[]).map((l) => ({ name: l.title || l.description, description: l.title ? l.description : null, qty: l.qty, unit_price_cents: l.unit_price_cents, total_cents: l.line_total_cents })),
+      payments: ((paiements ?? []) as any[]).map((p) => ({
+        payment_id: p.id, amount_cents: p.amount_cents, refunded_cents: p.refunded_cents ?? 0, tip_cents: p.tip_cents ?? 0,
+        date: p.paid_at || p.payment_date, method: p.method, provider: p.provider, status: p.status,
+        carte: p.card_last4 ? `${p.card_brand || 'carte'} •••• ${p.card_last4}` : null,
+      })),
+    };
+  },
+};
+
+/**
+ * Une SOUMISSION au complet (2026-10-01) : lignes, rabais, dépôt, dates d'envoi, et si le
+ * client l'a ouverte. list_quotes n'en donne que le numéro, le titre, le statut et le total.
+ */
+const getQuote: AgentTool = {
+  kind: 'read',
+  declaration: {
+    name: 'get_quote',
+    description: 'One quote in full, by its id OR displayed number: line items (optional ones flagged), subtotal, discount, taxes, total, required deposit and its status, validity date, when it was sent (email / SMS), approved or declined, and whether the client opened it (how many times, last time). Use it for any question about what is IN a quote or whether the client saw it; list_quotes only gives one summary line per quote.',
+    parameters: {
+      type: 'object',
+      properties: { quote_id: { type: 'string', description: 'The quote id, or the quote number shown in Lume.' } },
+      required: ['quote_id'],
+    },
+  },
+  handler: async (args, ctx) => {
+    const id = String(args.quote_id ?? '').trim();
+    if (!UUID_FICHE.test(id)) return { introuvable: true, message: "Aucune soumission avec ce numéro dans cette entreprise. Vérifie le numéro avec l'utilisateur, ou cherche-la avec list_quotes (query)." };
+    const { data: q, error } = await ctx.client.from('quotes')
+      .select('id, quote_number, title, status, valid_until, subtotal_cents, discount_type, discount_value, discount_cents, tax_cents, total_cents, currency, notes, internal_notes, deposit_required, deposit_type, deposit_value, deposit_cents, deposit_status, sent_via_email_at, sent_via_sms_at, approved_at, declined_at, converted_at, is_viewed, viewed_at, last_viewed_at, view_count, client_id, lead_id, job_id, created_at')
+      .eq('org_id', ctx.orgId).eq('id', id).is('deleted_at', null).maybeSingle();
+    if (error) return toolError('db', error);
+    if (!q) return { introuvable: true, message: "Aucune soumission avec cet identifiant dans cette entreprise (elle a peut-être été supprimée)." };
+    const x: any = q;
+    const idClient = x.client_id || x.lead_id;
+    const [{ data: lignes }, { data: client }] = await Promise.all([
+      ctx.client.from('quote_line_items').select('name, description, quantity, unit_price_cents, total_cents, is_optional, sort_order')
+        .eq('org_id', ctx.orgId).eq('quote_id', id).order('sort_order', { ascending: true }).limit(100),
+      idClient
+        ? ctx.client.from('clients').select('first_name, last_name, company, display_as_company, email, phone').eq('org_id', ctx.orgId).eq('id', idClient).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const c: any = client;
+    const nom = c ? ((c.display_as_company && c.company) ? c.company : ([c.first_name, c.last_name].filter(Boolean).join(' ').trim() || c.company || null)) : null;
+    return {
+      id: x.id, // interne : pour send_quote, update_quote, convert_quote_to_job…
+      quote_number: x.quote_number,
+      title: x.title,
+      statut: traduireStatut(x.status, STATUT_DEVIS),
+      client_id: idClient, client_name: nom, client_email: c?.email ?? null, client_phone: c?.phone ?? null,
+      created_at: x.created_at, valid_until: x.valid_until,
+      subtotal_cents: x.subtotal_cents,
+      discount: x.discount_cents ? { type: x.discount_type, value_amount: x.discount_value, discount_cents: x.discount_cents } : null,
+      tax_cents: x.tax_cents, total_cents: x.total_cents, currency: x.currency,
+      deposit: x.deposit_required ? { type: x.deposit_type, value_amount: x.deposit_value, deposit_cents: x.deposit_cents, statut: x.deposit_status } : null,
+      notes_client: x.notes, notes_internes: x.internal_notes,
+      envoyee_par_courriel: x.sent_via_email_at, envoyee_par_texto: x.sent_via_sms_at,
+      approuvee_le: x.approved_at, refusee_le: x.declined_at, convertie_le: x.converted_at,
+      ouverte_par_le_client: x.is_viewed === true, premiere_ouverture: x.viewed_at, derniere_ouverture: x.last_viewed_at, nombre_ouvertures: x.view_count ?? 0,
+      line_items: ((lignes ?? []) as any[]).map((l) => ({ name: l.name, description: l.description, quantity: l.quantity, unit_price_cents: l.unit_price_cents, total_cents: l.total_cents, optionnelle: l.is_optional === true })),
     };
   },
 };
@@ -1044,7 +1166,9 @@ export const AGENT_TOOLS: AgentTool[] = [
   findDatesInLocation,
   querySchedule,
   listQuotes,
+  getQuote,
   listInvoices,
+  getInvoice,
   getCompanyInfo,
   getOverduePayments,
   getRevenueSummary,

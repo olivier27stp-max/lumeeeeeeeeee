@@ -694,5 +694,39 @@
   "voisins": [
    "list_invoices"
   ]
+ },
+ {
+  "id": "prod-get_invoice",
+  "section": "facturation",
+  "outil": "get_invoice",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Qu’est-ce qu’il y a sur la facture n° 1, ligne par ligne ?",
+  "voisins": [
+   "list_invoices"
+  ]
+ },
+ {
+  "id": "prod-get_quote",
+  "section": "devis",
+  "outil": "get_quote",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "La soumission 1 de Sophie Tremblay : c’est quoi les lignes, pis est-ce qu’elle l’a ouverte ?",
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "prod-list_invoices-recherche",
+  "section": "facturation",
+  "outil": "list_invoices",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Trouve-moi toutes les factures de Sophie Tremblay.",
+  "voisins": [
+   "get_client_profile",
+   "search_clients"
+  ]
  }
 ]
