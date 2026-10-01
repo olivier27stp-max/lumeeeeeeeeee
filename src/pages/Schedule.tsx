@@ -20,6 +20,7 @@ import DailyDispatchView from '../components/dispatch-daily/DailyDispatchView';
 import WeeklyDispatchView from '../components/dispatch-weekly/WeeklyDispatchView';
 import MonthlyDispatchView from '../components/dispatch-monthly/MonthlyDispatchView';
 import AgendaRoutePanel, { type EquipeAffichee } from '../components/schedule/AgendaRoutePanel';
+import ChoixJourneeOptimisation from '../components/schedule/ChoixJourneeOptimisation';
 import { listerTrajets, type ReponseTrajets } from '../lib/agendaTrajetsApi';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarControllerProvider, CalendarUiView, useCalendarController } from '../contexts/CalendarController';
@@ -301,6 +302,8 @@ function ScheduleContent() {
   const [unassignedMode, setUnassignedMode] = useState(false);
   // Bouton « + Créer » : menu Job (heure précise) ou Tâche (heure optionnelle).
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  // « Optimiser la journée » : choix du jour et de l'équipe avant d'ouvrir Lumi.
+  const [optimPop, setOptimPop] = useState(false);
 
   // Échap ferme le menu ouvert.
   //
@@ -315,6 +318,7 @@ function ScheduleContent() {
       setCalPop(false);
       setTeamPop(false);
       setCreateMenuOpen(false);
+      setOptimPop(false);
     };
     window.addEventListener('keydown', surEchap);
     return () => window.removeEventListener('keydown', surEchap);
@@ -800,22 +804,36 @@ function ScheduleContent() {
           {unscheduledJobs.length > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-white">{unscheduledJobs.length}</span>}
         </button>
 
-        {(
+        <div className="relative">
           <button
-            onClick={() => {
-              // « Optimiser la journée » (audit Agenda 2026-09-30) : ouvre Lumi, qui
-              // PROPOSE (0 LLM) puis attend la carte de confirmation. Plus rien n'est
-              // appliqué directement d'ici : l'ancien bouton réécrivait toutes les
-              // visites de la job, sans proposition ni confirmation.
-              const equipe = selectedTeamIds.length === 1 ? `&equipe=${selectedTeamIds[0]}` : '';
-              navigate(`/lumi?action=optimiser-journee&date=${dateKey}${equipe}`);
-            }}
+            type="button"
+            onClick={() => setOptimPop((v) => !v)}
+            aria-expanded={optimPop}
             className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-[5px] text-[13px] font-semibold text-primary hover:bg-primary/10 transition-colors"
-            title={language === 'fr' ? 'Proposer une meilleure tournée pour la journée affichée' : 'Propose a better route for the displayed day'}
+            title={language === 'fr' ? 'Choisir une journée et proposer une meilleure tournée' : 'Pick a day and propose a better route'}
           >
             <MapPin size={13} />{language === 'fr' ? 'Optimiser la journée' : 'Optimize the day'}
           </button>
-        )}
+          {optimPop && (<>
+            <div role="presentation" tabIndex={-1} className="fixed inset-0 z-30" onClick={() => setOptimPop(false)} />
+            <div className="absolute right-0 top-full z-40 mt-1">
+              <ChoixJourneeOptimisation
+                fuseau={fuseau}
+                teams={teams}
+                jourAffiche={dateKey}
+                equipeInitiale={selectedTeamIds.length === 1 ? selectedTeamIds[0] : null}
+                fr={language === 'fr'}
+                onChoisir={(jour, equipe) => {
+                  // « Optimiser la journée » (audit Agenda 2026-09-30) : ouvre Lumi, qui
+                  // PROPOSE (0 LLM) puis attend la carte de confirmation. Rien n'est
+                  // appliqué d'ici.
+                  setOptimPop(false);
+                  navigate(`/lumi?action=optimiser-journee&date=${jour}${equipe ? `&equipe=${equipe}` : ''}`);
+                }}
+              />
+            </div>
+          </>)}
+        </div>
         <div className="relative">
           <button
             onClick={() => setCreateMenuOpen((v) => !v)}

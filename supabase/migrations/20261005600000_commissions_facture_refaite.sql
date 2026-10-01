@@ -1,7 +1,6 @@
 -- ============================================================================
--- PROPOSÉE — NE PAS APPLIQUER SANS L'OK DE RAFBA (audit commissions 2026-09-30)
--- Avant application en prod : dump complet de la prod (PITR désactivée ;
--- sauvegardes en échec depuis le 2026-09-26, voir COMMISSIONS_AUDIT.md §0.1).
+-- Audit commissions 2026-09-30 — approuvée par Rafba le 2026-09-30.
+-- Appliquée après la sauvegarde complète prod-20261001-0010.dump (268 tables, relue).
 --
 -- Problème (bug B-05) : l'index unique fs_commission_entries_uniq_job_rep
 -- (org_id, job_id, user_id) interdit une 2e commission pour le même rep sur le

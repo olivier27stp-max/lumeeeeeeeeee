@@ -130,7 +130,7 @@ const META: Record<string, Meta> = {
     description: ['Texto de remerciement une heure après la fin de la job.', 'Thank-you text one hour after the job is done.'] },
   google_review: { categorie: 'apres_job', ajoute_le: BASE,
     nom: ['Demande d’avis — après la job', 'Review request — after the job'],
-    description: ['Sondage d’étoiles à la fin de la job ; les bonnes notes sont invitées à laisser un avis Google.', 'Star survey when the job ends; happy clients are invited to leave a Google review.'] },
+    description: ['Demande d’avis à la fin de la job : chaque client choisit Google ou Facebook (sauf les clients « noreview »).', 'Review request when the job ends: every client picks Google or Facebook (except “noreview” clients).'] },
   review_reminder_7d: { categorie: 'apres_job', ajoute_le: BASE,
     nom: ['Rappel d’avis — 7 jours', 'Review reminder — 7 days'],
     description: ['Rappel doux une semaine après la job pour laisser un avis.', 'Gentle reminder a week after the job to leave a review.'] },

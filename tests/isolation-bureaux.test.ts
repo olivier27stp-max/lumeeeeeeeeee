@@ -117,6 +117,7 @@ describe('4. companyOrgIds (groupe) uniquement pour le catalogue et les droits',
     'server/lib/feature-guard.ts',                  // gating de forfait : même lecture, même raison que le paywall
     'server/lib/twilioProvisioning.ts',             // droit aux SMS : même forfait de groupe que le paywall
     'server/lib/lumi/budget.ts',                    // budget IA du plan
+    'server/lib/lumi/avis-credits.ts',              // avertissement crédits Lumi : pool du groupe → propriétaires du groupe (qui ont accès à tous les bureaux)
     'server/routes/lumi.ts',                        // crédits Lumi : pool partagé par le groupe — totaux par jour seulement ; le détail par utilisateur reste au bureau de la session
     'server/lib/field-sales/commission-engine.ts',  // catégories de commission du catalogue
     'server/lib/agent/tools-reglages.ts',           // catalogue (Lumi)

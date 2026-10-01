@@ -1,0 +1,275 @@
+<!doctype html>
+<!-- Maquette de l'écran Accueil pour l'aperçu de la landing (public/landing/apercu-accueil.webp).
+     Données fictives. Régénérer : capture Playwright en viewport 1800×1125, deviceScaleFactor 1.6
+     (→ 2880×1800), puis WebP qualité 90. -->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1800px; height: 1125px; overflow: hidden; background: #fafafa; }
+  body { font-family: Inter, -apple-system, system-ui, sans-serif; color: #111; -webkit-font-smoothing: antialiased; position: relative; }
+  svg { display: block; }
+  .ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Sidebar */
+  .side { position: absolute; left: 0; top: 0; bottom: 0; width: 290px; background: #f2f2f2; border-right: 1px solid #e6e6e6; padding: 18px 14px; }
+  .logo { display: flex; align-items: center; gap: 8px; padding: 0 6px; height: 34px; }
+  .logo b { font-size: 29px; font-weight: 800; letter-spacing: .06em; }
+  .logo .chev { margin-left: auto; color: #555; }
+  .nav.more { font-size: 16px; color: #555; margin-top: 8px; }
+  .nav.more .ic { width: 17px; height: 17px; }
+  .sec { font-size: 13px; font-weight: 600; letter-spacing: .1em; color: #8a8a8a; padding: 0 11px; margin: 20px 0 6px; }
+  .sec.first { margin-top: 18px; }
+  .nav { display: flex; align-items: center; gap: 14px; height: 43px; padding: 0 11px; margin-bottom: 3px; border-radius: 12px; font-size: 18px; color: #1a1a1a; }
+  .nav.plan { background: #fdf3c4; color: #b45309; }
+  .nav.active { background: #e2e2e2; font-weight: 600; box-shadow: inset 3px 0 0 #111; }
+  .nav .badge { margin-left: auto; min-width: 22px; height: 22px; border-radius: 11px; background: #e11d48; color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; padding: 0 5px; }
+  .nav .badge.soft { background: transparent; color: #e11d48; }
+  .side .bottom { position: absolute; left: 14px; right: 14px; bottom: 14px; border-top: 1px solid #e3e3e3; padding-top: 10px; }
+
+  /* Topbar */
+  .top { position: absolute; left: 290px; right: 0; top: 0; height: 55px; background: #fff; border-bottom: 1px solid #ececec; display: flex; align-items: center; padding: 0 24px 0 34px; gap: 10px; }
+  .org { display: flex; align-items: center; gap: 10px; font-size: 18px; color: #333; }
+  .search { margin-left: auto; width: 280px; height: 42px; border: 1px solid #e3e3e3; border-radius: 12px; display: flex; align-items: center; gap: 10px; padding: 0 14px; color: #9a9a9a; font-size: 16px; }
+  .tico { position: relative; width: 44px; display: grid; place-items: center; color: #444; }
+  .tico i { position: absolute; top: -6px; right: 4px; background: #e11d48; color: #fff; font-style: normal; font-size: 9.5px; font-weight: 700; border-radius: 9px; padding: 1px 4px; border: 1.5px solid #fff; }
+  .avatar { width: 38px; height: 38px; border-radius: 50%; background: #f1ece6; border: 1px solid #e3e3e3; margin-left: 6px; display: grid; place-items: center; font-weight: 700; font-size: 14px; color: #6b5a48; }
+
+  /* Main */
+  .main { position: absolute; left: 380px; right: 90px; top: 92px; }
+  .head { display: flex; align-items: flex-end; justify-content: space-between; }
+  h1 { font-size: 31px; font-weight: 700; letter-spacing: -.02em; }
+  .sub { font-size: 18px; color: #555; margin-top: 10px; }
+  .sub span { color: #bbb; margin: 0 6px; }
+  .acts { display: flex; gap: 12px; }
+  .btn { height: 46px; padding: 0 20px; border-radius: 12px; border: 1px solid #e0e0e0; background: #fff; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .btn.dark { background: #111; color: #fff; border-color: #111; }
+  .card { background: #fff; border: 1px solid #e6e6e6; border-radius: 18px; }
+
+  /* Weather */
+  .wx { margin-top: 24px; border-radius: 18px; border: 1px solid #dfe7f1; background: linear-gradient(135deg, #f0f8ff 0%, #dde9fb 100%); display: flex; padding: 18px 22px; gap: 22px; }
+  .wx-now { display: flex; align-items: center; gap: 18px; width: 330px; flex: none; border-right: 1px solid rgba(100,120,150,.2); padding-right: 22px; }
+  .wx-big { font-size: 60px; line-height: 1; }
+  .wx-city { display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 600; color: #4b5563; }
+  .wx-temp { font-size: 46px; font-weight: 700; line-height: 1.05; }
+  .wx-lab { font-size: 15px; font-weight: 500; color: #4b5563; }
+  .wx-stats { display: flex; gap: 12px; font-size: 13px; color: #6b7280; font-weight: 500; margin-top: 4px; }
+  .wx-ok { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: #4b5563; margin-top: 5px; }
+  .wx-ok i { width: 9px; height: 9px; border-radius: 50%; background: #10b981; }
+  .wx-hours { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+  .wx-h { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+  .wx-h small { font-size: 14px; color: #6b7280; font-weight: 500; }
+  .wx-h span { font-size: 28px; line-height: 1; }
+  .wx-h b { font-size: 18px; }
+  .wx-h em { font-style: normal; font-size: 12.5px; color: #3b82f6; font-weight: 500; height: 15px; }
+
+  /* KPI */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 18px; }
+  .kpi { padding: 22px 22px 20px; }
+  .kpi .l { display: flex; align-items: center; gap: 8px; font-size: 15.5px; color: #777; font-weight: 500; }
+  .kpi .l .ic { width: 17px; height: 17px; }
+  .kpi .v { font-size: 34px; font-weight: 700; margin-top: 12px; letter-spacing: -.01em; }
+  .kpi .s { font-size: 15.5px; color: #666; margin-top: 8px; }
+  .kpi .s b { color: #059669; font-weight: 600; }
+
+  /* Bottom row */
+  .row { display: grid; grid-template-columns: 432px 1fr; gap: 16px; margin-top: 16px; }
+  .day { padding: 22px 22px 10px; }
+  .ch { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; }
+  .ch .ic { width: 20px; height: 20px; }
+  .ch a { margin-left: auto; font-size: 15px; color: #888; font-weight: 500; display: flex; align-items: center; gap: 5px; }
+  .job { display: flex; gap: 14px; padding: 12px 0 12px 10px; border-left: 2px solid #e5e5e5; margin: 10px 0 0 6px; }
+  .job.now { border-left-color: #10b981; }
+  .job .t { font-size: 15.5px; font-weight: 600; width: 58px; flex: none; color: #222; }
+  .job .n { font-size: 16px; font-weight: 600; color: #111; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .job .a { font-size: 14px; color: #888; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #d1fae5; color: #047857; }
+  .pill.blue { background: #e0ecff; color: #1d4ed8; }
+  .job > div:nth-child(2) { flex: 1; min-width: 0; }
+  .job .m { margin-left: auto; flex: none; padding-left: 8px; font-size: 15px; font-weight: 600; color: #333; }
+
+  .rev { padding: 22px 26px; }
+  .rev-h { display: flex; align-items: center; justify-content: space-between; }
+  .rev-h h3 { font-size: 20px; font-weight: 600; }
+  .seg { display: flex; background: #ececec; border-radius: 12px; padding: 4px; font-size: 16px; color: #555; }
+  .seg span { padding: 7px 14px; border-radius: 9px; }
+  .seg .on { background: #fff; color: #111; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .totals { display: flex; gap: 52px; margin-top: 16px; }
+  .totals .k { display: flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 600; }
+  .totals .k i { width: 13px; height: 13px; border-radius: 50%; background: #111; }
+  .totals .k i.g { background: #a3a3a3; }
+  .totals .x { font-size: 36px; font-weight: 700; margin-top: 6px; letter-spacing: -.01em; }
+  .totals .d { font-size: 14px; color: #059669; font-weight: 600; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="side">
+  <div class="logo">
+    <img src="../../public/lume-logo-v2.png" style="height:34px;width:auto" alt="">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic chev lucide lucide-chevron-left" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+  </div>
+  <div class="nav active" style="margin-top:22px"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-house" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>Accueil</div>
+  <div class="sec">PRINCIPAL</div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-users" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></svg>Clients</div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-inbox" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>Demandes<span class="badge">2</span></div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-git-branch" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>Pipeline</div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-clipboard-list" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M12 11h4"></path><path d="M12 16h4"></path><path d="M8 11h.01"></path><path d="M8 16h.01"></path></svg>Devis</div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-wallet" aria-hidden="true"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"></path><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"></path></svg>Finances<span class="badge soft">3</span></div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-briefcase" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path><rect width="20" height="14" x="2" y="6" rx="2"></rect></svg>Jobs<span class="badge">9+</span></div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-calendar" aria-hidden="true"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path></svg>Calendrier</div>
+  <div class="sec">OUTILS</div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-sparkles" aria-hidden="true"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path><path d="M20 2v4"></path><path d="M22 4h-4"></path><circle cx="4" cy="20" r="2"></circle></svg>Lumi</div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-message-square" aria-hidden="true"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"></path></svg>Messages<span class="badge">6</span></div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-timer" aria-hidden="true"><line x1="10" x2="14" y1="2" y2="2"></line><line x1="12" x2="15" y1="14" y2="11"></line><circle cx="12" cy="14" r="8"></circle></svg>Feuilles de temps</div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-graduation-cap" aria-hidden="true"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"></path><path d="M22 10v6"></path><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"></path></svg>Formations</div>
+  <div class="sec">VENTE</div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-map-pinned" aria-hidden="true"><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"></path><circle cx="12" cy="8" r="2"></circle><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"></path></svg>Map</div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-trophy" aria-hidden="true"><path d="M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978"></path><path d="M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978"></path><path d="M18 9h1.5a1 1 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z"></path><path d="M6 9H4.5a1 1 0 0 1 0-5H6"></path></svg>Classement</div>
+  <div class="nav"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-wallet" aria-hidden="true"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"></path><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"></path></svg>Commissions</div>
+  <div class="nav more"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ic lucide lucide-chevron-left" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>Plus</div>
+</aside>
+
+<!-- Topbar -->
+<header class="top">
+  <div class="org">
+    <svg class="ic" viewBox="0 0 24 24" style="color:#777"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 7h2M14 7h2M8 11h2M14 11h2M10 21v-4h4v4"/></svg>
+    Vision Lavage
+    <svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px;color:#777"><path d="M6 9l6 6 6-6"/></svg>
+  </div>
+  <div class="search"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Rechercher partout… clients</div>
+  <div class="tico"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></svg><i>6</i></div>
+  <div class="tico"><svg class="ic" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0"/></svg><i>9+</i></div>
+  <div class="avatar">M</div>
+</header>
+
+<main class="main">
+  <div class="head">
+    <div>
+      <h1>Bon retour, Marc</h1>
+      <div class="sub">mercredi 9 septembre<span>·</span>6 rendez-vous<span>·</span>0 en retard</div>
+    </div>
+    <div class="acts">
+      <div class="btn dark">＋ Devis</div>
+      <div class="btn">＋ Job</div>
+      <div class="btn">＋ Client</div>
+      <div class="btn">＋ Facture</div>
+    </div>
+  </div>
+
+  <!-- Météo -->
+  <section class="wx">
+    <div class="wx-now">
+      <div class="wx-big">☀️</div>
+      <div>
+        <div class="wx-city"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 21s-7-6-7-11a7 7 0 0114 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Saint-Bruno-de-Montarville</div>
+        <div class="wx-temp">19°</div>
+        <div class="wx-lab">Ensoleillé</div>
+        <div class="wx-stats"><span><b style="color:#ef4444">↑</b>22° <b style="color:#3b82f6">↓</b>9°</span><span>💨 11 km/h</span><span>💧 0 mm</span></div>
+        <div class="wx-ok"><i></i>Bon pour travailler</div>
+      </div>
+    </div>
+    <div class="wx-hours">
+      <div class="wx-h"><small>9 h</small><span>🌤️</span><b>14°</b><em></em></div>
+      <div class="wx-h"><small>10 h</small><span>☀️</span><b>16°</b><em></em></div>
+      <div class="wx-h"><small>11 h</small><span>☀️</span><b>18°</b><em></em></div>
+      <div class="wx-h"><small>12 h</small><span>☀️</span><b>20°</b><em></em></div>
+      <div class="wx-h"><small>13 h</small><span>☀️</span><b>21°</b><em></em></div>
+      <div class="wx-h"><small>14 h</small><span>⛅</span><b>22°</b><em></em></div>
+      <div class="wx-h"><small>15 h</small><span>⛅</span><b>22°</b><em>10%</em></div>
+      <div class="wx-h"><small>16 h</small><span>🌤️</span><b>21°</b><em></em></div>
+      <div class="wx-h"><small>17 h</small><span>🌤️</span><b>19°</b><em></em></div>
+      <div class="wx-h"><small>18 h</small><span>🌇</span><b>17°</b><em></em></div>
+    </div>
+  </section>
+
+  <!-- KPI -->
+  <div class="kpis">
+    <div class="card kpi">
+      <div class="l"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Revenus du jour</div>
+      <div class="v">$1,840</div>
+      <div class="s">encaissé aujourd'hui</div>
+    </div>
+    <div class="card kpi">
+      <div class="l"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M12 7v13"/></svg>Jobs aujourd'hui</div>
+      <div class="v">6</div>
+      <div class="s">2 terminées · 1 en cours · 3 à venir</div>
+    </div>
+    <div class="card kpi">
+      <div class="l"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6M19 8v6M16 11h6"/></svg>Nouveaux leads</div>
+      <div class="v">4</div>
+      <div class="s"><b>38 %</b> conversion</div>
+    </div>
+    <div class="card kpi">
+      <div class="l"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>À recevoir</div>
+      <div class="v">$3,215</div>
+      <div class="s">7 clients</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Ma journée -->
+    <section class="card day">
+      <div class="ch"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Ma journée<a>Calendrier →</a></div>
+      <div class="job">
+        <div class="t">08 h 00</div>
+        <div><div class="n">Lavage de vitres — Tremblay</div><div class="a">Marie Tremblay · 1450 rue Montarville, Saint-Bruno</div></div>
+        <div class="m">$385</div>
+      </div>
+      <div class="job now">
+        <div class="t">09 h 30</div>
+        <div><div class="n">Lavage à pression — Gagnon</div><div class="a"><span class="pill">En cours</span> Luc Gagnon · 2275 boul. Clairevue, Saint-Bruno</div></div>
+        <div class="m">$620</div>
+      </div>
+      <div class="job">
+        <div class="t">11 h 15</div>
+        <div><div class="n">Gouttières — Bouchard</div><div class="a">Julie Bouchard · 88 rue de la Rabastalière</div></div>
+        <div class="m">$240</div>
+      </div>
+      <div class="job">
+        <div class="t">13 h 00</div>
+        <div><div class="n">Vitres + moustiquaires — Côté</div><div class="a">André Côté · 1730 rue Roberval, Saint-Bruno</div></div>
+        <div class="m">$455</div>
+      </div>
+      <div class="job">
+        <div class="t">14 h 30</div>
+        <div><div class="n">Évaluation sur place — Lavoie</div><div class="a"><span class="pill blue">Soumission</span> Sophie Lavoie · 455 rue Seigneuriale</div></div>
+      </div>
+      <div class="job">
+        <div class="t">16 h 00</div>
+        <div><div class="n">Lavage de vitres — Pelletier</div><div class="a">Marc Pelletier · 12 rue des Peupliers</div></div>
+        <div class="m">$340</div>
+      </div>
+    </section>
+
+    <!-- Revenus -->
+    <section class="card rev">
+      <div class="rev-h"><h3>Revenus</h3><div class="seg"><span>Aujourd'hui</span><span class="on">Semaine</span><span>Mois</span></div></div>
+      <div class="totals">
+        <div><div class="k"><i></i>Collecté</div><div class="x">$42,380</div><div class="d">↑ 18 % vs semaine passée</div></div>
+        <div><div class="k"><i class="g"></i>Planifié</div><div class="x">$51,960</div></div>
+      </div>
+      <svg viewBox="0 0 860 260" width="100%" height="260" style="margin-top:14px" font-family="Inter, system-ui" font-size="14" fill="#888">
+        <!-- grid -->
+        <g stroke="#eee" stroke-width="1">
+          <line x1="44" y1="20" x2="850" y2="20"/><line x1="44" y1="70" x2="850" y2="70"/><line x1="44" y1="120" x2="850" y2="120"/><line x1="44" y1="170" x2="850" y2="170"/>
+        </g>
+        <line x1="44" y1="220" x2="850" y2="220" stroke="#ddd"/>
+        <text x="34" y="25" text-anchor="end">12k</text><text x="34" y="75" text-anchor="end">9k</text><text x="34" y="125" text-anchor="end">6k</text><text x="34" y="175" text-anchor="end">3k</text><text x="34" y="225" text-anchor="end">0</text>
+        <!-- planned dashed: Ven..Jeu -->
+        <path d="M50 118 C 110 100, 150 96, 184 98 S 280 150, 318 160 S 400 150, 452 120 S 540 60, 586 56 S 680 40, 720 44 S 810 70, 850 80" fill="none" stroke="#9a9a9a" stroke-width="2.4" stroke-dasharray="7 6"/>
+        <!-- collected area + line -->
+        <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#111" stop-opacity=".12"/><stop offset="1" stop-color="#111" stop-opacity="0"/></linearGradient></defs>
+        <path d="M50 124 C 110 108, 150 100, 184 104 S 280 158, 318 166 S 400 156, 452 126 S 540 70, 586 66 S 680 60, 720 72 L 720 220 L 50 220 Z" fill="url(#g)"/>
+        <path d="M50 124 C 110 108, 150 100, 184 104 S 280 158, 318 166 S 400 156, 452 126 S 540 70, 586 66 S 680 60, 720 72" fill="none" stroke="#111" stroke-width="3"/>
+        <circle cx="720" cy="72" r="6" fill="#111" stroke="#fff" stroke-width="2.5"/>
+        <g text-anchor="middle"><text x="50" y="248">Ven</text><text x="184" y="248">Sam</text><text x="318" y="248">Dim</text><text x="452" y="248">Lun</text><text x="586" y="248">Mar</text><text x="720" y="248" fill="#111" font-weight="600">Mer</text><text x="850" y="248" text-anchor="end">Jeu</text></g>
+      </svg>
+    </section>
+  </div>
+</main>
+</body>
+</html>

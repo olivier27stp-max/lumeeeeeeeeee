@@ -145,7 +145,8 @@ describe('déclarations', () => {
     expect(props('create_challenge').type.enum).toEqual(['daily', 'weekly']);
     expect(props('create_course').status.enum).toEqual(['draft', 'published']);
     // Les colonnes de réglages sont celles de field_settings dans SCHEMA_SNAPSHOT (la route PUT cite des colonnes inexistantes).
-    expect(Object.keys(props('update_d2d_settings')).sort()).toEqual(['ai_summaries_enabled', 'auto_followup_days', 'auto_revisit_days', 'feature_enabled', 'show_peer_payouts', 'territory_restriction_enabled', 'voice_notes_enabled']);
+    // Sauf show_peer_payouts, retiré exprès (Loi 25, 2026-09-30) : toujours faux, ni Lumi ni la route ne peuvent l'activer.
+    expect(Object.keys(props('update_d2d_settings')).sort()).toEqual(['ai_summaries_enabled', 'auto_followup_days', 'auto_revisit_days', 'feature_enabled', 'territory_restriction_enabled', 'voice_notes_enabled']);
   });
 });
 

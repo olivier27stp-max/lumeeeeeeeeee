@@ -24,6 +24,7 @@ import {
   enrichirEntrees,
 } from '../lib/field-sales/commission-engine';
 import { exigerPeriodeOuverte, PeriodeVerrouillee } from '../lib/field-sales/commission-verrou';
+import { politiqueRemboursement, ecrireDrapeauReprise } from '../lib/field-sales/commission-reglages';
 import { totauxCommissions, enCents } from '../lib/field-sales/commission-periode';
 import { fuseauOrg } from '../lib/automations-fuseau-org';
 import { toLocalDate } from '../lib/reports/dates';
@@ -478,7 +479,8 @@ router.get('/commissions/settings', async (req, res) => {
     const sc = getServiceClient();
     const { data, error } = await sc.from('commission_settings').select('*').eq('org_id', auth.orgId).maybeSingle();
     if (error) throw new Error(error.message);
-    res.json(data || { org_id: auth.orgId, reversal_policy: 'alert', default_rule_id: null });
+    const reversal_policy = await politiqueRemboursement(sc, auth.orgId);
+    res.json({ ...(data || { org_id: auth.orgId, default_rule_id: null }), reversal_policy });
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
@@ -495,23 +497,20 @@ router.put('/commissions/settings', validate(commissionSettingsSchema), async (r
       const { data: regle } = await sc.from('fs_commission_rules').select('id').eq('id', default_rule_id).eq('org_id', auth.orgId).is('deleted_at', null).maybeSingle();
       if (!regle) return res.status(404).json({ error: 'Commission rule not found.' });
     }
+    const politiqueAvant = await politiqueRemboursement(sc, auth.orgId);
     const { data: avant } = await sc.from('commission_settings').select('*').eq('org_id', auth.orgId).maybeSingle();
     const payload: Record<string, any> = { org_id: auth.orgId, updated_at: new Date().toISOString() };
-    if (reversal_policy) payload.reversal_policy = reversal_policy;
+    // « Reprendre » = 'auto' en base + drapeau (voir commission-reglages.ts) :
+    // la contrainte de la colonne n'accepte pas 'clawback'.
+    if (reversal_policy) payload.reversal_policy = reversal_policy === 'clawback' ? 'auto' : reversal_policy;
     if (default_rule_id !== undefined) payload.default_rule_id = default_rule_id;
     const { data, error } = await sc.from('commission_settings').upsert(payload, { onConflict: 'org_id' }).select().single();
-    // « Reprendre » exige la migration 20261005100400 : tant qu'elle n'est pas
-    // appliquée, la contrainte de la base refuse la valeur — on le dit clairement
-    // au lieu d'un « Data validation failed » incompréhensible.
-    if (error && error.code === '23514' && reversal_policy === 'clawback') {
-      return res.status(409).json({
-        error: 'L’option « Reprendre » sera disponible après la prochaine mise à jour de la base. Les autres options fonctionnent déjà.',
-        code: 'clawback_indisponible',
-      });
-    }
     if (error) throw error;
-    await tracer(sc, auth, req, 'commission_settings.updated', { type: 'commission_settings', id: null }, avant, data);
-    res.json(data);
+    if (reversal_policy) await ecrireDrapeauReprise(sc, auth.orgId, reversal_policy === 'clawback');
+    const politique = await politiqueRemboursement(sc, auth.orgId);
+    await tracer(sc, auth, req, 'commission_settings.updated', { type: 'commission_settings', id: null },
+      avant ? { ...avant, reversal_policy: politiqueAvant } : null, { ...data, reversal_policy: politique });
+    res.json({ ...data, reversal_policy: politique });
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }

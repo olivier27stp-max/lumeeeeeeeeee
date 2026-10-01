@@ -55,6 +55,6 @@ export function usePageMeta(m: PageMeta) {
 }
 
 export const HOME_META = {
-  fr: { title: 'Lume · CRM et assistant IA pour entreprises de services', description: 'Arrêtez de gérer manuellement, commencez à croître automatiquement. Clients, soumissions, calendrier, textos, factures et paie au même endroit, avec Lumi, l\'assistant IA.', path: '/', raw: true },
-  en: { title: 'Lume · CRM and AI assistant for service businesses', description: 'Stop managing manually, start scaling automatically. Clients, quotes, calendar, texts, invoices and payroll in one place, with Lumi, the AI assistant.', path: '/', raw: true },
+  fr: { title: 'Lume · CRM pour les services résidentiels et la rénovation', description: 'Lume CRM, le logiciel tout-en-un des entreprises de services résidentiels et de rénovation : pipeline de vente clair et automatisations qui relancent tes clients à ta place.', path: '/', raw: true },
+  en: { title: 'Lume · CRM for residential service and renovation businesses', description: 'Lume CRM is the all-in-one software for residential service and renovation businesses: a clear sales pipeline and automations that follow up with your clients for you.', path: '/', raw: true },
 } as const;

@@ -111,7 +111,7 @@ export async function ensureAutomationPresets(
     .update({
       delay_seconds: 0,
       name: "Sondage d'avis — dès la fin de la job",
-      description: "Envoie le sondage d'étoiles (courriel + SMS) dès que la job est marquée terminée",
+      description: "Envoie la demande d'avis Google / Facebook (courriel + SMS) dès que la job est marquée terminée",
     })
     .eq('org_id', orgId)
     .eq('preset_key', 'google_review')

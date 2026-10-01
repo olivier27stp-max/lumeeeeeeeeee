@@ -1577,7 +1577,7 @@ export const commissionRuleCreateSchema = regleCommissionChamps.superRefine(spli
 export const commissionRuleUpdateSchema = regleCommissionChamps.partial().superRefine(splitValide);
 export const commissionAssignSchema = z.object({ user_id: z.string().uuid(), rule_id: z.string().uuid().nullable().optional() }).strict();
 export const commissionSettingsSchema = z.object({
-  // 'clawback' (« Reprendre ») exige la migration 20261005100400.
+  // 'clawback' (« Reprendre ») : enregistré sans migration (commission-reglages.ts).
   reversal_policy: z.enum(['auto', 'keep', 'alert', 'clawback']).optional(),
   default_rule_id: z.string().uuid().nullable().optional(),
 }).strict();

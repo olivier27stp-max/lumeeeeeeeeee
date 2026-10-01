@@ -34,7 +34,7 @@ describe.skipIf(!disponible)('commissions — exactitude contre l’oracle', () 
   }, 180_000);
   afterAll(async () => { await db?.end(); });
 
-  it('chaque commission = l’oracle, au cent près [RF2 exige M1]', () => {
+  it('chaque commission = l’oracle, au cent près', () => {
     const e = ecarts(attendus, reels);
     expect(e.map((x) => `${x.cle}/${x.user_id.slice(-3)}: attendu ${x.attendu} (${x.etat_attendu}), moteur ${x.reel} (${x.statut_reel})`)).toEqual([]);
   });
@@ -58,7 +58,7 @@ describe.skipIf(!disponible)('commissions — exactitude contre l’oracle', () 
     for (const r of rows) expect(r.parts, cleFacture(r.invoice_id)).toBe(r.total);
   });
 
-  it('total d’un rep sur la période (page) = somme de ses lignes = oracle [Fred exige M1]', async () => {
+  it('total d’un rep sur la période (page) = somme de ses lignes = oracle', async () => {
     const reps = [U.rita, U.fred, U.tina, U.sam, U.sara];
     const faux: string[] = [];
     for (const rep of reps) {
@@ -134,7 +134,7 @@ describe.skipIf(!disponible)('commissions — exactitude contre l’oracle', () 
     expect({ reprise: rows[0].n > 0, signal: !!alerte[0].reverse_reason }).not.toEqual({ reprise: false, signal: false });
   });
 
-  it('la facture refaite sur le même job (void → supprimée → nouvelle) est commissionnée [exige M1]', () => {
+  it('la facture refaite sur le même job (void → supprimée → nouvelle) est commissionnée', () => {
     expect(reels.filter((r) => r.invoice_id === f('RF2').id).length).toBe(1);
   });
 });

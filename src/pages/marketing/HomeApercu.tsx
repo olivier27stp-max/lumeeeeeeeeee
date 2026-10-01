@@ -18,12 +18,11 @@
  * gauche sont gérés par `MarketingLayout` / `LumiAgent`, pas ici.
  */
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
-import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
 import { usePageMeta, HOME_META } from '../../hooks/usePageMeta';
-import { StopList, Pillars, Roles, LumiSection, StatsBand, Flow, PlansTeaser, Security, Faq, SECTIONS_CSS } from './homeApercuSections';
+import { StopList, FeatureRows, Roles, LumiSection, StatsBand, Flow, PlansTeaser, Security, Faq, SECTIONS_CSS } from './homeApercuSections';
 
 type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
 
@@ -83,10 +82,6 @@ export default function HomeApercu() {
     frameRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
   }, [reduceMotion]);
 
-  const facts = fr
-    ? ['Sans engagement en mensuel', 'Intégration guidée incluse', 'Support FR / EN']
-    : ['No commitment on monthly plans', 'Guided onboarding included', 'Support in FR / EN'];
-
   const before = fr
     ? [
         ['7 h', 'Appels et textos de confirmation faits un par un, depuis le camion, avant la première job.'],
@@ -129,7 +124,6 @@ export default function HomeApercu() {
           </div>
         ))}
         <div className="ha-head">
-          <p className="ha-kicker">{fr ? 'Lume · CRM + assistant IA pour entreprises de services' : 'Lume · CRM + AI assistant for service businesses'}</p>
           <h1 className="ha-h1">
             <span>{h.titleStopManaging}{' '}<span className="relative inline-block">{h.titleManually}<Underline color="text-red-500" /></span></span>
             <br />
@@ -141,20 +135,19 @@ export default function HomeApercu() {
               {h.bookDemo}
               <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
             </button>
-            <Link to="/features" className="ha-btn ha-ghost">{fr ? 'Voir les fonctionnalités' : 'See the features'}</Link>
           </div>
-          <ul className="ha-facts">{facts.map((f) => <li key={f}>{f}</li>)}</ul>
         </div>
 
         {/* ── 2. Aperçu interactif ── */}
         <div className="ha-stage" ref={frameRef}>
           <div className="ha-float ha-f1" aria-hidden="true"><span className="ha-ic">✓</span><div><b>{fr ? 'Soumission #1042 signée' : 'Quote #1042 signed'}</b><span>{fr ? 'Excavation Roy · il y a 2 min' : 'Excavation Roy · 2 min ago'}</span></div></div>
-          <div className="ha-float ha-f2" aria-hidden="true"><span className="ha-ic">$</span><div><b>{fr ? '1 250 $ reçus en ligne' : '$1,250 received online'}</b><span>{fr ? 'Vision Lavage · facture #877' : 'Vision Lavage · invoice #877'}</span></div></div>
+          <div className="ha-float ha-f2" aria-hidden="true"><span className="ha-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span><div><b>{fr ? 'Soumission #1043 ouverte' : 'Quote #1043 opened'}</b><span>{fr ? 'Prospect · Marc Gagnon · à l\'instant' : 'Prospect · Marc Gagnon · just now'}</span></div></div>
+          <div className="ha-devices">
           <div className="ha-frame">
             <div className="ha-bar">
               <i /><i /><i />
               <span className="ha-url">{TABS.find((x) => x.key === tab)?.url}</span>
-              <span className="ha-hint">{fr ? 'Cliquez pour explorer ↗' : 'Click to explore ↗'}</span>
+              <span className="ha-hint">{fr ? 'Clique pour explorer ↗' : 'Click to explore ↗'}</span>
               <div className="ha-seg" role="tablist" aria-label={fr ? "Écrans de l'app" : 'App screens'}>
                 {TABS.map((x) => (
                   <button key={x.key} type="button" role="tab" aria-selected={tab === x.key} onClick={() => setTab(x.key)}>
@@ -177,12 +170,32 @@ export default function HomeApercu() {
               />
             ))}
           </div>
+          {/* Téléphone posé sur la droite du screenshot : écran Accueil de l'app iOS
+              (maquette scripts/marketing/apercu-accueil-mobile.html). */}
+          <div className="ha-phone">
+            <i className="ha-btn-side ha-btn-power" aria-hidden="true" />
+            <i className="ha-btn-side ha-btn-vol1" aria-hidden="true" />
+            <i className="ha-btn-side ha-btn-vol2" aria-hidden="true" />
+            <div className="ha-phone-body">
+              <div className="ha-phone-screen">
+                <img
+                  src="/landing/apercu-accueil-mobile.webp"
+                  alt={fr ? "Écran Accueil de Lume sur téléphone" : 'Lume Home screen on a phone'}
+                  width={780}
+                  height={1688}
+                  decoding="async"
+                />
+                <span className="ha-island" aria-hidden="true" />
+              </div>
+            </div>
+          </div>
+          </div>
         </div>
       </section>
 
       {/* ── 3. Sous le pli ── */}
       <StopList fr={fr} />
-      <Pillars fr={fr} />
+      <FeatureRows fr={fr} />
       <Roles fr={fr} goTo={goTo} />
       <LumiSection fr={fr} />
       <StatsBand fr={fr} />
@@ -230,19 +243,15 @@ const HOME_APERCU_CSS = `
 .home-apercu { --forest:#1F5F4F; --mint:#3FAF97; --mint-soft:#dff3ec; --amber:#b45309; --amber-soft:#fef3c7; --line:#e5e5e0; color:#171717; background:transparent; }
 .home-apercu .ha-kicker { font-size:11px; letter-spacing:.2em; text-transform:uppercase; font-weight:600; color:var(--forest); margin:0; }
 
-.ha-hero { position:relative; overflow:hidden; background:transparent; padding-top:88px; }
+.ha-hero { position:relative; overflow:hidden; background:transparent; padding-top:88px; container:ha-hero / inline-size; }
 .ha-cloud { position:absolute; border-radius:50%; background:#fff; filter:blur(2px); opacity:.9; pointer-events:none; }
 .ha-c1 { width:520px; height:170px; left:-120px; top:140px; } .ha-c2 { width:380px; height:130px; right:-60px; top:100px; }
-.ha-head { position:relative; z-index:2; max-width:820px; margin:0 auto; padding:26px 24px 8px; text-align:center; }
-.ha-h1 { font-size:clamp(34px,3.6vw,50px); font-weight:800; letter-spacing:-.035em; line-height:1.05; margin:12px auto 0; max-width:20ch; color:#111; text-wrap:balance; }
-.ha-sub { font-size:15px; line-height:1.55; color:#3a3a3a; max-width:52ch; margin:14px auto 0; }
-.ha-ctas { display:flex; justify-content:center; gap:10px; margin-top:16px; flex-wrap:wrap; }
+.ha-head { position:relative; z-index:2; max-width:1400px; margin:0 auto; padding:26px 24px 8px; text-align:center; container-type:inline-size; }
+.ha-h1 { font-size:clamp(30px,5cqi,68px); font-weight:800; letter-spacing:-.035em; line-height:1.05; margin:12px auto 0; max-width:none; color:#111; text-wrap:balance; }
+.ha-sub { font-size:clamp(15px,1.25vw,18px); line-height:1.45; color:#3a3a3a; max-width:46ch; margin:20px auto 0; }
+.ha-ctas { display:flex; justify-content:center; gap:10px; margin-top:26px; flex-wrap:wrap; }
 .ha-btn { display:inline-flex; align-items:center; gap:8px; padding:13px 20px; border-radius:12px; border:0; font-size:14.5px; font-weight:700; cursor:pointer; text-decoration:none; }
 .ha-dark { background:#111; color:#fff; } .ha-dark:hover { background:#000; }
-.ha-ghost { background:rgba(255,255,255,.7); color:#171717; border:1.5px solid rgba(0,0,0,.22); font-weight:600; } .ha-ghost:hover { background:#fff; }
-.ha-facts { list-style:none; margin:14px 0 0; padding:0; display:flex; justify-content:center; gap:16px; flex-wrap:wrap; }
-.ha-facts li { display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:500; color:#3a3a3a; }
-.ha-facts li::before { content:""; width:16px; height:16px; border-radius:50%; border:2px solid var(--mint); background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3 8.5l3.5 3.5L13 5' stroke='%233FAF97' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/9px no-repeat; flex:none; }
 
 .ha-stage { position:relative; z-index:2; max-width:1180px; margin:22px auto 0; padding:0 24px 40px; scroll-margin-top:84px; }
 .ha-frame { background:#fff; border-radius:18px; box-shadow:0 40px 90px -36px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.06); overflow:hidden; }
@@ -257,22 +266,44 @@ const HOME_APERCU_CSS = `
 .ha-float { position:absolute; z-index:4; background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:14px; padding:11px 14px; box-shadow:0 20px 40px -18px rgba(0,0,0,.3); font-size:13px; display:flex; gap:10px; align-items:center; animation:ha-float 6s ease-in-out infinite; }
 .ha-float .ha-ic { width:32px; height:32px; border-radius:10px; background:var(--mint-soft); color:var(--forest); display:grid; place-items:center; font-weight:800; font-size:12px; flex:none; }
 .ha-float b { display:block; font-weight:700; color:#171717; } .ha-float span { color:#8a8a84; font-size:12px; }
-.ha-f1 { left:6px; top:-22px; } .ha-f2 { right:6px; top:120px; animation-delay:-2.5s; }
+.ha-f1 { left:6px; top:-22px; } .ha-f2 { left:-14px; bottom:22%; animation-delay:-2.5s; }
 @keyframes ha-float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
+
+/* Téléphone ancré au cadre desktop. Les tailles sont en cqi (largeur de
+   .ha-devices) : hauteur du cadre ≈ 62.5cqi + 46px (image 16:10 + barre), le
+   téléphone en fait ~87 %, donc largeur ≈ 26cqi + 19px au ratio 418/872.
+   Inclinaison : rotateZ pousse le haut vers la droite, rotateY négatif amène
+   la tranche droite (::before) vers l'avant. */
+.ha-devices { position:relative; container-type:inline-size; margin-bottom:48px; }
+.ha-phone { position:absolute; z-index:5; right:3%; bottom:-7%; width:calc(26cqi + 19px); aspect-ratio:418/872; transform:perspective(1600px) rotateY(-14deg) rotateZ(4deg); transform-origin:50% 100%; animation:ha-pop .8s .35s cubic-bezier(.2,.8,.2,1) both; }
+.ha-phone::before { content:""; position:absolute; inset:.6% -2.4% .4% 2.4%; border-radius:15% / 7.2%; background:linear-gradient(90deg,#1a1a1d 0%,#3b3b40 45%,#121214 100%); }
+.ha-phone::after { content:""; position:absolute; left:6%; right:-4%; bottom:-3%; height:7%; border-radius:50%; background:rgba(0,0,0,.35); filter:blur(14px); z-index:-1; }
+.ha-phone-body { position:relative; height:100%; padding:3.2%; border-radius:15% / 7.2%; background:#0d0d0f; box-shadow:inset 0 0 0 1.5px #4a4a50, inset 0 0 0 4px #141416, 30px 40px 70px -24px rgba(0,0,0,.5), 6px 10px 22px -10px rgba(0,0,0,.35); }
+.ha-phone-screen { position:relative; height:100%; overflow:hidden; border-radius:12.5% / 5.8%; background:#fafafa; }
+.ha-phone-screen img { display:block; width:100%; height:100%; object-fit:cover; object-position:top; }
+.ha-phone-screen::after { content:""; position:absolute; inset:0; background:linear-gradient(118deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,0) 32%); pointer-events:none; }
+.ha-island { position:absolute; top:1.3%; left:50%; width:31%; aspect-ratio:125/37; translate:-50% 0; border-radius:999px; background:#000; }
+.ha-btn-side { position:absolute; width:1.6%; border-radius:2px; background:#2a2a2e; }
+.ha-btn-power { right:-2.6%; top:24%; height:11%; background:#4a4a50; }
+.ha-btn-vol1 { left:-.9%; top:20%; height:6%; } .ha-btn-vol2 { left:-.9%; top:28%; height:6%; }
+@container (max-width: 640px) {
+  .ha-phone { width:calc(30cqi + 8px); right:2%; bottom:-9%; transform:perspective(1200px) rotateY(-12deg) rotateZ(4deg); }
+  .ha-phone-body { box-shadow:inset 0 0 0 1px #4a4a50, inset 0 0 0 2.5px #141416, 14px 20px 36px -14px rgba(0,0,0,.5); }
+}
 
 /* Personas : une carte de chaque côté du titre, dans la même famille que les
    cartes flottantes de l'aperçu. Entrée en douceur, avatar qui flotte, et la
    carte se déplace un peu vers la souris (--px/--py posés par le hero). */
-.ha-person { position:absolute; z-index:3; top:246px; display:flex; gap:12px; align-items:center; background:#fff; border:1px solid rgba(11,40,80,.12); border-radius:16px; padding:12px 16px 12px 12px; box-shadow:0 24px 50px -28px rgba(0,0,0,.35); font-size:14px; color:#171717; white-space:nowrap; animation:ha-pop .7s cubic-bezier(.2,.8,.2,1) both; transform:translate(calc(var(--px, 0) * 16px), calc(var(--py, 0) * 10px)); transition:transform .35s ease-out; }
+.ha-person { position:absolute; z-index:3; top:300px; display:flex; gap:12px; align-items:center; background:#fff; border:1px solid rgba(11,40,80,.12); border-radius:16px; padding:12px 16px 12px 12px; box-shadow:0 24px 50px -28px rgba(0,0,0,.35); font-size:14px; color:#171717; white-space:nowrap; animation:ha-pop .7s cubic-bezier(.2,.8,.2,1) both; transform:translate(calc(var(--px, 0) * 16px), calc(var(--py, 0) * 10px)); transition:transform .35s ease-out; }
 .ha-p-l { left:max(24px, calc(50% - 640px)); animation-delay:.25s; }
-.ha-p-r { right:max(24px, calc(50% - 640px)); top:300px; animation-delay:.4s; }
+.ha-p-r { right:max(24px, calc(50% - 640px)); top:360px; animation-delay:.4s; }
 .ha-person img { width:52px; height:52px; border-radius:50%; background:#f5f5f5; flex:none; animation:ha-float 6s ease-in-out infinite; }
 .ha-p-r img { animation-delay:-3s; }
 .ha-person em { display:block; font-style:normal; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:var(--forest); }
 .ha-person b { display:block; font-size:14px; color:#0a0a0a; }
 .ha-person span { display:block; font-size:12.5px; color:#4a4f57; margin-top:2px; }
 @keyframes ha-pop { from { opacity:0; translate:0 14px; scale:.96; } to { opacity:1; translate:0 0; scale:1; } }
-@media (max-width: 1180px) { .ha-person { display:none; } }
+@container ha-hero (max-width: 1400px) { .ha-person { display:none; } }
 
 .ha-case-note { margin:28px 0 0; padding-top:12px; border-top:1px solid #d9d9d4; font-size:12.5px; color:#555; }
 
@@ -298,5 +329,5 @@ const HOME_APERCU_CSS = `
   .ha-bar { height:auto; flex-wrap:wrap; padding:8px 12px; } .ha-seg { margin-left:0; width:100%; justify-content:space-between; }
   .ha-case-head { flex-direction:column; align-items:flex-start; }
 }
-@media (prefers-reduced-motion: reduce) { .ha-float, .ha-person, .ha-person img { animation:none !important; transition:none !important; } }
+@media (prefers-reduced-motion: reduce) { .ha-float, .ha-person, .ha-person img, .ha-phone { animation:none !important; transition:none !important; } }
 `;

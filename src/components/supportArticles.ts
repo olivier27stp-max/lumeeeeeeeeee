@@ -280,9 +280,9 @@ export const ARTICLES: Article[] = [
     path: '/settings/reviews',
     q_fr: 'Comment demander des avis Google à mes clients ?',
     q_en: 'How do I ask my clients for Google reviews?',
-    a_fr: "Paramètres → Avis clients : activez « Demander un avis à la fin d'un job » et collez le lien de votre fiche Google. À la fin de chaque job, le client reçoit un texto avec un sondage étoiles ; une bonne note l'envoie vers votre page Google, une mauvaise vous revient en privé. Le message se personnalise au même endroit.",
-    a_en: 'Settings → Client reviews: turn on "Ask for a review when a job ends" and paste your Google listing link. At the end of each job the client gets a text with a star survey; a good rating sends them to your Google page, a bad one comes back to you privately. The message is customized in the same place.',
-    tags: 'avis google review étoiles sondage réputation fin de job',
+    a_fr: "Paramètres → Avis clients : activez « Demander un avis à la fin d'un job » et collez le lien de votre fiche Google. À la fin de chaque job, le client reçoit un texto et un courriel avec un lien qui l'amène à choisir Google ou Facebook pour laisser son avis. Pour exclure un client, cochez son champ personnalisé « noreview ». Le message se personnalise au même endroit.",
+    a_en: 'Settings → Client reviews: turn on "Ask for a review when a job ends" and paste your Google listing link. At the end of each job the client gets a text and an email with a link to pick Google or Facebook and leave a review. To exclude a client, check their “noreview” custom field. The message is customized in the same place.',
+    tags: 'avis google facebook review noreview réputation fin de job',
   },
   {
     id: 'job-profit',
