@@ -84,3 +84,24 @@ export async function orgEnPause(
   cache.set(orgId, { enPause, expire: maintenant + DUREE_CACHE_MS });
   return enPause;
 }
+
+/**
+ * Toutes les entreprises en pause, pour que la file planifiée ne les DÉPILE
+ * pas. Les sauter après les avoir lues ne suffisait pas : la file lit les
+ * 50 tâches dues les plus anciennes, et une entreprise en pause qui en avait
+ * 50 bloquait toutes les autres à chaque passage.
+ *
+ * En cas de panne de lecture : liste vide (on laisse passer, voir l'en-tête —
+ * chaque tâche repasse de toute façon par `orgEnPause`).
+ */
+export async function orgsEnPause(supabase: SupabaseClient): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('company_settings')
+    .select('org_id')
+    .eq('automations_paused', true);
+  if (error) {
+    logger.warn('[automations-pause] liste des entreprises en pause illisible — file non filtrée', { error: error.message });
+    return [];
+  }
+  return (data ?? []).map((l) => String(l.org_id)).filter(Boolean);
+}

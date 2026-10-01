@@ -28,7 +28,7 @@ import {
   echeanceAvantDate,
 } from './automationSequences';
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
-import { orgEnPause } from './automations-pause-org';
+import { orgEnPause, orgsEnPause } from './automations-pause-org';
 import { fuseauOrg, FUSEAU_DEFAUT, corrigerChangementDHeure } from './automations-fuseau-org';
 import { noterRegleTraitee } from './outbox';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
@@ -1610,12 +1610,19 @@ async function recupererTachesFigees(supabase: SupabaseClient, orgId?: string): 
  * sans toucher aux tâches des autres entreprises de staging. Le serveur,
  * lui, appelle toujours sans filtre.
  */
-export async function processScheduledTasks(supabase: SupabaseClient, options: { orgId?: string } = {}) {
-  if (!engineConfig) return;
+/** Tâches lues par passage de la file. */
+export const TACHES_PAR_LOT = 50;
+
+/**
+ * Renvoie le nombre de tâches LUES : un lot plein (= TACHES_PAR_LOT) dit au
+ * planificateur qu'il en reste peut-être d'autres à dépiler tout de suite.
+ */
+export async function processScheduledTasks(supabase: SupabaseClient, options: { orgId?: string; orgIds?: string[] } = {}): Promise<number> {
+  if (!engineConfig) return 0;
   // Interrupteur d'arrêt (F6) : AVANT la récupération des tâches figées.
   // Remettre des tâches en file serait déjà y toucher, et l'arrêt doit
   // laisser la file exactement dans l'état où il l'a trouvée.
-  if (!automatisationsActivesAvecTrace()) return;
+  if (!automatisationsActivesAvecTrace()) return 0;
 
   // Avant tout : libérer ce qu'un arrêt brutal aurait laissé coincé.
   await recupererTachesFigees(supabase, options.orgId);
@@ -1635,15 +1642,20 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
     .eq('status', 'pending')
     .lte('execute_at', now);
   if (options.orgId) requeteTaches = requeteTaches.eq('org_id', options.orgId);
+  if (options.orgIds) requeteTaches = requeteTaches.in('org_id', options.orgIds);
+  // Les entreprises en pause ne sont pas DÉPILÉES : leurs tâches restent en
+  // file sans occuper le lot (sinon 50 tâches en pause bloquaient tout le monde).
+  const enPause = await orgsEnPause(supabase);
+  if (enPause.length) requeteTaches = requeteTaches.not('org_id', 'in', `(${enPause.join(',')})`);
   const { data: tasks, error } = await requeteTaches
     .order('execute_at', { ascending: true })
-    .limit(50);
+    .limit(TACHES_PAR_LOT);
 
   if (error) {
     console.error('[automationEngine] failed to fetch scheduled tasks:', error.message);
-    return;
+    return 0;
   }
-  if (!tasks || tasks.length === 0) return;
+  if (!tasks || tasks.length === 0) return 0;
 
   for (const task of tasks as any[]) {
     /*
@@ -2213,6 +2225,7 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
       }
     }
   }
+  return tasks.length;
 }
 
 // ── Stop condition checker ──────────────────────────────────

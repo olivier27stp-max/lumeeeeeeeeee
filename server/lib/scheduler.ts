@@ -14,6 +14,29 @@ import {
 import { logger } from './logger';
 
 const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+/** File planifiée : au plus 20 lots (1 000 tâches) et 3 min par tick. */
+export const LOTS_MAX_PAR_TICK = 20;
+export const BUDGET_FILE_MS = 3 * 60 * 1000;
+
+/**
+ * Dépile la file planifiée lot après lot, tant qu'un lot revient plein, dans
+ * les bornes ci-dessus. Renvoie le nombre de lots passés. `filtre` : la suite
+ * de tests limite le passage à ses bureaux (le serveur n'en passe jamais).
+ */
+export async function viderFile(
+  supabase: SupabaseClient,
+  filtre: { orgId?: string; orgIds?: string[] } = {},
+): Promise<number> {
+  const { processScheduledTasks, TACHES_PAR_LOT } = await import('./automationEngine');
+  const debut = Date.now();
+  let lot = 0;
+  while (lot < LOTS_MAX_PAR_TICK) {
+    lot++;
+    const lues = await processScheduledTasks(supabase, filtre);
+    if (lues < TACHES_PAR_LOT || Date.now() - debut > BUDGET_FILE_MS) break;
+  }
+  return lot;
+}
 
 type TriggerType =
   | 'days_after_quote_sent'
@@ -749,9 +772,14 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
     await handleRecurringInvoices(supabase);
 
     // Process event-driven scheduled tasks (automation engine)
+    //
+    // Par LOTS, tant qu'un lot revient plein : un seul lot de 50 par tick de
+    // 5 min plafonnait la plateforme à 600 tâches/heure pour TOUTES les
+    // entreprises (mesure de charge M-004) — une campagne d'une seule
+    // entreprise retardait les rappels de toutes les autres. Bornes : 3 min
+    // (le tick fait d'autres choses, et le verrou dure 10 min) et 20 lots.
     try {
-      const { processScheduledTasks } = await import('./automationEngine');
-      await processScheduledTasks(supabase);
+      await viderFile(supabase);
     } catch (err: any) {
       console.error('[scheduler] scheduled tasks processing failed:', err.message);
     }
