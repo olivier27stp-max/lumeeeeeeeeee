@@ -16,6 +16,7 @@ import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
 import { interfaceEnFrancais } from './champs/messages';
 import { appelServeur } from './appelServeur';
+import { messageDuServeur } from './messageDuServeur';
 import type { AutomationRule } from './automationRulesApi';
 import type { DeclencheurCatalogue, ActionCatalogue } from './automationCatalogue';
 import type { ModeleAutomatisation } from './automationTemplates';
@@ -93,7 +94,8 @@ async function erreurDe(reponse: Response, repli: string): Promise<Error> {
   let message = repli;
   try {
     const corps = await reponse.json();
-    if (corps?.error && typeof corps.error === 'string') message = corps.error;
+    // La phrase lisible (`message`) avant le texte technique (`error`) d'un refus de permission.
+    message = messageDuServeur(corps) ?? repli;
   } catch {
     // Corps illisible : le repli dit déjà l'essentiel.
   }

@@ -13,6 +13,7 @@ import express from 'express';
 import { getUserContext, hasPermission, type UserContext } from './rbac';
 import type { PermissionKey } from '../../src/lib/permissions';
 import { requireAuthedClient } from './supabase';
+import { corpsRefusPermission } from './refus-permission';
 
 // Extend Express Request to carry user context
 declare global {
@@ -556,7 +557,8 @@ export function rbacMiddleware(): express.RequestHandler {
     const allowed = keys.some((k) => hasPermission(ctx, k));
 
     if (!allowed) {
-      res.status(403).json({ error: `Permission denied: ${keys.join(' or ')}` });
+      // Même corps que `requirePermission` : `error` inchangé, plus une phrase lisible (`message`).
+      res.status(403).json(corpsRefusPermission(keys));
       return;
     }
 
