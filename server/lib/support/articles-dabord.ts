@@ -31,6 +31,7 @@
  * Tests : tests/support/articles-dabord.test.ts
  */
 import { chercherAide } from '../agent/tools-aide';
+import { ARTICLES } from '../../../src/components/supportArticles';
 import { porteSurLesDonnees, motsUtiles } from './faq';
 import { normaliser } from '../lumi/normaliser';
 import type { Voix } from './faq-tutoiement';
@@ -135,8 +136,20 @@ export function reponseAideDirecte(
   const extrait = premier.extrait.trim().replace(/\s+/g, ' ').slice(0, 400);
   // La relance suit la voix de celui qui parle : Lumi tutoie, le support vouvoie.
   const relance = opts.voix === 'tu' ? 'Si ça ne règle pas ton cas, dis-le-moi et je creuse.' : 'Si ça ne règle pas votre cas, dites-le-moi et je creuse.';
-  const texte = langue === 'fr'
-    ? `${extrait}\n\n→ ${premier.titre} (${premier.page})\n\n${relance}`
-    : `${extrait}\n\n→ ${premier.titre} (${premier.page})\n\nIf that doesn’t cover your case, tell me and I’ll dig further.`;
+  // En anglais, le centre d'aide n'a rien à servir tel quel : il est écrit en
+  // français. Batterie du support, prod, 2026-10-01 : « How much is the Scale plan
+  // per month…? » recevait le paragraphe FRANÇAIS, suivi d'une relance en anglais.
+  // Seule une Q/R de la FAQ a sa version anglaise : on la sert ; pour tout autre
+  // passage, on rend la main au modèle, qui répond dans la langue de la question.
+  if (langue === 'en') {
+    const article = ARTICLES.find((x) => x.q_fr === premier.titre && x.a_fr === premier.extrait);
+    if (!article) return null;
+    return {
+      texte: `${article.a_en.trim()}\n\n→ ${article.q_en} (${premier.page})\n\nIf that doesn’t cover your case, tell me and I’ll dig further.`,
+      pages: trouves.map((t) => t.page),
+      score: premier.score,
+    };
+  }
+  const texte = `${extrait}\n\n→ ${premier.titre} (${premier.page})\n\n${relance}`;
   return { texte, pages: trouves.map((t) => t.page), score: premier.score };
 }
