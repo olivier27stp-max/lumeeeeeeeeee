@@ -2290,8 +2290,12 @@ export default function Automations() {
               </table>
             </div>
 
-            {/* ══ 7. Pagination ══ */}
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-outline/30 px-4 py-3 text-[12px]">
+            {/* ══ 7. Pagination ══
+                `pr-20` : la place de la bulle « Aide et support » (fixe, à
+                20 px du bord, 48 px de large). Quand la pagination est en bas
+                de la fenêtre, la bulle recouvrait la flèche de « 10 / page »
+                (audit du 2026-10-01). */}
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-outline/30 py-3 pl-4 pr-20 text-[12px]">
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}

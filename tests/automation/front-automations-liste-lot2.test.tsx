@@ -9,6 +9,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // ── Mocks (hissés) ─────────────────────────────────────────────
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
@@ -430,6 +432,29 @@ describe('liste-11 / modeles-09 — un seul mot pour le même envoi : « Texto �
     expect(conteneur.querySelector('textarea')?.getAttribute('aria-label')).toBe('Text sent to client');
     await cliquer(bouton(/^View messages of Parcours$/));
     expect(intitules()).toEqual(['Text sent to client']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+describe('liste-14 — la bulle « Aide et support » ne recouvre plus « 10 / page »', () => {
+  it('la pagination réserve à sa droite la place de la bulle flottante (décalage + largeur)', async () => {
+    // jsdom ne met rien en page : on compare les réserves DÉCLARÉES. La bulle
+    // est `fixed right-N w-M` (unités Tailwind de 4 px) ; quelle que soit la
+    // marge de la page, un retrait droit ≥ N + M garde le sélecteur hors d'elle.
+    const bulle = readFileSync(resolve(process.cwd(), 'src/components/SupportFAB.tsx'), 'utf8')
+      .match(/'fixed right-(\d+) z-50 w-(\d+) /);
+    expect(bulle, 'les classes de position de la bulle ont changé : revoir ce test').not.toBeNull();
+    const empreinte = (Number(bulle![1]) + Number(bulle![2])) * 4;
+    expect(empreinte).toBe(68);
+
+    await rendre();
+    const barre = document.getElementById('par-page')!.parentElement as HTMLElement;
+    const retrait = barre.className.match(/(?:^|\s)pr-(\d+)(?:\s|$)/);
+    expect(retrait, `aucun retrait droit propre à la pagination : « ${barre.className} »`).not.toBeNull();
+    expect(Number(retrait![1]) * 4).toBeGreaterThanOrEqual(empreinte);
+    // Le sélecteur reste le dernier élément de la barre, aligné à droite.
+    expect(barre.lastElementChild?.id).toBe('par-page');
+    expect(barre.className).toContain('justify-end');
   });
 });
 
