@@ -60,7 +60,10 @@ describe('verbes ajoutés après l’éval finale', () => {
   });
   it('la fiche du job par le routeur : seulement pour le job lui-même', () => {
     const r = readFileSync(resolve(__dirname, '..', 'server', 'routes', 'lumi.ts'), 'utf8');
-    expect(r).toContain("routeur.verdict?.action === 'job-numero' && detecterRaccourci(message)?.id !== 'job-numero'");
+    // Généralisé le 2026-10-01 : TOUT raccourci choisi par le routeur doit être reconnu aussi par
+    // le détecteur strict — la fiche du job reste donc réservée aux questions sur le job lui-même.
+    expect(r).toContain("const raccourciStrict = detecterRaccourci(message)?.id ?? null;");
+    expect(r).toContain('raccourciStrict === routeur.verdict.action');
   });
 });
 
