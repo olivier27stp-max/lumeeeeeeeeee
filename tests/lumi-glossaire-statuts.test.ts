@@ -180,7 +180,8 @@ describe('statuts — l’écran ne se contredit pas (relevé)', () => {
    * au lieu de l'accent. L'un d'eux est affiché : supprimer un devis montre
    * « Devis supprim\u00e9 », lettre pour lettre (src/pages/Quotes.tsx:246).
    */
-  it.fails('ÉCART : aucun libellé français n’affiche un code « \\u00e9 » à la place d’un accent (src/i18n/fr.ts:2731)', () => {
+  // CORRIGÉ le 2026-10-01 : les dix codes sont redevenus des accents ; le test reste, au vert, comme cliquet.
+  it('aucun libellé français n’affiche un code « \\u00e9 » à la place d’un accent', () => {
     const aplatir = (o: unknown, sortie: string[] = []): string[] => {
       if (typeof o === 'string') sortie.push(o);
       else if (o && typeof o === 'object') Object.values(o).forEach((v) => aplatir(v, sortie));
