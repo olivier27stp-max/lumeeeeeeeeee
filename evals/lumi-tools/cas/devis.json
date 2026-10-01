@@ -1,195 +1,686 @@
 [
- { "id": "list_quotes-1", "section": "devis", "outil": "list_quotes", "langue": "fr", "type": "lecture",
-   "q": "Combien j’ai de soumissions encore en brouillon ?" },
- { "id": "list_services-1", "section": "devis", "outil": "list_services", "langue": "en", "type": "lecture",
-   "q": "What are my usual prices? Show me my service catalog." },
- { "id": "list_quote_presets-1", "section": "devis", "outil": "list_quote_presets", "langue": "fr", "type": "lecture",
-   "q": "C’est quoi mes préréglages de soumission ?" },
- { "id": "list_quote_templates-1", "section": "devis", "outil": "list_quote_templates", "langue": "fr", "type": "lecture",
-   "q": "Montre-moi mes modèles de soumission avec les prix." },
-
- { "id": "unarchive_quote-1", "section": "devis", "outil": "unarchive_quote", "langue": "fr", "type": "action",
-   "q": "Ressors de l’archive la soumission « Réparation toiture — Roy », la cliente a rappelé.",
-   "voisins": ["list_quotes"] },
- { "id": "create_quote_template-1", "section": "devis", "outil": "create_quote_template", "langue": "fr", "type": "action",
-   "q": "Crée un modèle de soumission « Vitres commercial » avec lavage de vitres à 225 $, taxes incluses dans le calcul.",
-   "params": { "name": "Vitres commercial", "unit_price_cents": 22500 } },
- { "id": "update_quote_template-1", "section": "devis", "outil": "update_quote_template", "langue": "fr", "type": "action",
-   "q": "Dans mon modèle de soumission « Vitres résidentiel », monte le lavage de vitres à 175 $.",
-   "params": { "unit_price_cents": 17500 },
-   "voisins": ["list_quote_templates"] },
- { "id": "delete_quote_template-1", "section": "devis", "outil": "delete_quote_template", "langue": "en", "type": "action",
-   "q": "Delete the “Vitres résidentiel” quote template, I don't use it anymore.",
-   "voisins": ["list_quote_templates"] },
-
- { "id": "create_quote-1", "section": "devis", "outil": "create_quote", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Fais une soumission pour Marie Tremblay : lavage de vitres 250 $ et 2 nettoyages de gouttières à 90 $ chacun.",
-   "params": { "unit_price_cents": 9000, "quantity": 2 },
-   "cible": ["Tremblay"],
-   "voisins": ["search_clients"] },
- { "id": "create_quote-2", "section": "devis", "outil": "create_quote", "langue": "en", "type": "action", "sensible": true,
-   "q": "Put together a quote for Jean-Pierre Gagnon: siding repair at $1,200 and caulking at $150. No taxes on this one, it's warranty work.",
-   "params": { "unit_price_cents": 120000, "no_taxes": true },
-   "cible": ["Jean-Pierre Gagnon"],
-   "voisins": ["search_clients"] },
- { "id": "create_quote-3", "section": "devis", "outil": "create_quote", "langue": "fr", "type": "clarification", "sensible": true,
-   "q": "Fais une soumission pour Sophie Bouchard pour le nettoyage de son stationnement." },
-
- { "id": "send_quote-1", "section": "devis", "outil": "send_quote", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Shoot la soumission 9 des gouttières à Marie Tremblay par courriel.",
-   "cible": ["Tremblay"],
-   "interdits": ["send_quote_sms"],
-   "voisins": ["list_quotes"] },
- { "id": "send_quote-2", "section": "devis", "outil": "send_quote", "langue": "en", "type": "action", "sensible": true,
-   "q": "Can you email Marie Tremblay her gutter quote, number 9? Add a line saying we can start next week.",
-   "params": { "message": "next week" },
-   "cible": ["Tremblay"],
-   "voisins": ["list_quotes"] },
- { "id": "send_quote-3", "section": "devis", "outil": "send_quote", "langue": "fr", "type": "clarification", "sensible": true,
-   "q": "Envoie la soumission de réparation de toiture à Isabelle Roy." },
-
- { "id": "convert_quote_to_job-1", "section": "devis", "outil": "convert_quote_to_job", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Sophie Bouchard a accepté la soumission 19 des lumières de Noël : fais-en une job pour le 3 novembre à 9 h.",
-   "params": { "scheduled_at": "2026-11-03T09:00" },
-   "cible": ["Bouchard"],
-   "voisins": ["list_quotes"] },
- { "id": "convert_quote_to_job-2", "section": "devis", "outil": "convert_quote_to_job", "langue": "en", "type": "action", "sensible": true,
-   "q": "Quote #11 got approved — turn it into a job, we'll schedule it later.",
-   "cible": ["Bouchard"],
-   "voisins": ["list_quotes"] },
- { "id": "convert_quote_to_job-3", "section": "devis", "outil": "convert_quote_to_job", "langue": "fr", "type": "action", "sensible": true,
-   "q": "La soumission 19 est acceptée, mais faut planifier les travaux avant de facturer : convertis-la.",
-   "cible": ["Bouchard"],
-   "interdits": ["convert_quote_to_invoice"],
-   "voisins": ["list_quotes"] },
-
- { "id": "cancel_quote-1", "section": "devis", "outil": "cancel_quote", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Marie Tremblay a dit non pour la soumission 9 des gouttières, marque-la refusée.",
-   "params": { "reason": "declined" },
-   "cible": ["Tremblay"],
-   "voisins": ["list_quotes"] },
- { "id": "cancel_quote-2", "section": "devis", "outil": "cancel_quote", "langue": "en", "type": "action", "sensible": true,
-   "q": "Archive quote #8, the client never got back to us.",
-   "params": { "reason": "archived" },
-   "cible": ["Lavage de vitres et nettoyage"],
-   "voisins": ["list_quotes"] },
- { "id": "cancel_quote-3", "section": "devis", "outil": "cancel_quote", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Mets la soumission 8 de côté. Je veux pas la supprimer, juste la sortir de mes soumissions actives.",
-   "params": { "reason": "archived" },
-   "cible": ["Lavage de vitres et nettoyage"],
-   "interdits": ["delete_quote"],
-   "voisins": ["list_quotes"] },
-
- { "id": "update_quote-1", "section": "devis", "outil": "update_quote", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Change le titre de la soumission 9 pour « Nettoyage complet des gouttières » et rends-la valide 45 jours.",
-   "params": { "title": "Nettoyage complet des gouttières", "valid_days": 45 },
-   "cible": ["Tremblay"],
-   "voisins": ["list_quotes"] },
- { "id": "update_quote-2", "section": "devis", "outil": "update_quote", "langue": "en", "type": "action", "sensible": true,
-   "q": "On quote #8, change the window cleaning line to $300, keep everything else the same.",
-   "params": { "unit_price_cents": 30000 },
-   "cible": ["Lavage de vitres et nettoyage"],
-   "voisins": ["list_quotes"] },
- { "id": "update_quote-3", "section": "devis", "outil": "update_quote", "langue": "fr", "type": "clarification", "sensible": true,
-   "q": "Monte le prix de la soumission de Marie Tremblay." },
-
- { "id": "duplicate_quote-1", "section": "devis", "outil": "duplicate_quote", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Duplique la soumission 11 des lumières de Noël de Sophie Bouchard, je vais la réutiliser l’an prochain.",
-   "cible": ["Bouchard"],
-   "voisins": ["list_quotes"] },
- { "id": "duplicate_quote-2", "section": "devis", "outil": "duplicate_quote", "langue": "en", "type": "action", "sensible": true,
-   "q": "Make a copy of quote #9 and call it “Gutter cleaning — fall 2026”.",
-   "params": { "title": "Gutter cleaning" },
-   "cible": ["Tremblay"],
-   "voisins": ["list_quotes"] },
- { "id": "duplicate_quote-3", "section": "devis", "outil": "duplicate_quote", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Refais-moi exactement la même soumission que la 11, identique, pour Sophie Bouchard.",
-   "cible": ["Bouchard"],
-   "interdits": ["create_quote"],
-   "voisins": ["list_quotes"] },
-
- { "id": "delete_quote-1", "section": "devis", "outil": "delete_quote", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Supprime la soumission 18, c’était un test.",
-   "cible": ["Exec devis job"],
-   "voisins": ["list_quotes"] },
- { "id": "delete_quote-2", "section": "devis", "outil": "delete_quote", "langue": "en", "type": "action", "sensible": true,
-   "q": "Delete quote #21, it was created by mistake.",
-   "cible": ["Exec-4r65 devis 2"],
-   "voisins": ["list_quotes"] },
- { "id": "delete_quote-3", "section": "devis", "outil": "delete_quote", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Efface complètement la soumission 25, je veux pas juste l’archiver.",
-   "cible": ["Exec-4r65 devis job"],
-   "interdits": ["cancel_quote"],
-   "voisins": ["list_quotes"] },
-
- { "id": "send_quote_sms-1", "section": "devis", "outil": "send_quote_sms", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Texte la soumission 9 à Marie Tremblay, elle lit jamais ses courriels.",
-   "cible": ["Tremblay"],
-   "interdits": ["send_quote"],
-   "voisins": ["list_quotes"] },
- { "id": "send_quote_sms-2", "section": "devis", "outil": "send_quote_sms", "langue": "en", "type": "action", "sensible": true,
-   "q": "Send quote 9 to Marie Tremblay by text so she can approve it from her phone.",
-   "cible": ["Tremblay"],
-   "voisins": ["list_quotes"] },
- { "id": "send_quote_sms-3", "section": "devis", "outil": "send_quote_sms", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Envoie la soumission 9 à Marie Tremblay sur son cell, avec le lien pour l’accepter.",
-   "cible": ["Tremblay"],
-   "interdits": ["send_quote", "send_sms"],
-   "voisins": ["list_quotes"] },
-
- { "id": "convert_quote_to_invoice-1", "section": "devis", "outil": "convert_quote_to_invoice", "langue": "fr", "type": "action", "sensible": true,
-   "q": "La job est déjà faite pour la soumission 11 de Sophie Bouchard : transforme-la directement en facture.",
-   "cible": ["Bouchard"],
-   "voisins": ["list_quotes"] },
- { "id": "convert_quote_to_invoice-2", "section": "devis", "outil": "convert_quote_to_invoice", "langue": "en", "type": "action", "sensible": true,
-   "q": "Turn quote #19 into an invoice, no need to schedule anything.",
-   "cible": ["Bouchard"],
-   "voisins": ["list_quotes"] },
- { "id": "convert_quote_to_invoice-3", "section": "devis", "outil": "convert_quote_to_invoice", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Facture la soumission 11 telle quelle, sans passer par une job.",
-   "cible": ["Bouchard"],
-   "interdits": ["convert_quote_to_job", "create_invoice"],
-   "voisins": ["list_quotes"] },
-
- { "id": "create_quote_preset-1", "section": "devis", "outil": "create_quote_preset", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Crée un préréglage de soumission « Entretien automne » avec nettoyage de gouttières et lavage de vitres.",
-   "params": { "name": "Entretien automne" } },
- { "id": "create_quote_preset-2", "section": "devis", "outil": "create_quote_preset", "langue": "en", "type": "action", "sensible": true,
-   "q": "Create a quote preset called “Spring cleanup” with window washing and gutter cleaning, and a 25% deposit required.",
-   "params": { "name": "Spring cleanup", "deposit_type": "percentage", "deposit_value": 25 } },
- { "id": "create_quote_preset-3", "section": "devis", "outil": "create_quote_preset", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Crée un préréglage « Lumières de Noël » — juste les services, pas de prix : installation, minuterie, rallonges.",
-   "params": { "name": "Lumières de Noël" },
-   "interdits": ["create_quote_template", "create_quote"] },
-
- { "id": "update_quote_preset-1", "section": "devis", "outil": "update_quote_preset", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Renomme mon préréglage « Nettoyage printemps » en « Grand ménage du printemps ».",
-   "params": { "name": "Grand ménage du printemps" },
-   "voisins": ["list_quote_presets"] },
- { "id": "update_quote_preset-2", "section": "devis", "outil": "update_quote_preset", "langue": "en", "type": "action", "sensible": true,
-   "q": "In my “Nettoyage printemps” quote preset, require a 20% deposit.",
-   "params": { "deposit_required": true, "deposit_value": 20 },
-   "voisins": ["list_quote_presets"] },
- { "id": "update_quote_preset-3", "section": "devis", "outil": "update_quote_preset", "langue": "fr", "type": "clarification", "sensible": true,
-   "q": "Change le dépôt dans mon préréglage « Nettoyage printemps »." },
-
- { "id": "delete_quote_preset-1", "section": "devis", "outil": "delete_quote_preset", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Supprime le préréglage de soumission « Exec préréglage 2 (Copy) », c’est un doublon.",
-   "voisins": ["list_quote_presets"] },
- { "id": "delete_quote_preset-2", "section": "devis", "outil": "delete_quote_preset", "langue": "en", "type": "action", "sensible": true,
-   "q": "Delete the “Exec-yuq5 préréglage 2 (Copy)” quote preset, it's a leftover copy.",
-   "voisins": ["list_quote_presets"] },
- { "id": "delete_quote_preset-3", "section": "devis", "outil": "delete_quote_preset", "langue": "fr", "type": "clarification", "sensible": true,
-   "q": "Supprime le préréglage Exec-5zhp." },
-
- { "id": "duplicate_quote_preset-1", "section": "devis", "outil": "duplicate_quote_preset", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Duplique mon préréglage de soumission « Nettoyage printemps ».",
-   "voisins": ["list_quote_presets"] },
- { "id": "duplicate_quote_preset-2", "section": "devis", "outil": "duplicate_quote_preset", "langue": "en", "type": "action", "sensible": true,
-   "q": "Duplicate my “Nettoyage printemps” quote preset so I can tweak the copy.",
-   "voisins": ["list_quote_presets"] },
- { "id": "duplicate_quote_preset-3", "section": "devis", "outil": "duplicate_quote_preset", "langue": "fr", "type": "action", "sensible": true,
-   "q": "Fais-moi une copie du préréglage « Nettoyage printemps » pour que je parte de là — pas une nouvelle soumission.",
-   "interdits": ["create_quote_preset", "duplicate_quote", "create_quote"],
-   "voisins": ["list_quote_presets"] }
+ {
+  "id": "list_quotes-1",
+  "section": "devis",
+  "outil": "list_quotes",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Combien j’ai de soumissions encore en brouillon ?"
+ },
+ {
+  "id": "list_services-1",
+  "section": "devis",
+  "outil": "list_services",
+  "langue": "en",
+  "type": "lecture",
+  "q": "What are my usual prices? Show me my service catalog."
+ },
+ {
+  "id": "list_quote_presets-1",
+  "section": "devis",
+  "outil": "list_quote_presets",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "C’est quoi mes préréglages de soumission ?"
+ },
+ {
+  "id": "list_quote_templates-1",
+  "section": "devis",
+  "outil": "list_quote_templates",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Montre-moi mes modèles de soumission avec les prix."
+ },
+ {
+  "id": "unarchive_quote-1",
+  "section": "devis",
+  "outil": "unarchive_quote",
+  "langue": "fr",
+  "type": "action",
+  "q": "Ressors de l’archive la soumission « Réparation toiture — Roy », la cliente a rappelé.",
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "create_quote_template-1",
+  "section": "devis",
+  "outil": "create_quote_template",
+  "langue": "fr",
+  "type": "action",
+  "q": "Crée un modèle de soumission « Vitres commercial » avec lavage de vitres à 225 $, taxes incluses dans le calcul.",
+  "params": {
+   "name": "Vitres commercial",
+   "unit_price_cents": 22500
+  }
+ },
+ {
+  "id": "update_quote_template-1",
+  "section": "devis",
+  "outil": "update_quote_template",
+  "langue": "fr",
+  "type": "action",
+  "q": "Dans mon modèle de soumission « Vitres résidentiel », monte le lavage de vitres à 175 $.",
+  "params": {
+   "unit_price_cents": 17500
+  },
+  "voisins": [
+   "list_quote_templates"
+  ]
+ },
+ {
+  "id": "delete_quote_template-1",
+  "section": "devis",
+  "outil": "delete_quote_template",
+  "langue": "en",
+  "type": "action",
+  "q": "Delete the “Vitres résidentiel” quote template, I don't use it anymore.",
+  "voisins": [
+   "list_quote_templates"
+  ]
+ },
+ {
+  "id": "create_quote-1",
+  "section": "devis",
+  "outil": "create_quote",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Fais une soumission pour Marie Tremblay : lavage de vitres 250 $ et 2 nettoyages de gouttières à 90 $ chacun.",
+  "params": {
+   "unit_price_cents": 9000,
+   "quantity": 2
+  },
+  "cible": [
+   "Tremblay"
+  ],
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "create_quote-2",
+  "section": "devis",
+  "outil": "create_quote",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Put together a quote for Jean-Pierre Gagnon: siding repair at $1,200 and caulking at $150. No taxes on this one, it's warranty work.",
+  "params": {
+   "unit_price_cents": 120000,
+   "no_taxes": true
+  },
+  "cible": [
+   "Jean-Pierre Gagnon"
+  ],
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "create_quote-3",
+  "section": "devis",
+  "outil": "create_quote",
+  "langue": "fr",
+  "type": "clarification",
+  "sensible": true,
+  "q": "Fais une soumission pour Sophie Bouchard pour le nettoyage de son stationnement."
+ },
+ {
+  "id": "send_quote-1",
+  "section": "devis",
+  "outil": "send_quote",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Shoot la soumission 9 des gouttières à Marie Tremblay par courriel.",
+  "cible": [
+   "Tremblay"
+  ],
+  "interdits": [
+   "send_quote_sms"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "send_quote-2",
+  "section": "devis",
+  "outil": "send_quote",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Can you email Marie Tremblay her gutter quote, number 9? Add a line saying we can start next week.",
+  "params": {
+   "message": "next week"
+  },
+  "cible": [
+   "Tremblay"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "send_quote-3",
+  "section": "devis",
+  "outil": "send_quote",
+  "langue": "fr",
+  "type": "clarification",
+  "sensible": true,
+  "q": "Envoie la soumission de réparation de toiture à Isabelle Roy."
+ },
+ {
+  "id": "convert_quote_to_job-1",
+  "section": "devis",
+  "outil": "convert_quote_to_job",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Sophie Bouchard a accepté la soumission 19 des lumières de Noël : fais-en une job pour le 3 novembre à 9 h.",
+  "params": {
+   "scheduled_at": "2026-11-03T09:00"
+  },
+  "cible": [
+   "Bouchard"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "convert_quote_to_job-2",
+  "section": "devis",
+  "outil": "convert_quote_to_job",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Quote #11 got approved — turn it into a job, we'll schedule it later.",
+  "cible": [
+   "Bouchard"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "convert_quote_to_job-3",
+  "section": "devis",
+  "outil": "convert_quote_to_job",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "La soumission 19 est acceptée, mais faut planifier les travaux avant de facturer : convertis-la.",
+  "cible": [
+   "Bouchard"
+  ],
+  "interdits": [
+   "convert_quote_to_invoice"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "cancel_quote-1",
+  "section": "devis",
+  "outil": "cancel_quote",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Marie Tremblay a dit non pour la soumission 9 des gouttières, marque-la refusée.",
+  "params": {
+   "reason": "declined"
+  },
+  "cible": [
+   "Tremblay"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "cancel_quote-2",
+  "section": "devis",
+  "outil": "cancel_quote",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Archive quote #8, the client never got back to us.",
+  "params": {
+   "reason": "archived"
+  },
+  "cible": [
+   "Lavage de vitres et nettoyage"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "cancel_quote-3",
+  "section": "devis",
+  "outil": "cancel_quote",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Mets la soumission 8 de côté. Je veux pas la supprimer, juste la sortir de mes soumissions actives.",
+  "params": {
+   "reason": "archived"
+  },
+  "cible": [
+   "Lavage de vitres et nettoyage"
+  ],
+  "interdits": [
+   "delete_quote"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "update_quote-1",
+  "section": "devis",
+  "outil": "update_quote",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Change le titre de la soumission 9 pour « Nettoyage complet des gouttières » et rends-la valide 45 jours.",
+  "params": {
+   "title": "Nettoyage complet des gouttières",
+   "valid_days": 45
+  },
+  "cible": [
+   "Tremblay"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "update_quote-2",
+  "section": "devis",
+  "outil": "update_quote",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "On quote #8, change the window cleaning line to $300, keep everything else the same.",
+  "params": {
+   "unit_price_cents": 30000
+  },
+  "cible": [
+   "Lavage de vitres et nettoyage"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "update_quote-3",
+  "section": "devis",
+  "outil": "update_quote",
+  "langue": "fr",
+  "type": "clarification",
+  "sensible": true,
+  "q": "Monte le prix de la soumission de Marie Tremblay."
+ },
+ {
+  "id": "duplicate_quote-1",
+  "section": "devis",
+  "outil": "duplicate_quote",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Duplique la soumission 11 des lumières de Noël de Sophie Bouchard, je vais la réutiliser l’an prochain.",
+  "cible": [
+   "Bouchard"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "duplicate_quote-2",
+  "section": "devis",
+  "outil": "duplicate_quote",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Make a copy of quote #9 and call it “Gutter cleaning — fall 2026”.",
+  "params": {
+   "title": "Gutter cleaning"
+  },
+  "cible": [
+   "Tremblay"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "duplicate_quote-3",
+  "section": "devis",
+  "outil": "duplicate_quote",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Refais-moi exactement la même soumission que la 11, identique, pour Sophie Bouchard.",
+  "cible": [
+   "Bouchard"
+  ],
+  "interdits": [
+   "create_quote"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "delete_quote-1",
+  "section": "devis",
+  "outil": "delete_quote",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Supprime la soumission 18, c’était un test.",
+  "cible": [
+   "Exec devis job"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "delete_quote-2",
+  "section": "devis",
+  "outil": "delete_quote",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Delete quote #21, it was created by mistake.",
+  "cible": [
+   "Exec-4r65 devis 2"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "delete_quote-3",
+  "section": "devis",
+  "outil": "delete_quote",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Efface complètement la soumission 25, je veux pas juste l’archiver.",
+  "cible": [
+   "Exec-4r65 devis job"
+  ],
+  "interdits": [
+   "cancel_quote"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "send_quote_sms-1",
+  "section": "devis",
+  "outil": "send_quote_sms",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Texte la soumission 9 à Marie Tremblay, elle lit jamais ses courriels.",
+  "cible": [
+   "Tremblay"
+  ],
+  "interdits": [
+   "send_quote"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "send_quote_sms-2",
+  "section": "devis",
+  "outil": "send_quote_sms",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Send quote 9 to Marie Tremblay by text so she can approve it from her phone.",
+  "cible": [
+   "Tremblay"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "send_quote_sms-3",
+  "section": "devis",
+  "outil": "send_quote_sms",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Envoie la soumission 9 à Marie Tremblay sur son cell, avec le lien pour l’accepter.",
+  "cible": [
+   "Tremblay"
+  ],
+  "interdits": [
+   "send_quote",
+   "send_sms"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "convert_quote_to_invoice-1",
+  "section": "devis",
+  "outil": "convert_quote_to_invoice",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "La job est déjà faite pour la soumission 11 de Sophie Bouchard : transforme-la directement en facture.",
+  "cible": [
+   "Bouchard"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "convert_quote_to_invoice-2",
+  "section": "devis",
+  "outil": "convert_quote_to_invoice",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Turn quote #19 into an invoice, no need to schedule anything.",
+  "cible": [
+   "Bouchard"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "convert_quote_to_invoice-3",
+  "section": "devis",
+  "outil": "convert_quote_to_invoice",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Facture la soumission 11 telle quelle, sans passer par une job.",
+  "cible": [
+   "Bouchard"
+  ],
+  "interdits": [
+   "convert_quote_to_job",
+   "create_invoice"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "create_quote_preset-1",
+  "section": "devis",
+  "outil": "create_quote_preset",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Crée un préréglage de soumission « Entretien automne » avec nettoyage de gouttières et lavage de vitres.",
+  "params": {
+   "name": "Entretien automne"
+  }
+ },
+ {
+  "id": "create_quote_preset-2",
+  "section": "devis",
+  "outil": "create_quote_preset",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Create a quote preset called “Spring cleanup” with window washing and gutter cleaning, and a 25% deposit required.",
+  "params": {
+   "name": "Spring cleanup",
+   "deposit_type": "percentage",
+   "deposit_value": 25
+  }
+ },
+ {
+  "id": "create_quote_preset-3",
+  "section": "devis",
+  "outil": "create_quote_preset",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Crée un préréglage « Lumières de Noël » — juste les services, pas de prix : installation, minuterie, rallonges.",
+  "params": {
+   "name": "Lumières de Noël"
+  },
+  "interdits": [
+   "create_quote_template",
+   "create_quote"
+  ]
+ },
+ {
+  "id": "update_quote_preset-1",
+  "section": "devis",
+  "outil": "update_quote_preset",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Renomme mon préréglage « Nettoyage printemps » en « Grand ménage du printemps ».",
+  "params": {
+   "name": "Grand ménage du printemps"
+  },
+  "voisins": [
+   "list_quote_presets"
+  ]
+ },
+ {
+  "id": "update_quote_preset-2",
+  "section": "devis",
+  "outil": "update_quote_preset",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "In my “Nettoyage printemps” quote preset, require a 20% deposit.",
+  "params": {
+   "deposit_required": true,
+   "deposit_value": 20
+  },
+  "voisins": [
+   "list_quote_presets"
+  ]
+ },
+ {
+  "id": "update_quote_preset-3",
+  "section": "devis",
+  "outil": "update_quote_preset",
+  "langue": "fr",
+  "type": "clarification",
+  "sensible": true,
+  "q": "Change le dépôt dans mon préréglage « Nettoyage printemps »."
+ },
+ {
+  "id": "delete_quote_preset-1",
+  "section": "devis",
+  "outil": "delete_quote_preset",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Supprime le préréglage de soumission « Nettoyage printemps », on ne le vend plus.",
+  "voisins": [
+   "list_quote_presets"
+  ],
+  "cible": []
+ },
+ {
+  "id": "delete_quote_preset-2",
+  "section": "devis",
+  "outil": "delete_quote_preset",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Delete the “Nettoyage printemps” quote preset, we don't sell it anymore.",
+  "voisins": [
+   "list_quote_presets"
+  ],
+  "cible": []
+ },
+ {
+  "id": "delete_quote_preset-3",
+  "section": "devis",
+  "outil": "delete_quote_preset",
+  "langue": "fr",
+  "type": "clarification",
+  "sensible": true,
+  "q": "Supprime le préréglage Exec-5zhp."
+ },
+ {
+  "id": "duplicate_quote_preset-1",
+  "section": "devis",
+  "outil": "duplicate_quote_preset",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Duplique mon préréglage de soumission « Nettoyage printemps ».",
+  "voisins": [
+   "list_quote_presets"
+  ]
+ },
+ {
+  "id": "duplicate_quote_preset-2",
+  "section": "devis",
+  "outil": "duplicate_quote_preset",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Duplicate my “Nettoyage printemps” quote preset so I can tweak the copy.",
+  "voisins": [
+   "list_quote_presets"
+  ]
+ },
+ {
+  "id": "duplicate_quote_preset-3",
+  "section": "devis",
+  "outil": "duplicate_quote_preset",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Fais-moi une copie du préréglage « Nettoyage printemps » pour que je parte de là — pas une nouvelle soumission.",
+  "interdits": [
+   "create_quote_preset",
+   "duplicate_quote",
+   "create_quote"
+  ],
+  "voisins": [
+   "list_quote_presets"
+  ]
+ }
 ]
