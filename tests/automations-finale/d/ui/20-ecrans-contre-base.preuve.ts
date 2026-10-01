@@ -284,6 +284,30 @@ describe('D — l’onglet Historique contre le jeu connu', () => {
   });
 });
 
+describe('D — le panneau d’étape › Statistiques contre le jeu connu', () => {
+  it('[D-EL-19] parcours P : le courriel (e1) = 2 réussis ; le texto (e3) = 2 en attente', async () => {
+    await avecCapture(fr, 'd-etape-statistiques', async () => {
+      await fr.page.goto(`${fr.base}/automations/${jeu.regles.P.id}`);
+      const carte = (titre: string) => fr.page.locator('div.relative.w-\\[260px\\]').filter({ has: fr.page.locator('span.font-medium', { hasText: titre }) }).first();
+      const panneau = fr.page.getByRole('complementary', { name: 'Modifier l’étape' });
+      const lire = async (titre: string): Promise<string> => {
+        await carte(titre).locator('button').first().click();
+        await panneau.waitFor();
+        await panneau.getByRole('tab', { name: 'Statistiques' }).click();
+        await expect.poll(async () => propre(await panneau.innerText())).toContain('60 derniers jours.');
+        const texte = propre(await panneau.innerText());
+        await panneau.getByRole('button', { name: 'Fermer le panneau' }).click();
+        await panneau.waitFor({ state: 'hidden' });
+        return texte;
+      };
+      const courriel = await lire('Envoyer un courriel');
+      for (const attendu of ['Réussis 2', 'Sautés 0', 'Échoués 0', 'En attente 0']) expect(courriel, courriel).toContain(attendu);
+      const texto = await lire('Envoyer un texto');
+      for (const attendu of ['Réussis 0', 'Sautés 0', 'Échoués 0', 'En attente 2']) expect(texto, texto).toContain(attendu);
+    });
+  });
+});
+
 describe('D — états : chargement, erreur', () => {
   it('[D-EL-16] statistiques illisibles (API en erreur) : « — » dans les colonnes, et le panneau le dit', async () => {
     const o = await ouvrirOnglet({ langue: 'fr' });
