@@ -13,14 +13,15 @@ type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
 type Bi = { fr: string; en: string };
 const pick = (fr: boolean, b: Bi) => (fr ? b.fr : b.en);
 
-/* ── Ce que tu arrêtes de faire : Sans Lume / Avec Lume face à face.
+/* ── Ce que tu arrêtes de faire : Avant Lume / Après Lume face à face.
+   Rouge / vert = les deux soulignés du titre du hero (red-500, #3FAF97).
    Les deux cartes partagent les rangées de .hs-vs (subgrid) : la ligne N du
    problème est à la hauteur de la ligne N de sa solution. ── */
 type VsCard = { key: 'sans' | 'avec'; label: Bi; sub: Bi; items: Bi[]; stats: { label: Bi; value: Bi }[] };
 const VS_CARDS: VsCard[] = [
   {
     key: 'sans',
-    label: { fr: 'Sans Lume', en: 'Without Lume' },
+    label: { fr: 'Avant Lume', en: 'Before Lume' },
     sub: { fr: 'Des textos partout, des soumissions oubliées, des soirées au bureau.', en: 'Texts everywhere, forgotten quotes, evenings at the kitchen table.' },
     items: [
       { fr: 'Retaper à la main les demandes reçues sur ton site', en: 'Retyping website requests by hand' },
@@ -33,7 +34,7 @@ const VS_CARDS: VsCard[] = [
   },
   {
     key: 'avec',
-    label: { fr: 'Avec Lume', en: 'With Lume' },
+    label: { fr: 'Après Lume', en: 'After Lume' },
     sub: { fr: "Une seule app, et des automatisations qui travaillent pendant que t'es sur la job.", en: "One app, with automations that work while you're on the job." },
     items: [
       { fr: 'La demande sur ton site crée le client et la fiche toute seule', en: 'Website requests create the client and the record on their own' },
@@ -321,20 +322,16 @@ export const SECTIONS_CSS = `
 .hs-stop, .hs-pillars, .hs-roles, .hs-lumi, .hs-flow, .hs-plans, .hs-secu { max-width:1180px; margin:0 auto; padding:52px 24px 8px; }
 .hs-vs { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:repeat(8,auto); column-gap:16px; margin-top:22px; }
 .hs-vscard { grid-row:span 8; display:grid; grid-template-rows:subgrid; border-radius:18px; padding:22px; }
-.hs-vscard.sans { background:#f1f1ef; border:1px solid #e4e4df; }
-.hs-vscard.avec { background:#fff; border:2px solid var(--forest); box-shadow:0 24px 40px -28px rgba(31,95,79,.45); }
-.hs-vscard h3 { margin:0; font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:800; color:#555; }
-.hs-vscard.avec h3 { color:var(--forest); }
-.hs-vssub { margin:8px 0 0; font-size:19px; font-weight:700; letter-spacing:-.015em; line-height:1.3; color:#111; }
+.hs-vscard { --vs:#ef4444; --vs-line:rgba(239,68,68,.25); background:#fff; border:2px solid var(--vs); box-shadow:0 24px 40px -28px var(--vs-line); }
+.hs-vscard.avec { --vs:#3FAF97; --vs-line:rgba(63,175,151,.3); }
+.hs-vscard h3 { margin:0; text-align:center; font-size:clamp(28px,3vw,38px); font-weight:800; letter-spacing:-.03em; line-height:1.1; color:var(--vs); }
+.hs-vssub { margin:10px auto 0; max-width:34ch; text-align:center; font-size:17px; font-weight:600; letter-spacing:-.01em; line-height:1.4; color:#111; }
 .hs-vscard ul { grid-row:span 5; display:grid; grid-template-rows:subgrid; list-style:none; margin:14px 0 0; padding:0; }
-.hs-vscard li { display:flex; gap:10px; align-items:flex-start; font-size:14.5px; line-height:1.45; color:#333; padding:11px 0; border-top:1px solid #e4e4df; }
-.hs-vscard.avec li { color:#171717; border-top-color:#ececea; }
-.hs-vsic { flex:none; width:20px; height:20px; margin-top:1px; border-radius:50%; display:grid; place-items:center; font-size:11px; font-weight:800; background:#e4e4df; color:#8a8a84; }
-.hs-vscard.avec .hs-vsic { background:var(--mint-soft); color:var(--forest); }
-.hs-vsstats { display:flex; gap:28px; margin:6px 0 0; padding-top:16px; border-top:1px solid #d9d9d4; align-self:end; }
-.hs-vsstats dt { font-size:12px; color:#555; } .hs-vscard.avec .hs-vsstats { border-top-color:rgba(31,95,79,.25); }
-.hs-vsstats dd { margin:4px 0 0; font-size:28px; font-weight:800; letter-spacing:-.03em; line-height:1; color:#111; }
-.hs-vscard.avec .hs-vsstats dd { color:var(--forest); }
+.hs-vscard li { display:flex; gap:10px; align-items:flex-start; font-size:14.5px; line-height:1.45; color:#171717; padding:11px 0; border-top:1px solid #ececea; }
+.hs-vsic { flex:none; width:20px; height:20px; margin-top:1px; border-radius:50%; display:grid; place-items:center; font-size:11px; font-weight:800; background:var(--vs); color:#fff; }
+.hs-vsstats { display:flex; justify-content:center; gap:28px; margin:6px 0 0; padding-top:16px; border-top:1px solid var(--vs-line); align-self:end; text-align:center; }
+.hs-vsstats dt { font-size:12px; color:#555; }
+.hs-vsstats dd { margin:4px 0 0; font-size:28px; font-weight:800; letter-spacing:-.03em; line-height:1; color:var(--vs); }
 .hs-marquee { margin:34px 0 0; overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent); mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent); }
 .hs-mlabel { margin:0 0 14px; text-align:center; font-size:11px; letter-spacing:.14em; text-transform:uppercase; font-weight:700; color:#8a8a84; }
 .hs-mtrack { display:flex; width:max-content; animation:hs-marquee 32s linear infinite; }
