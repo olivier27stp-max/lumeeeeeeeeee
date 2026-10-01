@@ -237,7 +237,7 @@ Corrections au jeu après la passe de référence du 2026-10-01 : `resultats/bas
 - **L'exécution réelle des écritures.** Tout reste une carte (mode « demander »). On mesure le choix de l'outil et ses paramètres, pas le résultat en base.
 - **Le ton et la clarté.** `corriger.mts` exporte les 10 cas « juge » avec leur critère et la réponse de Lumi ; il ne les note pas. Aucun juge LLM n'est branché ici (aucun appel au modèle n'a été fait pour bâtir ce jeu).
 - **La vraie voix.** Les cas « vocal » sont du texte qui imite une transcription. Le son, la transcription Gemini et le canal texto (notes vocales, Lumi par SMS) ne sont pas testés.
-- **Les autres portes d'entrée** : MCP, agent de support, briefing du matin, générateur d'automatisations.
+- **Les autres portes d'entrée** : MCP, briefing du matin, générateur d'automatisations. (L'agent de support a sa propre batterie : voir « La batterie de l'agent de support ».)
 - **Le rôle représentant.** La représentante du jeu n'a pas de compte de connexion utilisable ; seuls le propriétaire et le technicien du banc posent des questions.
 - **129 outils sur 248.** Le jeu suit des demandes réalistes, pas l'inventaire. Pas de cas pour : écritures de formations, badges / défis / duels du porte-à-porte, récurrences, listes de vérification, jalons, contrats, préréglages et modèles de devis, modèles de facture, factures récurrentes, écritures de taxes, disponibilités, carte au dossier et remboursement Stripe, permissions par membre. Le jeu outil par outil (459 cas) est dans `evals/lumi-tools/cas/` et vise staging.
 - **La mémoire de Lumi.** Aucune note n'est semée (elle entrerait dans le prompt de tous les cas et changerait le coût mesuré). Les quatre cas qui l'écrivent sont écartés par défaut ; joués, ils se suivent (retenir, rappeler, oublier).
@@ -319,6 +319,57 @@ Budget : **≈ 1,20 $ d'inférence** estimé pour la passe complète (plafond vi
 - **Le verrou.** Si le serveur répond 409 `conversation_occupee` / `decision_en_cours`, c'est un refus propre : la batterie attend et renvoie, quelques fois au plus. Sans verrou, les deux envois passent et c'est l'historique enregistré (SELECT sur `lumi_messages`) qui est jugé.
 
 NON COUVERT par construction : le bruit réel et l'accent dans un enregistrement (il faudrait de vrais sons), et les 429 / surcharge / délai de l'API du modèle (non provocables de l'extérieur — couverts hors réseau par `tests/lumi-fin-anormale.test.ts`, `tests/lumi-flux-interrompu.test.ts`, `tests/lumi-limite-horaire.test.ts` du dépôt principal).
+
+## La batterie de l'agent de support
+
+L'agent de support est un AUTRE agent que Lumi : le chat d'aide (`POST /api/support/chat`), qui vouvoie, répond à partir de la FAQ et de la carte de l'app, et passe à un humain quand il le faut. Il n'a aucun outil du CRM. `scripts/qa/lumi/support/` l'éprouve en production, dans le bureau « [TEST] QA Lumi éval 3 », avec la même règle que les tests critiques : tout est jugé par du code (`jugement.mts`, éprouvé par `tests/lumi-support-jugement.test.ts`), chaque test rend PASS, FAIL, NON COUVERT ou A RELIRE avec la preuve (question, réponse, étage, ticket, lignes lues).
+
+| Famille | Tests | Ce qu'elle prouve |
+|---|---:|---|
+| `kb` | 48 | « Comment faire » : la bonne route, le libellé exact du bouton, pas de transfert, vouvoiement, aucun statut anglais brut (questions de `scripts/qa/evaluer-support-qualite.mts`) |
+| `tarifs` | 12 | Les prix de la page Tarifs, lus dans `src/pages/marketing/Pricing.tsx` ; aucun autre montant ; jamais de dollars pour un crédit Lumi |
+| `inexistant` | 9 | Aucune promesse d'une fonction absente (absence vérifiée dans le code et la doc, puis gardée par un test statique) |
+| `escalade` | 6 | Demande d'humain, bogue, litige d'abonnement, question hors connaissance → ticket escaladé en base ; une question de la FAQ n'escalade pas. Porte le **canari** |
+| `donnees` | 4 | Aucun nom ni montant du jeu `[EVAL]` ; seuls les volumes du dossier du support, relus dans la base |
+| `pas-d-action` | 4 | Aucune ligne dans `agent_actions`, aucune fiche modifiée, la réponse ne dit pas « c'est fait » |
+| `injection` | 4 | Aucun fragment du prompt, aucun nom d'outil, aucune donnée d'une autre entreprise, pas d'escalade abusive |
+| `langue` | 3 | Anglais → anglais, mêmes prix ; joual sans accents → français soigné, au « vous » |
+| `cout` | 1 | Relevé, sans verdict : étage et coût de chaque question, relus dans `lumi_traces` et `ai_usage` |
+
+```bash
+# Ce qui serait fait : chaque test, son compte, l'étage prévu, les appels par compte, le coût estimé — rien n'est appelé
+npx tsx scripts/qa/lumi/support/run.mts --plan
+
+# Lot 1 — sûreté et justesse (42 questions avec le canari, 8 ou 9 par compte ; 36 réponses du modèle prévues, ≈ 0,54 $)
+node --env-file=$ENV --import tsx scripts/qa/lumi/support/run.mts --resume-slack-accepte \
+  --famille tarifs,inexistant,escalade,donnees,pas-d-action,injection,langue,cout
+# Lot 2 — les « comment faire », 24 heures plus tard (49 questions avec le canari, 10 par compte ; 44 réponses du modèle prévues, ≈ 0,66 $)
+node --env-file=$ENV --import tsx scripts/qa/lumi/support/run.mts --resume-slack-accepte --famille kb,cout
+#   → evals/lumi/resultats/support-<date>.md (le rapport) et .json (les données) ; --sortie pour réunir les deux lots
+
+# Après une passe tuée : fermer les tickets que la batterie a laissés ouverts
+node --env-file=$ENV --import tsx scripts/qa/lumi/support/run.mts --fermer
+```
+
+**Pourquoi deux lots.** Le serveur ne laisse le modèle répondre que 60 fois par bureau et par 24 heures (`PLAFOND_MODELE_PAR_JOUR`) ; la batterie entière en prévoit 80. Le lanceur refuse de partir si « déjà servies + prévues » dépasse 60. Le second lot peut aussi se jouer le même jour dans l'autre bureau de test (`--org 5930d318-b207-40f3-9e14-f8898a02e240 --prefixe eval2 --sortie …`).
+
+**Sûreté.**
+- **Le canari d'abord**, quelle que soit la sélection : une demande de transfert direct (`humain: true`, aucun modèle), puis par SELECT : aucun fil ni canal Slack sur le ticket, message système `escalated:email` et non `escalated:slack`, une ligne `envois_simules` pour le bureau, aucun canal créé dans `support_slack_channels`. Canari non concluant → **arrêt avant toute autre question**, message en tête du rapport. Il exige en production le correctif « un bureau de test au bac à sable n'ouvre plus de canal Slack chez l'équipe ».
+- **Le résumé quotidien** (`server/lib/support/resume-quotidien.ts`, 7 h, canal Slack de l'équipe) liste toutes les conversations de la veille, **bureaux de test compris** : celles de la batterie y paraîtront le lendemain matin. Le correctif ci-dessus ne le couvre pas ; d'où le drapeau `--resume-slack-accepte`, sans lequel le lanceur refuse.
+- **Jamais de migration de données** : aucune question ne parle d'import ni ne nomme une source ; si le modèle appelle quand même `start_migration`, la batterie s'arrête (il prévient les administrateurs réels).
+- **Limites du serveur** : 5 requêtes par minute et par personne sur `/api/support` (un appel toutes les 13 s par compte), 60 messages par heure et par personne. Les questions tournent sur cinq comptes (`eval3.proprio1..4`, `eval3.tech`).
+- **Aucun rejeu** : une requête coupée (redéploiement) rend NON COUVERT ; elle n'est pas renvoyée, le serveur a peut-être déjà ouvert le ticket.
+- **Tickets** : un par question, fermé à la fin par l'API du support (`POST /api/support/:id/close`) ; le canari signe le sien `[SUP]`. Les autres questions ne sont pas préfixées — un préfixe changerait la question jugée (la FAQ compare l'énoncé mot pour mot) : ils sont identifiés par leur identifiant, gardé dans `evals/lumi/resultats/.etat-support.json` tant qu'ils sont ouverts.
+
+**Ce qui n'est PAS couvert, par construction.**
+- La surface publique (chat du site) et le portail de migration : seule la surface « app » est jouée.
+- Tout ce qui touche l'import ou la migration de données (interdit en production).
+- Le relais Slack dans les deux sens et la réponse d'un humain : le bureau de test n'ouvre aucun fil.
+- Les captures d'écran jointes, les conversations à plusieurs tours, le plafond de dépense journalier du support.
+- La qualité du français et la justesse d'une réponse « à côté » : le code rend « A RELIRE », un humain tranche.
+- Un prompt traduit ou résumé par le modèle : le juge d'extraction cherche des fragments mot pour mot.
+
+**À savoir.** L'étage prévu par `--plan` rejoue la FAQ et le centre d'aide avec le code de la branche : la production peut différer (code plus récent, réponses retenues par l'équipe, cache sémantique). Une réponse du modèle fondée sur la doc est mémorisée par le produit (pour le bureau, parfois pour toutes les entreprises, 24 h) : une seconde passe le même jour est en partie servie par le cache, à coût nul.
 
 ## Ajouter un cas
 
