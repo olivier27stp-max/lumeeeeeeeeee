@@ -331,6 +331,16 @@ export interface ResultatTour {
    * priver l'utilisateur de sa réponse.
    */
   chiffresSuspects?: string[];
+  /** `stop_reason` du DERNIER appel au modèle du tour (null si aucun appel n'est parti). */
+  stop_reason?: string | null;
+  /** La réponse a été coupée par la limite de sortie (`max_tokens`) : elle est incomplète, et dite comme telle. */
+  tronque?: boolean;
+  /** Nombre d'appels au modèle dans ce tour. */
+  appels_modele?: number;
+  /** Outils chargés d'office dans la requête (les différés ne comptent pas). */
+  outils_charges?: number;
+  /** Délai entre le début du tour et le premier texte reçu du modèle (null : aucun texte). */
+  premier_token_ms?: number | null;
 }
 
 export async function tourLumi(opts: {
@@ -363,6 +373,8 @@ export async function tourLumi(opts: {
    * vraie barrière dans tous les cas.
    */
   outilsPermis?: ReadonlySet<string> | null;
+  /** Langue des avis rendus par gabarit (réponse coupée, refus). Français par défaut. */
+  langue?: 'fr' | 'en';
 }): Promise<ResultatTour> {
   const model = opts.reglages?.model ?? modeleLumi();
   const effort = opts.reglages?.effort ?? reglesCout().effort_defaut;
@@ -373,6 +385,14 @@ export async function tourLumi(opts: {
   let texteTotal = '';
   let coutTotal = 0;
   let coutHorsCacheFroid = 0;
+  // Mesure (LUMI_INVENTORY, partie 1 §7) : ce que la trace ne savait pas encore.
+  const debutTour = Date.now();
+  let premierTokenMs: number | null = null;
+  let appelsModele = 0;
+  let dernierStop: string | null = null;
+  const outilsCharges = outils.filter((o) => !('defer_loading' in o && o.defer_loading) && !('type' in o && o.type)).length;
+  const mesure = () => ({ stop_reason: dernierStop, appels_modele: appelsModele, outils_charges: outilsCharges, premier_token_ms: premierTokenMs });
+  const fr = opts.langue !== 'en';
   // Tous les résultats d'outils du tour, pour vérifier après coup que les
   // montants cités dans la réponse en viennent bien.
   const resultatsBruts: string[] = [];
@@ -400,7 +420,7 @@ export async function tourLumi(opts: {
     const doitConclure = coutHorsCacheFroid >= plafondTour;
     if (coutHorsCacheFroid >= plafondTour * 2) {
       opts.emettre({ type: 'error', message: 'plafond_tour' });
-      return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal };
+      return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, ...mesure() };
     }
     // Plafond dur : le coût maximal de l'appel est réservé AVANT de l'envoyer
     // (verrou en base) ; `capped` = rien ne part, la route sert le gabarit.
@@ -408,7 +428,7 @@ export async function tourLumi(opts: {
       ? await opts.budget.reserver(estimationCoutAppel(model, JSON.stringify(messages).length + opts.systeme.reduce((n, b) => n + b.text.length, 0), MAX_TOKENS))
       : null;
     if (reservation?.statut === 'capped') {
-      return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true };
+      return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true, ...mesure() };
     }
     const stream = clientAnthropic().messages.stream({
       model,
@@ -426,8 +446,13 @@ export async function tourLumi(opts: {
       // préfixe et coûterait une réécriture, exactement ce qu'on veut éviter).
       ...(doitConclure ? { tool_choice: { type: 'none' as const } } : {}),
     });
-    stream.on('text', (delta) => { texteTotal += delta; opts.emettre({ type: 'text', delta }); });
+    stream.on('text', (delta) => {
+      if (premierTokenMs === null) premierTokenMs = Date.now() - debutTour;
+      texteTotal += delta; opts.emettre({ type: 'text', delta });
+    });
     const reponse = await stream.finalMessage();
+    appelsModele += 1;
+    dernierStop = reponse.stop_reason ?? null;
     signalerAppelLumi(model, { systeme: opts.systeme, outils }, opts.sousAgent ?? 'base'); // arme le maintien du cache 1 h sur CE préfixe (cache-chaud.ts)
 
     const cout = coutEnCents(model, reponse.usage);
@@ -443,19 +468,56 @@ export async function tourLumi(opts: {
     // Tokens seulement : aucun montant en $ ne part vers le navigateur (crédits Lumi, 2026-09-30).
     opts.emettre({ type: 'usage', model, usage: reponse.usage });
 
+    // ── Fin anormale : réponse COUPÉE (max_tokens), REFUSÉE, ou vide ──
+    // Avant (2026-10-01), `max_tokens` passait pour une fin normale et le
+    // contenu était sauvegardé tel quel. Si la coupe tombait dans un bloc
+    // d'action, ce bloc — arguments incomplets — restait dans l'historique :
+    // sans `tool_result`, chaque tour suivant risquait un refus 400 de l'API,
+    // et une écriture tronquée pouvait réapparaître comme carte à confirmer.
+    // On ne garde donc QUE le texte complet, on n'exécute et ne propose rien,
+    // et on le DIT : jamais un faux « c'est fait », jamais un silence.
+    if (reponse.stop_reason === 'max_tokens' || reponse.stop_reason === 'refusal' || reponse.content.length === 0) {
+      const coupee = reponse.stop_reason === 'max_tokens';
+      const refusee = reponse.stop_reason === 'refusal';
+      const textes = reponse.content.filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text' && b.text.trim().length > 0);
+      const actionCoupee = reponse.content.some((b) => b.type === 'tool_use');
+      let avis = '';
+      if (coupee && actionCoupee) {
+        avis = fr
+          ? 'Je n’ai pas pu préparer cette action : ma réponse a été coupée avant la fin, donc rien n’a été fait. Redemande-la en plus court, ou une étape à la fois.'
+          : 'I couldn’t prepare that action: my reply was cut off before the end, so nothing was done. Ask again more briefly, or one step at a time.';
+      } else if (coupee) {
+        avis = fr ? '(Ma réponse a été coupée ici. Écris « continue » pour la suite.)' : '(My reply was cut off here. Type “continue” for the rest.)';
+      } else if (!textes.length) {
+        avis = refusee
+          ? (fr ? 'Je ne peux pas répondre à cette demande.' : 'I can’t help with that request.')
+          : (fr ? 'Je n’ai pas réussi à répondre. Réessaie.' : 'I couldn’t answer. Please try again.');
+      }
+      if (avis) {
+        const separateur = texteTotal && !texteTotal.endsWith('\n') ? '\n\n' : '';
+        texteTotal += separateur + avis;
+        opts.emettre({ type: 'text', delta: separateur + avis });
+      }
+      // Jamais un message assistant vide (refusé par l'API au tour suivant).
+      const contenu: Anthropic.Messages.TextBlockParam[] = [
+        ...textes.map((b) => ({ type: 'text' as const, text: b.text })),
+        ...(avis ? [{ type: 'text' as const, text: avis }] : []),
+      ];
+      const fin: Anthropic.Messages.MessageParam = { role: 'assistant', content: contenu };
+      messages.push(fin);
+      nouveaux.push(fin);
+      opts.emettre({ type: 'error', message: refusee ? 'refusal' : coupee ? 'reponse_coupee' : 'reponse_vide' });
+      return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, tronque: coupee, ...mesure() };
+    }
+
     const assistant: Anthropic.Messages.MessageParam = { role: 'assistant', content: reponse.content };
     messages.push(assistant);
     nouveaux.push(assistant);
-
-    if (reponse.stop_reason === 'refusal') {
-      opts.emettre({ type: 'error', message: 'refusal' });
-      return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal };
-    }
     // pause_turn : l'API a interrompu le tour après un outil serveur (recherche
     // d'outils) ; on relance avec l'historique tel quel, sans message utilisateur.
     if (reponse.stop_reason === 'pause_turn') continue;
     if (reponse.stop_reason !== 'tool_use') {
-      return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal };
+      return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, ...mesure() };
     }
 
     const appels = reponse.content.filter((b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use');
@@ -541,7 +603,7 @@ export async function tourLumi(opts: {
       const premiere = groupe[0];
       opts.emettre({ type: 'proposal', tool_use_id: premiere.tool_use_id, tool: premiere.tool, args: premiere.args, capacite: premiere.capacite, apercu: premiere.apercu, ...(groupe.length > 1 ? { groupe } : {}) });
       const proposition: ResultatTour['proposition'] = { tool_use_id: premiere.tool_use_id, tool: premiere.tool, args: premiere.args, ...(enAttente.length > 1 ? { groupe: enAttente } : {}) };
-      return { nouveauxMessages: nouveaux, proposition, texte: texteTotal, cost_cents: coutTotal };
+      return { nouveauxMessages: nouveaux, proposition, texte: texteTotal, cost_cents: coutTotal, ...mesure() };
     }
 
     const u: Anthropic.Messages.MessageParam = { role: 'user', content: resultats };
@@ -549,7 +611,7 @@ export async function tourLumi(opts: {
   }
 
   opts.emettre({ type: 'error', message: 'trop_d_etapes' });
-  return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, chiffresSuspects: chiffresSuspects(texteTotal, resultatsBruts) };
+  return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, chiffresSuspects: chiffresSuspects(texteTotal, resultatsBruts), ...mesure() };
 }
 
 /**
