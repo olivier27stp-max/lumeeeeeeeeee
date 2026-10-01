@@ -84,7 +84,7 @@ const declencheur = (cle: unknown): [fr: string, en: string] => {
 };
 
 /* ── Résolveurs : un identifiant → une ligne lisible ─────────────────────── */
-type Resolveur = (id: string, ctx: Ctx, fuseau: string) => Promise<LigneApercu | null>;
+type Resolveur = (id: string, ctx: Ctx, fuseau: string, args?: Record<string, unknown>) => Promise<LigneApercu | null>;
 const introuvable = (libelle: LigneApercu['libelle']): LigneApercu => ({ libelle, valeur: 'introuvable dans cette entreprise', valeur_en: 'not found in this company', alerte: true });
 
 const client: Resolveur = async (id, { client: db, orgId }) => {
@@ -111,10 +111,13 @@ const facture: Resolveur = async (id, { client: db, orgId }) => {
   };
 };
 const devis: Resolveur = async (id, { client: db, orgId }) => {
-  const { data: q } = await db.from('quotes').select('quote_number, title, total_cents, status, client_id').eq('org_id', orgId).eq('id', id).maybeSingle();
+  const { data: q } = await db.from('quotes').select('quote_number, title, total_cents, status, client_id, lead_id').eq('org_id', orgId).eq('id', id).maybeSingle();
   if (!q) return introuvable(L('Devis', 'Quote'));
-  const { data: c } = estUuid(q.client_id)
-    ? await db.from('clients').select('first_name, last_name, company, display_as_company').eq('org_id', orgId).eq('id', q.client_id).maybeSingle()
+  // Le devis d'un prospect n'a pas de client_id : la personne est dans lead_id (même ordre que les routes d'envoi).
+  // Sans ce repli, la carte « envoyer / supprimer / modifier le devis » ne disait pas À QUI il est (éval du 2026-10-01).
+  const personne = estUuid(q.client_id) ? q.client_id : estUuid(q.lead_id) ? q.lead_id : null;
+  const { data: c } = personne
+    ? await db.from('clients').select('first_name, last_name, company, display_as_company').eq('org_id', orgId).eq('id', personne).maybeSingle()
     : { data: null };
   const tot = Number(q.total_cents) || 0;
   return {
@@ -294,6 +297,22 @@ const listeJob: Resolveur = async (id, ctx, fuseau) => {
   return { libelle: L('Liste de vérification', 'Checklist'), valeur: [j?.valeur, `${n} élément(s)`].filter(Boolean).join(' · '), valeur_en: [j?.valeur, `${n} item(s)`].filter(Boolean).join(' · ') };
 };
 
+// Une fiche désignée par deux arguments (entity_type + entity_id : une note, un champ…). Avant, la carte
+// disait « Élément visé : entity » — on confirmait une note sans voir sur QUI (éval du 2026-10-01).
+const ficheTypee: Resolveur = async (id, ctx, fuseau, args) => {
+  // Lu pour choisir la table, jamais affiché (String et non txt : le glossaire traque les codes posés sur la carte).
+  const type = String(args?.entity_type ?? '').trim().toLowerCase();
+  const parType: Record<string, Resolveur> = { client, lead: client, prospect: client, job, quote: devis, invoice: facture, deal };
+  const direct = parType[type];
+  if (direct) return direct(id, ctx, fuseau, args);
+  // Type absent ou inconnu : la première table qui connaît l'identifiant.
+  for (const r of [client, job, devis, facture]) {
+    const ligne = await r(id, ctx, fuseau, args);
+    if (ligne && !ligne.alerte) return ligne;
+  }
+  return introuvable(L('Fiche', 'Record'));
+};
+
 /** Nom d'argument → résolveur. Les identifiants non listés restent signalés comme « élément visé ». */
 const RESOLVEURS: Array<[RegExp, Resolveur]> = [
   [/^(client_id|lead_id|keep_client_id|absorb_client_id|customer_id)$/, client],
@@ -317,6 +336,7 @@ const RESOLVEURS: Array<[RegExp, Resolveur]> = [
   [/^preset_id$/, prereglage],
   [/^submission_id$/, demande],
   [/^note_id$/, noteFiche],
+  [/^entity_id$/, ficheTypee],
   [/^milestone_id$/, jalon],
   [/^group_id$/, groupeTaxes],
   [/^checklist_id$/, listeJob],
@@ -466,7 +486,7 @@ export async function apercuAction(args: Record<string, any>, ctx: Ctx, outil?: 
       details.push({ libelle: libelleParametre(cle), valeur: argentFr(v), valeur_en: argentEn(v) });
       continue;
     }
-    if (res && estUuid(v)) { cibles.push((await res(v, ctx, fuseau)) ?? introuvable(L(cle, cle))); continue; }
+    if (res && estUuid(v)) { cibles.push((await res(v, ctx, fuseau, args)) ?? introuvable(L(cle, cle))); continue; }
     // Liste d'identifiants (task_ids…) : chaque élément nommé.
     if (Array.isArray(v) && v.every(estUuid) && v.length) {
       const r = resolveurDe(cle.replace(/_ids$/, '_id'));
@@ -526,6 +546,8 @@ export async function apercuAction(args: Record<string, any>, ctx: Ctx, outil?: 
       details.push({ libelle: libelleParametre(cle), valeur: `${n} ${n > 1 ? 'réponses enregistrées' : 'réponse enregistrée'}`, valeur_en: `${n} ${n > 1 ? 'answers saved' : 'answer saved'}` });
       continue;
     }
+    // Le type de fiche est déjà dit par la cible nommée (« Client : Patrick Girard ») : pas de ligne « Type de fiche : client ».
+    if (cle === 'entity_type' && estUuid(args?.entity_id)) continue;
     const d = detail(cle, v, fuseau, /^(update_|set_)/.test(outil ?? ''));
     if (d) details.push(d);
   }
