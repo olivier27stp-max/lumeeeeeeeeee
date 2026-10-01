@@ -282,18 +282,96 @@ describe('K — jobs récurrents', () => {
     expect(heureLocale).toBe('09:00');
   });
 
-  it.fails('[K-042] ROUGE ATTENDU — décision requise : une récurrence créée par Lumi place ses visites à ~1 h du matin (next_run_at = date de début à 05:00Z), sans heure de la job d’origine', async () => {
-    const { job } = await jobSource(b.orgA, marque('K-042'));
+  const heureA = (iso: string, tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
+  const jourA = (iso: string, tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+  async function fuseauBureau(tz: string) {
+    const { error } = await b.admin.from('company_settings').update({ timezone: tz }).eq('org_id', b.orgA);
+    if (error) throw new Error(`fuseau du bureau : ${error.message}`);
+    (await import('../../../server/lib/automations-fuseau-org')).viderCacheFuseau();
+  }
+  /** L'heure de la job d'origine — une écriture ratée (staging lent) doit se voir, pas fausser l'attente. */
+  async function planifierJob(job: string, instant: string) {
+    const { error } = await b.admin.from('jobs').update({ scheduled_at: instant }).eq('id', job);
+    if (error) throw new Error(`heure de la job d'origine : ${error.message}`);
+  }
+  async function recurrenceParLumi(job: string, debut: string) {
     const { jeton } = await sessionDe(b.admin, COMPTES.proprioA.email);
     const { buildSupabaseWithAuth } = await import('../../../server/lib/supabase');
     const { executerOutilGarde } = await import('../../../server/lib/agent/garde');
-    const r = await executerOutilGarde({ name: 'create_recurrence_rule', args: { job_id: job, frequency: 'weekly', start_date: jour(3) }, userId: b.users.proprioA, orgId: b.orgA, client: buildSupabaseWithAuth(`Bearer ${jeton}`, b.orgA) });
+    const r = await executerOutilGarde({ name: 'create_recurrence_rule', args: { job_id: job, frequency: 'weekly', start_date: debut }, userId: b.users.proprioA, orgId: b.orgA, client: buildSupabaseWithAuth(`Bearer ${jeton}`, b.orgA) });
     const regleId = (r as { result?: { rule_id?: string } }).result?.rule_id;
     if (regleId) nettoyer.push(() => b.admin.from('job_recurrence_rules').delete().eq('id', regleId));
-    const { data } = await b.admin.from('job_recurrence_rules').select('next_run_at').eq('id', regleId ?? '').single();
-    const h = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false }).format(new Date(data!.next_run_at as string)));
+    const { data } = await b.admin.from('job_recurrence_rules').select('next_run_at, local_time, timezone').eq('id', regleId ?? '').single();
+    return data!;
+  }
+
+  it('[K-042] une récurrence créée par Lumi place ses visites à une heure de jour : celle de la job d’origine (14 h 30 à Toronto), plus ~1 h du matin', async () => {
+    await fuseauBureau('America/Toronto');
+    const { job } = await jobSource(b.orgA, marque('K-042'));
+    // 18:30Z le 15 octobre 2026 = 14 h 30 à Toronto (heure avancée).
+    await planifierJob(job, '2026-10-15T18:30:00Z');
+    const regle = await recurrenceParLumi(job, jour(3));
+    const h = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false }).format(new Date(regle.next_run_at as string)));
     expect(h).toBeGreaterThanOrEqual(7);
-  });
+    expect(heureA(regle.next_run_at as string, 'America/Toronto')).toBe('14:30');
+    expect(jourA(regle.next_run_at as string, 'America/Toronto')).toBe(jour(3));
+    expect(regle.local_time).toBe('14:30:00');
+    // Le fuseau n'est plus « America/Montreal » en dur : la série hérite de celui de l'entreprise.
+    expect(regle.timezone).toBeNull();
+  }, 180_000);
+
+  it('[K-042] sans heure connue (job jamais planifiée), la série prend 9 h LOCALE — à Vancouver aussi', async () => {
+    await fuseauBureau('America/Vancouver');
+    const { job } = await jobSource(b.orgA, marque('K-042b'));
+    const regle = await recurrenceParLumi(job, jour(3));
+    expect(heureA(regle.next_run_at as string, 'America/Vancouver')).toBe('09:00');
+    expect(jourA(regle.next_run_at as string, 'America/Vancouver')).toBe(jour(3));
+    expect(regle.local_time).toBe('09:00:00');
+  }, 180_000);
+
+  it('[K-044] série SANS heure (créée par l’app, ou par Lumi avant le correctif) : la visite copiée prend l’heure de la job d’origine, pas l’instant du passage', async () => {
+    const { processRecurringJobs } = await import('../../../server/lib/recurringJobScheduler');
+    const { fuseauEnJournee } = await import('../harnais/moteur');
+    const tz = fuseauEnJournee(); // il est entre 10 h et 16 h dans ce fuseau
+    await fuseauBureau(tz);
+    const { job, client: c } = await jobSource(b.orgA, marque('K-044'));
+    // La job d'origine est à 23 h 15 locale : ce soir, donc pas encore passée.
+    const { instantLocal, jourLocal } = await import('../../../server/lib/dates-locales');
+    await planifierJob(job, instantLocal(jourLocal(tz, new Date(), -7), '23:15', tz));
+    const id = await regle(b.orgA, job, { next_run_at: new Date(Date.now() - 3600_000).toISOString(), timezone: null, local_time: null });
+    await processRecurringJobs(b.admin, { orgId: b.orgA });
+    const j = await copies(c, job);
+    expect(j.length).toBe(1);
+    expect(heureA(j[0].scheduled_at as string, tz)).toBe('23:15');
+    expect(jourA(j[0].scheduled_at as string, tz)).toBe(jourLocal(tz, new Date()));
+    const { data: ev } = await b.admin.from('schedule_events').select('start_at').eq('job_id', j[0].id);
+    expect(ev?.map((e) => heureA(e.start_at as string, tz))).toEqual(['23:15']);
+    const { data: r } = await b.admin.from('job_recurrence_rules').select('next_run_at, local_time').eq('id', id).single();
+    expect(r!.local_time).toBe('23:15:00');
+    expect(heureA(r!.next_run_at as string, tz)).toBe('23:15');
+    expect(jourA(r!.next_run_at as string, tz)).toBe(jourLocal(tz, new Date(), 7));
+  }, 180_000);
+
+  it('[K-045] série sans heure dont l’heure est DÉJÀ passée aujourd’hui : jamais de visite dans le passé — cette occurrence garde son instant, les suivantes prennent l’heure de la série', async () => {
+    const { processRecurringJobs } = await import('../../../server/lib/recurringJobScheduler');
+    const { fuseauEnJournee } = await import('../harnais/moteur');
+    const tz = fuseauEnJournee();
+    await fuseauBureau(tz);
+    const { job, client: c } = await jobSource(b.orgA, marque('K-045'));
+    const { instantLocal, jourLocal } = await import('../../../server/lib/dates-locales');
+    // 6 h 10 locale : déjà passée (il est au moins 10 h).
+    await planifierJob(job, instantLocal(jourLocal(tz, new Date(), -7), '06:10', tz));
+    const du = new Date(Date.now() - 600_000).toISOString();
+    const id = await regle(b.orgA, job, { next_run_at: du, timezone: null, local_time: null });
+    await processRecurringJobs(b.admin, { orgId: b.orgA });
+    const j = await copies(c, job);
+    expect(j.length).toBe(1);
+    expect(new Date(j[0].scheduled_at as string).toISOString()).toBe(du);
+    const { data: r } = await b.admin.from('job_recurrence_rules').select('next_run_at, local_time').eq('id', id).single();
+    expect(r!.local_time).toBe('06:10:00');
+    expect(heureA(r!.next_run_at as string, tz)).toBe('06:10');
+    expect(jourA(r!.next_run_at as string, tz)).toBe(jourLocal(tz, new Date(du), 7));
+  }, 180_000);
 
   it('[K-043] isolation : un passage limité au bureau A ne copie aucun job du bureau B', async () => {
     const { processRecurringJobs } = await import('../../../server/lib/recurringJobScheduler');

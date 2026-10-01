@@ -26,3 +26,30 @@ export function minuitLocal(jour: string, fuseau: string): string {
   return new Date(estime - decalage).toISOString();
 }
 
+
+/** « 14:30 » : l'heure LOCALE d'un instant dans le fuseau donné. */
+export function heureLocale(instant: string | Date, fuseau: string): string {
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: fuseau, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(instant));
+  const v = (t: string) => p.find((x) => x.type === t)?.value ?? '00';
+  return `${v('hour')}:${v('minute')}`;
+}
+
+/**
+ * L'instant (ISO UTC) d'un jour et d'une heure LOCAUX : « 2026-10-15 » à
+ * « 09:00 » dans America/Vancouver → 2026-10-15T16:00:00.000Z.
+ *
+ * Deux passes : le décalage du fuseau se lit à l'instant ESTIMÉ, et peut
+ * différer à l'instant réel de part et d'autre d'un changement d'heure.
+ */
+export function instantLocal(jour: string, heure: string, fuseau: string): string {
+  const [y, m, d] = jour.split('-').map(Number);
+  const [hh, mm] = heure.split(':').map(Number);
+  const vise = Date.UTC(y, m - 1, d, hh || 0, mm || 0, 0);
+  const decalage = (instant: number): number => {
+    const p = new Intl.DateTimeFormat('en-CA', { timeZone: fuseau, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(instant));
+    const v = (t: string) => Number(p.find((x) => x.type === t)?.value ?? 0);
+    return Date.UTC(v('year'), v('month') - 1, v('day'), v('hour'), v('minute')) - instant;
+  };
+  const premier = vise - decalage(vise);
+  return new Date(vise - decalage(premier)).toISOString();
+}
