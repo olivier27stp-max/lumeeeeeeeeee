@@ -38,7 +38,7 @@ import { CONSIGNES_COLLEGUE_LUMI } from '../agent/consignesCollegue';
 import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 import { estimationCoutAppel, type Reservation } from './budget';
-import { serialiserResultat } from './compress';
+import { serialiserResultat, TAILLE_MAX_RESULTAT, TAILLE_MAX_TOUR } from './compress';
 import { reglesCout } from './regles-cout';
 import { verifierChiffres } from './verifier-chiffres';
 import { outilsDuSousAgent } from './sous-agents';
@@ -512,6 +512,12 @@ export async function tourLumi(opts: {
   // Tous les résultats d'outils du tour, pour vérifier après coup que les
   // montants cités dans la réponse en viennent bien.
   const resultatsBruts: string[] = [];
+  // Caractères de résultats d'outils déjà donnés au modèle dans CE tour. Ils
+  // arrivent après le point de cache, donc chaque étape les repaie plein tarif
+  // d'entrée : huit résultats raisonnables coûtent autant qu'un démesuré
+  // (mesuré le 2026-09-30 : 61 776 tokens d'entrée non cachés en un appel,
+  // 16,88 ¢). Le budget du tour rétrécit la borne de chaque résultat suivant.
+  let caracteresOutils = 0;
 
   const maxEtapes = Math.min(MAX_ETAPES, Math.max(0, opts.reglages?.max_etapes ?? MAX_ETAPES));
   if (maxEtapes === 0) return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true };
@@ -539,17 +545,28 @@ export async function tourLumi(opts: {
     // sans repartir en exploration. On ne coupe que si même ça ne suffit pas,
     // au double du plafond, où il est acquis que le tour est parti en vrille.
     const plafondTour = reglesCout().plafond_cout_tour_cents;
-    const doitConclure = coutHorsCacheFroid >= plafondTour;
-    const sansOutils = doitConclure || conclusionFinale;
     if (coutHorsCacheFroid >= plafondTour * 2) {
       opts.emettre({ type: 'error', message: 'plafond_tour' });
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, ...mesure() };
     }
+    // Ce que coûterait CET appel, au pire (toute l'entrée plein tarif, sortie
+    // au plafond). Sert deux fois : à réserver sur le budget de l'org, et à
+    // décider de dégrader AVANT d'envoyer.
+    const estimation = estimationCoutAppel(model, JSON.stringify(messages).length + opts.systeme.reduce((n, b) => n + b.text.length, 0), MAX_TOKENS);
+    // Le cran cumulatif ne voyait le coût qu'APRÈS l'appel : un seul appel
+    // chargé de résultats d'outils passait donc entier avant d'être compté
+    // (mesuré le 2026-09-30 : 16,88 ¢ en un coup sur un plafond de 6 ¢). On
+    // dégrade aussi quand l'ESTIMATION de l'appel à venir ferait franchir le
+    // point d'abandon — même dégradation, un appel plus tôt.
+    const doitConclure = coutHorsCacheFroid >= plafondTour
+      || coutHorsCacheFroid + estimation >= plafondTour * 2;
+    // Dernière étape : un appel de CONCLUSION sans outils, même sous le plafond
+    // (passe de référence du 2026-10-01). Les deux raisons de retirer les outils
+    // se cumulent ici.
+    const sansOutils = doitConclure || conclusionFinale;
     // Plafond dur : le coût maximal de l'appel est réservé AVANT de l'envoyer
     // (verrou en base) ; `capped` = rien ne part, la route sert le gabarit.
-    const reservation = opts.budget
-      ? await opts.budget.reserver(estimationCoutAppel(model, JSON.stringify(messages).length + opts.systeme.reduce((n, b) => n + b.text.length, 0), MAX_TOKENS))
-      : null;
+    const reservation = opts.budget ? await opts.budget.reserver(estimation) : null;
     if (reservation?.statut === 'capped') {
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true, ...mesure() };
     }
@@ -792,7 +809,13 @@ export async function tourLumi(opts: {
           if (LECTURES_A_CONTENU_EXTERNE.has(appel.name)) contenuExterneLu = true;
           const masque = masquerIds(espaceRefs, r.result);
           // Compacté (vides retirés, listes en table) : −35 à −45 % de tokens sur une liste, sans perte (compress.ts).
-          const contenuOutil = serialiserResultat(masque);
+          // Borne de CE résultat : la plus petite des deux (par résultat, et ce
+          // qui reste du budget du tour). Jamais zéro — un résultat vide ferait
+          // repartir le modèle en exploration, ce qui coûte plus cher que de
+          // lui donner une liste courte et honnête (`rows_omitted`).
+          const reste = Math.max(2_000, TAILLE_MAX_TOUR - caracteresOutils);
+          const contenuOutil = serialiserResultat(masque, Math.min(TAILLE_MAX_RESULTAT, reste));
+          caracteresOutils += contenuOutil.length;
         resultatsBruts.push(contenuOutil);
         resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: contenuOutil });
         }

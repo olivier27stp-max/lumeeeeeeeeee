@@ -41,11 +41,25 @@ describe('les règles sont branchées dans le code (pas seulement écrites)', ()
     // plafond le modèle conclut sans outils et en effort bas (`doitConclure`),
     // et on ne coupe qu'au double. Couper en plein tour laissait l'utilisateur
     // sans réponse — perdre une fonction pour économiser des cents.
-    expect(s).toContain('const doitConclure = coutHorsCacheFroid >= plafondTour;');
+    // Depuis le 2026-09-30, la dégradation est aussi PRÉVENTIVE : le cumul ne
+    // voyait le coût qu'après l'appel, donc un seul appel chargé de résultats
+    // d'outils passait entier (mesuré : 16,88 ¢ sur un plafond de 6 ¢). On
+    // dégrade aussi quand l'estimation de l'appel à venir franchirait le double.
+    expect(s).toContain('const doitConclure = coutHorsCacheFroid >= plafondTour');
+    expect(s).toContain('|| coutHorsCacheFroid + estimation >= plafondTour * 2');
     expect(s).toContain('coutHorsCacheFroid >= plafondTour * 2');
     expect(s).toContain("tool_choice: { type: 'none' as const }");
     expect(s).toContain('ephemeral_1h_input_tokens: 0');
     expect(s).toContain("message: 'plafond_tour'");
+  });
+  it('orchestrateur : les résultats d outils sont bornés, par résultat ET par tour', () => {
+    const s = lu('server/lib/lumi/orchestrateur.ts');
+    // Un résultat d'outil arrive APRÈS le point de cache : chaque étape le
+    // repaie plein tarif d'entrée. Sans ces deux bornes, un tour a envoyé
+    // 61 776 tokens d'entrée non cachés en un appel (2026-09-30).
+    expect(s).toContain('TAILLE_MAX_TOUR - caracteresOutils');
+    expect(s).toContain('serialiserResultat(masque, Math.min(TAILLE_MAX_RESULTAT, reste))');
+    expect(s).toContain('caracteresOutils += contenuOutil.length');
   });
   it('route : plafond de conversation servi en gabarit et escalade sur plafond_tour', () => {
     const s = lu('server/routes/lumi.ts');
