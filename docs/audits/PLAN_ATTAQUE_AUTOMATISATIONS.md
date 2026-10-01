@@ -86,13 +86,13 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | PERF-1/2 | La liste télécharge toutes les règles 2 fois ; l'éditeur charge 400 règles pour en montrer une | 1 seule lecture ; lecture par id | S |
 | Tests ✅ | 13 tests `front-automations` écrits pour l'ancienne page (dont F22 : variable inconnue, nom brut) | réécrits sur l'écran actuel : `tests/automation/front-automations-ecran.test.tsx`, **57 tests, en CI**. Preuve par mutation : retirer l'avertissement de variable inconnue et le compteur d'échecs fait tomber 4 tests. Deux défauts du produit trouvés au passage, gardés en quarantaine (voir « Constats hors backlog ») | M |
 
-## Vague 5 — performance et charge — T6.2 fait (#792 : 30 → 22 requêtes par `lead.created`, 3 règles = lectures d'une seule) ; outbox prod saine (0 bloqué, 0 erreur au 2026-09-30) ; **D-17 reste à faire**
+## Vague 5 — performance et charge — T6.2 fait (#792 : 30 → 22 requêtes par `lead.created`, 3 règles = lectures d'une seule) ; outbox prod saine (0 bloqué, 0 erreur au 2026-10-01) ; **D-17 : conclu par lecture du code, correctif à décider**
 
 
 | id | Problème | Correction | Effort |
 |---|---|---|---|
 | T6.2 | 21 à 40 requêtes par événement ; réglages de l'entreprise relus 6 fois | mémoïser par événement, regrouper les lectures | M |
-| D-17 | Sous saturation : 8/144 écritures sans événement | **refaire la charge sur un environnement isolé** avant de conclure (staging était partagé) | M |
+| D-17 | Sous saturation : 8/144 écritures sans événement | **Conclu le 2026-10-01 sans refaire la charge** (aucun environnement isolé, disque du poste à 99 %) : `server/lib/champs/service.ts` écrit la valeur (`cf_ecrire_valeur`) puis émet `custom_field.changed` dans une 2e étape non attendue — la perte est réelle par construction, la charge n'en mesurait que la fréquence. Correctif proposé, **non fait** (migration) : déposer l'événement dans la même transaction, comme les visites, jobs, devis et factures (`20261003100000`) | M |
 | Outbox prod | Aucun événement dans `domain_events` depuis le 28 à 22:14 (≈ 26 h) | vérifier si c'est normal (types consignés) ou une panne | XS |
 
 ## Livré après les vagues (2026-09-30, soir)
@@ -115,6 +115,13 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 5. **Cache Haiku** de Lumi (< 4 096 tokens, rien n'est mis en cache) : accepter (0,49 ¢/génération) ou allonger le prompt ?
 6. ~~Messages Slack de test~~ — 6 supprimés, 0 restant ; le support (Slack + courriel) n'a pas été touché.
 7. **Adresse des bureaux** (effet L8) : 7/9 bureaux sans adresse = courriels commerciaux sautés.
+8. **Textos en prod** : sur 8 jours, 1 parti, 13 en échec, 5 sautés — aucun numéro Twilio (Trust Hub). Rien à corriger dans le moteur ; tant que le numéro n'est pas approuvé, aucune automatisation ne livre de texto.
+9. **D-17** : faire ou non le correctif (événement de champ déposé dans la transaction d'écriture) — une migration et un changement du moteur.
+10. **Sept règles publiées sur `estimate.sent`**, événement plus émis : les rebrancher sur `quote.sent` ou les retirer.
+
+## Phase 5 — rapport de prod (2026-10-01) — ✅ fait
+
+`docs/audits/RAPPORT_PROD_AUTOMATISATIONS_2026-10-01.md`, lecture seule, 24 h après les dernières mises en ligne : **0 exécution en échec en 48 h** (14 sur les 5 jours d'avant), 0 tâche en retard, 0 événement bloqué, crons de la vague 2 tous passés, 0 lettre morte. Limite dite dans le rapport : 43 exécutions en 8 jours, surtout des bureaux de test — la prod ne prouve pas le moteur, staging l'a fait (24/24 déclencheurs).
 
 ## Constats hors backlog (notés, **pas** corrigés ici)
 
@@ -126,6 +133,8 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | Migration fantôme **20260928120000** : `payments.reference` / `payments.notes` absentes en prod ET staging | `information_schema` des deux bases ; « Marquer payée » s'en sort par un repli | chantier paiements |
 | `check:db-coherence` : 3 fonctions QuickBooks non exécutables par `authenticated` | sortie du script | chantier QuickBooks |
 | Préréglage `estimate_followup` sur `estimate.sent` : événement jamais émis | audit V2 | à trancher |
+| Cron des **relances de paiement** : l'appel dépasse les 5 s de `pg_net`, sa réponse est perdue ; et `reminder_log` est vide depuis 10 jours alors que 22 factures sont en retard et 3 bureaux ont des relances réglées. Peut être normal (relances coupées, données de test, relance prise par une automatisation) : **pas vérifié** | `net._http_response` (2026-10-01 13:00 UTC), `reminder_log` | chantier paiements |
+| `pg_net` ne garde ses réponses qu'environ 6 h : un cron qui échoue la nuit ne laisse aucune trace le matin | plus vieille réponse à 07:50 UTC le 2026-10-01 | surveillance à prévoir |
 
 ## Parité GHL (phase 2)
 
