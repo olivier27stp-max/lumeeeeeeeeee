@@ -104,7 +104,8 @@ describe('support — les tarifs écrits sont ceux de la grille', () => {
    * 1 / 2 / 5 : server/lib/agent/promptVente.ts:30-32 et
    * server/lib/agent/reponsesFixes.ts:28.
    */
-  it.fails('ÉCART : l’agent du site annonce le nombre de bureaux que le code accorde (promptVente.ts:31-32, reponsesFixes.ts:28)', () => {
+  // CORRIGÉ le 2026-10-01 (prompt et réponse fixe alignés sur le code et la page Tarifs) : cliquet.
+  it('l’agent du site annonce le nombre de bureaux que le code accorde', () => {
     const quotas = /BUREAUX_PAR_FORFAIT[^{]*\{\s*starter: (\d+),\s*pro: (\d+),\s*autopilot: (\d+)/.exec(lire('server/lib/platformFeatures.ts'))!;
     const attendu = { Minimum: Number(quotas[1]), Scale: Number(quotas[2]), Autopilot: Number(quotas[3]) };
     for (const texte of [PROMPT_VENTE, REPONSES_FIXES.find((r) => r.id === 'prix')!.reponse]) {
@@ -123,7 +124,8 @@ describe('support — les tarifs écrits sont ceux de la grille', () => {
    * Laquelle des deux dit vrai dépend de la table `plans` en production, que
    * ce test ne peut pas lire.
    */
-  it.fails('ÉCART : l’agent du site place le porte-à-porte dans le même forfait que la page Tarifs (promptVente.ts:31, :33)', () => {
+  // CORRIGÉ le 2026-10-01 ; la table plans de la prod (includes_d2d : Autopilot seulement) confirme la page Tarifs.
+  it('l’agent du site place le porte-à-porte dans le même forfait que la page Tarifs', () => {
     const ligne = /label: \{[^}]*fr: 'Porte-à-porte[^']*' \}, cells: \[(\w+), (\w+), (\w+)\]/.exec(pageTarifs)!;
     const dansScaleSelonLaPage = ligne[2] === 'true';
     const ligneScale = PROMPT_VENTE.split('\n').find((l) => l.includes('« Scale »')) ?? '';
