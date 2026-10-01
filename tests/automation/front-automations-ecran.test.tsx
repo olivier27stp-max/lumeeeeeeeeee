@@ -245,18 +245,31 @@ describe('T13.2 — états vides', () => {
     vi.mocked(api.getAutomationRules).mockResolvedValue([]);
     await rendre();
     expect(texte()).toContain('Aucune automatisation');
-    expect(bouton(/^Voir les modèles$/)).toBeUndefined();
+    expect(bouton(/^Voir les automatisations prêtes à publier$/)).toBeUndefined();
   });
 
-  it('seulement des modèles en brouillon : « Toutes » est vide mais propose « Voir les modèles », qui ouvre l’onglet', async () => {
+  /*
+   * L'onglet s'appelait « Modèles », comme la « Bibliothèque de modèles » du
+   * menu Créer — deux choses différentes sous le même mot (audit du
+   * 2026-10-01, modeles-13) : ici, ce sont les automatisations FOURNIES pas
+   * encore publiées, qu'on publie en place ; là-bas, des modèles dont on tire
+   * une copie. L'onglet dit maintenant ce qu'il contient.
+   */
+  it('seulement des automatisations fournies en brouillon : « Toutes » est vide mais mène à l’onglet « Prêtes à publier »', async () => {
     vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ is_active: false })]);
     await rendre();
     expect(texte()).toContain('Aucune automatisation');
     expect(texte()).not.toContain(NOM_FR);
-    await cliquer(bouton(/^Voir les modèles$/));
-    const ongletModeles = conteneur.querySelector('[role="tab"][aria-selected="true"]');
-    expect(ongletModeles?.textContent).toMatch(/Modèles \(1\)/);
+    await cliquer(bouton(/^Voir les automatisations prêtes à publier$/));
+    const ongletChoisi = conteneur.querySelector('[role="tab"][aria-selected="true"]');
+    expect(ongletChoisi?.textContent).toMatch(/Prêtes à publier \(1\)/);
     expect(texte()).toContain(NOM_FR);
+  });
+
+  it('plus aucun onglet ne s’appelle « Modèles » : ce mot est réservé à la bibliothèque', async () => {
+    await rendre();
+    const onglets = Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').replace(/\s*\(\d+\)$/, '').trim());
+    expect(onglets).toEqual(['Toutes', 'À vérifier', 'Prêtes à publier', 'Corbeille']);
   });
 
   it('recherche sans résultat : le message vide commun (« Aucun résultat » n’existe plus)', async () => {

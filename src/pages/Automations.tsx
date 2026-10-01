@@ -1247,7 +1247,9 @@ export default function Automations() {
   const ONGLETS = [
     { cle: 'toutes' as const, fr: 'Toutes', en: 'All workflows', n: mesAutos.length },
     { cle: 'verifier' as const, fr: 'À vérifier', en: 'Needs review', n: aVerifier.length },
-    { cle: 'modeles' as const, fr: 'Modèles', en: 'Templates', n: modeles.length },
+    // « Prêtes à publier », plus « Modèles » : ce mot désigne la bibliothèque du menu Créer (copies en
+    // brouillon). Ici, ce sont les automatisations fournies pas encore publiées, qu'on publie en place.
+    { cle: 'modeles' as const, fr: 'Prêtes à publier', en: 'Ready to publish', n: modeles.length },
     { cle: 'corbeille' as const, fr: 'Corbeille', en: 'Deleted', n: supprimees.length },
   ];
 
@@ -1798,7 +1800,7 @@ export default function Automations() {
                             className="glass-button mt-4 inline-flex items-center gap-1.5"
                           >
                             <FileText size={13} aria-hidden="true" />
-                            {fr ? 'Voir les modèles' : 'Browse templates'}
+                            {fr ? 'Voir les automatisations prêtes à publier' : 'See ready-to-publish automations'}
                           </button>
                         )}
                       </td>

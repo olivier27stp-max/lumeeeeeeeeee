@@ -241,7 +241,7 @@ function saisirRecherche(v: string) {
 }
 
 describe('M9 — le lot n’agit que sur ce qui est à l’écran', () => {
-  it('cocher dans « Toutes » puis dans « Modèles » : « Publier » ne touche QUE la ligne visible', async () => {
+  it('cocher dans « Toutes » puis dans « Prêtes à publier » : « Publier » ne touche QUE la ligne visible', async () => {
     reglesServies = [
       regle({ id: 'a', name: 'Mienne A' }),
       regle({ id: 'b', name: 'Mienne B' }),
@@ -250,7 +250,7 @@ describe('M9 — le lot n’agit que sur ce qui est à l’écran', () => {
     await rendre();
     cocher('Mienne A');
     cocher('Mienne B');
-    cliquer(Array.from(container.querySelectorAll('button[role="tab"]')).find((b) => b.textContent?.includes('Modèles')));
+    cliquer(Array.from(container.querySelectorAll('button[role="tab"]')).find((b) => b.textContent?.includes('Prêtes à publier')));
     await attendre();
     cocher('Modèle M');
     await attendre();
