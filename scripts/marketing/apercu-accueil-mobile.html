@@ -1,0 +1,189 @@
+<!doctype html>
+<!-- Maquette de l'écran Accueil en largeur téléphone, pour le mockup iPhone du hero
+     de la landing (public/landing/apercu-accueil-mobile.webp). Mêmes données fictives
+     que apercu-accueil.html ; reprend le rendu < 768 px de CrmWorkspace (barre du haut
+     d'App.tsx, HomeWeatherStrip empilé, HomeHero, HomeKpiStrip 2×2, HomeAgendaCard).
+     Régénérer : capture Playwright en viewport 390×844, deviceScaleFactor 2
+     (→ 780×1688), puis WebP qualité 90. -->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 390px; height: 844px; overflow: hidden; background: #fafafa; }
+  body { font-family: Inter, -apple-system, system-ui, sans-serif; color: #171717; -webkit-font-smoothing: antialiased; position: relative; }
+  svg { display: block; }
+  .ic { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Barre d'état iOS (l'îlot dynamique est dessiné par le cadre du téléphone) */
+  .status { height: 50px; background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 40px; font-size: 16px; font-weight: 600; }
+  .status .r { display: flex; align-items: center; gap: 6px; }
+
+  /* Barre du haut — header h-11 de App.tsx */
+  .top { height: 44px; background: #fff; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 14px; color: #737373; }
+  .office { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; color: #525252; font-size: 14px; font-weight: 500; }
+  .office span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .search { width: 132px; height: 34px; border: 1px solid #e5e5e5; border-radius: 8px; display: flex; align-items: center; gap: 7px; padding: 0 10px; font-size: 13px; color: #a3a3a3; flex: none; background: #fff; }
+  .tb { position: relative; padding: 6px; flex: none; }
+  .tb i { position: absolute; top: 2px; right: 1px; min-width: 14px; height: 14px; border-radius: 7px; background: #ef4444; color: #fff; font-style: normal; font-size: 8px; font-weight: 700; display: grid; place-items: center; padding: 0 2px; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: #f1ece6; border: 1px solid #e5e5e5; display: grid; place-items: center; font-weight: 700; font-size: 12px; color: #6b5a48; flex: none; }
+
+  .page { padding: 20px 20px 0; }
+
+  /* Météo — HomeWeatherStrip, empilé sous md */
+  .wx { border-radius: 16px; border: 1px solid #e5e5e5; background: linear-gradient(135deg, #f0f9ff 0%, rgba(219,234,254,.6) 100%); padding: 16px 16px 12px; }
+  .wx-now { display: flex; align-items: center; gap: 14px; }
+  .wx-big { font-size: 50px; line-height: 1; }
+  .wx-city { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: #525252; }
+  .wx-temp { font-size: 40px; font-weight: 700; line-height: 1; margin-top: 2px; }
+  .wx-lab { font-size: 13px; font-weight: 500; color: #525252; }
+  .wx-stats { display: flex; gap: 10px; font-size: 11px; color: #737373; font-weight: 500; margin-top: 3px; }
+  .wx-ok { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #525252; margin-top: 3px; }
+  .wx-ok i { width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
+  .wx-hours { display: flex; gap: 4px; margin-top: 12px; margin-right: -16px; overflow: hidden; }
+  .wx-h { min-width: 52px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px; }
+  .wx-h small { font-size: 12px; color: #737373; font-weight: 500; }
+  .wx-h span { font-size: 24px; line-height: 1; }
+  .wx-h b { font-size: 15px; }
+
+  /* HomeHero */
+  .hero { margin-top: 20px; }
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+  .sub { font-size: 14px; color: #525252; font-weight: 500; margin-top: 4px; }
+  .sub span { color: #a3a3a3; margin: 0 6px; }
+  .acts { display: flex; gap: 8px; margin-top: 14px; }
+  .btn { height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #e5e5e5; background: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+  .btn.dark { background: #171717; color: #fff; border-color: #171717; }
+  .btn .ic { width: 15px; height: 15px; stroke-width: 2; }
+
+  /* HomeKpiStrip — grid-cols-2 */
+  .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+  .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; }
+  .kpi { padding: 14px; }
+  .kpi .l { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #a3a3a3; font-weight: 600; white-space: nowrap; }
+  .kpi .l .ic { width: 14px; height: 14px; stroke-width: 2; }
+  .kpi .v { font-size: 26px; font-weight: 700; margin-top: 12px; letter-spacing: -.02em; line-height: 1; }
+  .kpi .s { font-size: 12px; color: #525252; margin-top: 6px; white-space: nowrap; }
+
+  /* HomeAgendaCard */
+  .day { margin-top: 12px; padding: 18px 16px 6px; }
+  .ch { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  .ch .ic { width: 16px; height: 16px; color: #525252; }
+  .ch a { margin-left: auto; font-size: 12px; color: #a3a3a3; font-weight: 500; display: flex; align-items: center; gap: 3px; }
+  .job { position: relative; display: grid; grid-template-columns: 54px 1fr; gap: 10px; padding: 10px 4px 10px 8px; }
+  .job + .job { border-top: 1px solid #f0f0f0; }
+  .job::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 2px; border-radius: 2px; background: #e5e5e5; }
+  .job.now::before { background: #10b981; }
+  .job .t { font-size: 12px; font-weight: 600; padding-top: 1px; white-space: nowrap; }
+  .job .n { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job .a { font-size: 12px; color: #a3a3a3; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+
+<div class="status">
+  <span>9:41</span>
+  <div class="r">
+    <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1" fill="#111"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="#111"/><rect x="10" y="3" width="3" height="9" rx="1" fill="#111"/><rect x="15" y="0" width="3" height="12" rx="1" fill="#111"/></svg>
+    <svg width="16" height="12" viewBox="0 0 16 12" fill="#111"><path d="M8 2.6c2.2 0 4.2.9 5.7 2.3l1.1-1.1A9.6 9.6 0 0 0 8 1 9.6 9.6 0 0 0 1.2 3.8l1.1 1.1A8 8 0 0 1 8 2.6zm0 3.2c1.3 0 2.5.5 3.4 1.4l1.1-1.1A6.4 6.4 0 0 0 8 4.2c-1.8 0-3.4.7-4.5 1.9l1.1 1.1c.9-.9 2.1-1.4 3.4-1.4zM8 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>
+    <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="#111" opacity=".4"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#111"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" fill="#111" opacity=".5"/></svg>
+  </div>
+</div>
+
+<!-- Barre du haut -->
+<header class="top">
+  <div class="tb" style="color:#737373"><svg class="ic lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M4 18h16"/><path d="M4 6h16"/></svg></div>
+  <div class="office">
+    <svg class="ic lucide lucide-building-2" viewBox="0 0 24 24" style="width:16px;height:16px;flex:none;color:#737373"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
+    <span>Vision Lavage</span>
+  </div>
+  <div class="search"><svg class="ic lucide lucide-search" viewBox="0 0 24 24" style="width:15px;height:15px"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Rechercher…</div>
+  <div class="tb"><svg class="ic lucide lucide-message-square" viewBox="0 0 24 24"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></svg><i>6</i></div>
+  <div class="tb"><svg class="ic lucide lucide-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg><i>9+</i></div>
+  <div class="avatar">M</div>
+</header>
+
+<main class="page">
+  <!-- Météo -->
+  <section class="wx">
+    <div class="wx-now">
+      <div class="wx-big">☀️</div>
+      <div>
+        <div class="wx-city"><svg class="ic lucide lucide-map-pin" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>Saint-Bruno-de-Montarville</div>
+        <div class="wx-temp">19°</div>
+        <div class="wx-lab">Ensoleillé</div>
+        <div class="wx-stats"><span><b style="color:#ef4444">↑</b>22° <b style="color:#3b82f6">↓</b>9°</span><span>💨 11 km/h</span><span>💧 0 mm</span></div>
+        <div class="wx-ok"><i></i>Bon pour travailler</div>
+      </div>
+    </div>
+    <div class="wx-hours">
+      <div class="wx-h"><small>9 h</small><span>🌤️</span><b>14°</b></div>
+      <div class="wx-h"><small>10 h</small><span>☀️</span><b>16°</b></div>
+      <div class="wx-h"><small>11 h</small><span>☀️</span><b>18°</b></div>
+      <div class="wx-h"><small>12 h</small><span>☀️</span><b>20°</b></div>
+      <div class="wx-h"><small>13 h</small><span>☀️</span><b>21°</b></div>
+      <div class="wx-h"><small>14 h</small><span>⛅</span><b>22°</b></div>
+      <div class="wx-h"><small>15 h</small><span>⛅</span><b>22°</b></div>
+    </div>
+  </section>
+
+  <!-- Salutation + actions rapides -->
+  <div class="hero">
+    <h1>Bon retour, Marc</h1>
+    <div class="sub">Mercredi 9 septembre<span>·</span>6 rendez-vous</div>
+    <div class="acts">
+      <div class="btn dark"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Devis</div>
+      <div class="btn"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Job</div>
+      <div class="btn"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Client</div>
+      <div class="btn"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Facture</div>
+    </div>
+  </div>
+
+  <!-- KPI -->
+  <div class="kpis">
+    <div class="card kpi">
+      <div class="l"><svg class="ic lucide lucide-dollar-sign" viewBox="0 0 24 24"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Revenus du jour</div>
+      <div class="v">$1,840</div>
+      <div class="s">encaissé aujourd'hui</div>
+    </div>
+    <div class="card kpi">
+      <div class="l"><svg class="ic lucide lucide-briefcase" viewBox="0 0 24 24"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>Jobs aujourd'hui</div>
+      <div class="v">6</div>
+      <div class="s">1 en cours · 3 à venir</div>
+    </div>
+    <div class="card kpi">
+      <div class="l"><svg class="ic lucide lucide-user-plus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>Nouveaux leads</div>
+      <div class="v">4</div>
+      <div class="s">38% conversion</div>
+    </div>
+    <div class="card kpi">
+      <div class="l"><svg class="ic lucide lucide-credit-card" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>À recevoir</div>
+      <div class="v">$3,215</div>
+      <div class="s">7 clients</div>
+    </div>
+  </div>
+
+  <!-- Ma journée -->
+  <section class="card day">
+    <div class="ch"><svg class="ic lucide lucide-calendar-days" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>Ma journée<a>Calendrier <svg class="ic" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="m9 18 6-6-6-6"/></svg></a></div>
+    <div class="job">
+      <div class="t">08 h 00</div>
+      <div style="min-width:0"><div class="n">Lavage de vitres — Tremblay</div><div class="a">Marie Tremblay · 1450 rue Montarville</div></div>
+    </div>
+    <div class="job now">
+      <div class="t">09 h 30</div>
+      <div style="min-width:0"><div class="n">Lavage à pression — Gagnon</div><div class="a">Luc Gagnon · 2275 boul. Clairevue</div></div>
+    </div>
+    <div class="job">
+      <div class="t">11 h 15</div>
+      <div style="min-width:0"><div class="n">Gouttières — Bouchard</div><div class="a">Julie Bouchard · 88 rue de la Rabastalière</div></div>
+    </div>
+    <div class="job">
+      <div class="t">13 h 00</div>
+      <div style="min-width:0"><div class="n">Vitres + moustiquaires — Côté</div><div class="a">André Côté · 1730 rue Roberval</div></div>
+    </div>
+  </section>
+</main>
+</body>
+</html>
