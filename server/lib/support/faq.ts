@@ -92,7 +92,10 @@ const MARQUES_DONNEES = [
   // règle ci-dessus, et « Crée un rappel automatique par texto la veille de
   // chaque rendez-vous » recevait l'article « SMS » au lieu de l'automatisation
   // demandée (40-iklm-lumi-demandes, I-002). Même garde pour l'anglais.
-  /(^|[^\p{L}])(cr[eé][eé]\w*|automatis\w*|programme|configure|mets en place|create|set up|automate|make)(?![\p{L}])/iu,
+  // Sauf si la phrase est une QUESTION sur la marche à suivre (« Comment
+  // configurer mes taxes », « How do I set up taxes for Quebec? ») : celle-là
+  // garde sa réponse d'aide.
+  /^(?!\s*(comment|how|o[uù]|where|pourquoi|why|est-ce|can\s+i|puis-je|peut-on)(?![\p{L}]))(?=.*(^|[^\p{L}])(cr[eé][eé]\w*|automatis\w*|programme|configure|mets en place|create|set up|automate|make)(?![\p{L}]))/iu,
   // Renvois au contenu réel du compte.
   /\b(chez|pour le client|de mon client)\b/i,
   // « C'est quoi MES préréglages », « montre-moi mes modèles », « what checklist
