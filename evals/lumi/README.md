@@ -66,6 +66,35 @@ Autres commandes utiles :
 - **Le bac à sable.** Le seed refuse de tourner si le bureau n'y est plus. La ligne actuelle porte la raison « retiré à la fin de l'essai » (une autre session) : **la garder** tant que le jeu existe, sinon les rappels de facture en retard du bureau partiraient pour vrai (vers des adresses `@lume-qa.test`, qui n'existent pas, et des numéros 555-01xx).
 - **Valable jusqu'au 2026-12-31.** Après, les factures « envoyées, non échues » passent en retard et les totaux attendus ne tiennent plus.
 
+## Les autres bureaux d'évaluation
+
+La garde quotidienne de dépense IA (15 % du plafond mensuel en un jour) fait passer un bureau en palier « restreint » jusqu'à minuit : **une seule passe propre par bureau et par jour**. Deux doublures du banc existent en production, chacune avec son groupe d'entreprises (donc son propre lot de crédits), 4 propriétaires et 1 technicien :
+
+| Bureau | Org | Préfixe | Comptes |
+|---|---|---|---|
+| « [TEST] QA Lumi éval 2 — ne pas utiliser » | `5930d318-b207-40f3-9e14-f8898a02e240` | `eval2` | `eval2.proprio1…4@lume-qa.test`, `eval2.tech@lume-qa.test` |
+| « [TEST] QA Lumi éval 3 — ne pas utiliser » | `7f859087-0f5e-4604-8a20-315be43be4c3` | `eval3` | `eval3.proprio1…4@lume-qa.test`, `eval3.tech@lume-qa.test` |
+
+```bash
+# Créer ou retrouver les bureaux (simulation sans --appliquer ; bac à sable inscrit AVANT toute autre écriture)
+node --env-file=$ENV --import tsx scripts/qa/lumi/bureaux-eval.mts [--appliquer] [--seulement eval2]
+
+# Par bureau (ici eval2) : le jeu, sa fiche des faits, ses cas en 4 lots propriétaire + 1 lot technicien
+node --env-file=$ENV --import tsx scripts/qa/lumi/seed-bureau-test.mts --org 5930d318-b207-40f3-9e14-f8898a02e240 --prefixe eval2 --appliquer
+npx tsx evals/lumi/preparer.mts --fixture evals/lumi/fixture-eval2.json --sortie evals/lumi/cas-resolus-eval2
+npx tsx evals/lumi/repartir.mts --source evals/lumi/cas-resolus-eval2/proprietaire --lots 4
+
+# Le canari des envois (aucun modèle) : doit finir sur « arrêtés par le filet ENTREPRISE »
+node --env-file=$ENV --import tsx scripts/qa/lumi/canari-bureau.mts --org 5930d318-b207-40f3-9e14-f8898a02e240 --compte eval2.proprio1@lume-qa.test
+
+# La passe : un lot par compte (lot N ↔ proprioN), puis le correcteur avec les cas DU bureau
+node --env-file=$ENV --import tsx evals/lumi-tools/run.mts --prod --org 5930d318-b207-40f3-9e14-f8898a02e240 --compte eval2.proprio1@lume-qa.test \
+     --cas evals/lumi/cas-resolus-eval2/proprietaire-lot1 --sortie evals/lumi/resultats/eval2/lot1.json
+npx tsx evals/lumi/corriger.mts --cas evals/lumi/cas-resolus-eval2 --resultats evals/lumi/resultats/eval2/lot1.json,… --sortie evals/lumi/resultats/eval2/bilan.json
+```
+
+Ce qui diffère du banc d'origine : ces bureaux ne contiennent **que** le jeu (les mesures « bureau entier » y valent celles du jeu : 1 devis brouillon au lieu de 4, 1 prospect au lieu de 14, numéros à partir de 1) ; les identifiants des fiches sont dérivés de l'org (`idEval(clé, org)`) ; les membres du jeu ont leurs propres comptes (`eval2.mathieu.lavoie@…`) ; le champ « Outils » du dossier Dépenses, absent des entreprises récentes, est créé par le seed. `run.mts` ne garde qu'**un** fichier d'état (`.etat-prod.json`) : avec plusieurs lots en parallèle, `--remettre` ne remet que le dernier compte lancé — après une passe tuée, vérifier `memberships.lumi_mode` des autres.
+
 ## Ce que le seed écrit
 
 Une entreprise fictive de lavage sur la Rive-Sud. Courriels en `@lume-qa.test`, numéros `514-555-0110` à `0184`.
