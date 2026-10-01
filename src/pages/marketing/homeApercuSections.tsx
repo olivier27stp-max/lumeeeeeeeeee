@@ -18,7 +18,7 @@ export function StopList({ fr }: { fr: boolean }) {
     { fr: 'Retaper à la main les demandes reçues sur ton site.', en: 'Retyping the requests from your website by hand.' },
     { fr: 'Recevoir les textos des clients sur ton cell.', en: 'Getting client texts on your personal phone.' },
     { fr: 'Relancer une soumission sans savoir si elle a été ouverte.', en: 'Following up on a quote without knowing if it was opened.' },
-    { fr: 'Deviner quelles portes tes vendeurs ont cognées.', en: 'Guessing which doors your reps knocked on.' },
+    { fr: 'Quémander des avis Google, un client à la fois.', en: 'Begging for Google reviews, one client at a time.' },
     { fr: 'Arriver chez un client qui avait oublié ton passage.', en: 'Showing up at a client who forgot you were coming.' },
   ];
   return (
