@@ -39,6 +39,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 import { reponseFaqPour } from '../lib/support/faq';
 import { estDemandeDAction } from '../lib/lumi/demande-action';
 import { langueDuMessage } from '../lib/lumi/langue-message';
+import { reponseAidePartageable } from '../lib/lumi/cache-aide-global';
 import { repererFiches } from '../lib/lumi/reperage';
 import { sujetParRegle } from '../lib/lumi/sujet-par-regle';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
@@ -527,9 +528,9 @@ async function executerTourSse(opts: {
       void (async () => {
         const vec = opts.cache?.vecteur ? await opts.cache.vecteur : null;
         if (vec) await memoriserSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, { enonce: opts.enonce!, vec, texte: resultat.texte, fiches, outils, version: await versionOrg(p.orgId) });
-        // Réponse d'aide pure (seul search_help a servi, aucun nom d'org ni de personne dedans) → cache global 24 h.
-        const nomsSensibles = [ctx.promptCtx.companyName, ctx.promptCtx.userName].filter((x): x is string => !!x && x.length > 2);
-        if (vec && outils.length > 0 && outils.every((o) => o === 'search_help') && !nomsSensibles.some((n) => resultat.texte.toLowerCase().includes(n.toLowerCase()))) {
+        // Réponse d'aide pure → cache global 24 h, servi à TOUTES les entreprises : seulement si rien du
+        // compte n'a pu y entrer (ni fiche repérée, ni note de mémoire, ni chiffre, ni état) — cache-aide-global.ts.
+        if (vec && reponseAidePartageable({ texte: resultat.texte, outils, companyName: ctx.promptCtx.companyName, userName: ctx.promptCtx.userName, souvenirs: ctx.promptCtx.souvenirs, reperage })) {
           await memoriserSemantique({ genre: 'global', espace: 'aide' }, { enonce: opts.enonce!, vec, texte: resultat.texte, fiches: [], outils, version: 0 });
         }
       })();
