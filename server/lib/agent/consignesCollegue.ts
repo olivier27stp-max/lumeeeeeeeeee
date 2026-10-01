@@ -55,3 +55,31 @@ SIGNAUX DISCRETS DANS LES RÉSULTATS (réagis-y en collègue, sans les nommer) :
 
 /** Signal propre au MCP : le jeton OAuth a expiré (dans Lumi, l'utilisateur est déjà connecté). */
 export const CONSIGNE_SESSION_MCP = `- « session_a_reconnecter » ou « note_session » : la connexion à Lume a expiré. Donne quand même la réponse (elle est bonne), puis glisse UNE fois, en fin de message, un rappel léger : « reconnecte Lume dans tes réglages quand tu as deux minutes, ça garde tout à jour ». N'y reviens pas à chaque réponse.`;
+
+/**
+ * Variante pour Lumi (dans l'application) — 2026-10-01.
+ * ─────────────────────────────────────────────────────────────────────────
+ * Sur le MCP, il n'y a pas de carte : « montre le contenu, attends un OUI » est
+ * la seule confirmation possible. Dans Lumi, CHAQUE écriture est une carte à
+ * confirmer, et le prompt le dit (« la carte EST le oui »). Les deux règles se
+ * contredisaient dans le même prompt : mesuré à l'éval, Lumi listait les
+ * relances ou décrivait l'envoi puis demandait « je l'envoie ? » en texte au
+ * lieu de proposer la carte (send_payment_reminders, send_invoice, send_quote).
+ * Ici, les trois lignes « attends un OUI » deviennent « la carte demande le OUI ».
+ */
+const REMPLACEMENTS_LUMI: Array<[string, string]> = [
+  [
+    `- « Relance mes retards » → get_overdue_payments, PROPOSE un message par client (montant, jours de retard, ton courtois), montre-les TOUS, send_payment_reminders seulement après un OUI clair.`,
+    `- « Relance mes retards » → get_overdue_payments, puis send_payment_reminders avec un message par client (montant, jours de retard, ton courtois) : la carte les montre TOUS avant l'envoi.`,
+  ],
+  [
+    `- Avant TOUT envoi (texto, devis, facture) : montre le contenu exact et le destinataire, attends un OUI. Un envoi ne se rattrape pas.\n- Avant TOUTE action qui défait ou encaisse (annuler une visite ou un devis, supprimer une tâche, marquer payé) : dis clairement ce qui va changer, attends un OUI.`,
+    `- Un envoi (texto, devis, facture) ou une action qui défait ou encaisse (annuler, supprimer, marquer payé) : appelle l'outil avec le contenu complet. La carte montre le contenu exact, le destinataire et ce qui va changer ; c'est elle qui demande le OUI, pas toi.`,
+  ],
+];
+
+export const CONSIGNES_COLLEGUE_LUMI = REMPLACEMENTS_LUMI.reduce((texte, [avant, apres]) => {
+  // Une consigne MCP reformulée sans mettre cette table à jour laisserait la contradiction revenir en silence.
+  if (!texte.includes(avant)) throw new Error('consignesCollegue : une règle « attends un OUI » a changé, mettre REMPLACEMENTS_LUMI à jour');
+  return texte.replace(avant, apres);
+}, CONSIGNES_COLLEGUE);
