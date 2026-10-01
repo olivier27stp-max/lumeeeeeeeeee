@@ -99,6 +99,9 @@ import { captureClientException } from '../lib/sentry';
 
 type Onglet = 'parcours' | 'reglages' | 'historique' | 'journaux';
 
+/** Un déclencheur et SES réglages : ce qu'un choix dans le tiroir écrit. */
+interface ChoixDeclencheur { trigger_event: string; conditions: Record<string, unknown> }
+
 /** Bornes du zoom. Au-delà, on ne lit plus rien ; en deçà, on se perd. */
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.6;
@@ -484,22 +487,73 @@ export default function AutomationBuilderPage() {
     [fr, drapeauxActifs],
   );
 
+  /*
+   * LE DERNIER CHOIX GAGNE, ET L'ÉCRAN LE DIT TOUT DE SUITE (audit du
+   * 2026-10-01). Chaque choix partait aussitôt en PATCH, en parallèle : cinq
+   * choix rapprochés, et c'est la dernière RÉPONSE arrivée qui restait — pas
+   * le dernier clic. Pendant ce temps la carte gardait l'ancien déclencheur
+   * sous un « Enregistré » : un clic y ouvrait les réglages de l'ancien.
+   *
+   * Même principe que la file de publication (`fileBascule.ts`) :
+   *   · la carte suit le DERNIER choix, tout de suite ;
+   *   · un seul enregistrement en vol ; à sa réponse, si le choix a changé
+   *     entre-temps, on envoie le nouveau — jamais deux en parallèle ;
+   *   · un refus ramène la carte au dernier déclencheur CONFIRMÉ par le
+   *     serveur, et le dit.
+   */
+  const fileDeclencheur = useRef<{
+    confirme: ChoixDeclencheur | null;
+    voulu: ChoixDeclencheur | null;
+    /** Résout à `true` quand la base porte le dernier choix, `false` sur un refus. */
+    enVol: Promise<boolean> | null;
+  }>({ confirme: null, voulu: null, enVol: null });
+  /** Un changement de déclencheur attend la réponse du serveur. */
+  const [declencheurEnVol, setDeclencheurEnVol] = useState(false);
+
   /** Changer le déclencheur de la règle depuis le tiroir. */
-  const choisirDeclencheur = useCallback(async (cle: string) => {
+  const choisirDeclencheur = useCallback((cle: string) => {
     if (!regle) return;
     setTiroirDeclencheur(false);
     if (cle === regle.trigger_event) return;
-    try {
-      // Les réglages de l'ANCIEN déclencheur partent avec lui ; ceux du
-      // nouveau sont posés d'office (voir `conditionsApresChangement`).
-      const maj = await ecrire({
-        trigger_event: cle,
-        conditions: conditionsApresChangement(regle.trigger_event, cle, (regle.conditions ?? {}) as Record<string, unknown>),
-      });
-      setRegle(maj);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+    const file = fileDeclencheur.current;
+    // Rien en vol : ce que l'écran montre EST ce que la base contient.
+    if (!file.enVol) {
+      file.confirme = { trigger_event: regle.trigger_event, conditions: (regle.conditions ?? {}) as Record<string, unknown> };
     }
+    // Les réglages de l'ANCIEN déclencheur partent avec lui ; ceux du
+    // nouveau sont posés d'office (voir `conditionsApresChangement`).
+    const voulu: ChoixDeclencheur = {
+      trigger_event: cle,
+      conditions: conditionsApresChangement(regle.trigger_event, cle, (regle.conditions ?? {}) as Record<string, unknown>),
+    };
+    file.voulu = voulu;
+    setRegle((r) => (r ? { ...r, ...voulu } : r));
+    if (file.enVol) return;
+    setDeclencheurEnVol(true);
+    file.enVol = (async () => {
+      try {
+        while (file.voulu) {
+          const cible = file.voulu;
+          const maj = await ecrire(cible);
+          file.confirme = { trigger_event: maj.trigger_event, conditions: (maj.conditions ?? {}) as Record<string, unknown> };
+          // Un autre choix a été fait pendant l'envoi : il part au tour suivant.
+          if (file.voulu === cible) {
+            file.voulu = null;
+            setRegle(maj);
+          }
+        }
+        return true;
+      } catch (e: unknown) {
+        const retour = file.confirme;
+        file.voulu = null;
+        if (retour) setRegle((r) => (r ? { ...r, ...retour } : r));
+        toast.error(e instanceof Error ? e.message : String(e));
+        return false;
+      } finally {
+        file.enVol = null;
+        setDeclencheurEnVol(false);
+      }
+    })();
   }, [regle, ecrire]);
 
   /**
@@ -1276,7 +1330,7 @@ export default function AutomationBuilderPage() {
    */
   // « en cours » compte aussi : fermer l'onglet pendant l'enregistrement
   // peut couper la requête avant que le serveur l'ait reçue (P2-13).
-  const travailNonEnregistre = etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours';
+  const travailNonEnregistre = etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours' || declencheurEnVol;
 
   /**
    * Prévenir avant de FERMER l'onglet.
@@ -1503,6 +1557,14 @@ export default function AutomationBuilderPage() {
   /** Enregistrer les réglages du déclencheur. */
   const enregistrerDeclencheur = useCallback(async (conditions: Record<string, unknown>, arreterSiResolu?: boolean) => {
     if (!regle) return;
+    /*
+     * Un changement de déclencheur encore en vol : ces réglages attendent sa
+     * réponse. Partis en parallèle, les deux se doublaient, et le plus lent
+     * écrasait l'autre. Changement refusé : la carte est revenue à l'ancien
+     * déclencheur (c'est déjà dit) — ces réglages n'étaient pas les siens.
+     */
+    const changementEnVol = fileDeclencheur.current.enVol;
+    if (changementEnVol && !(await changementEnVol)) return;
     try {
       // La case « Arrêter si… » vit dans `settings` : on la fusionne avec les
       // réglages existants (fenêtre, réentrée…) au lieu de les écraser.
@@ -1687,7 +1749,9 @@ export default function AutomationBuilderPage() {
                   ? `${etapesIncompletes} étape(s) à compléter`
                   : `${etapesIncompletes} step(s) to complete`}
               </span>
-            ) : etatSauvegarde === 'en_cours' ? (
+            ) : etatSauvegarde === 'en_cours' || declencheurEnVol ? (
+              // Le changement de déclencheur compte aussi : « Enregistré »
+              // pendant que son PATCH était en vol mentait (audit 2026-10-01).
               <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />{fr ? 'Enregistrement…' : 'Saving…'}</>
             ) : etatSauvegarde === 'modifie' ? (
               <><Cloud className="h-3.5 w-3.5" aria-hidden="true" />{fr ? 'Modifié' : 'Edited'}</>
