@@ -1354,7 +1354,7 @@ export default function Automations() {
                     onClick={() => changerLangue(l)}
                     disabled={savingLang}
                     aria-pressed={orgLang === l}
-                    className={`px-2.5 py-1 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary'}`}
+                    className={`px-2.5 py-1 font-medium transition-colors pointer-coarse:py-2 ${orgLang === l ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary'}`}
                   >
                     {l === 'fr' ? 'FR' : 'EN'}
                   </button>
@@ -1757,7 +1757,12 @@ export default function Automations() {
         ) : (
           <div className="section-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-[13px]">
+              {/* TABLETTE (mesuré sur un iPad le 2026-10-01) : une largeur minimale de
+                  980 px poussait l'interrupteur, les messages et le menu « ⋮ » hors
+                  écran dès 1024 px ; en portrait on ne voyait plus que « Nom ». Les
+                  colonnes secondaires se replient par palier — compteurs à partir de
+                  1024 px, dates à partir de 1280 px — et les actions restent là. */}
+              <table className="w-full min-w-[440px] text-[13px]">
                 <thead>
                   <tr className="border-b border-outline/40 text-left text-[12px] text-text-secondary">
                     <th scope="col" className="w-10 px-3 py-3">
@@ -1772,10 +1777,10 @@ export default function Automations() {
                     {([
                       ['nom', fr ? 'Nom' : 'Name', ''],
                       ['statut', fr ? 'Statut' : 'Status', ''],
-                      ['declenches', fr ? 'Total déclenché' : 'Total enrolled', ''],
-                      ['en_cours', fr ? 'En cours' : 'Active enrolled', ''],
-                      ['modifiee', fr ? 'Modifiée le' : 'Last updated', 'hidden lg:table-cell'],
-                      ['creee', fr ? 'Créée le' : 'Created on', 'hidden lg:table-cell'],
+                      ['declenches', fr ? 'Total déclenché' : 'Total enrolled', 'hidden lg:table-cell'],
+                      ['en_cours', fr ? 'En cours' : 'Active enrolled', 'hidden lg:table-cell'],
+                      ['modifiee', fr ? 'Modifiée le' : 'Last updated', 'hidden xl:table-cell'],
+                      ['creee', fr ? 'Créée le' : 'Created on', 'hidden xl:table-cell'],
                     ] as const).map(([cle, libelle, classe]) => {
                       const actif = tri?.cle === cle;
                       const Fleche = actif && tri?.sens === 'desc' ? ArrowDown : ArrowUp;
@@ -1921,11 +1926,11 @@ export default function Automations() {
 
                           {/* Total déclenché / En cours : les vrais chiffres (60 j),
                               « — » seulement si la lecture a échoué. */}
-                          <td className="px-3 py-3 tabular-nums text-primary">{stats ? (stats[rule.id]?.declenches ?? 0) : '—'}</td>
-                          <td className="px-3 py-3 tabular-nums text-primary">{stats ? (stats[rule.id]?.en_cours ?? 0) : '—'}</td>
+                          <td className="hidden px-3 py-3 tabular-nums text-primary lg:table-cell">{stats ? (stats[rule.id]?.declenches ?? 0) : '—'}</td>
+                          <td className="hidden px-3 py-3 tabular-nums text-primary lg:table-cell">{stats ? (stats[rule.id]?.en_cours ?? 0) : '—'}</td>
 
-                          <td className="hidden px-3 py-3 text-text-secondary lg:table-cell">{dateCourte(rule.updated_at)}</td>
-                          <td className="hidden px-3 py-3 text-text-secondary lg:table-cell">{dateCourte(rule.created_at)}</td>
+                          <td className="hidden px-3 py-3 text-text-secondary xl:table-cell">{dateCourte(rule.updated_at)}</td>
+                          <td className="hidden px-3 py-3 text-text-secondary xl:table-cell">{dateCourte(rule.created_at)}</td>
 
                           <td className="px-3 py-3">
                             <button

@@ -504,3 +504,74 @@ describe('liste-05 — langue du bureau illisible : l’écran ne prétend pas l
     expect(texte()).toContain(AVEU);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+describe('tablette — l’interrupteur et le menu « ⋮ » restent à l’écran', () => {
+  /*
+   * Mesuré sur lumecrm.net le 2026-10-01 (WebKit, iPad) : en paysage (1024 px)
+   * comme en portrait (768 px), le tableau gardait une largeur minimale de
+   * 980 px dans une zone de 706 px, puis 482 px. L'interrupteur publier /
+   * brouillon, la flèche des messages et le menu « ⋮ » étaient HORS ÉCRAN ; en
+   * portrait on ne voyait plus que la colonne « Nom ».
+   *
+   * jsdom ne met rien en page : on vérifie ce qui décide de la mise en page —
+   * plus de largeur minimale de bureau, et des colonnes secondaires qui se
+   * replient par palier, en-tête et cellules ENSEMBLE (une cellule de trop
+   * décalerait toute la ligne).
+   */
+  const colonnes = () => {
+    const enTetes = Array.from(conteneur.querySelectorAll('thead th')) as HTMLElement[];
+    const cellules = Array.from(conteneur.querySelectorAll('tbody tr')[0].querySelectorAll('td')) as HTMLElement[];
+    return { enTetes, cellules };
+  };
+  /** Le palier à partir duquel une colonne s'affiche : '' = toujours. */
+  const palier = (el: HTMLElement) => {
+    const c = el.className;
+    if (!/\bhidden\b/.test(c)) return '';
+    return /\b(sm|md|lg|xl|2xl):table-cell\b/.exec(c)?.[1] ?? 'jamais';
+  };
+
+  it('le tableau n’impose plus une largeur de bureau', async () => {
+    await rendre();
+    const table = conteneur.querySelector('table') as HTMLElement;
+    expect(table.className).not.toContain('min-w-[980px]');
+    // Sous 768 px l'app n'est pas offerte (porte mobile) : 440 px tiennent dans la zone d'un iPad en portrait (482 px).
+    const mini = Number(/min-w-\[(\d+)px\]/.exec(table.className)?.[1] ?? 0);
+    expect(mini).toBeLessThanOrEqual(480);
+  });
+
+  it('toujours visibles : case, nom, statut, statistiques, actions', async () => {
+    await rendre();
+    const { enTetes } = colonnes();
+    const toujours = enTetes.filter((th) => palier(th) === '').map((th) => (th.textContent || '').trim() || (th.querySelector('input') ? 'case' : ''));
+    expect(toujours).toEqual(['case', 'Nom', 'Statut', 'Stats', 'Actions']);
+  });
+
+  it('les compteurs apparaissent à partir de 1024 px, les dates à partir de 1280 px', async () => {
+    await rendre();
+    const { enTetes } = colonnes();
+    const parNom = Object.fromEntries(enTetes.map((th) => [(th.textContent || '').trim(), palier(th)]));
+    expect(parNom['Total déclenché']).toBe('lg');
+    expect(parNom['En cours']).toBe('lg');
+    expect(parNom['Modifiée le']).toBe('xl');
+    expect(parNom['Créée le']).toBe('xl');
+  });
+
+  it('chaque cellule suit le palier de son en-tête : aucune ligne décalée', async () => {
+    await rendre();
+    const { enTetes, cellules } = colonnes();
+    expect(cellules.length).toBe(enTetes.length);
+    expect(cellules.map(palier)).toEqual(enTetes.map(palier));
+  });
+
+  it('la cellule des actions porte l’interrupteur, les messages et le menu, et ne se replie jamais', async () => {
+    await rendre();
+    const { cellules } = colonnes();
+    const actions = cellules[cellules.length - 1];
+    expect(palier(actions)).toBe('');
+    const noms = Array.from(actions.querySelectorAll('button')).map((b) => b.getAttribute('aria-label') || '');
+    expect(noms.some((n) => /^(Publier|Repasser) /.test(n))).toBe(true);
+    expect(noms.some((n) => /^Voir les messages de /.test(n))).toBe(true);
+    expect(noms.some((n) => /^Actions pour /.test(n))).toBe(true);
+  });
+});
