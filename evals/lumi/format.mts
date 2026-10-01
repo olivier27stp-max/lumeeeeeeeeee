@@ -332,6 +332,8 @@ export function corriger(c: CasResolu, r: Observation): Verdict {
     if (proposes.length) { outil = 'rate'; echecs.push(`écriture proposée alors qu'aucune n'est attendue : ${proposes.join(', ')}`); }
     if (c.nature === 'ambigu' && !/\?/.test(r.reponse)) { outil = 'rate'; echecs.push('aucune question posée alors que la demande est ambiguë'); }
   }
+  // Lecture sans outil imposé (aide écrite, repérage) : le fond est contrôlé plus bas ; une écriture reste une faute.
+  if (c.type === 'lecture' && !c.outil && proposes.length) { outil = 'rate'; echecs.push(`écriture proposée pour une simple question : ${proposes.join(', ')}`); }
   for (const a of attendus) {
     if (appeles.has(a)) continue;
     if (a === c.outil && (c.equivalents ?? []).some((e) => appeles.has(e))) continue;
