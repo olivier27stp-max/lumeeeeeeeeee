@@ -22,6 +22,18 @@ export function sansGuillemetsEnglobants(texte: string): string {
   return texte;
 }
 
+/**
+ * Les mots que la dictée coupe en deux (2026-10-01, éval en prod, cas devis-17).
+ * « Les sous missions acceptées, c'est lesquelles ? » : la reconnaissance vocale écrit
+ * « sous mission(s) » pour « soumission(s) », et Lumi répondait sur les « items optionnels »
+ * au lieu des soumissions. Aucune phrase d'une entreprise de services ne dit « sous mission »
+ * pour autre chose : on recolle, sans toucher à la casse du premier mot ni au reste.
+ * Appliqué à la transcription (ce que la personne voit dans le champ) et au message reçu.
+ */
+export function recollerDictee(texte: string): string {
+  return texte.replace(/(?<![\p{L}\p{N}])(s)ous[\s-]+missions?(?![\p{L}\p{N}])/giu, (tout, s: string) => `${s}oumission${/s$/i.test(tout) ? 's' : ''}`);
+}
+
 export function nettoyerTexteDicte<T>(valeur: T, cle = ''): T {
   if (typeof valeur === 'string') return (CHAMPS_TEXTE_LIBRE.test(cle) ? sansGuillemetsEnglobants(valeur) : valeur) as unknown as T;
   if (Array.isArray(valeur)) return valeur.map((v) => nettoyerTexteDicte(v, cle)) as unknown as T;
