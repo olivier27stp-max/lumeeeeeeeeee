@@ -125,6 +125,13 @@ export interface ResultatRouteur {
   decision: 'action' | 'modele' | 'hors_scope';
   usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number };
   duree_ms: number;
+  /** 'regle' = sujet trouvé par sujet-par-regle.ts, le modèle de routage n'a pas été appelé (0 ¢). */
+  source?: 'regle';
+}
+
+/** Verdict d'une règle : même forme qu'un verdict du routeur, sans action déterministe ni coût. */
+export function resultatParRegle(topic: Verdict['topic']): ResultatRouteur {
+  return { verdict: { topic, action: null, params: {}, confidence: 1 }, statut: 'ok', decision: 'modele', duree_ms: 0, source: 'regle' };
 }
 
 /** Ce que le code fait d'un verdict validé (pur, testable). */
