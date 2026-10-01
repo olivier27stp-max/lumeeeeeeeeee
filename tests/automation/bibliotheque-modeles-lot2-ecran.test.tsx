@@ -229,6 +229,30 @@ describe('modeles-01 — les conditions se lisent en clair, dans la langue de l�
 const etapesAffichees = () => [...fenetre().querySelectorAll('ol > li')];
 const canauxAnnonces = (dans: Element) => [...dans.querySelectorAll('svg[aria-label]')].map((s) => s.getAttribute('aria-label'));
 
+describe('modeles-10 — en anglais, l’aperçu ne montre plus de français', () => {
+  it('« Lead — Welcome » : la notification d’équipe se lit « New lead »', async () => {
+    await monter(false);
+    cliquer(carte('welcome_new_lead'));
+    const notification = etapesAffichees().find((li) => /Notify the team|Notify/.test(li.textContent ?? ''))!; // présente : 3e étape du modèle
+    expect(notification.textContent).toContain('New lead');
+    expect(fenetre().textContent).not.toContain('Nouveau prospect');
+  });
+
+  it('aucun aperçu anglais ne montre un titre de notification ou de tâche resté en français', async () => {
+    const francais = /\b(soumission|facture|prospect|dépôt|rendez-vous|tâche|relancer|reçu|jours|annulé)\b/i;
+    await monter(false);
+    for (const m of MODELES_AUTOMATISATION) {
+      cliquer(carte(m.id));
+      // Le texte affiché sous une étape « notification » ou « tâche » (son titre).
+      // (Sans les variables : « {{soumission.numero}} » porte un mot français qui n'est pas affiché au client.)
+      const titres = etapesAffichees().flatMap((li) => [...li.querySelectorAll(':scope > p')]
+        .map((p) => (p.textContent ?? '').replace(/\[[a-z0-9_]+\]|\{\{[^}]+\}\}/gi, '')));
+      for (const t of titres) expect(t, m.id).not.toMatch(francais);
+      cliquer(bouton(/^Back$/));
+    }
+  });
+});
+
 describe('modeles-07 — autant d’étapes annoncées que de cartes dans l’éditeur', () => {
   it('« Prospect — Bienvenue » : la carte dit 4 étapes, l’aperçu en liste 4, la 4e est la note technique', async () => {
     await monter();

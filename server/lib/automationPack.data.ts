@@ -32,7 +32,9 @@ const JOUR = 86_400;
 /**
  * Les actions d'un préréglage éprouvé, sans la trace interne `log_activity`.
  * Une tâche portait `description`, que les parcours n'acceptent pas : elle
- * devient `body` (« Détail »), le champ prévu.
+ * devient `body` (« Détail »), le champ prévu. Son détail anglais est déjà
+ * écrit `body_en` dans le préréglage (la validation de la route n'admet pas
+ * `description_en`) : il suit tel quel.
  */
 function actionsDe(cle: string): Action[] {
   const p = AUTOMATION_PRESETS.find((x) => x.preset_key === cle);
