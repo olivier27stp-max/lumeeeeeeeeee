@@ -95,6 +95,17 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | D-17 | Sous saturation : 8/144 écritures sans événement | **refaire la charge sur un environnement isolé** avant de conclure (staging était partagé) | M |
 | Outbox prod | Aucun événement dans `domain_events` depuis le 28 à 22:14 (≈ 26 h) | vérifier si c'est normal (types consignés) ou une panne | XS |
 
+## Livré après les vagues (2026-09-30, soir)
+
+| PR | Quoi | Preuve |
+|---|---|---|
+| **#802** | Corbeille : « Supprimer définitivement » (ligne et lot, avec confirmation). La règle sort de la corbeille pour de bon, et l'**historique d'envois est gardé** (`purged_at`, migration 20261004400000) | 7 tests rouges sans la fonctionnalité ; bout en bout sur staging avec RLS réelle |
+| **#799** | Construire avec Lumi **montre le nouveau texte** sous sa phrase et dit franchement quand rien n'a changé. Sonnet 5 au lieu de Haiku. `update_automation_message` réécrit l'étape réellement exécutée | conversation réelle de Rafba rejouée sur le vrai modèle |
+| **#805** | Réponses coupées (`max_tokens`), régression anglaise, questions sans réponse, textos > 160 caractères ; second essai sur un JSON illisible. Batterie `npm run qa:construire-lumi` : 12 conversations, 107 contrôles | 1re passe 90 % → **107/107** |
+| **#806** | Surveillance des vraies conversations : `npm run qa:surveiller-construire-lumi -- --prod`, en lecture seule | a repéré la conversation qui a déclenché #799 |
+
+**Leçon** : changer de modèle oblige à remesurer `max_tokens`. Tout changement de `generer-parcours.ts` passe par la batterie avant le merge.
+
 ## Ce qui t'attend (décisions, pas du code)
 
 1. ~~Merges vague 0 et 1~~ — fait.
