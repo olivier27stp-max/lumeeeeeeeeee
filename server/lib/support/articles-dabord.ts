@@ -33,6 +33,7 @@
 import { chercherAide } from '../agent/tools-aide';
 import { porteSurLesDonnees, motsUtiles } from './faq';
 import { normaliser } from '../lumi/normaliser';
+import type { Voix } from './faq-tutoiement';
 
 /** Score minimal du premier résultat : en dessous, la recherche « devine ». */
 export const SCORE_FRANC = 6;
@@ -77,7 +78,7 @@ export function estQuestionComment(message: string): boolean {
 export function reponseAideDirecte(
   message: string,
   langue: 'fr' | 'en',
-  opts: { premierMessage: boolean },
+  opts: { premierMessage: boolean; voix?: Voix },
 ): ReponseAide | null {
   if (!opts.premierMessage) return null;
   if (!message.trim()) return null;
@@ -132,8 +133,10 @@ export function reponseAideDirecte(
 
   // Une réponse courte qui cite la page, comme le modèle le ferait.
   const extrait = premier.extrait.trim().replace(/\s+/g, ' ').slice(0, 400);
+  // La relance suit la voix de celui qui parle : Lumi tutoie, le support vouvoie.
+  const relance = opts.voix === 'tu' ? 'Si ça ne règle pas ton cas, dis-le-moi et je creuse.' : 'Si ça ne règle pas votre cas, dites-le-moi et je creuse.';
   const texte = langue === 'fr'
-    ? `${extrait}\n\n→ ${premier.titre} (${premier.page})\n\nSi ça ne règle pas ton cas, dis-le-moi et je creuse.`
+    ? `${extrait}\n\n→ ${premier.titre} (${premier.page})\n\n${relance}`
     : `${extrait}\n\n→ ${premier.titre} (${premier.page})\n\nIf that doesn’t cover your case, tell me and I’ll dig further.`;
   return { texte, pages: trouves.map((t) => t.page), score: premier.score };
 }

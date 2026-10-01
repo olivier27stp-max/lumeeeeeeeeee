@@ -27,7 +27,7 @@ describe('estDemandeDAction', () => {
     const r = readFileSync(resolve(__dirname, '..', 'server', 'routes', 'lumi.ts'), 'utf8');
     const garde = r.indexOf('!estDemandeDAction(message)');
     expect(garde).toBeGreaterThan(0);
-    expect(garde).toBeLessThan(r.indexOf('reponseFaqPour(message, ctx.language)'));
+    expect(garde).toBeLessThan(r.indexOf('reponseFaqPour(message, ctx.language,'));
   });
 });
 
@@ -130,7 +130,7 @@ describe('passe de référence du 2026-10-01 : six questions de données servies
     const r = readFileSync(resolve(__dirname, '..', 'server', 'routes', 'lumi.ts'), 'utf8');
     const reconnu = r.indexOf('const raccourciReconnu =');
     expect(reconnu).toBeGreaterThan(0);
-    expect(reconnu).toBeLessThan(r.indexOf('reponseFaqPour(message, ctx.language)'));
+    expect(reconnu).toBeLessThan(r.indexOf('reponseFaqPour(message, ctx.language,'));
     expect(r).toContain('!estDemandeDAction(message) && !raccourciReconnu');
   });
 });
