@@ -40,8 +40,9 @@ Ce qui manque pour dire « prêt » :
 | `30` `31` `32` (tablette) | liste, barre du haut, éditeur sur iPad paysage et portrait | 1/3, 1/2, 19/24 | 3/3, 2/2, 24/24 |
 | `40-roles-api` | technicien et vendeur refusés sur les 32 routes de l’API (403 avec une phrase lisible), y compris barre finale, majuscules et double barre ; sans session : 401 ; propriétaire et admin lisent | — | 9/9 |
 | `50-comportements-navigateur` | éditeur : rechargement, retour arrière et avancer, lien direct vers une règle inexistante (« introuvable ») ou à la corbeille, modification hors ligne (l’écran dit « Modifié », rien n’est écrit, puis ça s’enregistre au retour du réseau), règle supprimée dans un autre onglet (« n’existe plus ») | — | 6/6 |
+| `60-anglais` | interface en anglais : liste, vue d’ensemble, réglages globaux, éditeur — aucun texte d’interface resté en français | — | 4/4 |
 
-Ces scripts sont maintenant dans le dépôt (`scripts/qa/automations-prod/`) et se lancent d’une commande : **`npm run test:automations:e2e`** — 60 vérifications sur 60 réussies le 2026-10-01 à 19 h 45 UTC, sortie en JSON et en markdown. C’est une passe **après déploiement** : elle juge ce qui est en ligne. Ce qui bloque un merge avant déploiement reste la CI.
+Ces scripts sont maintenant dans le dépôt (`scripts/qa/automations-prod/`) et se lancent d’une commande : **`npm run test:automations:e2e`** — 64 vérifications sur 64 réussies le 2026-10-01 à 19 h 50 UTC, sortie en JSON et en markdown. C’est une passe **après déploiement** : elle juge ce qui est en ligne. Ce qui bloque un merge avant déploiement reste la CI.
 
 Tests unitaires et de composant ajoutés par les correctifs : environ 330, tous dans la suite de la CI (qui bloque le merge).
 
@@ -55,7 +56,7 @@ Tests unitaires et de composant ajoutés par les correctifs : environ 330, tous 
 | Téléphone 375 | la section n'est pas offerte : porte mobile « Le bureau sur l'ordi. Le terrain dans l'app. » — voulu |
 | Firefox, Safari de bureau | conformes ; Firefox remonte à chaque page l'exception du verrou de session de supabase-js, sans effet visible (P-001) |
 | Rôles | propriétaire et admin : complet ; technicien et vendeur : refusés sur les 32 routes de l’API par appel direct (403, vérifié sur le vrai site), y compris avec une adresse détournée ; **membre « lecture + modification » : voir § 6** |
-| Anglais | libellés alignés (« Build with Lumi »), textes anglais ajoutés aux 54 notifications / tâches des modèles ; reste le titre « Workflows list » (P-002) |
+| Anglais | les quatre écrans vérifiés sur le vrai site sans un texte d’interface en français ; libellés alignés (« Build with Lumi »), textes anglais ajoutés aux 54 notifications / tâches des modèles ; reste le titre « Workflows list » à côté d’un menu « Workflows » (P-002) |
 
 ## 4. Envois : rien n'est parti
 
