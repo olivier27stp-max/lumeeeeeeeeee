@@ -1003,55 +1003,174 @@ const setCustomField: AgentTool = {
    PIPELINE (cartes de deals)
    ═══════════════════════════════════════════════════════════════ */
 
+/**
+ * Le VRAI pipeline de ventes (2026-10-01).
+ * ─────────────────────────────────────────────────────────────────────────
+ * Ces trois outils lisaient et écrivaient `pipeline_deals`, l'ancien tableau à cinq
+ * étapes fixes, que le menu ne propose plus. L'écran « Pipeline » (/ventes) vit sur
+ * `deals`, `pipelines_ventes` et `pipeline_stages` (étapes au choix de l'entreprise).
+ * Mesuré en prod sur l'org de test : Lumi annonçait 8 cartes, l'écran en montrait 2.
+ *
+ * Les écritures font ce que fait l'écran (src/lib/pipelineVentesApi.ts) : une mise à
+ * jour de `deals` sous la RLS de la personne ; l'historique, les événements et les
+ * automatisations d'étape sont posés par les déclencheurs de la base.
+ */
+interface EtapePipeline { id: string; name_fr: string; name_en: string; kind: 'open' | 'won' | 'lost'; position: number }
+const sansAccentMin = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+const NATURE_ETAPE: Record<string, EtapePipeline['kind']> = {
+  open: 'open', ouvert: 'open', ouverts: 'open', ouverte: 'open', 'en cours': 'open',
+  won: 'won', gagne: 'won', gagnes: 'won', gagnee: 'won', closed_won: 'won',
+  lost: 'lost', perdu: 'lost', perdus: 'lost', perdue: 'lost', closed_lost: 'lost',
+};
+
+async function pipelinesDeLOrg(ctx: ToolContext): Promise<Array<{ id: string; name: string; is_default: boolean }>> {
+  const { data, error } = await ctx.client.from('pipelines_ventes').select('id, name, is_default, position')
+    .eq('org_id', ctx.orgId).is('archived_at', null).order('position', { ascending: true }).order('name', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Array<{ id: string; name: string; is_default: boolean }>;
+}
+
+async function etapesDuPipeline(ctx: ToolContext, pipelineId: string): Promise<EtapePipeline[]> {
+  const { data, error } = await ctx.client.from('pipeline_stages').select('id, name_fr, name_en, kind, position')
+    .eq('org_id', ctx.orgId).eq('pipeline_id', pipelineId).is('archived_at', null).order('position', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as EtapePipeline[];
+}
+
+/** Les étapes désignées par un nom (français ou anglais), un identifiant, ou une nature (ouvert, gagné, perdu). */
+export function etapesDesignees(etapes: EtapePipeline[], demande: unknown): EtapePipeline[] {
+  const brut = String(demande ?? '').trim();
+  if (!brut) return [];
+  const parId = etapes.filter((e) => e.id === brut);
+  if (parId.length) return parId;
+  const d = sansAccentMin(brut);
+  const exact = etapes.filter((e) => sansAccentMin(e.name_fr) === d || sansAccentMin(e.name_en) === d);
+  if (exact.length) return exact;
+  if (NATURE_ETAPE[d]) return etapes.filter((e) => e.kind === NATURE_ETAPE[d]);
+  return etapes.filter((e) => sansAccentMin(e.name_fr).includes(d) || sansAccentMin(e.name_en).includes(d));
+}
+
+const nomsEtapes = (etapes: EtapePipeline[]) => etapes.map((e) => `« ${e.name_fr} »`).join(', ');
+
 const listDeals: AgentTool = {
   kind: 'read',
-  needsIdentity: true, // valeur estimée = un montant
+  needsIdentity: true, // le montant d'un deal est un montant
   declaration: {
     name: 'list_deals',
     description:
-      'The pipeline board: deal cards with their stage, estimated value and prospect. Filter by stage or search '
-      + 'by title/prospect name. Returns total_matching and the deal ids needed by update_deal_stage / delete_deal.',
+      'The sales pipeline board (the « Pipeline » screen): its stages in order with how many deals each holds, and the deals '
+      + '(client, stage, amount, seller, target close date). The stages are the company’s OWN — read them here, never assume '
+      + 'their names. Filter by stage (its name, or open / won / lost) or search by client name or deal title. Returns the '
+      + 'deal ids needed by update_deal_stage / delete_deal.',
     parameters: {
       type: 'object',
       properties: {
-        stage: { type: 'string', description: "Optional stage filter: 'new_prospect', 'no_response', 'quote_sent', 'closed_won', 'closed_lost' (French labels accepted)." },
-        query: { type: 'string', description: 'Optional text to match the deal title.' },
+        stage: { type: 'string', description: 'Optional: a stage name as shown on the board, or open / won / lost (French accepted).' },
+        query: { type: 'string', description: 'Optional search words: client name, company or deal title.' },
+        pipeline: { type: 'string', description: 'Optional pipeline name when the company has several (default: its main pipeline).' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
     },
   },
   handler: async (args, ctx) => {
-    let q = ctx.client
-      .from('pipeline_deals')
-      .select('id, title, stage, value, created_at, updated_at, won_at, lost_at, lead:clients!pipeline_deals_lead_id_fkey(first_name, last_name, company, display_as_company)', { count: 'exact' })
-      .eq('org_id', ctx.orgId)
-      .is('deleted_at', null)
-      .order('updated_at', { ascending: false })
-      .limit(clamp(args.limit, 15, 30));
-    if (args.stage) {
-      try { q = q.eq('stage', versEtape(args.stage)); } catch (e: any) { return { error: e?.message || 'Étape inconnue.' }; }
+    try {
+      const pipelines = await pipelinesDeLOrg(ctx);
+      if (!pipelines.length) return { total_matching: 0, deals: [], note: 'Cette entreprise n’a pas encore de pipeline de ventes.' };
+      const voulu = sansAccentMin(args.pipeline);
+      const pipeline = (voulu ? pipelines.find((x) => sansAccentMin(x.name).includes(voulu)) : null) ?? pipelines.find((x) => x.is_default) ?? pipelines[0];
+      if (voulu && !sansAccentMin(pipeline.name).includes(voulu)) {
+        return { error: `Aucun pipeline nommé « ${String(args.pipeline)} ». Pipelines : ${pipelines.map((x) => `« ${x.name} »`).join(', ')}.` };
+      }
+      const etapes = await etapesDuPipeline(ctx, pipeline.id);
+      const parId = new Map(etapes.map((e) => [e.id, e]));
+      let filtreEtapes: EtapePipeline[] | null = null;
+      if (args.stage) {
+        filtreEtapes = etapesDesignees(etapes, args.stage);
+        if (!filtreEtapes.length) return { error: `Aucune étape « ${String(args.stage)} » dans ce pipeline. Étapes : ${nomsEtapes(etapes)}.` };
+      }
+      const limite = clamp(args.limit, 15, 30);
+      let q = ctx.client.from('deals')
+        .select('id, title, stage_id, client_id, assigned_user_id, source, expected_close_date, stage_entered_at, last_activity_at, won_at, lost_at, lost_reason, quote_id, job_id, client:clients!deals_client_same_org(first_name, last_name, company, display_as_company)', { count: 'exact' })
+        .eq('org_id', ctx.orgId).eq('pipeline_id', pipeline.id).is('deleted_at', null)
+        .order('last_activity_at', { ascending: false }).limit(limite);
+      if (filtreEtapes) q = q.in('stage_id', filtreEtapes.map((e) => e.id));
+      const terme = String(args.query || '').trim();
+      if (terme) {
+        // Le titre du deal, OU un client dont le prénom, le nom ou l'entreprise contient chaque mot.
+        const mots = terme.replace(/[%,()"'’`\\*]/g, ' ').split(/\s+/).filter((x) => x.length >= 2).slice(0, 4);
+        let qc = ctx.client.from('clients').select('id').eq('org_id', ctx.orgId).is('deleted_at', null).limit(40);
+        for (const mot of mots) qc = qc.or(`first_name.ilike.%${mot}%,last_name.ilike.%${mot}%,company.ilike.%${mot}%`);
+        const { data: trouves } = mots.length ? await qc : { data: [] as Array<{ id: string }> };
+        const ids = ((trouves ?? []) as Array<{ id: string }>).map((x) => x.id);
+        q = q.or([`title.ilike.%${mots.join(' ')}%`, ...(ids.length ? [`client_id.in.(${ids.join(',')})`] : [])].join(','));
+      }
+      const { data, error, count } = await q;
+      if (error) return erreurLecture('deals', error);
+      const lignes = (data ?? []) as any[];
+
+      // Le compte par étape porte sur TOUT le pipeline, pas sur la page rendue.
+      const { data: toutes } = await ctx.client.from('deals').select('stage_id').eq('org_id', ctx.orgId).eq('pipeline_id', pipeline.id).is('deleted_at', null).limit(5000);
+      const compte = new Map<string, number>();
+      for (const d of (toutes ?? []) as Array<{ stage_id: string }>) compte.set(d.stage_id, (compte.get(d.stage_id) ?? 0) + 1);
+
+      // Montants : la même fonction que le tableau (job liée, devis lié, sinon dernier devis du client).
+      const montants = new Map<string, { cents: number; provenance: string }>();
+      const { data: m } = await ctx.client.rpc('pipeline_montants');
+      for (const r of (m ?? []) as Array<{ deal_id: string; cents: number; provenance: string }>) montants.set(r.deal_id, { cents: Number(r.cents) || 0, provenance: r.provenance });
+
+      const idsVendeurs = [...new Set(lignes.map((d) => d.assigned_user_id).filter(Boolean))] as string[];
+      const vendeurs = new Map<string, string>();
+      if (idsVendeurs.length) {
+        const { data: tm } = await ctx.client.from('team_members').select('user_id, first_name, last_name').eq('org_id', ctx.orgId).in('user_id', idsVendeurs);
+        for (const t of (tm ?? []) as any[]) vendeurs.set(t.user_id, [t.first_name, t.last_name].filter(Boolean).join(' ').trim());
+      }
+      const total = count ?? lignes.length;
+      return {
+        pipeline: pipeline.name,
+        ...(pipelines.length > 1 ? { autres_pipelines: pipelines.filter((x) => x.id !== pipeline.id).map((x) => x.name) } : {}),
+        etapes: etapes.map((e) => ({ stage_id: e.id, nom: e.name_fr, name_en: e.name_en, nature: e.kind === 'won' ? 'gagné' : e.kind === 'lost' ? 'perdu' : 'ouvert', deals: compte.get(e.id) ?? 0 })),
+        total_matching: total,
+        shown: lignes.length,
+        ...(total > lignes.length ? { note: `Only ${lignes.length} of ${total} are listed below. The exact total is ${total}.` } : {}),
+        deals: lignes.map((d) => {
+          const client = Array.isArray(d.client) ? d.client[0] : d.client;
+          const e = parId.get(d.stage_id);
+          const mt = montants.get(d.id);
+          return {
+            id: d.id, // interne : pour update_deal_stage / delete_deal
+            title: d.title || nomAffiche(client) || null,
+            client: nomAffiche(client) || null,
+            client_id: d.client_id,
+            etape: e?.name_fr ?? null, stage_en: e?.name_en ?? null,
+            nature: e ? (e.kind === 'won' ? 'gagné' : e.kind === 'lost' ? 'perdu' : 'ouvert') : null,
+            amount_cents: mt && mt.provenance !== 'aucun' ? mt.cents : null,
+            vendeur: d.assigned_user_id ? (vendeurs.get(d.assigned_user_id) || null) : null,
+            source: d.source,
+            expected_close_date: d.expected_close_date,
+            dans_cette_etape_depuis: d.stage_entered_at,
+            derniere_activite: d.last_activity_at,
+            ...(d.lost_reason ? { raison_perte: d.lost_reason } : {}),
+          };
+        }),
+      };
+    } catch (e: any) {
+      return erreurLecture('deals', e);
     }
-    const terme = String(args.query || '').trim().replace(/[%,()]/g, ' ');
-    if (terme) q = q.ilike('title', `%${terme}%`);
-    const { data, error, count } = await q;
-    if (error) return erreurLecture('deals', error);
-    const lignes = data || [];
-    const total = count ?? lignes.length;
-    return {
-      total_matching: total,
-      shown: lignes.length,
-      ...(total > lignes.length ? { note: `Only ${lignes.length} of ${total} are listed below. The exact total is ${total}.` } : {}),
-      deals: lignes.map((d: any) => ({
-        id: d.id,
-        title: d.title,
-        prospect: nomAffiche(Array.isArray(d.lead) ? d.lead[0] : d.lead) || null,
-        statut: traduireStatut(d.stage, STATUT_PROSPECT),
-        value_amount: d.value,
-        updated_at: d.updated_at,
-      })),
-    };
   },
 };
+
+/** Le deal (sous la RLS de la personne), son pipeline et ses étapes. */
+async function dealEtEtapes(ctx: ToolContext, dealId: string) {
+  const { data: deal, error } = await ctx.client.from('deals')
+    .select('id, title, stage_id, pipeline_id, client_id, client:clients!deals_client_same_org(first_name, last_name, company, display_as_company)')
+    .eq('org_id', ctx.orgId).eq('id', dealId).is('deleted_at', null).maybeSingle();
+  if (error) echecEcriture('retrouver le deal', error);
+  if (!deal) throw new Error('Deal introuvable dans le pipeline — consulte list_deals.');
+  const d: any = deal;
+  const etapes = await etapesDuPipeline(ctx, d.pipeline_id);
+  const client = Array.isArray(d.client) ? d.client[0] : d.client;
+  return { deal: d, etapes, nom: String(d.title || nomAffiche(client) || 'ce deal') };
+}
 
 const updateDealStage: AgentTool = {
   kind: 'write',
@@ -1059,51 +1178,43 @@ const updateDealStage: AgentTool = {
   declaration: {
     name: 'update_deal_stage',
     description:
-      'Move a pipeline card (deal) to another stage — same as dragging it on the board. The stage automations '
-      + '(e.g. a job intent when won) run like in the app. Get the deal id from list_deals. If the user talks '
-      + 'about the PROSPECT rather than the card, prefer update_lead_status (it keeps both in sync).',
+      'Move a deal to another stage of the sales pipeline — same as dragging its card on the « Pipeline » screen; the stage '
+      + 'automations run like in the app. Get the deal id and the stage names from list_deals (stages are the company’s own). '
+      + 'Moving to a LOST stage needs lost_reason (what the client said). When the client simply stopped answering, use delete_deal (abandon).',
     parameters: {
       type: 'object',
       properties: {
         deal_id: { type: 'string', description: 'Deal id (from list_deals).' },
-        stage: { type: 'string', description: "Target stage: 'new_prospect', 'no_response', 'quote_sent', 'closed_won' or 'closed_lost' (French labels accepted)." },
+        stage: { type: 'string', description: 'Target stage: its name as shown on the board (or its stage_id from list_deals).' },
+        lost_reason: { type: 'string', description: 'Required when the target stage is a lost stage: why the deal was lost.' },
       },
       required: ['deal_id', 'stage'],
     },
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'update_deal_stage', args, async () => {
-      const dealId = champRequis(args.deal_id, 'La carte de pipeline');
-      const etape = versEtape(champRequis(args.stage, 'L’étape'));
-      // Miroir de setPipelineDealStage (pipelineApi) : on lit l'ancienne étape
-      // (filtre org), on passe par le RPC de l'app, on signale l'événement.
-      const { data: deal, error: errDeal } = await ctx.client
-        .from('pipeline_deals')
-        .select('id, title, stage, lead_id, job_id')
-        .eq('org_id', ctx.orgId).eq('id', dealId)
-        .is('deleted_at', null)
-        .maybeSingle();
-      if (errDeal) echecEcriture('retrouver la carte de pipeline', errDeal);
-      if (!deal) throw new Error('Carte de pipeline introuvable — elle a peut-être été supprimée. Consulte list_deals.');
-      const statut = traduireStatut(etape, STATUT_PROSPECT);
-      if (deal.stage === etape) {
-        return { updated: true, changed: false, deal: { title: deal.title }, statut, note: `La carte était déjà à l’étape « ${statut} » — rien à changer.` };
+      const dealId = champRequis(args.deal_id, 'Le deal');
+      const demande = champRequis(args.stage, 'L’étape');
+      const { deal, etapes, nom } = await dealEtEtapes(ctx, dealId);
+      const cibles = etapesDesignees(etapes, demande);
+      if (cibles.length === 0) throw new Error(`Aucune étape « ${demande} » dans ce pipeline. Étapes : ${nomsEtapes(etapes)}.`);
+      if (cibles.length > 1) throw new Error(`« ${demande} » désigne plusieurs étapes (${nomsEtapes(cibles)}) : précise laquelle.`);
+      const cible = cibles[0];
+      const avant = etapes.find((e) => e.id === deal.stage_id);
+      if (deal.stage_id === cible.id) {
+        return { updated: true, changed: false, deal: { title: nom }, etape: cible.name_fr, note: `Le deal était déjà à l’étape « ${cible.name_fr} » — rien à changer.` };
       }
-      const { error } = await ctx.client.rpc('set_deal_stage', { p_deal_id: deal.id, p_stage: etape });
-      if (error) echecEcriture('déplacer la carte de pipeline', error);
-      const avert = await signaler(ctx, '/automations/events/deal-stage-changed', {
-        dealId: deal.id,
-        ...(deal.lead_id ? { leadId: deal.lead_id } : {}),
-        ...(deal.job_id ? { jobId: deal.job_id } : {}),
-        oldStage: deal.stage || '',
-        newStage: etape,
-      });
+      const raison = String(args.lost_reason ?? '').trim();
+      if (cible.kind === 'lost' && !raison) throw new Error(`« ${cible.name_fr} » est une étape de perte : demande à l’utilisateur pourquoi le deal est perdu, puis repasse lost_reason. (Si le client ne répond simplement plus : delete_deal, qui l’abandonne.)`);
+      const { data, error } = await ctx.client.from('deals')
+        .update({ stage_id: cible.id, ...(cible.kind === 'lost' ? { lost_reason: raison } : {}) })
+        .eq('org_id', ctx.orgId).eq('id', deal.id).select('id');
+      if (error) echecEcriture('déplacer le deal', error);
+      if (!data || data.length === 0) throw new Error('Le deal n’a pas été déplacé : tu n’as pas accès à ce pipeline, ou le deal a changé entre-temps.');
       return {
-        updated: true,
-        changed: true,
-        deal: { title: deal.title },
-        statut,
-        note: `Carte déplacée à l’étape « ${statut} ».${avert ? ` Attention : ${avert}` : ''}`,
+        updated: true, changed: true, deal: { title: nom },
+        de: avant?.name_fr ?? null, etape: cible.name_fr,
+        note: `Deal « ${nom} » déplacé${avant ? ` de « ${avant.name_fr} »` : ''} à « ${cible.name_fr} ». Les automatisations de cette étape suivent, comme sur le tableau.`,
       };
     }),
 };
@@ -1114,57 +1225,29 @@ const deleteDeal: AgentTool = {
   declaration: {
     name: 'delete_deal',
     description:
-      'Remove a card from the pipeline (soft delete, like in Lume — the user cannot undo it). With also_delete_lead: '
-      + 'true the prospect itself is deleted too. Confirm with the user first. Get the deal id from list_deals. '
-      + 'A saved payment card (« carte enregistrée », card on file) is NOT a pipeline card → remove_card_on_file / charge_card_on_file.',
+      'Take a deal out of the active pipeline by ABANDONING it (the client stopped answering, or it was entered by mistake) — '
+      + 'the app’s own action: Lume never deletes a deal, it moves it to the lost stage as « abandoned », out of the win-rate. '
+      + 'Give the reason. Get the deal id from list_deals. The client said NO → update_deal_stage to the lost stage with lost_reason. '
+      + 'To delete the PROSPECT record itself → delete_lead. A saved payment card (card on file) is NOT a pipeline card → remove_card_on_file.',
     parameters: {
       type: 'object',
       properties: {
         deal_id: { type: 'string', description: 'Deal id (from list_deals).' },
-        also_delete_lead: { type: 'boolean', description: 'true to delete the linked prospect as well (default false).' },
+        reason: { type: 'string', description: 'Why it is abandoned (e.g. « ne répond plus », « entré par erreur »).' },
       },
       required: ['deal_id'],
     },
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'delete_deal', args, async () => {
-      const dealId = champRequis(args.deal_id, 'La carte de pipeline');
-      const { data: deal, error: errDeal } = await ctx.client
-        .from('pipeline_deals')
-        .select('id, title, lead_id')
-        .eq('org_id', ctx.orgId).eq('id', dealId)
-        .is('deleted_at', null)
-        .maybeSingle();
-      if (errDeal) echecEcriture('retrouver la carte de pipeline', errDeal);
-      if (!deal) throw new Error('Carte de pipeline introuvable — elle a peut-être déjà été supprimée.');
-      const aussiLeLead = Boolean(args.also_delete_lead);
-      if (aussiLeLead && deal.lead_id) {
-        // Audit 2026-09-30 : la fiche liée est peut-être devenue un CLIENT
-        // (jobs, factures) — la supprimer avec la carte laisserait tout son
-        // historique orphelin. On ne supprime qu'un prospect sans historique.
-        const { data: fiche, error: errFiche } = await ctx.client
-          .from('clients').select('id, status').eq('org_id', ctx.orgId).eq('id', deal.lead_id).is('deleted_at', null).maybeSingle();
-        if (errFiche) echecEcriture('vérifier la fiche liée', errFiche);
-        if (fiche) {
-          if (fiche.status !== 'lead') throw new Error('La fiche liée à cette carte est un client actif : je retire seulement la carte, sans supprimer le client. Redemande sans supprimer la fiche.');
-          // Trois requêtes explicites (pas de nom de table dynamique : le vérificateur
-          // de schéma voit chaque colonne citée).
-          const nb = (r: { count: number | null; error: any }) => { if (r.error) echecEcriture('vérifier la fiche liée', r.error); return r.count ?? 0; };
-          const historique =
-            nb(await ctx.client.from('jobs').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', fiche.id).is('deleted_at', null))
-            + nb(await ctx.client.from('invoices').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', fiche.id).is('deleted_at', null))
-            + nb(await ctx.client.from('quotes').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', fiche.id).is('deleted_at', null));
-          if (historique > 0) throw new Error('Ce prospect a déjà des jobs, devis ou factures : je ne supprime pas sa fiche avec la carte. Redemande sans supprimer la fiche.');
-        }
-      }
-      const r = await routeOuIncertain(ctx, '/deals/soft-delete', { dealId: deal.id, alsoDeleteLead: aussiLeLead }, 'la carte a été supprimée');
-      if ('incertain' in r) return r.incertain;
-      if (!r.ok) echecRoute('supprimer la carte de pipeline', r.status, r.json);
+      const dealId = champRequis(args.deal_id, 'Le deal');
+      const { deal, nom } = await dealEtEtapes(ctx, dealId);
+      const raison = String(args.reason ?? '').trim();
+      const { error } = await ctx.client.rpc('pipeline_abandonner_deal', { p_deal_id: deal.id, p_raison: raison || null });
+      if (error) echecEcriture('abandonner le deal', error);
       return {
-        deleted: true,
-        deal: { title: deal.title },
-        lead_deleted: Boolean(r.json?.lead_deleted),
-        note: r.json?.lead_deleted ? 'Carte retirée du pipeline et prospect supprimé.' : 'Carte retirée du pipeline.',
+        deleted: true, abandonne: true, deal: { title: nom },
+        note: `Deal « ${nom} » abandonné : il sort du pipeline actif et ne compte pas comme une vente perdue. Il reste visible dans l’étape des deals perdus et peut être rouvert en le redéplaçant. La fiche du client n’est pas touchée.`,
       };
     }),
 };
@@ -1364,8 +1447,8 @@ export const PERMISSIONS_LEADS: Record<string, { cle: PermissionKey; capacite: s
   add_client_tag:             { cle: 'clients.update', capacite: 'les étiquettes des clients' },
   remove_client_tag:          { cle: 'clients.update', capacite: 'les étiquettes des clients' },
   list_deals:                 { cle: 'leads.read',     capacite: 'la consultation du pipeline' },
-  update_deal_stage:          { cle: 'leads.update',   capacite: 'le déplacement des cartes du pipeline' },
-  delete_deal:                { cle: 'leads.delete',   capacite: 'la suppression des cartes du pipeline' },
+  update_deal_stage:          { cle: 'leads.update',   capacite: 'le déplacement des deals du pipeline' },
+  delete_deal:                { cle: 'leads.delete',   capacite: 'l’abandon des deals du pipeline' },
 };
 
 /** Chaque outil, exactement une fois — à fusionner dans TOPICS (topics.ts). */
