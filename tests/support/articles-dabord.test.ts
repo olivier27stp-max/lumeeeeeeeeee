@@ -87,3 +87,43 @@ describe('forme de la question', () => {
     expect(FACTEUR_ECART).toBeGreaterThanOrEqual(1.5);
   });
 });
+
+// Batterie du support, prod, 2026-10-01 (langue.anglais-prix) : « How much is the Scale
+// plan per month, and how much does one extra user cost? » recevait le paragraphe
+// FRANÇAIS du centre d'aide, suivi d'une relance en anglais.
+describe('une question en anglais ne reçoit jamais un paragraphe français', () => {
+  it('une Q/R de la FAQ est servie dans sa version anglaise, titre compris', async () => {
+    const { reponseAideDirecte } = await import('../../server/lib/support/articles-dabord');
+    const r = reponseAideDirecte('How much is the Scale plan per month, and how much does one extra user cost?', 'en', { premierMessage: true });
+    expect(r).not.toBeNull();
+    expect(r!.texte).toContain('Three plans, in Canadian dollars');
+    expect(r!.texte).toContain('$347');
+    expect(r!.texte).toContain('How much do the Lume plans cost?');
+    expect(r!.texte).not.toMatch(/Trois forfaits|Combien coûtent|par mois|utilisateur/);
+  });
+
+  it('un passage du centre d’aide sans version anglaise n’est pas servi : la main passe au modèle', async () => {
+    const { reponseAideDirecte } = await import('../../server/lib/support/articles-dabord');
+    for (const q of ['How do I embed the request form on my website?', 'How do I change my plan?', 'How do I reset my password?']) {
+      expect(reponseAideDirecte(q, 'en', { premierMessage: true }), q).toBeNull();
+    }
+  });
+
+  it('aucune réponse d’aide directe en anglais ne contient de texte français', async () => {
+    const { reponseAideDirecte } = await import('../../server/lib/support/articles-dabord');
+    const questions = [
+      'How do I add a team member?', 'How do I set up taxes for Quebec?', 'How do I change my plan?', 'How can I get paid online?',
+      'How do I schedule a job?', 'How do I create a recurring job?', 'How do I reset my password?', 'How do I turn on two-factor authentication?',
+      'How do I embed the request form on my website?', 'How do I approve timesheets?', 'How do I export to QuickBooks?', 'How do I archive a client?',
+    ];
+    let servies = 0;
+    for (const q of questions) {
+      const r = reponseAideDirecte(q, 'en', { premierMessage: true });
+      if (!r) continue; // pas de version anglaise : le modèle répond, en anglais
+      servies += 1;
+      expect(r.texte, q).not.toMatch(/ (vous|votre|vos|dans|puis|cliquez|paramètres) /i);
+      expect(r.texte, q).toContain('If that doesn’t cover your case');
+    }
+    expect(servies).toBeGreaterThan(0);
+  });
+});
