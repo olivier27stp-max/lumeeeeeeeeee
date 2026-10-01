@@ -161,8 +161,9 @@ const MARQUES_DONNEES = [
   /\b(mes|nos)\s+(clients?|employ[ée]s?|techniciens?)\b[^.?]{0,15}\b(re[cç]oi\w*|ont re[cç]u|ont pay[ée]|ont sign[ée]|ont accept[ée])\b/i,
   // L'anglais n'avait aucune règle de quantité : « How many invoices are overdue
   // right now » partait à l'article « facture impayée ». « How many clients CAN I
-  // have » et « how much does it COST » restent des questions produit.
-  /\bhow\s+(many|much)\b(?![^.?]*\b(can|could|may|allowed|costs?|included?|includes|limit|maximum|max)\b)/i,
+  // have », « how much does it COST » et « how much is the Scale PLAN » restent des
+  // questions produit (limites et prix des forfaits).
+  /\bhow\s+(many|much)\b(?![^.?]*\b(can|could|may|allowed|costs?|included?|includes|limit|maximum|max|plans?|price[sd]?|pricing|subscription|lume|minimum|scale|autopilot)\b)/i,
   /\b(who|which|what)\b[^.?]{0,40}\b(overdue|unpaid|outstanding|past due|late)\b/i,
 ];
 
