@@ -29,7 +29,7 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { rendreCourrielLume, echapper } from '../lib/courriels/gabarit';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
-import { type Fiche } from '../lib/lumi/fiches';
+import { apercuProposition, type Apercu, type Fiche } from '../lib/lumi/fiches';
 import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, PLAFOND_ECRITURES_PAR_CONVERSATION, compterEcritures, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
 import { getUserContext, hasPermission } from '../lib/rbac';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, OUTILS_DE_BASE, type EvenementLumi, type ResultatTour } from '../lib/lumi/orchestrateur';
@@ -1298,7 +1298,7 @@ router.get('/lumi/conversations', async (req, res) => {
 });
 
 /** Rend les blocs stockés en éléments d'interface : texte, appels d'outils, propositions et leur sort. */
-type PropositionRendue = { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee'; fiche?: Fiche | null; auto?: boolean; groupe?: PropositionRendue[] };
+type PropositionRendue = { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee'; fiche?: Fiche | null; auto?: boolean; apercu?: Apercu | null; groupe?: PropositionRendue[] };
 export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: PropositionRendue; report?: Rapport; fiches?: Fiche[] }> {
   const sorts = new Map<string, 'confirmee' | 'annulee' | 'echouee'>();
   const fiches = new Map<string, Fiche>();
@@ -1358,6 +1358,27 @@ export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant';
   return out;
 }
 
+/**
+ * Une carte encore en attente retrouve son aperçu à la relecture. L'historique ne garde que
+ * l'outil et ses arguments (des références, pas des noms) : rouverte, la carte montrait
+ * « client id ref3 » sans le nom du client, sans la somme, sans l'avertissement « irréversible ».
+ * On le recalcule comme au moment de la proposition, avec les droits de l'utilisateur.
+ * Seul le DERNIER message peut porter une carte en attente (le message suivant l'annule).
+ */
+export async function remettreApercuEnAttente(
+  messages: ReturnType<typeof rendreMessages>,
+  cleRefs: string,
+  ctx: Parameters<typeof apercuProposition>[2],
+): Promise<void> {
+  const carte = messages[messages.length - 1]?.proposal;
+  if (carte?.statut !== 'en_attente') return;
+  for (const ligne of carte.groupe ?? [carte]) {
+    if (ligne.statut !== 'en_attente') continue;
+    ligne.apercu = await apercuProposition(ligne.tool, demasquerIds(cleRefs, ligne.args), ctx);
+  }
+  if (carte.groupe) carte.apercu = carte.groupe[0]?.apercu ?? null;
+}
+
 router.get('/lumi/conversations/:id', async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
@@ -1366,7 +1387,11 @@ router.get('/lumi/conversations/:id', async (req, res) => {
     if (!UUID.test(id)) return res.status(400).json({ error: 'Invalid id' });
     const { data: conv } = await getServiceClient().from('lumi_conversations').select('id, title').eq('id', id).eq('org_id', auth.orgId).eq('user_id', auth.user.id).maybeSingle();
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
-    const msgs = await chargerHistorique(id);
+    // Les réfs courtes appartiennent à CETTE conversation : même clé pour les rejouer et pour démasquer.
+    const cleRefs = espaceRefsDe(auth.orgId, auth.user.id, id);
+    const msgs = await chargerHistorique(id, cleRefs);
+    const messages = rendreMessages(msgs);
+    await remettreApercuEnAttente(messages, cleRefs, { client: auth.client, orgId: auth.orgId, userId: auth.user.id });
     // Tokens et coût réels de la conversation (table ai_usage, écrite à chaque
     // appel au modèle) : le chiffre vérifiable, pas une estimation.
     // (Plus de coût en $ : le client ne voit que des crédits — 2026-09-30.)
@@ -1376,7 +1401,7 @@ router.get('/lumi/conversations/:id', async (req, res) => {
       usage = { model: (lignes[lignes.length - 1] as any).model ?? null, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, appels: lignes.length };
       for (const l of lignes as any[]) { usage.input_tokens += l.input_tokens || 0; usage.output_tokens += l.output_tokens || 0; usage.cache_read_input_tokens += l.cache_read_input_tokens || 0; }
     }
-    return res.json({ conversation: conv, messages: rendreMessages(msgs), usage });
+    return res.json({ conversation: conv, messages, usage });
   } catch (error: any) {
     return sendSafeError(res, error, 'Unable to load conversation.', '[lumi/conversation]');
   }

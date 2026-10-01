@@ -12,6 +12,10 @@
  * correspond à rien dans l'entreprise est SIGNALÉ (alerte) — jamais caché.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { LIBELLES_PARAMETRES, PARAMETRES_A_CHOIX, VALEURS_TRADUITES, PARAMETRES_EN_POURCENT, PARAMETRES_JOUR_SEMAINE, JOURS_SEMAINE } from './libelles-cartes';
+import { PERMISSION_GROUPS } from '../../../src/lib/permissions';
+import { trouverDeclencheur } from '../../../src/lib/automationCatalogue';
+import { STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD } from '../agent/tools-etendus';
 
 export interface LigneApercu {
   libelle: { fr: string; en: string };
@@ -36,7 +40,16 @@ export function argentEn(cents: number): string {
   const v = (Math.abs(cents) / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${cents < 0 ? '-' : ''}$${v}`;
 }
-function dateLocale(iso: string, fuseau: string, langue: 'fr' | 'en'): string {
+export function dateLocale(iso: string, fuseau: string, langue: 'fr' | 'en'): string {
+  // « 2026-10-15T09:00 » sans décalage : l'exécution la lit comme une heure de l'entreprise
+  // (normaliserDatesHeures). `new Date()` la lisait dans le fuseau du SERVEUR : la carte pouvait
+  // afficher une autre heure que celle qui serait écrite. Sans décalage, on affiche l'heure telle quelle.
+  const sansDecalage = /T\d{2}:\d{2}/.test(iso) && !/(Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  if (sansDecalage) {
+    const mur = new Date(`${iso.slice(0, 16)}:00Z`);
+    if (Number.isNaN(mur.getTime())) return iso;
+    return new Intl.DateTimeFormat(langue === 'fr' ? 'fr-CA' : 'en-CA', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(mur);
+  }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const avecHeure = /T\d{2}:\d{2}/.test(iso);
@@ -49,6 +62,25 @@ const nomPersonne = (p: { first_name?: string | null; last_name?: string | null;
   if (!p) return '';
   const nom = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
   return (p.display_as_company && p.company) ? p.company : (nom || p.company || p.email || '');
+};
+
+/* ── Statuts : jamais le code de la base sur une carte ────────────────────── */
+// « sent », « sales_rep », « weekly », « invoice.paid » sortaient tels quels à côté du nom de la fiche.
+const sansTiret = (v: unknown) => txt(v).replace(/[_.]/g, ' ');
+/** Un statut dans les deux langues : le dictionnaire français des outils, l'anglais lisible. */
+const statut = (v: unknown, dico: Record<string, string>): [fr: string, en: string] => [dico[txt(v).toLowerCase()] ?? sansTiret(v), sansTiret(v)];
+/** Une valeur d'énumération connue de libelles-cartes.ts (rôle, fréquence, type…), en minuscules dans une phrase. */
+const valeurConnue = (v: unknown): [fr: string, en: string] => {
+  const t = VALEURS_TRADUITES[txt(v).toLowerCase()];
+  return t ? [t[0].toLowerCase(), t[1].toLowerCase()] : [sansTiret(v), sansTiret(v)];
+};
+const STATUT_INVITATION: Record<string, string> = { pending: 'en attente', accepted: 'acceptée', expired: 'expirée', revoked: 'révoquée' };
+const STATUT_CONTRAT: Record<string, string> = { draft: 'brouillon', sent: 'envoyé', viewed: 'consulté', signed: 'signé', declined: 'refusé', expired: 'expiré', cancelled: 'annulé' };
+const STATUT_TACHE: Record<string, string> = { open: 'à faire', done: 'terminée' };
+/** Le déclencheur d'une automatisation, tel que l'éditeur le nomme. */
+const declencheur = (cle: unknown): [fr: string, en: string] => {
+  const d = trouverDeclencheur(txt(cle));
+  return d ? [d.fr, d.en] : [sansTiret(cle), sansTiret(cle)];
 };
 
 /* ── Résolveurs : un identifiant → une ligne lisible ─────────────────────── */
@@ -74,8 +106,8 @@ const facture: Resolveur = async (id, { client: db, orgId }) => {
   const tot = Number(f.total_cents) || 0; const sol = Number(f.balance_cents) || 0;
   return {
     libelle: L('Facture', 'Invoice'),
-    valeur: [`#${txt(f.invoice_number)}`, txt(f.client_name_snapshot), `total ${argentFr(tot)}`, `solde ${argentFr(sol)}`, txt(f.status)].filter(Boolean).join(' · '),
-    valeur_en: [`#${txt(f.invoice_number)}`, txt(f.client_name_snapshot), `total ${argentEn(tot)}`, `balance ${argentEn(sol)}`, txt(f.status)].filter(Boolean).join(' · '),
+    valeur: [`#${txt(f.invoice_number)}`, txt(f.client_name_snapshot), `total ${argentFr(tot)}`, `solde ${argentFr(sol)}`, statut(f.status, STATUT_FACTURE)[0]].filter(Boolean).join(' · '),
+    valeur_en: [`#${txt(f.invoice_number)}`, txt(f.client_name_snapshot), `total ${argentEn(tot)}`, `balance ${argentEn(sol)}`, statut(f.status, STATUT_FACTURE)[1]].filter(Boolean).join(' · '),
   };
 };
 const devis: Resolveur = async (id, { client: db, orgId }) => {
@@ -87,8 +119,8 @@ const devis: Resolveur = async (id, { client: db, orgId }) => {
   const tot = Number(q.total_cents) || 0;
   return {
     libelle: L('Devis', 'Quote'),
-    valeur: [`#${txt(q.quote_number)}`, txt(q.title), nomPersonne(c), argentFr(tot), txt(q.status)].filter(Boolean).join(' · '),
-    valeur_en: [`#${txt(q.quote_number)}`, txt(q.title), nomPersonne(c), argentEn(tot), txt(q.status)].filter(Boolean).join(' · '),
+    valeur: [`#${txt(q.quote_number)}`, txt(q.title), nomPersonne(c), argentFr(tot), statut(q.status, STATUT_DEVIS)[0]].filter(Boolean).join(' · '),
+    valeur_en: [`#${txt(q.quote_number)}`, txt(q.title), nomPersonne(c), argentEn(tot), statut(q.status, STATUT_DEVIS)[1]].filter(Boolean).join(' · '),
   };
 };
 const paiement: Resolveur = async (id, { client: db, orgId }, fuseau) => {
@@ -102,15 +134,22 @@ const paiement: Resolveur = async (id, { client: db, orgId }, fuseau) => {
   const quand = p.paid_at ? dateLocale(String(p.paid_at), fuseau, 'fr') : '';
   return {
     libelle: L('Paiement', 'Payment'),
-    valeur: [argentFr(m), quand, txt(p.method || p.provider), f ? `facture #${txt(f.invoice_number)}` : '', txt(f?.client_name_snapshot), r > 0 ? `déjà remboursé ${argentFr(r)}` : ''].filter(Boolean).join(' · '),
-    valeur_en: [argentEn(m), p.paid_at ? dateLocale(String(p.paid_at), fuseau, 'en') : '', txt(p.method || p.provider), f ? `invoice #${txt(f.invoice_number)}` : '', txt(f?.client_name_snapshot), r > 0 ? `already refunded ${argentEn(r)}` : ''].filter(Boolean).join(' · '),
+    valeur: [argentFr(m), quand, valeurConnue(p.method || p.provider)[0], f ? `facture #${txt(f.invoice_number)}` : '', txt(f?.client_name_snapshot), r > 0 ? `déjà remboursé ${argentFr(r)}` : ''].filter(Boolean).join(' · '),
+    valeur_en: [argentEn(m), p.paid_at ? dateLocale(String(p.paid_at), fuseau, 'en') : '', valeurConnue(p.method || p.provider)[1], f ? `invoice #${txt(f.invoice_number)}` : '', txt(f?.client_name_snapshot), r > 0 ? `already refunded ${argentEn(r)}` : ''].filter(Boolean).join(' · '),
   };
 };
 const membre: Resolveur = async (id, { client: db, orgId }) => {
   let { data: m } = await db.from('team_members').select('first_name, last_name, email, role').eq('org_id', orgId).eq('user_id', id).maybeSingle();
   if (!m) ({ data: m } = await db.from('team_members').select('first_name, last_name, email, role').eq('org_id', orgId).eq('id', id).maybeSingle());
-  if (!m) return introuvable(L('Membre', 'Member'));
-  return { libelle: L('Membre', 'Member'), valeur: [nomPersonne(m), txt(m.email), txt(m.role)].filter(Boolean).join(' · ') };
+  if (!m) {
+    // Les outils d'équipe, de paie et de rôles valident contre `memberships` : une personne qui en fait
+    // partie sans ligne dans team_members n'est PAS introuvable (fausse alerte rouge sur la carte).
+    const { data: adhesion } = await db.from('memberships').select('role, status').eq('org_id', orgId).eq('user_id', id).maybeSingle();
+    if (!adhesion) return introuvable(L('Membre', 'Member'));
+    const role = valeurConnue(adhesion.role);
+    return { libelle: L('Membre', 'Member'), valeur: ['membre de l’entreprise', role[0]].filter(Boolean).join(' · '), valeur_en: ['company member', role[1]].filter(Boolean).join(' · ') };
+  }
+  return { libelle: L('Membre', 'Member'), valeur: [nomPersonne(m), txt(m.email), valeurConnue(m.role)[0]].filter(Boolean).join(' · '), valeur_en: [nomPersonne(m), txt(m.email), valeurConnue(m.role)[1]].filter(Boolean).join(' · ') };
 };
 const equipe: Resolveur = async (id, { client: db, orgId }) => {
   const { data: t } = await db.from('teams').select('name').eq('org_id', orgId).eq('id', id).maybeSingle();
@@ -133,12 +172,12 @@ const visite: Resolveur = async (id, { client: db, orgId }, fuseau) => {
 };
 const tache: Resolveur = async (id, { client: db, orgId }) => {
   const { data: t } = await db.from('tasks').select('title, status').eq('org_id', orgId).eq('id', id).maybeSingle();
-  return t ? { libelle: L('Tâche', 'Task'), valeur: [txt(t.title), txt(t.status)].filter(Boolean).join(' · ') } : introuvable(L('Tâche', 'Task'));
+  return t ? { libelle: L('Tâche', 'Task'), valeur: [txt(t.title), statut(t.status, STATUT_TACHE)[0]].filter(Boolean).join(' · '), valeur_en: [txt(t.title), statut(t.status, STATUT_TACHE)[1]].filter(Boolean).join(' · ') } : introuvable(L('Tâche', 'Task'));
 };
 const automatisation: Resolveur = async (id, { client: db, orgId }) => {
   const { data: a } = await db.from('automation_rules').select('name, trigger_event, is_active').eq('org_id', orgId).eq('id', id).maybeSingle();
   if (!a) return introuvable(L('Automatisation', 'Automation'));
-  return { libelle: L('Automatisation', 'Automation'), valeur: [txt(a.name), txt(a.trigger_event), a.is_active ? 'active' : 'en pause'].filter(Boolean).join(' · '), valeur_en: [txt(a.name), txt(a.trigger_event), a.is_active ? 'active' : 'paused'].filter(Boolean).join(' · ') };
+  return { libelle: L('Automatisation', 'Automation'), valeur: [txt(a.name), declencheur(a.trigger_event)[0], a.is_active ? 'active' : 'en pause'].filter(Boolean).join(' · '), valeur_en: [txt(a.name), declencheur(a.trigger_event)[1], a.is_active ? 'active' : 'paused'].filter(Boolean).join(' · ') };
 };
 const service: Resolveur = async (id, { client: db, orgId }) => {
   const { data: s } = await db.from('predefined_services').select('name, default_price_cents').eq('org_id', orgId).eq('id', id).maybeSingle();
@@ -146,7 +185,7 @@ const service: Resolveur = async (id, { client: db, orgId }) => {
 };
 const invitation: Resolveur = async (id, { client: db, orgId }) => {
   const { data: i } = await db.from('invitations').select('email, role, status').eq('org_id', orgId).eq('id', id).maybeSingle();
-  return i ? { libelle: L('Invitation', 'Invitation'), valeur: [txt(i.email), txt(i.role), txt(i.status)].filter(Boolean).join(' · ') } : introuvable(L('Invitation', 'Invitation'));
+  return i ? { libelle: L('Invitation', 'Invitation'), valeur: [txt(i.email), valeurConnue(i.role)[0], statut(i.status, STATUT_INVITATION)[0]].filter(Boolean).join(' · '), valeur_en: [txt(i.email), valeurConnue(i.role)[1], statut(i.status, STATUT_INVITATION)[1]].filter(Boolean).join(' · ') } : introuvable(L('Invitation', 'Invitation'));
 };
 // Le pipeline de ventes vit sur `deals` (étapes de l'entreprise, pipeline_stages) depuis que les
 // outils list_deals / update_deal_stage / delete_deal y ont été rebranchés (2026-10-01) : la carte
@@ -169,7 +208,7 @@ const deal: Resolveur = async (id, ctx, fuseau) => {
   if (!d) return introuvable(L('Carte du pipeline', 'Pipeline card'));
   const pid = estUuid(d.client_id) ? d.client_id : estUuid(d.lead_id) ? d.lead_id : null;
   const c = pid ? await client(pid, ctx, fuseau) : null;
-  return { libelle: L('Carte du pipeline', 'Pipeline card'), valeur: [txt(d.title), c?.valeur, txt(d.stage)].filter(Boolean).join(' · ') };
+  return { libelle: L('Carte du pipeline', 'Pipeline card'), valeur: [txt(d.title), c?.valeur, statut(d.stage, STATUT_LEAD)[0]].filter(Boolean).join(' · '), valeur_en: [txt(d.title), c?.valeur, statut(d.stage, STATUT_LEAD)[1]].filter(Boolean).join(' · ') };
 };
 // Taxe : nom et taux ACTUELS, pour voir l'avant → après sur la carte (audit 2026-09-30).
 const taxe: Resolveur = async (id, { client: db, orgId }) => {
@@ -182,7 +221,7 @@ const taxe: Resolveur = async (id, { client: db, orgId }) => {
 // requêtes explicites, la première qui trouve l'identifiant nomme le modèle.
 const modele: Resolveur = async (id, { client: db, orgId }) => {
   const { data: c } = await db.from('email_templates').select('name, type, is_active').eq('org_id', orgId).eq('id', id).maybeSingle();
-  if (c) return { libelle: L('Modèle de courriel', 'Email template'), valeur: [txt(c.name), txt(c.type), c.is_active === false ? 'inactif' : ''].filter(Boolean).join(' · ') };
+  if (c) return { libelle: L('Modèle de courriel', 'Email template'), valeur: [txt(c.name), valeurConnue(c.type)[0], c.is_active === false ? 'inactif' : ''].filter(Boolean).join(' · '), valeur_en: [txt(c.name), valeurConnue(c.type)[1], c.is_active === false ? 'inactive' : ''].filter(Boolean).join(' · ') };
   const { data: f } = await db.from('invoice_templates').select('name').eq('org_id', orgId).eq('id', id).is('deleted_at', null).maybeSingle();
   if (f) return { libelle: L('Modèle de facture', 'Invoice template'), valeur: txt(f.name) };
   const { data: q } = await db.from('quote_templates').select('name').eq('org_id', orgId).eq('id', id).is('deleted_at', null).maybeSingle();
@@ -193,7 +232,7 @@ const modele: Resolveur = async (id, { client: db, orgId }) => {
 const rapport: Resolveur = async (id, { client: db, orgId }) => {
   const { data: r } = await db.from('scheduled_reports').select('recipient_email, frequency, enabled').eq('org_id', orgId).eq('id', id).maybeSingle();
   if (!r) return introuvable(L('Rapport planifié', 'Scheduled report'));
-  return { libelle: L('Rapport planifié', 'Scheduled report'), valeur: [txt(r.recipient_email), txt(r.frequency), r.enabled ? 'actif' : 'en pause'].filter(Boolean).join(' · '), valeur_en: [txt(r.recipient_email), txt(r.frequency), r.enabled ? 'active' : 'paused'].filter(Boolean).join(' · ') };
+  return { libelle: L('Rapport planifié', 'Scheduled report'), valeur: [txt(r.recipient_email), valeurConnue(r.frequency)[0], r.enabled ? 'actif' : 'en pause'].filter(Boolean).join(' · '), valeur_en: [txt(r.recipient_email), valeurConnue(r.frequency)[1], r.enabled ? 'active' : 'paused'].filter(Boolean).join(' · ') };
 };
 
 // Contrat : le job, le client qui le recevra, son statut.
@@ -202,7 +241,7 @@ const contrat: Resolveur = async (id, ctx, fuseau) => {
   if (!c) return introuvable(L('Contrat', 'Contract'));
   const j = estUuid(c.job_id) ? await job(c.job_id, ctx, fuseau) : null;
   const cl = estUuid(c.client_id) ? await client(c.client_id, ctx, fuseau) : null;
-  return { libelle: L('Contrat', 'Contract'), valeur: [j?.valeur, cl?.valeur, txt(c.status)].filter(Boolean).join(' · ') };
+  return { libelle: L('Contrat', 'Contract'), valeur: [j?.valeur, cl?.valeur, statut(c.status, STATUT_CONTRAT)[0]].filter(Boolean).join(' · '), valeur_en: [j?.valeur, cl?.valeur, statut(c.status, STATUT_CONTRAT)[1]].filter(Boolean).join(' · ') };
 };
 // Facture récurrente : client, objet, fréquence, actif — c'est de l'argent qui part tout seul.
 const recurrence: Resolveur = async (id, ctx, fuseau) => {
@@ -211,8 +250,8 @@ const recurrence: Resolveur = async (id, ctx, fuseau) => {
   const cl = estUuid(r.client_id) ? await client(r.client_id, ctx, fuseau) : null;
   return {
     libelle: L('Facture récurrente', 'Recurring invoice'),
-    valeur: [cl?.valeur, txt(r.subject), txt(r.frequency), r.is_active ? 'active' : 'arrêtée', r.auto_send ? 'envoi automatique' : ''].filter(Boolean).join(' · '),
-    valeur_en: [cl?.valeur, txt(r.subject), txt(r.frequency), r.is_active ? 'active' : 'stopped', r.auto_send ? 'auto-send' : ''].filter(Boolean).join(' · '),
+    valeur: [cl?.valeur, txt(r.subject), valeurConnue(r.frequency)[0], r.is_active ? 'active' : 'arrêtée', r.auto_send ? 'envoi automatique' : ''].filter(Boolean).join(' · '),
+    valeur_en: [cl?.valeur, txt(r.subject), valeurConnue(r.frequency)[1], r.is_active ? 'active' : 'stopped', r.auto_send ? 'auto-send' : ''].filter(Boolean).join(' · '),
   };
 };
 // Préréglage de devis (stocké dans quote_templates).
@@ -231,7 +270,7 @@ const noteFiche: Resolveur = async (id, { client: db, orgId }) => {
   const { data: n } = await db.from('specific_notes').select('text, entity_type').eq('org_id', orgId).eq('id', id).maybeSingle();
   if (!n) return introuvable(L('Note', 'Note'));
   const t = txt(n.text);
-  return { libelle: L('Note', 'Note'), valeur: `« ${t.slice(0, 120)}${t.length > 120 ? '…' : ''} » (${txt(n.entity_type)})` };
+  return { libelle: L('Note', 'Note'), valeur: `« ${t.slice(0, 120)}${t.length > 120 ? '…' : ''} » (${valeurConnue(n.entity_type)[0]})`, valeur_en: `“${t.slice(0, 120)}${t.length > 120 ? '…' : ''}” (${valeurConnue(n.entity_type)[1]})` };
 };
 // Jalon de facturation : libellé et montant.
 const jalon: Resolveur = async (id, { client: db, orgId }) => {
@@ -283,31 +322,113 @@ const RESOLVEURS: Array<[RegExp, Resolveur]> = [
   [/^checklist_id$/, listeJob],
   [/^(report_id|scheduled_report_id)$/, rapport],
 ];
-const resolveurDe = (cle: string) => RESOLVEURS.find(([re]) => re.test(cle))?.[1] ?? null;
+// Règle de récurrence d'un JOB (job_recurrence_rules) — pas une automatisation.
+const recurrenceJob: Resolveur = async (id, ctx, fuseau) => {
+  const { data: r } = await ctx.client.from('job_recurrence_rules').select('job_id, frequency, is_active').eq('org_id', ctx.orgId).eq('id', id).maybeSingle();
+  if (!r) return introuvable(L('Récurrence du job', 'Job recurrence'));
+  const j = estUuid(r.job_id) ? await job(r.job_id, ctx, fuseau) : null;
+  const freq = valeurConnue(r.frequency);
+  return {
+    libelle: L('Récurrence du job', 'Job recurrence'),
+    valeur: [j?.valeur, freq[0], r.is_active ? 'active' : 'déjà arrêtée'].filter(Boolean).join(' · '),
+    valeur_en: [j?.valeur, freq[1], r.is_active ? 'active' : 'already stopped'].filter(Boolean).join(' · '),
+  };
+};
+// Modèle de liste de vérification (checklist_templates) — pas un modèle de courriel.
+const modeleListe: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: t } = await db.from('checklist_templates').select('name').eq('org_id', orgId).eq('id', id).maybeSingle();
+  return t ? { libelle: L('Modèle de liste de vérification', 'Checklist template'), valeur: txt(t.name) } : introuvable(L('Modèle de liste de vérification', 'Checklist template'));
+};
+
+/**
+ * Un même nom de paramètre vise des tables différentes selon l'outil. Sans cette table, `rule_id`
+ * de deactivate_recurrence_rule était cherché dans les automatisations et `template_id` des listes
+ * de vérification dans les modèles de courriel : la carte affichait « introuvable » en rouge pour
+ * une fiche qui existe.
+ */
+const RESOLVEURS_PAR_OUTIL: Record<string, Record<string, Resolveur>> = {
+  deactivate_recurrence_rule: { rule_id: recurrenceJob },
+  create_job_checklist: { template_id: modeleListe },
+  update_checklist_template: { template_id: modeleListe },
+  delete_checklist_template: { template_id: modeleListe },
+};
+const resolveurDe = (cle: string, outil?: string | null) => (outil ? RESOLVEURS_PAR_OUTIL[outil]?.[cle] : undefined) ?? RESOLVEURS.find(([re]) => re.test(cle))?.[1] ?? null;
 
 /* ── Détails non identifiants ─────────────────────────────────────────── */
-const LIBELLES: Record<string, [string, string]> = {
-  message_text: ['Message', 'Message'], message: ['Message', 'Message'], body: ['Message', 'Message'], subject: ['Objet', 'Subject'],
-  reason: ['Raison', 'Reason'], status: ['Statut', 'Status'], role: ['Rôle', 'Role'], title: ['Titre', 'Title'], name: ['Nom', 'Name'],
-  note: ['Note', 'Note'], notes: ['Notes', 'Notes'], email: ['Courriel', 'Email'], to: ['À', 'To'], phone_number: ['Téléphone', 'Phone'],
-  start_at: ['Début', 'Start'], end_at: ['Fin', 'End'], date: ['Date', 'Date'], due_date: ['Échéance', 'Due date'],
-  is_active: ['Active', 'Active'], permissions: ['Permissions', 'Permissions'], rate: ['Taux', 'Rate'], method: ['Mode', 'Method'],
-};
+// Les libellés et les valeurs traduites vivent dans libelles-cartes.ts (un par paramètre d'outil d'écriture).
 const ISO = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+const nombreFr = (n: number) => String(n).replace('.', ',');
 
-function detail(cle: string, v: unknown, fuseau: string): LigneApercu | null {
-  if (v === null || v === undefined || v === '') return null;
-  const [fr, en] = LIBELLES[cle] ?? [cle.replace(/_cents$/, '').replace(/_dollars$/, '').replace(/_/g, ' '), cle.replace(/_cents$/, '').replace(/_dollars$/, '').replace(/_/g, ' ')];
-  const libelle = L(fr.charAt(0).toUpperCase() + fr.slice(1), en.charAt(0).toUpperCase() + en.slice(1));
-  if (/_cents$/.test(cle) && typeof v === 'number') return { libelle, valeur: argentFr(v), valeur_en: argentEn(v) };
-  if (/(_dollars|^amount)$/.test(cle) && typeof v === 'number') return { libelle, valeur: argentFr(Math.round(v * 100)), valeur_en: argentEn(Math.round(v * 100)) };
-  if (typeof v === 'boolean') return { libelle, valeur: v ? 'Oui' : 'Non', valeur_en: v ? 'Yes' : 'No' };
-  if (typeof v === 'string' && ISO.test(v)) return { libelle, valeur: dateLocale(v, fuseau, 'fr'), valeur_en: dateLocale(v, fuseau, 'en') };
-  if (typeof v === 'object') return { libelle, valeur: JSON.stringify(v) };
-  return { libelle, valeur: String(v) };
+/** Le libellé d'un paramètre dans les deux langues ; sans entrée, son nom en mots (jamais d'underscore). */
+export function libelleParametre(cle: string): LigneApercu['libelle'] {
+  const connu = LIBELLES_PARAMETRES[cle];
+  if (connu) return L(connu[0], connu[1]);
+  const brut = cle.replace(/_cents$/, '').replace(/_dollars$/, '').replace(/_/g, ' ');
+  return L(brut.charAt(0).toUpperCase() + brut.slice(1), brut.charAt(0).toUpperCase() + brut.slice(1));
 }
 
-async function fuseauDe(ctx: Ctx): Promise<string> {
+export function detail(cle: string, v: unknown, fuseau: string, montrerVide = false): LigneApercu | null {
+  if (v === undefined) return null;
+  const libelle = libelleParametre(cle);
+  // Sur une MODIFICATION, un champ explicitement vidé se voit : avant, la ligne disparaissait et la
+  // carte ne disait rien de l'effacement. Sur une création, un champ vide n'est que du bruit.
+  if (v === null || v === '') return montrerVide ? { libelle, valeur: '(vidé)', valeur_en: '(cleared)' } : null;
+  if (/_cents$/.test(cle) && typeof v === 'number') return { libelle, valeur: argentFr(v), valeur_en: argentEn(v) };
+  if (/(_dollars|^amount|^estimated_value)$/.test(cle) && typeof v === 'number') return { libelle, valeur: argentFr(Math.round(v * 100)), valeur_en: argentEn(Math.round(v * 100)) };
+  if (PARAMETRES_EN_POURCENT.has(cle) && typeof v === 'number') return { libelle, valeur: `${nombreFr(v)} %`, valeur_en: `${v}%` };
+  if (PARAMETRES_JOUR_SEMAINE.has(cle)) {
+    const jours = (Array.isArray(v) ? v : [v]).map((j) => JOURS_SEMAINE[Number(j)]).filter(Boolean);
+    if (jours.length) return { libelle, valeur: jours.map((j) => j[0]).join(', '), valeur_en: jours.map((j) => j[1]).join(', ') };
+  }
+  if (typeof v === 'boolean') return { libelle, valeur: v ? 'Oui' : 'Non', valeur_en: v ? 'Yes' : 'No' };
+  if (typeof v === 'string' && ISO.test(v)) return { libelle, valeur: dateLocale(v, fuseau, 'fr'), valeur_en: dateLocale(v, fuseau, 'en') };
+  if (typeof v === 'string' && PARAMETRES_A_CHOIX.has(cle)) {
+    const t = VALEURS_TRADUITES[v.trim().toLowerCase()];
+    if (t) return { libelle, valeur: t[0], valeur_en: t[1] };
+  }
+  if (Array.isArray(v) && v.every((x) => typeof x === 'string' || typeof x === 'number')) {
+    const mots = v.map((x) => (typeof x === 'string' ? VALEURS_TRADUITES[x.trim().toLowerCase()] : undefined) ?? [String(x), String(x)] as [string, string]);
+    return { libelle, valeur: mots.map((m) => m[0]).join(', ') || '(aucun)', valeur_en: mots.map((m) => m[1]).join(', ') || '(none)' };
+  }
+  if (typeof v === 'object') return { libelle, valeur: JSON.stringify(v) };
+  return { libelle, valeur: typeof v === 'number' ? nombreFr(v) : String(v), ...(typeof v === 'number' ? { valeur_en: String(v) } : {}) };
+}
+
+/* ── Listes et objets ─────────────────────────────────────────────────── */
+const LIBELLE_PERMISSION = new Map<string, [fr: string, en: string]>(
+  PERMISSION_GROUPS.flatMap((g) => g.permissions.map((perm): [string, [string, string]] => [perm.key, [perm.label_fr, perm.label_en]])),
+);
+
+/**
+ * une ligne de devis, de facture ou de job : « 2 × Lavage de vitres à 150,00 $ = 300,00 $ ».
+ * Avant, la carte disait « Lavage de vitres — 2 — 150,00 $ » : trois valeurs sans nom ni total.
+ */
+export function ligneDeVente(el: Record<string, unknown>): { fr: string; en: string; total: number | null } | null {
+  const nom = txt(el.name) || txt(el.description);
+  if (!nom || !('unit_price_cents' in el || 'qty' in el || 'quantity' in el)) return null;
+  const qte = Number(el.qty ?? el.quantity ?? 1) || 1;
+  const prix = typeof el.unit_price_cents === 'number' ? el.unit_price_cents : null;
+  const total = prix == null ? null : Math.round(qte * prix);
+  const precision = txt(el.name) && txt(el.description) ? ` (${txt(el.description).slice(0, 160)})` : '';
+  const option = el.is_optional === true;
+  return {
+    fr: `${nombreFr(qte)} × ${nom}${precision}${prix == null || total == null ? '' : ` à ${argentFr(prix)} = ${argentFr(total)}`}${option ? ' — en option' : ''}`,
+    en: `${qte} × ${nom}${precision}${prix == null || total == null ? '' : ` at ${argentEn(prix)} = ${argentEn(total)}`}${option ? ' — optional' : ''}`,
+    // Une ligne en option n'entre pas dans le total tant que le client ne la choisit pas.
+    total: option ? null : total,
+  };
+}
+
+/** Une carte de permissions { clé: vrai/faux } : ce qui est accordé et ce qui est retiré, dans les mots de la page Rôles. */
+export function lignesPermissions(v: Record<string, unknown>): LigneApercu[] {
+  const mots = (accorde: boolean, langue: 0 | 1) => Object.entries(v).filter(([, b]) => b === accorde).map(([k]) => LIBELLE_PERMISSION.get(k)?.[langue] ?? k);
+  const lignes: LigneApercu[] = [];
+  if (mots(true, 0).length) lignes.push({ libelle: L('Permissions accordées', 'Permissions granted'), valeur: mots(true, 0).join(', '), valeur_en: mots(true, 1).join(', ') });
+  if (mots(false, 0).length) lignes.push({ libelle: L('Permissions retirées', 'Permissions removed'), valeur: mots(false, 0).join(', '), valeur_en: mots(false, 1).join(', ') });
+  return lignes;
+}
+
+export async function fuseauDe(ctx: Ctx): Promise<string> {
   const { data } = await ctx.client.from('company_settings').select('timezone').eq('org_id', ctx.orgId).maybeSingle();
   return txt(data?.timezone) || 'America/Toronto';
 }
@@ -334,12 +455,17 @@ export function ciblesIntrouvables(apercu: unknown, langue: 'fr' | 'en' = 'fr'):
 }
 
 /** L'aperçu générique : cibles nommées + détails lisibles. */
-export async function apercuAction(args: Record<string, any>, ctx: Ctx): Promise<ApercuAction> {
+export async function apercuAction(args: Record<string, any>, ctx: Ctx, outil?: string | null): Promise<ApercuAction> {
   const fuseau = await fuseauDe(ctx);
   const cibles: LigneApercu[] = [];
   const details: LigneApercu[] = [];
   for (const [cle, v] of Object.entries(args ?? {})) {
-    const res = resolveurDe(cle);
+    const res = resolveurDe(cle, outil);
+    // La cible d'un objectif de REVENUS est en cents : « 5000000 » se lit 50 000,00 $.
+    if (cle === 'target_value' && typeof v === 'number' && args?.metric === 'revenue') {
+      details.push({ libelle: libelleParametre(cle), valeur: argentFr(v), valeur_en: argentEn(v) });
+      continue;
+    }
     if (res && estUuid(v)) { cibles.push((await res(v, ctx, fuseau)) ?? introuvable(L(cle, cle))); continue; }
     // Liste d'identifiants (task_ids…) : chaque élément nommé.
     if (Array.isArray(v) && v.every(estUuid) && v.length) {
@@ -350,18 +476,37 @@ export async function apercuAction(args: Record<string, any>, ctx: Ctx): Promise
     }
     // Liste d'objets (relances : un client + un texte chacun) : une ligne par élément.
     if (Array.isArray(v) && v.length && v.every((x) => x && typeof x === 'object' && !Array.isArray(x))) {
+      // Sur une modification, une liste fournie REMPLACE celle qui existe : la carte le dit.
+      const remplace = /^(update_|save_|set_)/.test(outil ?? '');
+      details.push({
+        libelle: libelleParametre(cle),
+        valeur: `${v.length} ${v.length > 1 ? 'éléments' : 'élément'}${remplace ? ' — remplacent la liste actuelle au complet' : ''}`,
+        valeur_en: `${v.length} ${v.length > 1 ? 'items' : 'item'}${remplace ? ' — they replace the whole current list' : ''}`,
+      });
+      let sousTotal = 0;
+      let avecPrix = false;
       for (const [i, el] of v.slice(0, 30).entries()) {
+        const vente = ligneDeVente(el as Record<string, unknown>);
+        if (vente) {
+          if (vente.total != null) { sousTotal += vente.total; avecPrix = true; }
+          details.push({ libelle: L(`${i + 1}.`, `${i + 1}.`), valeur: vente.fr, valeur_en: vente.en });
+          continue;
+        }
         const morceaux: string[] = [];
+        const morceauxEn: string[] = [];
         let alerte = false;
         for (const [k, x] of Object.entries(el as Record<string, unknown>)) {
-          const r = resolveurDe(k);
-          if (r && estUuid(x)) { const l = await r(x, ctx, fuseau); if (l?.alerte) alerte = true; if (l) morceaux.push(l.valeur); continue; }
+          const r = resolveurDe(k, outil);
+          if (r && estUuid(x)) { const l = await r(x, ctx, fuseau); if (l?.alerte) alerte = true; if (l) { morceaux.push(l.valeur); morceauxEn.push(l.valeur_en ?? l.valeur); } continue; }
+          // Un identifiant interne à la liste (élément de liste de vérification, jalon existant) ne dit rien à personne.
+          if (/(^|_)id$/.test(k)) continue;
           const d = detail(k, x, fuseau);
-          if (d) morceaux.push(d.valeur);
+          if (d) { morceaux.push(`${d.libelle.fr} : ${d.valeur}`); morceauxEn.push(`${d.libelle.en}: ${d.valeur_en ?? d.valeur}`); }
         }
-        details.push({ libelle: L(`${i + 1}.`, `${i + 1}.`), valeur: morceaux.join(' — '), ...(alerte ? { alerte: true } : {}) });
+        details.push({ libelle: L(`${i + 1}.`, `${i + 1}.`), valeur: morceaux.join(' · '), valeur_en: morceauxEn.join(' · '), ...(alerte ? { alerte: true } : {}) });
       }
       if (v.length > 30) details.push({ libelle: L('Et encore', 'And'), valeur: `${v.length - 30} autres`, valeur_en: `${v.length - 30} more` });
+      if (avecPrix && v.length <= 30) details.push({ libelle: L('Sous-total avant taxes', 'Subtotal before taxes'), valeur: argentFr(sousTotal), valeur_en: argentEn(sousTotal) });
       continue;
     }
     if (estUuid(v) || /(^|_)id$/.test(cle)) {
@@ -373,7 +518,15 @@ export async function apercuAction(args: Record<string, any>, ctx: Ctx): Promise
       else if (res && typeof v === 'string' && v.trim()) cibles.push({ ...introuvable(L(cle.replace(/_id$/, '').replace(/_/g, ' '), cle.replace(/_id$/, '').replace(/_/g, ' '))), valeur: `« ${v.slice(0, 60)} » ne correspond à aucune fiche de l'entreprise`, valeur_en: `“${v.slice(0, 60)}” matches no record in this company` });
       continue;
     }
-    const d = detail(cle, v, fuseau);
+    // Permissions : la carte montrait du JSON (« {"invoices.delete":true} »).
+    if (cle === 'permissions' && v && typeof v === 'object' && !Array.isArray(v)) { details.push(...lignesPermissions(v as Record<string, unknown>)); continue; }
+    // Réponses d'une liste de vérification : des identifiants d'éléments, illisibles ; on dit combien.
+    if (cle === 'responses' && v && typeof v === 'object' && !Array.isArray(v)) {
+      const n = Object.keys(v).length;
+      details.push({ libelle: libelleParametre(cle), valeur: `${n} ${n > 1 ? 'réponses enregistrées' : 'réponse enregistrée'}`, valeur_en: `${n} ${n > 1 ? 'answers saved' : 'answer saved'}` });
+      continue;
+    }
+    const d = detail(cle, v, fuseau, /^(update_|set_)/.test(outil ?? ''));
     if (d) details.push(d);
   }
   return { genre: 'action', cibles, details };

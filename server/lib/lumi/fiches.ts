@@ -16,6 +16,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { taxesPourDocument } from '../agent/tools-etendus';
 import { drapeauxEcriture } from '../agent/registre';
 import { apercuAction, apercuTexto, type ApercuAction } from './apercu-action';
+import { complementsCarte } from './complements-cartes';
+import { montant as montantLisible, dateLisible, langueDe, MOTS } from '../courriels/gabarit';
+import { texteDuCourriel } from '../courriels/modeles';
+import { htmlVersTexte } from '../../../src/lib/emailBodyText';
 
 export type { ApercuAction, LigneApercu } from './apercu-action';
 
@@ -152,7 +156,12 @@ export async function apercuProposition(tool: string, args: Record<string, any>,
     else if (tool === 'send_email') base = { genre: 'email', to: texte(args.to) || texte(args.client_name) || null, subject: texte(args.subject) || null, body: texte(args.body ?? args.message) };
     else if (tool === 'send_quote' || tool === 'send_invoice') base = await apercuEnvoiDocument(tool === 'send_quote' ? 'quote' : 'invoice', args, ctx);
     else if (tool === 'merge_clients') base = { genre: 'fusion', garder: await ficheClientApercu(args.keep_client_id, ctx), absorber: await ficheClientApercu(args.absorb_client_id, ctx) };
-    if (!base) base = await apercuAction(args, ctx);
+    if (!base) {
+      // Les arguments nommés, puis l'effet réel que les arguments ne disent pas (complements-cartes.ts).
+      const generique = await apercuAction(args, ctx, tool);
+      generique.details.push(...await complementsCarte(tool, args, ctx));
+      base = generique;
+    }
   } catch (err: any) {
     // Un aperçu qui rate ne bloque pas la proposition : la carte dit alors qu'elle ne peut pas le montrer.
     console.error('[lumi/apercu]', err?.message || err);
@@ -225,11 +234,12 @@ async function apercuEnvoiDocument(genre: 'quote' | 'invoice', args: Record<stri
   // Même destinataire et même montant que les routes d'envoi (audit 2026-09-30) :
   // devis → courriel du client, sinon du prospect (routes/quotes.ts) ;
   // facture → le SOLDE, comme le courriel envoyé (pas le total).
-  const d: { numero: string; montant_cents: unknown; client_id: unknown; lead_id: unknown } | null = genre === 'quote'
-    ? await ctx.client.from('quotes').select('quote_number, total_cents, client_id, lead_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
-        .then(({ data }) => (data ? { numero: texte(data.quote_number), montant_cents: data.total_cents, client_id: data.client_id, lead_id: data.lead_id } : null))
-    : await ctx.client.from('invoices').select('invoice_number, balance_cents, client_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
-        .then(({ data }) => (data ? { numero: texte(data.invoice_number), montant_cents: data.balance_cents, client_id: data.client_id, lead_id: null } : null));
+  const d: { numero: string; montant_cents: unknown; client_id: unknown; lead_id: unknown; devise: string; date: string | null } | null = genre === 'quote'
+    ? await ctx.client.from('quotes').select('quote_number, total_cents, client_id, lead_id, currency, valid_until').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
+        .then(({ data }) => (data ? { numero: texte(data.quote_number), montant_cents: data.total_cents, client_id: data.client_id, lead_id: data.lead_id, devise: texte(data.currency) || 'CAD', date: data.valid_until ?? null } : null))
+    // Le solde, sinon le total quand il n'y a plus de solde : la même règle que la route d'envoi.
+    : await ctx.client.from('invoices').select('invoice_number, balance_cents, total_cents, client_id, currency, due_date').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
+        .then(({ data }) => (data ? { numero: texte(data.invoice_number), montant_cents: data.balance_cents || data.total_cents, client_id: data.client_id, lead_id: null, devise: texte(data.currency) || 'CAD', date: data.due_date ?? null } : null));
   if (!d) return null;
   let to: string | null = null;
   const personne = async (pid: unknown) => {
@@ -242,15 +252,38 @@ async function apercuEnvoiDocument(genre: 'quote' | 'invoice', args: Record<stri
   const qui = client?.email ? client : prospect?.email ? prospect : client ?? prospect;
   if (qui) to = qui.email ? `${qui.nom} <${qui.email}>` : `${qui.nom} — aucune adresse courriel : l’envoi sera refusé`;
   const num = d.numero;
-  const montant = cents(d.montant_cents);
-  const libelle = genre === 'quote' ? `Soumission ${num}` : `Facture ${num}`;
+  /* L'objet et le texte affichés sont ceux qui PARTENT (routes/quotes.ts, routes/emails.ts) :
+     la langue de l'entreprise, le montant au format du courriel, et le modèle « devis
+     envoyée » / « facture envoyée » de l'entreprise quand elle en a un. Avant, la carte montrait
+     « Soumission 12 · 300,00 $ » et « Courriel standard de Lume » même quand le client allait
+     recevoir l'objet et le texte écrits par l'entreprise. */
+  const { data: cs } = await ctx.client.from('company_settings').select('company_name, default_language').eq('org_id', ctx.orgId).maybeSingle();
+  const langue = langueDe(cs?.default_language);
+  const montantTexte = montantLisible(cents(d.montant_cents) ?? 0, d.devise, langue);
+  const communes = { client_name: qui?.nom || 'Client', company_name: texte(cs?.company_name) };
+  const variables: Record<string, string> = genre === 'quote'
+    ? { ...communes, quote_number: num, quote_amount: montantTexte, valid_until: dateLisible(d.date, langue), quote_link: '' }
+    : { ...communes, invoice_number: num, invoice_amount: montantTexte, due_date: dateLisible(d.date, langue), payment_link: '' };
+  const modele = texte(args.subject) && texte(args.message)
+    ? null
+    : await texteDuCourriel(ctx.orgId, genre === 'quote' ? 'quote_sent' : 'invoice_sent', variables, ctx.client);
+  const mots = MOTS[langue];
+  const objetParDefaut = genre === 'quote' ? `${mots.soumission}${num ? ` ${num}` : ''} — ${montantTexte}` : `${mots.facture} ${num} — ${montantTexte}`;
+  const suite = genre === 'quote'
+    ? 'Suivi du montant et du bouton pour consulter et approuver le devis en ligne.'
+    : 'Suivi du montant à payer et du bouton pour payer la facture en ligne.';
+  const texteModele = modele?.corpsHtml ? htmlVersTexte(modele.corpsHtml).trim() : '';
   return {
     genre: 'email',
     to,
-    subject: texte(args.subject) || `${libelle}${montant !== undefined ? ` · ${(montant / 100).toFixed(2).replace('.', ',')} $` : ''}`,
-    body: texte(args.message) || (genre === 'quote'
-      ? `Courriel standard de Lume avec le lien pour consulter et accepter la soumission en ligne.`
-      : `Courriel standard de Lume avec le lien pour consulter et payer la facture en ligne.`),
+    subject: texte(args.subject) || modele?.sujet || objetParDefaut,
+    body: texte(args.message)
+      ? `${texte(args.message)}\n\n${suite}`
+      : texteModele
+        ? `${texteModele}\n\n${suite}`
+        : (genre === 'quote'
+          ? `Courriel standard de Lume avec le lien pour consulter et approuver le devis en ligne.`
+          : `Courriel standard de Lume avec le lien pour consulter et payer la facture en ligne.`),
   };
 }
 

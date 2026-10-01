@@ -12,7 +12,7 @@ Chiffres de départ : 248 outils, dont 181 d'écriture.
 |---|---|---|---|
 | 1 | Lire une facture au complet ; trouver une facture par numéro ou par client | `getInvoiceById` (`src/lib/invoicesApi.ts`) ; `list_invoices` passait `p_q: null` | **fait** (#865) |
 | 2 | Lire une soumission au complet (lignes, dépôt, ouvertures) | `getQuoteById` (`src/lib/quotesApi.ts`) | **fait** (#865) |
-| 3 | Le vrai pipeline de ventes | `list_deals`, `update_deal_stage`, `delete_deal` lisent l'ancienne table `pipeline_deals` (`tools-leads.ts:1025`) ; la page `/ventes` utilise `deals`, `pipelines_ventes`, `pipeline_stages` (`src/lib/pipelineVentesApi.ts`) | à faire |
+| 3 | Le vrai pipeline de ventes | `list_deals`, `update_deal_stage`, `delete_deal` lisent l'ancienne table `pipeline_deals` (`tools-leads.ts:1025`) ; la page `/ventes` utilise `deals`, `pipelines_ventes`, `pipeline_stages` (`src/lib/pipelineVentesApi.ts`) | **fait** (#867) pour lire, déplacer, abandonner ; créer et assigner un deal : à faire |
 | 4 | Corriger une feuille de temps (heures, pointage forcé, suppression) | `src/pages/Timesheets.tsx:552-555` | à faire |
 | 5 | Montants de paie par période, et périodes passées | `GET /payroll/period-summary`, `/payroll/history` | à faire |
 | 6 | Marquer une soumission approuvée ou en attente à la main | `updateQuoteStatus` (`src/lib/quotesApi.ts`) | à faire |
@@ -26,7 +26,7 @@ Chiffres de départ : 248 outils, dont 181 d'écriture.
 | 14 | Consentement du client (texto, courriel) et champs étendus de la fiche | `definirConsentement` (`src/lib/clientsApi.ts`) | à faire |
 | 15 | Statistiques : taux de gain des soumissions, modes de paiement, performance d'équipe, versements Stripe | `src/lib/statistiquesApi.ts`, `GET /payments/payouts/*` | à faire |
 
-Le trou n° 3 est le seul qui est aussi un risque d'erreur : Lumi lit peut-être un pipeline qui n'est plus celui de l'écran. La migration `20260923150000_pipeline_reprise_deals.sql` dit que l'ancienne table est gardée pour le porte-à-porte ; la synchronisation entre les deux n'a pas été vérifiée.
+Le trou n° 3 était le seul qui était aussi un risque d'erreur : vérifié en prod le 2026-10-01, Lumi lisait 8 cartes de l'ancien tableau là où l'écran montre 2 deals. Corrigé par #867.
 
 ### Le reste, par domaine
 
@@ -87,13 +87,13 @@ Le trou n° 3 est le seul qui est aussi un risque d'erreur : Lumi lit peut-être
 | Réf. | Défaut | Où corriger | État |
 |---|---|---|---|
 | X1 | Pour 161 outils, le titre est la phrase de la permission, identique pour des actions contraires | `src/lib/lumiVerbes.ts`, `CarteAutorisation.tsx` | **fait** (#864) |
-| X2 | 156 noms de paramètres affichés en anglais ou bruts (« First name », « Send via », « Valid days ») | table `LIBELLES`, `apercu-action.ts:275-294` | à faire |
-| X3 | Valeurs brutes : énumérations non traduites, taux sans %, objectif de revenus en cents (« 5000000 ») | `detail()`, `apercu-action.ts` | à faire |
-| X4 | Vider un champ ne se voit pas (une valeur vide ou nulle est retirée de la carte) | `detail()` et `apercuAction` ligne 332 | à faire |
-| X5 | Listes et objets : « 1. a — b — c » sans nom de champ, sans total ; permissions en JSON brut | `apercuAction` lignes 310-331 | à faire |
-| X6 | Mauvais résolveur, donc fausse alerte rouge « introuvable » : `rule_id` de `deactivate_recurrence_rule` cherché dans les automatisations ; `template_id` des listes de vérification cherché dans les modèles de courriel | `RESOLVEURS` ; passer le nom de l'outil depuis `fiches.ts:155` | à faire |
-| X7 | Le résolveur de membre lit `team_members` ; les outils d'équipe et de paie valident contre `memberships` | `membre`, `apercu-action.ts:109-114` | à faire |
-| X8 | Une heure sans décalage est lue dans le fuseau du serveur sur la carte, dans celui de l'entreprise à l'exécution | normaliser avant l'aperçu (`orchestrateur.ts`, `actions-directes.ts`) | à faire |
+| X2 | 156 noms de paramètres affichés en anglais ou bruts (« First name », « Send via », « Valid days ») | `server/lib/lumi/libelles-cartes.ts` | **fait** (PR cartes) : 190 paramètres, test de couverture |
+| X3 | Valeurs brutes : énumérations non traduites, taux sans %, objectif de revenus en cents (« 5000000 ») | `detail()`, `apercu-action.ts` | **fait** (PR cartes) |
+| X4 | Vider un champ ne se voit pas (une valeur vide ou nulle est retirée de la carte) | `detail()` et `apercuAction` | **fait** (PR cartes) : « (vidé) » sur une modification |
+| X5 | Listes et objets : « 1. a — b — c » sans nom de champ, sans total ; permissions en JSON brut | `apercuAction` | **fait** (PR cartes) : lignes de vente avec total, champs nommés, permissions dans les mots de la page Rôles |
+| X6 | Mauvais résolveur, donc fausse alerte rouge « introuvable » : `rule_id` de `deactivate_recurrence_rule` cherché dans les automatisations ; `template_id` des listes de vérification cherché dans les modèles de courriel | `RESOLVEURS` ; `RESOLVEURS_PAR_OUTIL` | **fait** (PR cartes) |
+| X7 | Le résolveur de membre lit `team_members` ; les outils d'équipe et de paie valident contre `memberships` | `membre`, `apercu-action.ts` | **fait** (PR cartes) |
+| X8 | Une heure sans décalage est lue dans le fuseau du serveur sur la carte, dans celui de l'entreprise à l'exécution | `dateLocale`, `apercu-action.ts` | **fait** (PR cartes) : une heure sans décalage s'affiche telle qu'elle sera écrite |
 | X9 | Les automatisations qui partiront chez le client ne sont pas annoncées (job terminé, visite déplacée, facture payée, étiquette ajoutée) | `fiches.ts`, en réutilisant `propositionJournee.ts:243-244` | à faire |
 | X10 | Conversation rouverte : la carte en attente perd son aperçu et ses badges ; carte groupée repliée par défaut | `rendreMessages` (`server/routes/lumi.ts`), `LigneGroupe` | à faire |
 
@@ -128,6 +128,31 @@ Le trou n° 3 est le seul qui est aussi un risque d'erreur : Lumi lit peut-être
 **Automatisations**
 - `create_automation_from_text` : la carte montre seulement la phrase de l'utilisateur ; le nom, le déclencheur et les messages sont générés à l'exécution.
 - `update_automation_message` : l'ancien texte n'est pas montré.
+
+### Fait dans la PR cartes (`server/lib/lumi/complements-cartes.ts`)
+
+Chaque ligne vient d'une lecture de la base avec les droits de l'utilisateur, juste avant la confirmation.
+
+| Outil | Ce que la carte dit maintenant |
+|---|---|
+| `refund_payment` | La somme, et « remboursement COMPLET, la facture redevient due » ou « partiel, X sur Y » |
+| `charge_card_on_file` | La somme prélevée (le solde) et la carte : marque, 4 derniers chiffres, expiration ; ou « aucune carte au dossier » |
+| `remove_card_on_file` | La carte retirée |
+| `record_invoice_payment` | Le solde après le paiement |
+| `create_payment_request`, `resend_payment_request` | Le montant demandé, le canal par défaut, l'adresse ou le numéro, ou ce qui manque sur la fiche |
+| `send_quote_sms` | Le numéro (client, sinon prospect) |
+| `send_quote`, `send_invoice` | L'objet et le texte du modèle de l'entreprise quand elle en a un ; sinon l'objet par défaut de la route |
+| `delete_client`, `delete_lead` | Le nombre de jobs, soumissions, factures et deals supprimés avec la fiche |
+| `delete_job`, `unschedule_job` | Le nombre de visites retirées, avec leurs dates |
+| `cancel_visit`, `reschedule_job` | La visite visée quand aucune n'est nommée |
+| `delete_team` | Le nombre de membres et de jobs détachés |
+| `set_default_availability` | « Toutes les plages sont remplacées par lundi à vendredi, 8 h à 17 h » |
+| `set_hourly_rate` | Le taux actuel |
+| `mark_payroll_period_paid`, `unmark_payroll_period_paid`, `add_payroll_adjustment` | La période de paie visée |
+| `update_role_preset`, `set_member_permissions` | Permissions accordées et retirées, en clair |
+| `update_quote`, `update_invoice`, `update_job` et les modèles | « N éléments — remplacent la liste actuelle au complet », chaque ligne avec son total, sous-total |
+
+Reste à faire sur les cartes : X9 (automatisations qui partiront), X10 (carte rouverte), le total de la paie, l'avant → après d'un rôle, le texte généré de `create_automation_from_text`, l'ancien texte de `update_automation_message`, les jalons supprimés par `save_job_billing_milestones`.
 
 ### Ce que la session fiabilité a déjà pris
 

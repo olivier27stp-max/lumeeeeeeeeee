@@ -104,7 +104,33 @@ describe('apercuProposition', () => {
       quotes: { quote_number: 'Q-0043', total_cents: 49439, client_id: C1, title: 'Vitres' },
       clients: { first_name: 'Marie', last_name: 'Tremblay', email: 'marie@x.ca' },
     }));
-    expect(a).toMatchObject({ genre: 'email', to: 'Marie Tremblay <marie@x.ca>', subject: 'Soumission Q-0043 · 494,39 $' });
+    expect(a).toMatchObject({ genre: 'email', to: 'Marie Tremblay <marie@x.ca>' });
+    // L'objet par défaut de la route d'envoi : « Soumission N — montant », au format du courriel.
+    expect(a.subject).toMatch(/^Soumission Q-0043 — 494,39\s\$$/);
+  });
+
+  it('envoi d une facture : l objet et le texte du MODÈLE de l entreprise, pas un texte générique', async () => {
+    const { apercuProposition } = await import('../server/lib/lumi/fiches');
+    const rangees: Record<string, any> = {
+      invoices: { invoice_number: 'F-0012', balance_cents: 30000, total_cents: 45000, client_id: C1, currency: 'CAD', due_date: '2026-10-15' },
+      clients: { first_name: 'Marie', last_name: 'Tremblay', email: 'marie@x.ca' },
+      company_settings: { company_name: 'Vitres Nettes', default_language: 'fr' },
+    };
+    const client = {
+      from: (table: string) => {
+        const q: any = {};
+        q.select = () => q; q.eq = () => q; q.is = () => q; q.order = () => q;
+        q.limit = async () => ({ data: table === 'email_templates' ? [{ subject: 'Votre facture {invoice_number} de {company_name}', body: '<p>Bonjour {client_name}, voici {invoice_amount} à régler.</p>', source: 'user' }] : [], error: null });
+        q.maybeSingle = async () => ({ data: rangees[table] ?? null, error: null });
+        return q;
+      },
+    } as any;
+    const a: any = await apercuProposition('send_invoice', { invoice_id: Q1 }, { client, orgId: 'org', userId: 'u' });
+    expect(a.subject).toBe('Votre facture F-0012 de Vitres Nettes');
+    // Le SOLDE (300 $), pas le total (450 $) : c'est ce que le client doit payer.
+    expect(a.body).toMatch(/Bonjour Marie Tremblay, voici 300,00\s\$ à régler\./);
+    expect(a.body).toMatch(/Suivi du montant à payer et du bouton pour payer la facture en ligne\./);
+    expect(a.body).not.toMatch(/Courriel standard de Lume/);
   });
 
   it('fusion de doublons : les deux fiches côte à côte, avec leur volume d historique', async () => {
@@ -178,6 +204,27 @@ describe('rendreMessages : le reçu survit à la relecture', () => {
   });
 });
 
+describe('remettreApercuEnAttente : la carte rouverte dit encore ce qu elle fait', () => {
+  it('une proposition en attente retrouve son aperçu ; une carte déjà décidée n en reçoit pas', async () => {
+    const { rendreMessages, remettreApercuEnAttente } = await import('../server/routes/lumi');
+    const enAttente: any[] = [
+      { role: 'user', content: 'Supprime ce client' },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'delete_client', input: { client_id: C1 } }] },
+    ];
+    const rendus = rendreMessages(enAttente);
+    expect(rendus[1].proposal?.apercu).toBeUndefined();
+    await remettreApercuEnAttente(rendus, 'org:u', ctx({ clients: { first_name: 'Marie', last_name: 'Tremblay', status: 'active' } }));
+    const apercu: any = rendus[1].proposal?.apercu;
+    expect(apercu?.genre).toBe('action');
+    expect(apercu.cibles[0].valeur).toMatch(/Marie Tremblay/);
+    expect(apercu.drapeaux).toBeDefined();
+
+    const decidee = rendreMessages([...enAttente, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu1', content: '{"cancelled":true}' }] }, { role: 'assistant', content: [{ type: 'text', text: 'Annulé.' }] }]);
+    await remettreApercuEnAttente(decidee, 'org:u', ctx());
+    expect(decidee.find((m) => m.proposal)?.proposal?.apercu).toBeUndefined();
+  });
+});
+
 describe('carte : identifiant inventé', () => {
   it('une fiche désignée par un nom (« jean-pierre-gagnon ») est signalée, jamais cachée', async () => {
     const { apercuProposition } = await import('../server/lib/lumi/fiches');
@@ -195,7 +242,7 @@ describe('cartes : facture récurrente, contrat, rapport planifié (audit 2026-0
       recurring_invoice_schedules: { client_id: C1, subject: 'Entretien mensuel', frequency: 'monthly', is_active: true, auto_send: true },
       clients: { first_name: 'Marie', last_name: 'Tremblay' },
     }));
-    expect(rec.cibles[0].valeur).toMatch(/Marie Tremblay.*Entretien mensuel.*monthly.*envoi automatique/);
+    expect(rec.cibles[0].valeur).toMatch(/Marie Tremblay.*Entretien mensuel.*chaque mois.*envoi automatique/);
     const rap: any = await apercuProposition('send_scheduled_report_now', { report_id: S1 }, ctx({ scheduled_reports: { recipient_email: 'externe@exemple.com', frequency: 'monthly', enabled: true } }));
     expect(rap.cibles[0].valeur).toMatch(/externe@exemple\.com/);
     const con: any = await apercuProposition('send_agreement_sms', { agreement_id: S1 }, ctx({
@@ -203,6 +250,6 @@ describe('cartes : facture récurrente, contrat, rapport planifié (audit 2026-0
       jobs: { job_number: '30', title: 'Revêtement', client_name: 'Marie Tremblay' },
       clients: { first_name: 'Marie', last_name: 'Tremblay' },
     }));
-    expect(con.cibles[0].valeur).toMatch(/#30.*Marie Tremblay.*draft/);
+    expect(con.cibles[0].valeur).toMatch(/#30.*Marie Tremblay.*brouillon/);
   });
 });
