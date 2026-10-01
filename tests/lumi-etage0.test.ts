@@ -56,7 +56,7 @@ describe('reçu sans modèle après Confirmer / Annuler', () => {
     expect(texteRecus(lignes, 'cancel', true)).toBe('Annulé, rien n’a été fait.');
     expect(texteRecus([lignes[1]], 'confirm', false)).toBe('Done: the assignment.');
     // L'optimisation de journée a son nom : « C'est fait : l’action. » ne disait rien (vu en prod, 2026-10-01).
-    expect(texteRecus([{ recu: { tool_use_id: 'o', ok: true }, erreur: null, outil: 'apply_day_optimization' }], 'confirm', true)).toBe("C'est fait : la réorganisation de la journée.");
+    expect(texteRecus([{ recu: { tool_use_id: 'o', ok: true, fiche: null }, erreur: null, outil: 'apply_day_optimization' }], 'confirm', true)).toBe("C'est fait : la réorganisation de la journée.");
     expect(texteRecus(lignes, 'confirm', true)).not.toMatch(/create_quote|assign_job|tool_use/);
   });
   it('la route ne rappelle plus le modèle après une décision : reçu, texte, done, trace étage 0', () => {
