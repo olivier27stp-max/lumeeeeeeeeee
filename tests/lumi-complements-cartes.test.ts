@@ -91,7 +91,7 @@ describe('compléments des cartes de Lumi', () => {
     expect(await texte('resend_payment_request', { invoice_id: id(2) }, ctx)).toMatch(/Envoyer par : Courriel \(par défaut\)\nEnvoyé à : marie@exemple\.test/);
   });
 
-  it('le texto d’une soumission dit le numéro : celui du client, sinon du prospect', async () => {
+  it('le texto d’un devis dit le numéro : celui du client, sinon du prospect', async () => {
     const ctx = base({ quotes: [{ id: id(4), client_id: null, lead_id: id(5) }], clients: [{ id: id(5), phone: '438-555-0199' }] });
     expect(await texte('send_quote_sms', { quote_id: id(4) }, ctx)).toMatch(/Texto envoyé au : 438-555-0199/);
   });
@@ -101,7 +101,7 @@ describe('compléments des cartes de Lumi', () => {
       jobs: [{ id: id(6), client_id: id(3) }, { id: id(7), client_id: id(3) }, { id: id(8), client_id: id(3), deleted_at: '2026-01-01' }],
       quotes: [{ id: id(9), client_id: id(3) }], invoices: [{ id: id(10), client_id: id(3) }, { id: id(11), client_id: id(3) }, { id: id(12), client_id: id(3) }],
     });
-    expect(await texte('delete_client', { client_id: id(3) }, ctx)).toBe('Supprimés avec le client : 2 jobs, 1 soumission, 3 factures');
+    expect(await texte('delete_client', { client_id: id(3) }, ctx)).toBe('Supprimés avec le client : 2 jobs, 1 devis, 3 factures');
     expect(await texte('delete_client', { client_id: id(50) }, ctx)).toMatch(/rien d’autre/);
   });
 

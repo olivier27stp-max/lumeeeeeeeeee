@@ -253,7 +253,7 @@ async function apercuEnvoiDocument(genre: 'quote' | 'invoice', args: Record<stri
   if (qui) to = qui.email ? `${qui.nom} <${qui.email}>` : `${qui.nom} — aucune adresse courriel : l’envoi sera refusé`;
   const num = d.numero;
   /* L'objet et le texte affichés sont ceux qui PARTENT (routes/quotes.ts, routes/emails.ts) :
-     la langue de l'entreprise, le montant au format du courriel, et le modèle « soumission
+     la langue de l'entreprise, le montant au format du courriel, et le modèle « devis
      envoyée » / « facture envoyée » de l'entreprise quand elle en a un. Avant, la carte montrait
      « Soumission 12 · 300,00 $ » et « Courriel standard de Lume » même quand le client allait
      recevoir l'objet et le texte écrits par l'entreprise. */
@@ -270,7 +270,7 @@ async function apercuEnvoiDocument(genre: 'quote' | 'invoice', args: Record<stri
   const mots = MOTS[langue];
   const objetParDefaut = genre === 'quote' ? `${mots.soumission}${num ? ` ${num}` : ''} — ${montantTexte}` : `${mots.facture} ${num} — ${montantTexte}`;
   const suite = genre === 'quote'
-    ? 'Suivi du montant et du bouton pour consulter et approuver la soumission en ligne.'
+    ? 'Suivi du montant et du bouton pour consulter et approuver le devis en ligne.'
     : 'Suivi du montant à payer et du bouton pour payer la facture en ligne.';
   const texteModele = modele?.corpsHtml ? htmlVersTexte(modele.corpsHtml).trim() : '';
   return {
@@ -282,7 +282,7 @@ async function apercuEnvoiDocument(genre: 'quote' | 'invoice', args: Record<stri
       : texteModele
         ? `${texteModele}\n\n${suite}`
         : (genre === 'quote'
-          ? `Courriel standard de Lume avec le lien pour consulter et accepter la soumission en ligne.`
+          ? `Courriel standard de Lume avec le lien pour consulter et approuver le devis en ligne.`
           : `Courriel standard de Lume avec le lien pour consulter et payer la facture en ligne.`),
   };
 }

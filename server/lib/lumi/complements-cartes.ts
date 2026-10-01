@@ -205,7 +205,7 @@ const COMPLEMENTS: Record<string, Complement> = {
     }
     return [
       { libelle: L('Texto envoyé au', 'Text sent to'), valeur: telephone || 'aucun numéro sur la fiche — le texto ne partira pas', valeur_en: telephone || 'no phone number on the record — the text will not go out' },
-      { libelle: L('Contenu', 'Content'), valeur: 'le lien de consultation de la soumission, avec le texte habituel de l’entreprise', valeur_en: 'the link to view the quote, with the company’s usual wording' },
+      { libelle: L('Contenu', 'Content'), valeur: 'le lien de consultation du devis, avec le texte habituel de l’entreprise', valeur_en: 'the link to view the quote, with the company’s usual wording' },
     ];
   },
 
@@ -215,9 +215,9 @@ const COMPLEMENTS: Record<string, Complement> = {
       compter(ctx, 'jobs', 'client_id', args.client_id), compter(ctx, 'quotes', 'client_id', args.client_id),
       compter(ctx, 'invoices', 'client_id', args.client_id), compter(ctx, 'deals', 'client_id', args.client_id),
     ]);
-    const fr = [jobs && pluriel(jobs, 'job', 'jobs'), devis && pluriel(devis, 'soumission', 'soumissions'), factures && pluriel(factures, 'facture', 'factures'), deals && pluriel(deals, 'deal du pipeline', 'deals du pipeline')].filter(Boolean);
+    const fr = [jobs && pluriel(jobs, 'job', 'jobs'), devis && pluriel(devis, 'devis', 'devis'), factures && pluriel(factures, 'facture', 'factures'), deals && pluriel(deals, 'deal du pipeline', 'deals du pipeline')].filter(Boolean);
     const en = [jobs && pluriel(jobs, 'job', 'jobs'), devis && pluriel(devis, 'quote', 'quotes'), factures && pluriel(factures, 'invoice', 'invoices'), deals && pluriel(deals, 'pipeline deal', 'pipeline deals')].filter(Boolean);
-    return [{ libelle: L('Supprimés avec le client', 'Deleted with the client'), valeur: fr.length ? fr.join(', ') : 'rien d’autre : aucun job, soumission ni facture à son nom', valeur_en: en.length ? en.join(', ') : 'nothing else: no job, quote or invoice under their name' }];
+    return [{ libelle: L('Supprimés avec le client', 'Deleted with the client'), valeur: fr.length ? fr.join(', ') : 'rien d’autre : aucun job, devis ni facture à son nom', valeur_en: en.length ? en.join(', ') : 'nothing else: no job, quote or invoice under their name' }];
   },
 
   delete_lead: async (args, ctx) => {
@@ -226,9 +226,9 @@ const COMPLEMENTS: Record<string, Complement> = {
       compter(ctx, 'quotes', 'client_id', args.lead_id), compter(ctx, 'quotes', 'lead_id', args.lead_id), compter(ctx, 'deals', 'client_id', args.lead_id),
     ]);
     const devis = Math.max(parClient, parProspect);
-    const fr = [devis && pluriel(devis, 'soumission', 'soumissions'), deals && pluriel(deals, 'deal du pipeline', 'deals du pipeline')].filter(Boolean);
+    const fr = [devis && pluriel(devis, 'devis', 'devis'), deals && pluriel(deals, 'deal du pipeline', 'deals du pipeline')].filter(Boolean);
     const en = [devis && pluriel(devis, 'quote', 'quotes'), deals && pluriel(deals, 'pipeline deal', 'pipeline deals')].filter(Boolean);
-    return [{ libelle: L('Supprimés avec le prospect', 'Deleted with the lead'), valeur: fr.length ? fr.join(', ') : 'rien d’autre : aucune soumission ni deal à son nom', valeur_en: en.length ? en.join(', ') : 'nothing else: no quote or deal under their name' }];
+    return [{ libelle: L('Supprimés avec le prospect', 'Deleted with the lead'), valeur: fr.length ? fr.join(', ') : 'rien d’autre : aucun devis ni deal à son nom', valeur_en: en.length ? en.join(', ') : 'nothing else: no quote or deal under their name' }];
   },
 
   delete_job: async (args, ctx) => {

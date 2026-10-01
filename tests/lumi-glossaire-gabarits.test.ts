@@ -134,7 +134,8 @@ describe('gabarits de Lumi — aucun statut brut écrit dans une phrase françai
    *   :220    note → txt(n.entity_type)
    * Fichier réservé à une autre session : rapporté, pas corrigé ici.
    */
-  it.fails('ÉCART : la carte de confirmation ne pose aucune valeur de base à côté d’un nom (apercu-action.ts)', () => {
+  // Corrigé le 2026-10-01 (#869) : statuts, rôles, fréquences et déclencheurs passent par les dictionnaires.
+  it('la carte de confirmation ne pose aucune valeur de base à côté d’un nom (apercu-action.ts)', () => {
     const source = lire('server/lib/lumi/apercu-action.ts');
     const bruts = source.match(/txt\([a-z]+\??\.(status|stage|role|frequency|trigger_event|type|entity_type|method)\b[^)]*\)/g) ?? [];
     expect(bruts).toEqual([]);

@@ -146,8 +146,8 @@ const membre: Resolveur = async (id, { client: db, orgId }) => {
     // partie sans ligne dans team_members n'est PAS introuvable (fausse alerte rouge sur la carte).
     const { data: adhesion } = await db.from('memberships').select('role, status').eq('org_id', orgId).eq('user_id', id).maybeSingle();
     if (!adhesion) return introuvable(L('Membre', 'Member'));
-    const role = VALEURS_TRADUITES[txt(adhesion.role)];
-    return { libelle: L('Membre', 'Member'), valeur: ['membre de l’entreprise', role ? role[0].toLowerCase() : txt(adhesion.role)].filter(Boolean).join(' · '), valeur_en: ['company member', role ? role[1].toLowerCase() : txt(adhesion.role)].filter(Boolean).join(' · ') };
+    const role = valeurConnue(adhesion.role);
+    return { libelle: L('Membre', 'Member'), valeur: ['membre de l’entreprise', role[0]].filter(Boolean).join(' · '), valeur_en: ['company member', role[1]].filter(Boolean).join(' · ') };
   }
   return { libelle: L('Membre', 'Member'), valeur: [nomPersonne(m), txt(m.email), valeurConnue(m.role)[0]].filter(Boolean).join(' · '), valeur_en: [nomPersonne(m), txt(m.email), valeurConnue(m.role)[1]].filter(Boolean).join(' · ') };
 };
@@ -327,11 +327,11 @@ const recurrenceJob: Resolveur = async (id, ctx, fuseau) => {
   const { data: r } = await ctx.client.from('job_recurrence_rules').select('job_id, frequency, is_active').eq('org_id', ctx.orgId).eq('id', id).maybeSingle();
   if (!r) return introuvable(L('Récurrence du job', 'Job recurrence'));
   const j = estUuid(r.job_id) ? await job(r.job_id, ctx, fuseau) : null;
-  const freq = VALEURS_TRADUITES[txt(r.frequency)];
+  const freq = valeurConnue(r.frequency);
   return {
     libelle: L('Récurrence du job', 'Job recurrence'),
-    valeur: [j?.valeur, freq ? freq[0].toLowerCase() : txt(r.frequency), r.is_active ? 'active' : 'déjà arrêtée'].filter(Boolean).join(' · '),
-    valeur_en: [j?.valeur, freq ? freq[1].toLowerCase() : txt(r.frequency), r.is_active ? 'active' : 'already stopped'].filter(Boolean).join(' · '),
+    valeur: [j?.valeur, freq[0], r.is_active ? 'active' : 'déjà arrêtée'].filter(Boolean).join(' · '),
+    valeur_en: [j?.valeur, freq[1], r.is_active ? 'active' : 'already stopped'].filter(Boolean).join(' · '),
   };
 };
 // Modèle de liste de vérification (checklist_templates) — pas un modèle de courriel.
@@ -400,7 +400,7 @@ const LIBELLE_PERMISSION = new Map<string, [fr: string, en: string]>(
 );
 
 /**
- * Une ligne de soumission, de facture ou de job : « 2 × Lavage de vitres à 150,00 $ = 300,00 $ ».
+ * une ligne de devis, de facture ou de job : « 2 × Lavage de vitres à 150,00 $ = 300,00 $ ».
  * Avant, la carte disait « Lavage de vitres — 2 — 150,00 $ » : trois valeurs sans nom ni total.
  */
 export function ligneDeVente(el: Record<string, unknown>): { fr: string; en: string; total: number | null } | null {
