@@ -5,6 +5,7 @@ import { supabaseUrl, supabaseAnonKey, supabaseServiceRoleKey } from './config';
 import { ORG_UUID_RE, shouldUseRequestedOrg } from './active-org';
 import { setSentryRequestOrg } from './sentry';
 import { creerPartageEnVol } from './partage-en-vol';
+import { poserOrgDuContexte } from './bac-a-sable';
 
 let adminClientCache: SupabaseClient | null = null;
 
@@ -206,6 +207,7 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
   const enCache = cacheSessions.get(cle);
   if (enCache && enCache.expire > Date.now()) {
     setSentryRequestOrg(enCache.orgId, enCache.user.id);
+    poserOrgDuContexte(enCache.orgId);
     return { client: buildSupabaseWithAuth(authorizationHeader, enCache.orgId), orgId: enCache.orgId, user: enCache.user };
   }
 
@@ -220,6 +222,7 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
   // Toute erreur levée plus loin dans cette requête portera l'org — sinon
   // l'alerte Sentry ne dit pas chez quel client ça a planté. No-op sans DSN.
   setSentryRequestOrg(orgId, user.id);
+  poserOrgDuContexte(orgId);
 
   if (cacheSessions.size > 5_000) {
     const maintenant = Date.now();
