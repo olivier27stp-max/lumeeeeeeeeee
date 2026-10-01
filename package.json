@@ -93,6 +93,7 @@
     "test:quarantaine": "vitest run --config vitest.quarantaine.config.ts",
     "test:automations": "node scripts/qa/test-automatisations.mjs",
     "test:automations:unitaires": "node scripts/qa/test-automatisations.mjs --unitaires",
+    "test:automations:e2e": "node --env-file=.env.local scripts/qa/automations-prod/lancer.mjs",
     "qa:qualite": "node --env-file=.env.local --import tsx scripts/qa/qualite-lumi.mts",
     "qa:juge": "node --env-file=.env.local --import tsx scripts/qa/juge-lumi.mts",
     "qa:parcours-client": "node scripts/qa/parcours-client-final.mjs"
