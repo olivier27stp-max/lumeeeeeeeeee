@@ -1,6 +1,6 @@
 -- ============================================================================
--- PROPOSÉE — NE PAS APPLIQUER SANS L'OK DE RAFBA (audit commissions 2026-09-30)
--- Avant application en prod : dump complet de la prod.
+-- Audit commissions 2026-09-30 — approuvée par Rafba le 2026-09-30.
+-- Appliquée après la sauvegarde complète prod-20261001-0010.dump (268 tables, relue).
 -- Après : npm run check:broken-objects && npm run check:db-coherence
 --         && npm run check:schema-refs && npm run qa:rls-roles
 --
