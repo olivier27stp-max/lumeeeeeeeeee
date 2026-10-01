@@ -32,6 +32,61 @@ Règles : transcris mot pour mot ce qui est dit, avec la ponctuation, sans rien 
 Rules: transcribe word for word what is said, with punctuation, without summarizing or correcting the meaning. Write numbers as digits ("3 invoices", "$1,250", "8:30"). Do not answer the speaker, do not comment, do not translate. If unsure about a word, write what you hear. If the audio is empty or inaudible, return an empty string.`,
 } as const;
 
+/* ── Un enregistrement sans voix n'est pas envoyé au modèle ─────────────────
+   Batterie de robustesse du 2026-10-01 : une seconde de silence envoyée à la
+   route revenait avec « Ok, affiche-moi la liste des clients qui ont une
+   facture en retard. ». Devant un audio vide, le modèle ne renvoie pas la
+   chaîne vide que la consigne demande : il invente une phrase plausible à
+   partir du contexte du prompt — et cette phrase part dans la boîte de Lumi
+   comme une demande de la personne.
+
+   Le micro de l'app envoie du WAV PCM 16 bits (useVoiceInput.ts) : le niveau
+   sonore se lit donc ici, sans décodeur. Aucune tranche de 100 ms au-dessus du
+   seuil = rien à transcrire, texte vide, aucun appel payé. Le seuil est la
+   MOITIÉ de celui du micro (SILENCE_RMS = 0,012) : le rééchantillonnage par
+   moyenne baisse un peu le niveau, et un enregistrement que l'app a jugé
+   parlé ne doit jamais être écarté ici. Tout ce qui n'est pas un WAV PCM
+   16 bits lisible (note vocale reçue par texto, autre format) passe au modèle
+   comme avant. */
+const SEUIL_VOIX_RMS = 0.006;
+const TRANCHE_MS = 100;
+
+/** Vrai si le WAV PCM 16 bits ne contient aucune tranche au-dessus du seuil de voix. */
+export function wavSansVoix(audio: Buffer): boolean {
+  if (audio.length < 44 || audio.toString('latin1', 0, 4) !== 'RIFF' || audio.toString('latin1', 8, 12) !== 'WAVE') return false;
+  let format = 0, canaux = 0, taux = 0, bits = 0, debut = -1, taille = 0;
+  for (let o = 12; o + 8 <= audio.length;) {
+    const id = audio.toString('latin1', o, o + 4);
+    const longueur = audio.readUInt32LE(o + 4);
+    if (id === 'fmt ' && o + 24 <= audio.length) {
+      format = audio.readUInt16LE(o + 8);
+      canaux = audio.readUInt16LE(o + 10);
+      taux = audio.readUInt32LE(o + 12);
+      bits = audio.readUInt16LE(o + 22);
+    } else if (id === 'data') {
+      debut = o + 8;
+      taille = Math.min(longueur, audio.length - debut);
+      break;
+    }
+    o += 8 + longueur + (longueur % 2);
+  }
+  if (format !== 1 || bits !== 16 || canaux < 1 || taux < 1 || debut < 0) return false;
+  const echantillons = Math.floor(taille / 2);
+  if (echantillons === 0) return true;
+  const parTranche = Math.max(1, Math.round((taux * canaux * TRANCHE_MS) / 1000));
+  const seuilCarre = SEUIL_VOIX_RMS * SEUIL_VOIX_RMS;
+  for (let i = 0; i < echantillons; i += parTranche) {
+    const fin = Math.min(echantillons, i + parTranche);
+    let somme = 0;
+    for (let j = i; j < fin; j++) {
+      const x = audio.readInt16LE(debut + j * 2) / 0x8000;
+      somme += x * x;
+    }
+    if (somme / (fin - i) > seuilCarre) return false;
+  }
+  return true;
+}
+
 export async function transcribeAudio(opts: {
   /** Audio encodé en base64 (sans préfixe data:). */
   base64: string;
@@ -49,6 +104,9 @@ export async function transcribeAudioAvecUsage(opts: {
 }): Promise<{ text: string; usage: GeminiUsage | null; model: string; requestId: string | null }> {
   if (!geminiApiKey) {
     throw new Error('GEMINI_API_KEY is not configured.');
+  }
+  if (opts.mimeType === 'audio/wav' && wavSansVoix(Buffer.from(opts.base64, 'base64'))) {
+    return { text: '', usage: null, model: TRANSCRIBE_MODEL, requestId: null };
   }
   const body = {
     contents: [
