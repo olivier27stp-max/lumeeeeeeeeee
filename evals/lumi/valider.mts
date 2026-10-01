@@ -35,7 +35,7 @@ const CHAMPS = new Set(['id', 'section', 'categorie', 'registre', 'langue', 'nat
  * Acceptées seulement comme `equivalents` (une alternative légitime, jamais l'outil attendu d'un cas).
  * Dès que le registre les connaît, le validateur demande de les retirer d'ici : elles sont alors vérifiées comme les autres.
  */
-const LECTURES_ANNONCEES = new Set(['get_invoice', 'get_quote']);
+const LECTURES_ANNONCEES = new Set<string>([]);
 /** Les quatre défauts connus que le jeu doit surveiller (consigne de la mission). */
 const REGRESSIONS_EXIGEES = ['faq-a-la-place-du-paiement', 'set_default_email_template', 'duplicate_email_template', 'resend_payment_request'];
 
