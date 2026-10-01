@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 
 // ── Mocks (hissés) ─────────────────────────────────────────────
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
@@ -106,6 +106,12 @@ function regle(partiel: Partial<api.AutomationRule> = {}): api.AutomationRule {
 let conteneur: HTMLDivElement;
 let racine: Root | null = null;
 const laisser = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+/** Où le routeur se trouve — pour prouver qu'un lien mène bien quelque part. */
+let chemin = '';
+function Temoin() {
+  chemin = useLocation().pathname;
+  return null;
+}
 
 async function rendre(langue: 'fr' | 'en' = 'fr') {
   localStorage.setItem('lume-language', langue);
@@ -113,7 +119,7 @@ async function rendre(langue: 'fr' | 'en' = 'fr') {
   document.body.appendChild(conteneur);
   racine = createRoot(conteneur);
   await act(async () => {
-    racine!.render(<MemoryRouter><LanguageProvider><Automations /></LanguageProvider></MemoryRouter>);
+    racine!.render(<MemoryRouter initialEntries={['/automations']}><Temoin /><LanguageProvider><Automations /></LanguageProvider></MemoryRouter>);
   });
   await laisser(); await laisser();
   return conteneur;
@@ -268,6 +274,40 @@ describe('liste-07 — un seul menu ouvert à la fois (« Créer » et « ⋮ »
     await laisser();
     expect(menus()).toHaveLength(0);
     expect(document.activeElement).toBe(bouton(/^Créer$/));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+describe('liste-03 — la sous-navigation est faite de liens, et annonce la section courante', () => {
+  const nav = () => conteneur.querySelector('nav[aria-label="Sections"]') as HTMLElement;
+  const lien = (motif: RegExp) => Array.from(nav().querySelectorAll('a')).find((a) => motif.test((a.textContent || '').trim()));
+
+  it('« Vue d’ensemble » et « Réglages globaux » sont des liens (nouvel onglet, Ctrl+clic, clic milieu)', async () => {
+    await rendre();
+    expect(lien(/^Vue d’ensemble/)?.getAttribute('href')).toBe('/automations/apercu');
+    expect(lien(/^Réglages globaux$/)?.getAttribute('href')).toBe('/automations/reglages');
+    expect(nav().querySelectorAll('button'), 'plus aucun bouton dans la sous-navigation').toHaveLength(0);
+  });
+
+  it('la section courante est annoncée : aria-current="page" sur « Automatisations », et sur elle seule', async () => {
+    await rendre();
+    const courants = Array.from(nav().querySelectorAll('[aria-current="page"]'));
+    expect(courants).toHaveLength(1);
+    expect((courants[0].textContent || '').trim()).toBe('Automatisations');
+    expect(courants[0].getAttribute('href')).toBe('/automations');
+  });
+
+  it('un clic simple navigue toujours dans l’application', async () => {
+    await rendre();
+    expect(chemin).toBe('/automations');
+    await cliquer(lien(/^Réglages globaux$/));
+    expect(chemin).toBe('/automations/reglages');
+  });
+
+  it('« Vue d’ensemble » mène à l’aperçu', async () => {
+    await rendre();
+    await cliquer(lien(/^Vue d’ensemble/));
+    expect(chemin).toBe('/automations/apercu');
   });
 });
 

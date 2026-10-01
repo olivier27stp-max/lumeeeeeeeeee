@@ -12,7 +12,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Zap, Clock, Mail, Bell, FileText, CalendarClock, MessageSquare,
   ToggleLeft, ToggleRight, Loader2, Send, UserPlus, AlertTriangle,
@@ -1293,28 +1293,32 @@ export default function Automations() {
           <span className="pb-3 text-[15px] font-semibold text-text-primary">
             {fr ? 'Automatisation' : 'Automation'}
           </span>
+          {/* Des LIENS (audit du 2026-10-01) : en boutons, ni nouvel onglet, ni
+              Ctrl+clic, ni clic milieu — et rien n'annonçait la section courante. */}
           <nav className="flex items-center gap-1" aria-label={fr ? 'Sections' : 'Sections'}>
-            <span className="border-b-2 border-primary px-3 pb-3 pt-1 text-[13px] font-semibold text-primary">
+            <Link
+              to="/automations"
+              aria-current="page"
+              className="border-b-2 border-primary px-3 pb-3 pt-1 text-[13px] font-semibold text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
               {fr ? 'Automatisations' : 'Workflows'}
-            </span>
-            <button
-              type="button"
-              onClick={() => navigate('/automations/apercu')}
+            </Link>
+            <Link
+              to="/automations/apercu"
               className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               {fr ? 'Vue d’ensemble' : 'Overview'}
               <span className="rounded bg-warning-light px-1 py-0.5 text-[9px] font-bold uppercase text-warning">
                 {fr ? 'Bêta' : 'Beta'}
               </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/automations/reglages')}
+            </Link>
+            <Link
+              to="/automations/reglages"
               className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <Settings size={13} aria-hidden="true" />
               {fr ? 'Réglages globaux' : 'Global settings'}
-            </button>
+            </Link>
           </nav>
         </div>
 
