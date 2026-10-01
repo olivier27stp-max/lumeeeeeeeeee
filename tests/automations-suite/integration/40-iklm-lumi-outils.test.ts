@@ -96,6 +96,32 @@ describe('I — create_automation_from_text : les gardes de la route « Construi
     expect(await reglesDepuis(depuis)).toEqual([]);
   });
 
+  it('[I-036] un déclencheur en rodage, pas offert à l’entreprise (drapeau éteint), est REFUSÉ et rien n’est enregistré ; drapeau allumé, la règle est créée', async () => {
+    const { oublierDrapeaux } = await import('../../../server/lib/automations-drapeaux');
+    const poser = async (enabled: boolean) => {
+      await b.admin.from('org_features').upsert({ org_id: b.orgA, feature: 'auto_paiement_echoue', enabled }, { onConflict: 'org_id,feature' });
+      oublierDrapeaux(b.orgA);
+    };
+    const { data: avant } = await b.admin.from('org_features').select('enabled').eq('org_id', b.orgA).eq('feature', 'auto_paiement_echoue').maybeSingle();
+    try {
+      await poser(false);
+      const depuis = new Date().toISOString();
+      reponsesModele.push(PARCOURS_SIMPLE('payment.failed'));
+      const refus = await outil('create_automation_from_text', { description: `Écris au client quand son paiement échoue ${marque('I-036')}` });
+      expect(refus.created, JSON.stringify(refus)).not.toBe(true);
+      expect(String(refus.error ?? '')).toMatch(/« Paiement échoué » n’est pas encore offert/);
+      expect(await reglesDepuis(depuis)).toEqual([]);
+
+      await poser(true);
+      reponsesModele.push(PARCOURS_SIMPLE('payment.failed'));
+      const cree = await outil('create_automation_from_text', { description: `Écris au client dès que son paiement échoue ${marque('I-036')}` });
+      expect(cree.created, JSON.stringify(cree)).toBe(true);
+      expect((await reglesDepuis(depuis)).map((x) => x.trigger_event)).toEqual(['payment.failed']);
+    } finally {
+      await poser(avant?.enabled === true);
+    }
+  });
+
   it('[I-032] la 2e automatisation proposée (autre déclencheur) est créée elle aussi, en pause, avec sa limite par client', async () => {
     const depuis = new Date().toISOString();
     reponsesModele.push(PARCOURS_SIMPLE('quote.sent', {

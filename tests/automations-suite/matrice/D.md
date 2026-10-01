@@ -23,4 +23,4 @@ Tests : `tests/automations-suite/integration/20-cde-idempotence.test.ts` (vrai m
 | D-041 | boucle `demarrer_automatisation` | A → B → A | 2e démarrage sauté `boucle` | PASS |
 | D-042 | boucle de deal | A : S1→S2, B : S2→S1, 6 ticks de 5 min | 2 déplacements puis arrêt, deal en S1 | PASS après correctif `e163a414` (avant : 6 déplacements en 6 ticks, sans fin) |
 | D-043 | `pipeline_events` sans réclamation atomique | 2 instances hors verrou | — | NON COUVERT : le tick est sous `withAdvisoryLock` ; deux consommateurs concurrents exigeraient d'appeler la file hors verrou (inv-1 §9.4), non reproduit |
-| D-044 | `rappels-dates` rejoué le même jour | — | — | NON COUVERT : relève des déclencheurs temporels (plage B/K), route cron sans verrou (inv-1 §9.6) |
+| D-044 | `rappels-dates` rejoué le même jour | champ date = aujourd'hui, balayage passé 3 fois | une seule tâche créée, une seule ligne d'action au journal | l'anti-doublon est la clé d'exécution du moteur (règle + fiche + jour) ; `10-b-declencheurs.test.ts` |

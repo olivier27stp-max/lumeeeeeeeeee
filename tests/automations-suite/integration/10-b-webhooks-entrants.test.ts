@@ -246,10 +246,13 @@ describe('[B] webhooks Stripe signés', () => {
 
   it('[B-409] payment_intent.payment_failed drapeau COUPÉ : aucun déclenchement', async () => {
     const m = marque('B-409');
+    // La règle existe (créée quand la capacité était offerte — l'API refuse d'en
+    // créer une sans, I-036), PUIS la capacité est coupée : c'est le retour arrière.
+    await drapeau(b, 'auto_paiement_echoue', true);
+    const id = await regle(m, 'payment.failed');
     await drapeau(b, 'auto_paiement_echoue', false);
     const client = await creerClient(b, m);
     const f = await creerFacture(b, m, client.id, 4_400);
-    const id = await regle(m, 'payment.failed');
     const r = await envoyerStripe(intention('payment_intent.payment_failed', `pi_qa_${randomBytes(8).toString('hex')}`, {
       amount: 4_400, last_payment_error: { code: 'card_declined' }, metadata: { org_id: b.orgA, invoice_id: f.id },
     }));
