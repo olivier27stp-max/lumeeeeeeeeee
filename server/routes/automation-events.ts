@@ -202,6 +202,26 @@ router.post('/automations/events/appointment-rescheduled', validate(automationEv
   }
 });
 
+/**
+ * La notification « job prêt à facturer », dans la langue de qui la reçoit.
+ * Elle n'existait qu'en anglais : dans un bureau francophone, le centre
+ * d'activités affichait « Job ready for invoicing: … » (audit du 2026-10-01).
+ */
+function textePretAFacturer(langue: 'fr' | 'en', titreJob: string | null, nomClient: string): { title: string; body: string } {
+  if (langue === 'en') {
+    return {
+      title: `Job ready for invoicing: ${titreJob || 'Untitled'}`,
+      body: `${nomClient || 'A job'} has been completed by a technician and is ready for invoicing.`,
+    };
+  }
+  return {
+    title: `Job prêt à facturer : ${titreJob || 'Sans titre'}`,
+    body: nomClient
+      ? `Le job de ${nomClient} a été terminé par un technicien et est prêt à être facturé.`
+      : 'Un job a été terminé par un technicien et est prêt à être facturé.',
+  };
+}
+
 // ── POST /automations/events/job-completed ──
 // Called when a job status is changed to "completed"
 router.post('/automations/events/job-completed', validate(automationEventSchema), async (req, res) => {
@@ -273,7 +293,10 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
       try {
         const { data: admins, error: adminsError } = await admin
           .from('memberships')
-          .select('user_id')
+          // `language` : chaque destinataire lit la notification dans SA
+          // langue (memberships.language, français par défaut), comme les
+          // autres notifications ciblées (server/lib/notificationHelpers.ts).
+          .select('user_id, language')
           .eq('org_id', auth.orgId)
           .eq('status', 'active')
           .in('role', ['owner', 'admin']);
@@ -283,12 +306,11 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
         }
 
         if (admins && admins.length > 0) {
-          const notifications = admins.map((m: { user_id: string }) => ({
+          const notifications = admins.map((m: { user_id: string; language?: string | null }) => ({
             org_id: auth.orgId,
             user_id: m.user_id,
             type: 'job_ready_for_invoicing',
-            title: `Job ready for invoicing: ${job.title || 'Untitled'}`,
-            body: `${clientName || 'A job'} has been completed by a technician and is ready for invoicing.`,
+            ...textePretAFacturer(m.language === 'en' ? 'en' : 'fr', job.title, clientName),
             entity_type: 'job',
             entity_id: jobId,
             is_read: false,

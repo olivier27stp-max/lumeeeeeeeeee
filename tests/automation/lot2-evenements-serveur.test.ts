@@ -6,6 +6,10 @@
  * CHAQUE appel, même quand la visite n'avait pas bougé — le client recevait
  * une deuxième confirmation « Votre rendez-vous est confirmé » pour rien.
  *
+ * roles-13 : quand un technicien termine un job, les propriétaires et les
+ * administrateurs recevaient « Job ready for invoicing: … » en anglais, dans
+ * un bureau où tout le monde travaille en français.
+ *
  * La VRAIE route est montée. Supabase et l'authentification sont simulés
  * (lot2-faux-supabase.ts) ; le bus d'événements est remplacé par un témoin
  * qui fait ce que le moteur ferait d'une ré-émission : planifier un rappel
@@ -239,5 +243,80 @@ describe('roles-14 — une visite VRAIMENT déplacée est replanifiée, comme av
     expect(r.status).toBe(404);
     expect(reemissions()).toHaveLength(0);
     expect(etat.ecritures).toEqual([]);
+  });
+});
+
+// ─── roles-13 ───────────────────────────────────────────────────
+
+describe('roles-13 — « job prêt à facturer » : la notification est écrite dans la langue de qui la reçoit', () => {
+  const notifications = () => (etat.tables.notifications ?? []) as Array<{ user_id: string; type: string; title: string; body: string; entity_id: string }>;
+  const pour = (userId: string) => notifications().find((n) => n.user_id === userId);
+
+  beforeEach(() => {
+    session.role = 'technician';
+    etat.tables.jobs = [{ id: JOB, org_id: ORG, title: 'Job Décor-Rôles', client_id: CLIENTE, status: 'completed' }];
+    etat.tables.clients = [{ id: CLIENTE, org_id: ORG, first_name: 'Cliente', last_name: 'Décor-Rôles', email: 'decor-roles@lume-qa.test', phone: '+15555550177' }];
+    etat.tables.notifications = [];
+    etat.tables.memberships = [
+      { user_id: 'u-proprio-fr', org_id: ORG, role: 'owner', status: 'active', language: 'fr' },
+      { user_id: 'u-admin-en', org_id: ORG, role: 'admin', status: 'active', language: 'en' },
+      // Langue jamais choisie : le français, langue par défaut de Lume.
+      { user_id: 'u-admin-sans-langue', org_id: ORG, role: 'admin', status: 'active', language: null },
+      { user_id: 'u-vendeur', org_id: ORG, role: 'sales_rep', status: 'active', language: 'fr' },
+      { user_id: 'u-proprio-suspendu', org_id: ORG, role: 'owner', status: 'suspended', language: 'fr' },
+      { user_id: 'u-proprio-autre-bureau', org_id: AUTRE_ORG, role: 'owner', status: 'active', language: 'fr' },
+    ];
+  });
+
+  it('un propriétaire en français la reçoit en français', async () => {
+    const r = await appeler('/automations/events/job-completed', { jobId: JOB });
+    expect(r.status).toBe(200);
+    expect(pour('u-proprio-fr')).toMatchObject({
+      type: 'job_ready_for_invoicing',
+      title: 'Job prêt à facturer : Job Décor-Rôles',
+      body: 'Le job de Cliente Décor-Rôles a été terminé par un technicien et est prêt à être facturé.',
+      entity_id: JOB,
+    });
+  });
+
+  it('sans langue choisie : le français', async () => {
+    await appeler('/automations/events/job-completed', { jobId: JOB });
+    expect(pour('u-admin-sans-langue')?.title).toBe('Job prêt à facturer : Job Décor-Rôles');
+  });
+
+  it('un administrateur en anglais garde le texte anglais', async () => {
+    await appeler('/automations/events/job-completed', { jobId: JOB });
+    expect(pour('u-admin-en')).toMatchObject({
+      title: 'Job ready for invoicing: Job Décor-Rôles',
+      body: 'Cliente Décor-Rôles has been completed by a technician and is ready for invoicing.',
+    });
+  });
+
+  it('aucun texte anglais ne part à un destinataire en français', async () => {
+    await appeler('/automations/events/job-completed', { jobId: JOB });
+    for (const id of ['u-proprio-fr', 'u-admin-sans-langue']) {
+      expect(`${pour(id)?.title} ${pour(id)?.body}`).not.toMatch(/ready for invoicing|has been completed|Untitled|A job/);
+    }
+  });
+
+  it('job sans titre et sans client : « Sans titre », « Un job a été terminé… »', async () => {
+    etat.tables.jobs = [{ id: JOB, org_id: ORG, title: '', client_id: null, status: 'completed' }];
+    await appeler('/automations/events/job-completed', { jobId: JOB });
+    expect(pour('u-proprio-fr')).toMatchObject({
+      title: 'Job prêt à facturer : Sans titre',
+      body: 'Un job a été terminé par un technicien et est prêt à être facturé.',
+    });
+  });
+
+  it('les destinataires ne changent pas : propriétaires et administrateurs ACTIFS de ce bureau, une ligne chacun', async () => {
+    await appeler('/automations/events/job-completed', { jobId: JOB });
+    expect(notifications().map((n) => n.user_id).sort()).toEqual(['u-admin-en', 'u-admin-sans-langue', 'u-proprio-fr']);
+  });
+
+  it('terminé par quelqu’un d’autre qu’un technicien : aucune notification (inchangé)', async () => {
+    session.role = 'admin';
+    const r = await appeler('/automations/events/job-completed', { jobId: JOB });
+    expect(r.status).toBe(200);
+    expect(notifications()).toEqual([]);
   });
 });
