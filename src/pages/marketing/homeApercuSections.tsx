@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useRegion } from '../../hooks/useRegion';
 import { creditsParMois } from '../../lib/lumiCreditsFormat';
+import { INTEGRATION_LOGOS } from './integrationLogos';
 
 type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
 type Bi = { fr: string; en: string };
@@ -31,7 +32,29 @@ export function StopList({ fr }: { fr: boolean }) {
         ))}
       </ul>
       <p className="hs-stopnote">{fr ? "Tout ça, c'est Lume qui le fait maintenant. Le reste de la page montre comment." : 'Lume does all of that now. The rest of the page shows how.'}</p>
+      <LogoMarquee fr={fr} />
     </section>
+  );
+}
+
+/* ── Outils connectés : bande défilante. La liste est rendue deux fois pour
+   boucler sans saut (translateX -50 %) ; la copie est cachée aux lecteurs d'écran. ── */
+function LogoMarquee({ fr }: { fr: boolean }) {
+  const row = (hidden: boolean) => (
+    <ul className="hs-logos" aria-hidden={hidden || undefined}>
+      {INTEGRATION_LOGOS.map((l) => (
+        <li key={l.name}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill={l.color} d={l.path} /></svg>
+          <span>{l.name}</span>
+        </li>
+      ))}
+    </ul>
+  );
+  return (
+    <div className="hs-marquee">
+      <p className="hs-mlabel">{fr ? 'Se connecte à vos outils' : 'Connects to your tools'}</p>
+      <div className="hs-mtrack">{row(false)}{row(true)}</div>
+    </div>
   );
 }
 
@@ -263,6 +286,14 @@ export const SECTIONS_CSS = `
 .hs-stoplist li span { display:inline; background-image:linear-gradient(#ef4444,#ef4444); background-repeat:no-repeat; background-position:0 58%; background-size:0% 3px; -webkit-box-decoration-break:clone; box-decoration-break:clone; animation:hs-strike .6s cubic-bezier(.2,.8,.2,1) forwards; animation-delay:calc(.35s + var(--i) * .28s); }
 @keyframes hs-strike { to { background-size:100% 3px; } }
 .hs-stopnote { margin:22px 0 0; font-size:14.5px; color:#171717; }
+.hs-marquee { margin:34px 0 0; overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent); mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent); }
+.hs-mlabel { margin:0 0 14px; text-align:center; font-size:11px; letter-spacing:.14em; text-transform:uppercase; font-weight:700; color:#8a8a84; }
+.hs-mtrack { display:flex; width:max-content; animation:hs-marquee 32s linear infinite; }
+.hs-marquee:hover .hs-mtrack { animation-play-state:paused; }
+.hs-logos { list-style:none; margin:0; padding:0 12px 0 0; display:flex; gap:12px; }
+.hs-logos li { display:flex; align-items:center; gap:10px; padding:12px 20px; background:#fff; border:1px solid #e4e4df; border-radius:999px; font-size:15px; font-weight:700; letter-spacing:-.01em; color:#111; white-space:nowrap; }
+.hs-logos svg { width:22px; height:22px; flex:none; }
+@keyframes hs-marquee { to { transform:translateX(-50%); } }
 .hs-pgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:20px; }
 .hs-pc { display:flex; flex-direction:column; background:#fff; border:1px solid rgba(11,92,173,.12); border-radius:18px; padding:22px; text-decoration:none; color:inherit; transition:transform .2s, box-shadow .2s; }
 .hs-pc:hover { transform:translateY(-3px); box-shadow:0 24px 40px -24px rgba(0,0,0,.3); }
@@ -311,5 +342,8 @@ export const SECTIONS_CSS = `
   .hs-stoplist, .hs-pgrid, .hs-rp, .hs-lgrid, .hs-band, .hs-steps, .hs-plgrid, .hs-sgrid { grid-template-columns:1fr; }
   .hs-steps::before { display:none; }
 }
-@media (prefers-reduced-motion: reduce) { .hs-stoplist li span { animation:none; background-size:100% 3px; } }
+@media (prefers-reduced-motion: reduce) {
+  .hs-stoplist li span { animation:none; background-size:100% 3px; }
+  .hs-mtrack { animation:none; width:auto; justify-content:center; } .hs-logos { flex-wrap:wrap; justify-content:center; } .hs-logos[aria-hidden] { display:none; }
+}
 `;
