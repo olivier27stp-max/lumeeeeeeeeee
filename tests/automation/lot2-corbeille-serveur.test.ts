@@ -7,14 +7,16 @@
  * à la corbeille ou supprimée définitivement, ce que l'écran n'offre pas.
  *
  * Les VRAIES routes sont montées (règles + publication). Seuls Supabase et
- * l'authentification sont simulés : le faux client applique POUR VRAI les
- * filtres `eq`, `is null` et `not is null`, et répond comme PostgREST quand
- * `.single()` ne trouve pas exactement une ligne (PGRST116).
+ * l'authentification sont simulés : le faux client (lot2-faux-supabase.ts)
+ * applique POUR VRAI les filtres `eq`, `is null` et `not is null`, et répond
+ * comme PostgREST quand `.single()` ne trouve pas exactement une ligne
+ * (PGRST116).
  */
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import type { Ligne } from './lot2-faux-supabase';
 
 const ORG = '11111111-2222-4333-8444-555555555555';
 const VIVANTE = 'aaaaaaaa-0000-4000-8000-0000000000a1';
@@ -22,86 +24,7 @@ const CORBEILLE = 'aaaaaaaa-0000-4000-8000-0000000000a2';
 const PURGEE = 'aaaaaaaa-0000-4000-8000-0000000000a3';
 const ABSENTE = 'aaaaaaaa-0000-4000-8000-0000000000a4';
 
-type Ligne = Record<string, unknown>;
-const etat = vi.hoisted(() => ({
-  tables: {} as Record<string, Array<Record<string, unknown>>>,
-  /** Chaque écriture réellement appliquée : table, opération, lignes touchées. */
-  ecritures: [] as Array<{ table: string; op: 'update' | 'insert' | 'delete'; ids: unknown[]; valeurs: Record<string, unknown> }>,
-  /** Identifiant d'une règle qui DISPARAÎT de la base juste après avoir été lue. */
-  disparaitApresLecture: null as string | null,
-}));
-
-/** Un faux client Supabase qui filtre pour vrai et parle comme PostgREST. */
-function fauxClient() {
-  return {
-    from: (table: string) => {
-      const filtres: Array<(l: Ligne) => boolean> = [];
-      let op: 'select' | 'update' | 'insert' | 'delete' = 'select';
-      let valeurs: Ligne = {};
-      const lignes = () => (etat.tables[table] ??= []);
-
-      const executer = (): Ligne[] => {
-        if (op === 'insert') {
-          const nouvelle = { id: `nouvelle-${lignes().length + 1}`, deleted_at: null, purged_at: null, ...valeurs };
-          lignes().push(nouvelle);
-          etat.ecritures.push({ table, op, ids: [nouvelle.id], valeurs });
-          return [nouvelle];
-        }
-        const visees = lignes().filter((l) => filtres.every((f) => f(l)));
-        if (op === 'update' && visees.length) {
-          for (const l of visees) Object.assign(l, valeurs);
-          etat.ecritures.push({ table, op, ids: visees.map((l) => l.id), valeurs });
-        }
-        if (op === 'delete' && visees.length) {
-          etat.tables[table] = lignes().filter((l) => !visees.includes(l));
-          etat.ecritures.push({ table, op, ids: visees.map((l) => l.id), valeurs: {} });
-        }
-        if (op === 'select' && etat.disparaitApresLecture) {
-          const id = etat.disparaitApresLecture;
-          if (visees.some((l) => l.id === id)) {
-            // Copie rendue à l'appelant ; la ligne, elle, n'existe plus.
-            const copies = visees.map((l) => ({ ...l }));
-            etat.tables[table] = lignes().filter((l) => l.id !== id);
-            etat.disparaitApresLecture = null;
-            return copies;
-          }
-        }
-        return visees;
-      };
-
-      const PGRST116 = { code: 'PGRST116', message: 'Cannot coerce the result to a single JSON object' };
-      const q: Record<string, unknown> = {
-        select: () => q,
-        order: () => q,
-        limit: () => q,
-        insert: (v: Ligne) => { op = 'insert'; valeurs = v; return q; },
-        update: (v: Ligne) => { op = 'update'; valeurs = v; return q; },
-        delete: () => { op = 'delete'; return q; },
-        eq: (col: string, v: unknown) => { filtres.push((l) => l[col] === v); return q; },
-        in: (col: string, vs: unknown[]) => { filtres.push((l) => vs.includes(l[col])); return q; },
-        is: (col: string, v: unknown) => { filtres.push((l) => (l[col] ?? null) === v); return q; },
-        not: (col: string, operateur: string, v: unknown) => {
-          if (operateur !== 'is' || v !== null) throw new Error(`faux client : not(${col}, ${operateur}) non simulé`);
-          filtres.push((l) => (l[col] ?? null) !== null);
-          return q;
-        },
-        maybeSingle: async () => {
-          const r = executer();
-          if (r.length > 1) return { data: null, error: PGRST116 };
-          return { data: r[0] ?? null, error: null };
-        },
-        single: async () => {
-          const r = executer();
-          if (r.length !== 1) return { data: null, error: PGRST116 };
-          return { data: r[0], error: null };
-        },
-        then: (ok: (r: unknown) => unknown, ko?: (e: unknown) => unknown) =>
-          Promise.resolve({ data: executer(), error: null }).then(ok, ko),
-      };
-      return q;
-    },
-  };
-}
+const { etat, client: fauxClient } = await vi.hoisted(async () => (await import('./lot2-faux-supabase')).creerFausseBase());
 
 vi.mock('../../server/lib/supabase', () => ({
   requireAuthedClient: async () => ({ client: fauxClient(), orgId: ORG, user: { id: 'u1' } }),
@@ -251,5 +174,38 @@ describe('roles-09 — on ne duplique ni une règle supprimée définitivement, 
     expect(r.json.name).toBe('Règle a1 (copie)');
     expect(r.json.is_active).toBe(false);
     expect(copies()).toHaveLength(1);
+  });
+});
+
+// ─── roles-10 (lecture de l'éditeur) ────────────────────────────
+
+describe('roles-10 — ce que l’éditeur lit d’une règle supprimée', () => {
+  it('à la CORBEILLE : la règle reste lisible, avec `deleted_at` — l’écran en a besoin pour dire « à la corbeille » et offrir « Restaurer »', async () => {
+    const r = await appeler('GET', `/automations/editeur?rule_id=${CORBEILLE}`);
+    expect(r.status).toBe(200);
+    expect(r.json.rule?.id).toBe(CORBEILLE);
+    expect(r.json.rule?.deleted_at).toBe('2026-10-01T15:20:46.872+00:00');
+  });
+
+  it('supprimée DÉFINITIVEMENT : jamais rendue (`rule: null`), l’écran dit « introuvable »', async () => {
+    const r = await appeler('GET', `/automations/editeur?rule_id=${PURGEE}`);
+    expect(r.status).toBe(200);
+    expect(r.json.rule).toBeNull();
+    expect(JSON.stringify(r.json)).not.toContain(PURGEE);
+  });
+
+  it('la liste des automatisations ne rend jamais une règle supprimée définitivement', async () => {
+    const r = await appeler('GET', '/automations/rules');
+    expect(r.status).toBe(200);
+    const ids = (r.json.rules as Array<{ id: string }>).map((x) => x.id);
+    expect(ids).toContain(CORBEILLE);
+    expect(ids).not.toContain(PURGEE);
+  });
+
+  it('les « autres automatisations » offertes à l’éditeur ne citent ni corbeille ni purgée', async () => {
+    etat.tables.automation_rules.forEach((l) => { l.is_active = true; });
+    const r = await appeler('GET', `/automations/editeur?rule_id=${VIVANTE}`);
+    expect(r.status).toBe(200);
+    expect(r.json.autres).toEqual([]);
   });
 });
