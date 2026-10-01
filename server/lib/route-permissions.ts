@@ -87,6 +87,17 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/lumi/conversations/:id': 'external_agent.use',
   'DELETE /api/lumi/conversations/:id': 'external_agent.use',
 
+  // ── Mémoire de Lumi (org_knowledge) ──
+  // Ces notes entrent dans le prompt de Lumi et portent ce qu'un propriétaire lui
+  // a dit de retenir (marges, taux horaires). La route lit et écrit avec la clé
+  // de service : sans entrée ici, tout membre — technicien compris — pouvait les
+  // lire, en écrire et en retirer (prouvé en prod le 2026-10-01, bureau de test).
+  // Même clé que remember_this / recall_notes / forget_note et que la policy.
+  'GET /api/org-knowledge': 'settings.update',
+  'POST /api/org-knowledge': 'settings.update',
+  'POST /api/org-knowledge/bulk': 'settings.update',
+  'DELETE /api/org-knowledge/:id': 'settings.update',
+
   // ── Messages ──
   'POST /api/messages/send': 'messages.send',
   'GET /api/messages/inbox': 'messages.read',
