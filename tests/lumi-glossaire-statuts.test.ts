@@ -61,7 +61,7 @@ const ENTITES: Array<{ nom: string; bruts: string[]; lumi: Record<string, string
 ];
 
 /** Minuscules, sans accent, sans marque de genre ni de nombre : « Planifiée » et « planifié » sont le même mot. */
-const racineMot = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+const racineMot = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
   .split(/[^a-z]+/).filter(Boolean).map((m) => m.replace(/(es|e|s)$/, '')).join(' ');
 /** Même terme : l'un contient l'autre (« converti en job » ⊇ « Converti », « client actif » ⊇ « Actif »). */
 const memeTerme = (a: string, b: string) => { const x = racineMot(a), y = racineMot(b); return x.includes(y) || y.includes(x); };
@@ -176,9 +176,9 @@ describe('statuts — Lumi dit le mot de l’écran', () => {
 describe('statuts — l’écran ne se contredit pas (relevé)', () => {
   /**
    * ÉCART (UI) — huit libellés de src/i18n/fr.ts (:2718, :2721, :2722, :2726,
-   * :2727, :2731, :2732, :2733) contiennent la SUITE DE CARACTÈRES « é »
-   * au lieu de « é ». L'un d'eux est affiché : supprimer un devis montre
-   * « Devis supprimé » (src/pages/Quotes.tsx:246).
+   * :2727, :2731, :2732, :2733) contiennent la SUITE DE CARACTÈRES « \u00e9 »
+   * au lieu de l'accent. L'un d'eux est affiché : supprimer un devis montre
+   * « Devis supprim\u00e9 », lettre pour lettre (src/pages/Quotes.tsx:246).
    */
   it.fails('ÉCART : aucun libellé français n’affiche un code « \\u00e9 » à la place d’un accent (src/i18n/fr.ts:2731)', () => {
     const aplatir = (o: unknown, sortie: string[] = []): string[] => {
