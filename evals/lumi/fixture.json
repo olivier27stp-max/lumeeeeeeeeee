@@ -1,11 +1,11 @@
 {
- "etat": "previsionnel",
- "genere_le": "2026-10-01T15:26:13.017Z",
+ "etat": "reel",
+ "genere_le": "2026-10-01T15:59:39.947Z",
  "ancre": "2026-10-01",
  "valable_jusqu_au": "2026-12-31",
  "org": {
   "id": "93daa0c7-b749-4200-9755-dbeee62ce32d",
-  "nom": null
+  "nom": "ZZ QA Champs (banc de test)"
  },
  "comptes": {
   "proprietaire": "qa.map.owner@lume.test",
@@ -206,7 +206,7 @@
  },
  "jobs": {
   "roy_vitres": {
-   "numero": null,
+   "numero": "18",
    "titre": "Lavage de vitres intérieur et extérieur",
    "client": "Marie Roy",
    "ville": "Longueuil",
@@ -217,7 +217,7 @@
    "total_cents": 45990
   },
   "pelletier_pression": {
-   "numero": null,
+   "numero": "19",
    "titre": "Lavage à pression — entrée et patio",
    "client": "Jean-François Pelletier",
    "ville": "Saint-Lambert",
@@ -228,7 +228,7 @@
    "total_cents": 68985
   },
   "bergeron_vitrine": {
-   "numero": null,
+   "numero": "20",
    "titre": "Lavage de vitrine commerciale",
    "client": "Luc Bergeron",
    "ville": "Longueuil",
@@ -239,7 +239,7 @@
    "total_cents": 22995
   },
   "fournier_gouttieres": {
-   "numero": null,
+   "numero": "21",
    "titre": "Nettoyage de gouttières",
    "client": "Isabelle Fournier",
    "ville": "Montréal",
@@ -250,7 +250,7 @@
    "total_cents": 36792
   },
   "leblanc_clinique": {
-   "numero": null,
+   "numero": "22",
    "titre": "Lavage de vitres — clinique",
    "client": "Sylvie Leblanc",
    "ville": "Brossard",
@@ -261,7 +261,7 @@
    "total_cents": 41391
   },
   "ouellet_retard": {
-   "numero": null,
+   "numero": "23",
    "titre": "Lavage de vitres extérieur",
    "client": "André Ouellet",
    "ville": "Saint-Bruno-de-Montarville",
@@ -272,7 +272,7 @@
    "total_cents": 22995
   },
   "poirier_encours": {
-   "numero": null,
+   "numero": "24",
    "titre": "Entretien des vitres — restaurant",
    "client": "Guillaume Poirier",
    "ville": "Montréal",
@@ -283,7 +283,7 @@
    "total_cents": 18396
   },
   "cote_aujourdhui": {
-   "numero": null,
+   "numero": "25",
    "titre": "Nettoyage de gouttières",
    "client": "Nathalie Côté",
    "ville": "Boucherville",
@@ -294,7 +294,7 @@
    "total_cents": 27594
   },
   "girard_demain": {
-   "numero": null,
+   "numero": "26",
    "titre": "Lavage de vitres extérieur",
    "client": "Patrick Girard",
    "ville": "Laval",
@@ -305,7 +305,7 @@
    "total_cents": 22995
   },
   "bergeron_demain": {
-   "numero": null,
+   "numero": "27",
    "titre": "Lavage de vitrine commerciale",
    "client": "Luc Bergeron",
    "ville": "Longueuil",
@@ -316,7 +316,7 @@
    "total_cents": 22995
   },
   "roy_brossard_semaine": {
-   "numero": null,
+   "numero": "28",
    "titre": "Lavage de vitres extérieur",
    "client": "Marie Roy",
    "ville": "Brossard",
@@ -327,7 +327,7 @@
    "total_cents": 22995
   },
   "fournier_semaine": {
-   "numero": null,
+   "numero": "29",
    "titre": "Lavage à pression — entrée",
    "client": "Isabelle Fournier",
    "ville": "Montréal",
@@ -338,7 +338,7 @@
    "total_cents": 27594
   },
   "pelletier_brouillon": {
-   "numero": null,
+   "numero": "30",
    "titre": "Lavage de vitres — automne",
    "client": "Jean-François Pelletier",
    "ville": "Saint-Lambert",
@@ -351,7 +351,7 @@
  },
  "devis": {
   "brouillon": {
-   "numero": null,
+   "numero": "4",
    "titre": "Lavage de vitres et gouttières",
    "client": "Mélanie Simard",
    "statut": "draft",
@@ -360,7 +360,7 @@
    "total_cents": 51739
   },
   "envoye": {
-   "numero": null,
+   "numero": "5",
    "titre": "Lavage de vitres — deux étages",
    "client": "Patrick Girard",
    "statut": "awaiting_response",
@@ -369,7 +369,7 @@
    "total_cents": 59787
   },
   "accepte": {
-   "numero": null,
+   "numero": "6",
    "titre": "Lavage à pression — terrasse",
    "client": "Chantal Lévesque",
    "statut": "approved",
@@ -378,7 +378,7 @@
    "total_cents": 32193
   },
   "refuse": {
-   "numero": null,
+   "numero": "7",
    "titre": "Lavage à pression — maison complète",
    "client": "Nathalie Côté",
    "statut": "declined",
@@ -389,7 +389,7 @@
  },
  "factures": {
   "payee": {
-   "numero": null,
+   "numero": "2",
    "client": "Marie Roy",
    "sujet": "Lavage de vitres intérieur et extérieur",
    "statut": "paid",
@@ -401,7 +401,7 @@
    "solde_cents": 0
   },
   "partielle": {
-   "numero": null,
+   "numero": "3",
    "client": "Jean-François Pelletier",
    "sujet": "Lavage à pression — entrée et patio",
    "statut": "partial",
@@ -413,7 +413,7 @@
    "solde_cents": 38985
   },
   "en_retard": {
-   "numero": null,
+   "numero": "4",
    "client": "Luc Bergeron",
    "sujet": "Lavage de vitrine commerciale",
    "statut": "sent",
@@ -425,7 +425,7 @@
    "solde_cents": 22995
   },
   "envoyee": {
-   "numero": null,
+   "numero": "5",
    "client": "Isabelle Fournier",
    "sujet": "Nettoyage de gouttières",
    "statut": "sent",
@@ -437,7 +437,7 @@
    "solde_cents": 36792
   },
   "en_retard_ancienne": {
-   "numero": null,
+   "numero": "6",
    "client": "Patrick Girard",
    "sujet": "Lavage à pression — stationnement",
    "statut": "sent",
@@ -449,7 +449,7 @@
    "solde_cents": 91980
   },
   "payee_cheque": {
-   "numero": null,
+   "numero": "7",
    "client": "Chantal Lévesque",
    "sujet": "Lavage de vitres extérieur",
    "statut": "paid",
@@ -461,7 +461,7 @@
    "solde_cents": 0
   },
   "brouillon": {
-   "numero": null,
+   "numero": "8",
    "client": "André Ouellet",
    "sujet": "Lavage de vitres extérieur",
    "statut": "draft",
@@ -583,7 +583,7 @@
   }
  },
  "mesures": {
-  "portee": "jeu_seul",
+  "portee": "bureau_entier",
   "factures_en_retard": {
    "nombre": 2,
    "solde_cents": 114975
@@ -593,7 +593,7 @@
    "solde_cents": 190752
   },
   "factures_brouillon": {
-   "nombre": 1
+   "nombre": 2
   },
   "encaisse_septembre_2026": {
    "nombre": 3,
@@ -601,8 +601,8 @@
   },
   "heures_septembre_2026": {
    "total_heures": 17,
-   "lavoie_heures": 5,
    "gauthier_heures": 7.5,
+   "lavoie_heures": 5,
    "belanger_heures": 4.5
   },
   "visites": {
@@ -623,26 +623,26 @@
    "sept_jours": {
     "nombre": 6,
     "clients": [
-     "Guillaume Poirier",
-     "Nathalie Côté",
      "Patrick Girard",
-     "Luc Bergeron",
+     "Guillaume Poirier",
      "Marie Roy",
-     "Isabelle Fournier"
+     "Isabelle Fournier",
+     "Nathalie Côté",
+     "Luc Bergeron"
     ]
    }
   },
   "devis": {
-   "brouillon_nombre": 1,
+   "brouillon_nombre": 4,
    "en_attente_nombre": 1,
    "acceptes_nombre": 1,
    "refuses_nombre": 1
   },
   "clients": {
-   "nombre": 11
+   "nombre": 12
   },
   "prospects": {
-   "nombre": 1
+   "nombre": 14
   }
  },
  "ecarts": []
