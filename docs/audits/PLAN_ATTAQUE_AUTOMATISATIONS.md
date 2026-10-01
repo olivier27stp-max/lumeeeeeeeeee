@@ -121,7 +121,7 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 
 ## Phase 5 — rapport de prod (2026-10-01) — ✅ fait
 
-`docs/audits/RAPPORT_PROD_AUTOMATISATIONS_2026-10-01.md`, lecture seule, 24 h après les dernières mises en ligne : **0 exécution en échec en 48 h** (14 sur les 5 jours d'avant), 0 tâche en retard, 0 événement bloqué, crons de la vague 2 tous passés, 0 lettre morte. Limite dite dans le rapport : 43 exécutions en 8 jours, surtout des bureaux de test — la prod ne prouve pas le moteur, staging l'a fait (24/24 déclencheurs).
+`docs/audits/RAPPORT_PROD_AUTOMATISATIONS_2026-10-01.md`, lecture seule, 24 h après les dernières mises en ligne : **0 exécution en échec en 48 h** (14 sur les 5 jours d'avant), 0 tâche en retard, 0 événement bloqué, crons de la vague 2 tous passés, 0 lettre morte. Limite dite dans le rapport : 43 exécutions en 8 jours, surtout des bureaux de test — la prod ne prouve pas le moteur, staging l'a fait (24/24 déclencheurs). Le correctif D1/D2 (#840) est vérifié sur le vrai écran en prod, bureau de test, sans rien enregistrer : avant, « Bonjour [prenom] » ne montrait rien et 200 caractères affichaient « 200 / 1600 » ; après, « Variable inconnue : [prenom] — sera vide dans le message envoyé. » et « 200 / 1600 · 2 SMS ».
 
 ## Constats hors backlog (notés, **pas** corrigés ici)
 
