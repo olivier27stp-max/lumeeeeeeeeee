@@ -478,7 +478,9 @@ describe('hypothèses sur le serveur, vérifiées sur son code (sans réseau)', 
     expect(route).toContain('reply, escalated: transferer || chezHumain,');
     expect(route).toContain("canal: 'support'");
     expect(route).toContain("action: 'plafond-jour'");
-    expect(route).toContain('const fixe = humain');
+    // Depuis le 2026-10-01, une demande d'humain ÉCRITE vaut le bouton : la même garde, sur les deux.
+    expect(route).toContain('const veutHumain = !!humain || demandeUnHumain(message);');
+    expect(route).toContain('const fixe = veutHumain');
     expect(route).toContain("router.post('/support/:id/close'");
     expect(route).toContain("motif = 'Assistant indisponible'");
   });
