@@ -20,6 +20,15 @@ interface Releve { base: EtatBase; quota: EtatQuota; brut: unknown }
 /** Le tour de modèle de la famille, gardé pour le test « aucun montant ». */
 let tour: Echange | null = null;
 
+/** Des lectures que ni les raccourcis ni les actions directes ne servent : elles vont au modèle. */
+export const QUESTIONS_DE_CONTROLE = [
+  'Lequel de mes clients a le plus de jobs planifiées dans les sept prochains jours ?',
+  'Dans quelle ville j’ai le plus de clients actifs ?',
+  'Quel jour de la semaine prochaine est le plus chargé en visites ?',
+  'Quel est le titre de ma job créée le plus récemment, et pour quel client ?',
+  'Parmi mes devis refusés, lequel avait le plus gros total ?',
+];
+
 const quotaDe = (json: unknown): EtatQuota | null => {
   const c = json && typeof json === 'object' ? (json as { credits?: Record<string, unknown> }).credits : undefined;
   return c && typeof c.total === 'number' && typeof c.utilises === 'number' && typeof c.restants === 'number' ? { total: c.total, utilises: c.utilises, restants: c.restants } : null;
@@ -56,7 +65,8 @@ async function coherence(ctx: Contexte): Promise<Issue> {
   const preuves: Preuve[] = [{ libelle: 'définition des crédits du bureau (SELECT)', contenu: extrait(sqlCreditsDuBureau(ctx.orgA, await periodeDebut(ctx)), 900) }];
   const avant = await releve(ctx);
   if (!avant) return { verdict: 'NON COUVERT', constats: ['relevé de départ impossible : la consommation du bureau bouge pendant la lecture (autre session ?) ou /api/lumi/quota ne répond pas'], preuves };
-  const question = `Lequel de mes clients a le plus de jobs planifiées dans les sept prochains jours ? Réponds en une phrase. (question de contrôle ${ctx.nonce})`;
+  // Une question différente d'un lancement à l'autre : la même, rejouée dans les dix minutes, sort du cache sémantique (étage 4) sans appeler le modèle.
+  const question = `${QUESTIONS_DE_CONTROLE[[...ctx.nonce].reduce((n, c) => n + c.charCodeAt(0), 0) % QUESTIONS_DE_CONTROLE.length]} Réponds en une phrase. (question de contrôle ${ctx.nonce})`;
   const e = await ctx.lumi.demander(ctx.session('proprietaire'), question);
   tour = e;
   preuves.push({ libelle: 'demande', contenu: question }, { libelle: `réponse (statut ${e.statut}, étage ${e.etage ?? '—'})`, contenu: extrait(e.statut === 200 ? e.texte : e.corps, 300) });
@@ -70,16 +80,16 @@ async function coherence(ctx: Contexte): Promise<Issue> {
   if (!apres) return { verdict: 'NON COUVERT', constats: ['relevé de fin impossible : la consommation du bureau bouge pendant la lecture'], preuves };
   const trace = traces.find((t) => Number(t.etage) === 6);
   const routeur = trace && typeof trace.params === 'object' && trace.params ? (trace.params as { routeur?: { usage?: { input_tokens?: number; output_tokens?: number } | null } }).routeur?.usage : null;
-  const lignes: LigneUsage[] = usage.map((u) => ({
-    cost_cents: Number(u.cost_cents), credits_micro: u.credits_micro == null ? null : Number(u.credits_micro),
-    routeur: Boolean(routeur) && Number(u.input_tokens) === Number(routeur?.input_tokens) && Number(u.output_tokens) === Number(routeur?.output_tokens) && String(u.model) !== String(trace?.model),
-  }));
+  // La ligne du routeur se reconnaît à ses tokens (ceux que la trace rapporte pour lui), pas à son modèle :
+  // en palier économe ou restreint, l'agent tourne lui aussi sur Haiku. Une seule ligne, la première qui correspond.
+  const iRouteur = routeur ? usage.findIndex((u) => Number(u.input_tokens) === Number(routeur.input_tokens) && Number(u.output_tokens) === Number(routeur.output_tokens)) : -1;
+  const lignes: LigneUsage[] = usage.map((u, i) => ({ cost_cents: Number(u.cost_cents), credits_micro: u.credits_micro == null ? null : Number(u.credits_micro), routeur: i === iRouteur }));
   const [fenetre] = avant.base.derniere_ligne && apres.base.derniere_ligne
     ? await ctx.sql<{ micro: number; lignes: number }>(sqlUsageFenetre(ctx.orgA, avant.base.derniere_ligne, apres.base.derniere_ligne))
     : [{ micro: lignes.reduce((s, l) => s + (l.credits_micro ?? 0), 0), lignes: lignes.length }];
   preuves.push(
     { libelle: 'trace du tour (lumi_traces, étage 6)', contenu: extrait(trace ? { cost_cents: trace.cost_cents, model: trace.model, resultat: trace.resultat, routeur } : 'absente', 400) },
-    { libelle: 'grand livre de la conversation (ai_usage)', contenu: extrait(usage.map((u, i) => ({ model: u.model, cost_cents: u.cost_cents, credits_micro: u.credits_micro, routeur: lignes[i].routeur })), 700) },
+    { libelle: 'grand livre de la conversation (ai_usage)', contenu: extrait(usage.map((u, i) => ({ model: u.model, input_tokens: u.input_tokens, output_tokens: u.output_tokens, cost_cents: u.cost_cents, credits_micro: u.credits_micro, routeur: lignes[i].routeur })), 900) },
     { libelle: 'crédits du bureau en base, avant → après', contenu: `${avant.base.micro} → ${apres.base.micro} micro-crédits ; fenêtre : ${fenetre.lignes} ligne(s), ${fenetre.micro} micro-crédits ; période depuis ${apres.base.periode_debut} ; ${apres.base.bureaux} bureau(x) dans le groupe ; forfait : ${apres.base.credits_du_forfait} crédits` },
     { libelle: 'GET /api/lumi/quota, avant → après', contenu: `${JSON.stringify(avant.quota)} → ${JSON.stringify(apres.quota)}` },
     { libelle: 'crédits dans l’événement de fin du tour', contenu: extrait(e.fin?.credits, 300) },

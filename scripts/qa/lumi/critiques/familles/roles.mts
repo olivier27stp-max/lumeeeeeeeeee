@@ -18,12 +18,31 @@ const echange = (qui: string, question: string, e: Echange): Preuve[] => [
   { libelle: `${qui} — outils`, contenu: `aboutis : ${e.lectures.join(', ') || '—'} ; refusés : ${e.refusees.join(', ') || '—'}` },
 ];
 
+/** Refus de la garde d'outils journalisés pour une personne depuis un instant (lumi_traces, résultat « refus ») : la preuve, côté serveur, qu'un outil n'a rien rendu. */
+const sqlRefusDeGarde = (org: string, userId: string, depuisIso: string): string => {
+  if (!/^[0-9a-f-]{36}$/i.test(org) || !/^[0-9a-f-]{36}$/i.test(userId) || !/^[0-9TZ:.-]+$/.test(depuisIso)) throw new Error('paramètres invalides');
+  return `select action as outil, params->>'motif' as motif, params->>'permission' as permission, created_at from lumi_traces
+           where org_id = '${org}' and user_id = '${userId}' and resultat = 'refus' and origine = 'api' and created_at >= '${depuisIso}'::timestamptz order by created_at`;
+};
+
 /** La même question au technicien puis au propriétaire. */
 async function paire(ctx: Contexte, question: string, o: { interdits: ChiffreAttendu[]; outilsInterdits: string[]; temoin: { attendus: ChiffreAttendu[]; outilAttendu?: string }; preuves?: Preuve[] }): Promise<Issue> {
+  const depuis = new Date(Date.now() - 2000).toISOString();
   const tech = await ctx.lumi.demander(ctx.session('technicien'), question);
   const proprio = await ctx.lumi.demander(ctx.session('proprietaire'), question);
-  const j = jugerPaireRole(jugerRefusRole(tech, { interdits: o.interdits, outilsInterdits: o.outilsInterdits }), jugerTemoin(proprio, o.temoin));
-  return { ...j, preuves: [...(o.preuves ?? []), ...echange('technicien', question, tech), ...echange('propriétaire (témoin)', question, proprio)] };
+  // Sur le chemin sans modèle (étage 2), le serveur émet « outil terminé » même quand sa garde a refusé l'outil.
+  // L'événement ne prouve donc pas que l'outil a rendu quelque chose : le journal des refus de la garde, lui, le dit.
+  await ctx.attendre(1500);
+  const refus = await ctx.sql<{ outil: string; motif: string | null; permission: string | null }>(sqlRefusDeGarde(ctx.orgA, ctx.session('technicien').userId, depuis));
+  const refuses = new Set(refus.map((r) => String(r.outil)));
+  const effectif = { ...tech, lectures: tech.lectures.filter((x) => !refuses.has(x)) };
+  const j = jugerPaireRole(jugerRefusRole(effectif, { interdits: o.interdits, outilsInterdits: o.outilsInterdits }), jugerTemoin(proprio, o.temoin));
+  const annonces = tech.lectures.filter((x) => refuses.has(x));
+  return {
+    ...j,
+    preuves: [...(o.preuves ?? []), ...echange('technicien', question, tech), { libelle: 'technicien — refus journalisés par la garde d’outils (SELECT)', contenu: refus.length ? JSON.stringify(refus) : 'aucun' }, ...echange('propriétaire (témoin)', question, proprio)],
+    ...(annonces.length ? { observations: [`Le flux annonce « ${annonces.join(', ')} » comme terminé pour le technicien alors que la garde l’a refusé (étage ${tech.etage}) : l’interface montre un outil abouti pour un refus.`] } : {}),
+  };
 }
 
 const sansJeu = (): Issue => ({ verdict: 'NON COUVERT', constats: ['le jeu [EVAL] est absent du bureau A : aucun chiffre réservé à chercher, aucun témoin possible'], preuves: [] });
