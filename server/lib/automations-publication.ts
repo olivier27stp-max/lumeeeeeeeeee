@@ -13,14 +13,17 @@
    brouillon n'est jamais refusé : arrêter d'écrire aux clients doit
    toujours être possible.
 
-   Client de l'UTILISATEUR (RLS : écriture = `automations.update`), jamais
-   service_role.
+   Lecture et preuve de droit avec le client de l'UTILISATEUR (RLS :
+   écriture = `automations.update`). Seule l'écriture `is_active = true`
+   part avec le rôle de service — la base la refuse à une session
+   d'utilisateur (voir `changerPublication`).
    ═══════════════════════════════════════════════════════════════ */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { bloquantsPublication, type RegleAPublier } from '../../src/lib/publicationAutomatisation';
 import { logger } from './logger';
 import { MESSAGES_EN } from './automations-langue';
+import { getServiceClient } from './supabase';
 
 export type ResultatPublication =
   | { ok: true; id: string; is_active: boolean; name: string }
@@ -41,6 +44,36 @@ export function messagePublieeCassee(problemes: string[], fr = true): string {
 /** Les problèmes bloquants d'une règle, en texte (vide = publiable). */
 export function problemesBloquants(regle: RegleAPublier, fr = true): string[] {
   return bloquantsPublication({ ...regle, fr }).map((p) => p.message);
+}
+
+/**
+ * Le rôle de service, pour la SEULE écriture `is_active = true` (voir
+ * `changerPublication`). Chargé à l'usage : ce module est importé par des
+ * tests et des outils qui n'ont pas de clé de service.
+ */
+let serviceInjecte: SupabaseClient | null = null;
+function ecrireParService(): SupabaseClient {
+  return serviceInjecte ?? getServiceClient();
+}
+/** Pour les tests : remplace le client de service (rendre `null` pour revenir au vrai). */
+export function definirClientDeServicePourTests(client: SupabaseClient | null): void {
+  serviceInjecte = client;
+}
+
+/**
+ * Active une règle APRÈS une écriture réussie de l'utilisateur sur cette même
+ * règle (c'est elle, la preuve de droit) — pour les chemins qui ne passent pas
+ * par les contrôles de publication : la copie vers d'autres bureaux reprend
+ * l'état de l'original, sans le rejuger.
+ */
+export async function activerApresEcritureUtilisateur(orgId: string, id: string): Promise<{ error: { message: string; code?: string } | null }> {
+  const { error } = await ecrireParService()
+    .from('automation_rules')
+    .update({ is_active: true, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('org_id', orgId)
+    .is('deleted_at', null);
+  return { error };
 }
 
 export async function changerPublication(
@@ -81,13 +114,50 @@ export async function changerPublication(
     }
   }
 
-  // `.select()` : une ligne filtrée par la RLS ne doit pas passer pour un succès.
-  const { data, error } = await client
-    .from('automation_rules')
-    .update({ is_active: actif, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .eq('org_id', orgId)
-    .select('id, name, is_active');
+  /*
+   * PUBLIER s'écrit en deux temps (audit du 2026-10-01, roles-05).
+   *
+   * Un membre qui a le droit de modifier les automatisations pouvait écrire
+   * `is_active = true` DIRECTEMENT par l'API de la base, sans passer ici :
+   * une règle au texto vide se publiait. La base refuse donc à une session
+   * d'utilisateur de faire passer `is_active` de faux à vrai (déclencheur
+   * `automation_rules_garde`) ; seul le serveur, après les contrôles
+   * ci-dessus, l'écrit avec son rôle de service.
+   *
+   *   1. la PREUVE DE DROIT, avec le client de l'utilisateur : une écriture
+   *      sans effet (`updated_at`) que la RLS n'accepte que pour qui a
+   *      « modifier les automatisations » dans CE bureau ;
+   *   2. la publication, avec le rôle de service, bornée au même bureau.
+   *
+   * Repasser en brouillon reste une écriture ordinaire de l'utilisateur :
+   * arrêter d'écrire aux clients n'a besoin d'aucun détour.
+   */
+  const horodatage = new Date().toISOString();
+  const ecriture = actif
+    ? await (async () => {
+      const preuve = await client
+        .from('automation_rules')
+        .update({ updated_at: horodatage })
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .select('id');
+      if (preuve.error || !(preuve.data ?? []).length) return { data: [] as unknown[], error: preuve.error };
+      return ecrireParService()
+        .from('automation_rules')
+        .update({ is_active: true, updated_at: horodatage })
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .is('deleted_at', null)
+        .select('id, name, is_active');
+    })()
+    // `.select()` : une ligne filtrée par la RLS ne doit pas passer pour un succès.
+    : await client
+      .from('automation_rules')
+      .update({ is_active: false, updated_at: horodatage })
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .select('id, name, is_active');
+  const { data, error } = ecriture;
 
   if (error) {
     if (error.code === '42501') {
