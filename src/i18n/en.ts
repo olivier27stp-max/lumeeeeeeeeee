@@ -3853,7 +3853,7 @@ const en = {
       // OAuth brand verification (the homepage must explain what the app does
       // and carry the same name as the consent screen).
       subtitle:
-        'Lume CRM is an all-in-one management platform for residential service businesses. Manage your clients, quotes, invoices, scheduling and email in one place.',
+        'Lume CRM is the all-in-one software for residential service and renovation businesses: a clear sales pipeline and automations that follow up with your clients for you.',
       bookDemo: 'Book a demo',
     },
     trust: {

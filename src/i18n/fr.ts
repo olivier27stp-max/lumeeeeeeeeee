@@ -3845,7 +3845,7 @@ const fr: TranslationKeys = {
       // du branding Google OAuth (la page d'accueil doit expliquer l'objectif
       // de l'application et porter le même nom que l'écran de consentement).
       subtitle:
-        'Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels. Gérez vos clients, soumissions, factures, horaires et courriels au même endroit.',
+        'Lume CRM, le logiciel tout-en-un des entreprises de services résidentiels et de rénovation : un pipeline de vente clair et des automatisations qui relancent vos clients à votre place.',
       bookDemo: 'Réserver une démo',
     },
     trust: {
