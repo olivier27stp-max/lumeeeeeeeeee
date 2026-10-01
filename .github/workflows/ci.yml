@@ -45,6 +45,40 @@ jobs:
       - name: Build (vite)
         run: npm run build
 
+  # Lumi et l'agent de support : UN verdict (npm run test:lumi), avec un rapport
+  # JSON + markdown pour QA Smoke. Ici, l'étage déterministe seulement — tests de
+  # Lumi, du support, du MCP et du jeu d'évals, sans réseau ni secret. BLOQUANT :
+  # à déclarer « required » dans la protection de branche. Les étages joués
+  # contre la production (batteries critique et de robustesse, 221 demandes) se
+  # lancent à la main : `npm run test:lumi -- --prod --bureau eval2`.
+  lumi:
+    name: Lumi (npm run test:lumi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: test:lumi (étage déterministe)
+        run: npm run test:lumi -- --sortie rapports/lumi/test-lumi
+
+      - name: Rapport pour QA Smoke
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-lumi
+          path: rapports/lumi/
+          if-no-files-found: warn
+
   # Cross-tenant RLS isolation — impersonates authenticated users + anon and
   # asserts no relation leaks another org (reads, anon, child tables, writes).
   # Catches the class of bug fixed 2026-07-08 (properties_active, team_members…).

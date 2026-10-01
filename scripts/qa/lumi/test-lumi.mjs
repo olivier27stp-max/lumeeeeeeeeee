@@ -29,7 +29,7 @@
  * jour (la garde quotidienne du bureau passe ensuite au modèle de repli).
  */
 import { spawnSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -68,7 +68,8 @@ function lancer(cmd, argv, opts = {}) {
 // ── 1. Déterministe ───────────────────────────────────────────────────────
 {
   const fichier = `${SORTIE}.deterministe.json`;
-  const motifs = ['tests/lumi-*.test.ts', 'tests/support', 'tests/mcp-refs-stables.test.ts', 'tests/evals-lumi-*.test.ts', 'tests/lumi-critiques-jugement.test.ts', 'tests/lumi-robustesse-jugement.test.ts'];
+  // Les fichiers sont énumérés ici : passé tel quel, un motif à étoile n'est pas développé par l'interpréteur de commandes de Windows.
+  const motifs = [...readdirSync(join(RACINE, 'tests')).filter((f) => /^(lumi-|mcp-refs-|evals-lumi-).*[.]test[.]tsx?$/.test(f)).sort().map((f) => `tests/${f}`), 'tests/support'];
   const r = lancer('npx', ['vitest', 'run', ...motifs, '--maxWorkers=4', '--passWithNoTests', '--reporter=json', `--outputFile=${fichier}`]);
   const j = lireJson(fichier);
   rapport.deterministe = j
