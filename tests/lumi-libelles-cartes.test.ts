@@ -152,3 +152,36 @@ describe('listes et objets', () => {
     expect(texte(a)).toMatch(/50 000,00 \$/);
   });
 });
+
+describe('la fiche nommée sur la carte ne montre jamais un code de la base', () => {
+  const ID = '00000000-0000-4000-8000-000000000001';
+  const ctxAvec = (rangees: Record<string, unknown>) => {
+    const client = { from: (table: string) => {
+      const q: Record<string, unknown> = {};
+      for (const m of ['select', 'eq', 'is', 'in', 'order', 'limit']) q[m] = () => q;
+      q.maybeSingle = async () => ({ data: rangees[table] ?? null });
+      return q;
+    } };
+    return { client: client as never, orgId: 'o', userId: 'u' };
+  };
+  const cible = async (cle: string, rangees: Record<string, unknown>, outil = 'x') => (await apercuAction({ [cle]: ID }, ctxAvec(rangees), outil)).cibles[0];
+
+  it('facture, soumission, tâche, membre, invitation : le statut et le rôle en mots', async () => {
+    expect((await cible('invoice_id', { invoices: { invoice_number: '12', total_cents: 1000, balance_cents: 1000, status: 'sent' } })).valeur).toMatch(/envoyée$/);
+    expect((await cible('quote_id', { quotes: { quote_number: '7', total_cents: 1000, status: 'awaiting_response' } })).valeur).toMatch(/en attente de réponse$/);
+    expect((await cible('task_id', { tasks: { title: 'Rappeler', status: 'open' } })).valeur).toBe('Rappeler · à faire');
+    expect((await cible('user_id', { team_members: { first_name: 'Luc', last_name: 'Roy', email: 'l@x.ca', role: 'sales_rep' } })).valeur).toBe('Luc Roy · l@x.ca · représentant');
+    expect((await cible('invitation_id', { invitations: { email: 'n@x.ca', role: 'technician', status: 'pending' } })).valeur).toBe('n@x.ca · technicien · en attente');
+  });
+
+  it('automatisation, rapport, facture récurrente : le déclencheur et la fréquence en mots', async () => {
+    const auto = await cible('rule_id', { automation_rules: { name: 'Merci', trigger_event: 'invoice.paid', is_active: true } });
+    expect(auto.valeur).not.toMatch(/invoice\.paid/);
+    expect((await cible('report_id', { scheduled_reports: { recipient_email: 'a@x.ca', frequency: 'weekly', enabled: true } })).valeur).toBe('a@x.ca · chaque semaine · actif');
+    expect((await cible('schedule_id', { recurring_invoice_schedules: { subject: 'Entretien', frequency: 'monthly', is_active: true } })).valeur).toBe('Entretien · chaque mois · active');
+  });
+
+  it('aucun code avec underscore ne sort, même pour une valeur inconnue du dictionnaire', async () => {
+    expect((await cible('invoice_id', { invoices: { invoice_number: '12', total_cents: 0, balance_cents: 0, status: 'un_statut_nouveau' } })).valeur).not.toMatch(/_/);
+  });
+});

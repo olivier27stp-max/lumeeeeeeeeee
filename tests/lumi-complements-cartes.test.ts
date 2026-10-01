@@ -136,6 +136,41 @@ describe('compléments des cartes de Lumi', () => {
     expect(await texte('set_hourly_rate', { user_id: id(30), hourly_rate_cents: 2800 }, base(tables))).toBe('');
   });
 
+  it('réécrire un message d’automatisation montre le texte qu’on remplace', async () => {
+    const etapes = [
+      { type: 'action', action: { type: 'send_sms', config: { body: 'Rappel : visite demain.' } } },
+      { type: 'attente' },
+      { type: 'action', action: { type: 'send_sms', config: { body: 'Merci pour votre confiance !' } } },
+      { type: 'action', action: { type: 'send_email', config: { subject: 'Votre visite', body: 'Bonjour, à demain.' } } },
+    ];
+    const ctx = base({ automation_rules: [{ id: id(40), steps: etapes, actions: [{ type: 'send_sms', config: { body: 'reflet périmé' } }] }] });
+    expect(await texte('update_automation_sms_body', { rule_id: id(40), body: 'x', message_number: 2 }, ctx)).toBe('Texte actuel : Merci pour votre confiance !');
+    expect(await texte('update_automation_sms_body', { rule_id: id(40), body: 'x' }, ctx)).toMatch(/envoie 2 messages de ce type — il faudra dire lequel/);
+    expect(await texte('update_automation_message', { rule_id: id(40), action_type: 'send_email', body: 'x', subject: 'y' }, ctx)).toBe('Objet actuel : Votre visite\nTexte actuel : Bonjour, à demain.');
+    const sansEtapes = base({ automation_rules: [{ id: id(41), steps: [], actions: [{ type: 'send_sms', config: { body: 'Ancien texte' } }] }] });
+    expect(await texte('update_automation_message', { rule_id: id(41), action_type: 'send_sms', body: 'x' }, sansEtapes)).toBe('Texte actuel : Ancien texte');
+    expect(await texte('update_automation_message', { rule_id: id(41), action_type: 'send_email', body: 'x' }, sansEtapes)).toMatch(/n’envoie pas de courriel/);
+  });
+
+  it('un échéancier remplacé annonce les jalons qui disparaissent', async () => {
+    const ctx = base({ job_billing_milestones: [
+      { id: id(50), job_id: id(6), position: 0, label: 'Dépôt', amount_cents: 20000 },
+      { id: id(51), job_id: id(6), position: 1, label: 'Fin des travaux', amount_cents: 80000 },
+    ] });
+    expect(await texte('save_job_billing_milestones', { job_id: id(6), milestones: [{ id: id(50), label: 'Dépôt', amount_cents: 30000 }, { label: 'Solde', amount_cents: 70000 }] }, ctx)).toBe('Jalons supprimés : Fin des travaux (800,00 $)');
+    expect(await texte('save_job_billing_milestones', { job_id: id(6), milestones: [{ id: id(50), label: 'a', amount_cents: 1 }, { id: id(51), label: 'b', amount_cents: 1 }] }, ctx)).toBe('');
+  });
+
+  it('un changement de rôle dit combien de membres il touche, et le rôle qu’on quitte', async () => {
+    const ctx = base({ memberships: [
+      { user_id: id(60), role: 'technician', status: 'active' }, { user_id: id(61), role: 'technician', status: 'active' },
+      { user_id: id(62), role: 'technician', status: 'suspended' }, { user_id: id(63), role: 'sales_rep', status: 'active' },
+    ] });
+    expect(await texte('update_role_preset', { role: 'technician', permissions: {} }, ctx)).toMatch(/Membres touchés : 2 membres actifs ont ce rôle/);
+    expect(await texte('update_role_preset', { role: 'admin', permissions: {} }, ctx)).toMatch(/aucun membre actif/);
+    expect(await texte('update_member_role', { user_id: id(63), role: 'admin' }, ctx)).toMatch(/Rôle actuel : Représentant/);
+  });
+
   it('un outil sans complément, ou une lecture qui plante, n’ajoute rien et ne bloque rien', async () => {
     expect(await complementsCarte('create_task', { title: 'x' }, base({}))).toEqual([]);
     const casse = { client: { from: () => { throw new Error('panne'); } } as never, orgId: ORG, userId: id(99) };

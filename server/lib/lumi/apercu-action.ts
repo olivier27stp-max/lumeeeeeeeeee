@@ -14,6 +14,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { LIBELLES_PARAMETRES, PARAMETRES_A_CHOIX, VALEURS_TRADUITES, PARAMETRES_EN_POURCENT, PARAMETRES_JOUR_SEMAINE, JOURS_SEMAINE } from './libelles-cartes';
 import { PERMISSION_GROUPS } from '../../../src/lib/permissions';
+import { trouverDeclencheur } from '../../../src/lib/automationCatalogue';
+import { STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD } from '../agent/tools-etendus';
 
 export interface LigneApercu {
   libelle: { fr: string; en: string };
@@ -62,6 +64,25 @@ const nomPersonne = (p: { first_name?: string | null; last_name?: string | null;
   return (p.display_as_company && p.company) ? p.company : (nom || p.company || p.email || '');
 };
 
+/* ── Statuts : jamais le code de la base sur une carte ────────────────────── */
+// « sent », « sales_rep », « weekly », « invoice.paid » sortaient tels quels à côté du nom de la fiche.
+const sansTiret = (v: unknown) => txt(v).replace(/[_.]/g, ' ');
+/** Un statut dans les deux langues : le dictionnaire français des outils, l'anglais lisible. */
+const statut = (v: unknown, dico: Record<string, string>): [fr: string, en: string] => [dico[txt(v).toLowerCase()] ?? sansTiret(v), sansTiret(v)];
+/** Une valeur d'énumération connue de libelles-cartes.ts (rôle, fréquence, type…), en minuscules dans une phrase. */
+const valeurConnue = (v: unknown): [fr: string, en: string] => {
+  const t = VALEURS_TRADUITES[txt(v).toLowerCase()];
+  return t ? [t[0].toLowerCase(), t[1].toLowerCase()] : [sansTiret(v), sansTiret(v)];
+};
+const STATUT_INVITATION: Record<string, string> = { pending: 'en attente', accepted: 'acceptée', expired: 'expirée', revoked: 'révoquée' };
+const STATUT_CONTRAT: Record<string, string> = { draft: 'brouillon', sent: 'envoyé', viewed: 'consulté', signed: 'signé', declined: 'refusé', expired: 'expiré', cancelled: 'annulé' };
+const STATUT_TACHE: Record<string, string> = { open: 'à faire', done: 'terminée' };
+/** Le déclencheur d'une automatisation, tel que l'éditeur le nomme. */
+const declencheur = (cle: unknown): [fr: string, en: string] => {
+  const d = trouverDeclencheur(txt(cle));
+  return d ? [d.fr, d.en] : [sansTiret(cle), sansTiret(cle)];
+};
+
 /* ── Résolveurs : un identifiant → une ligne lisible ─────────────────────── */
 type Resolveur = (id: string, ctx: Ctx, fuseau: string) => Promise<LigneApercu | null>;
 const introuvable = (libelle: LigneApercu['libelle']): LigneApercu => ({ libelle, valeur: 'introuvable dans cette entreprise', valeur_en: 'not found in this company', alerte: true });
@@ -85,8 +106,8 @@ const facture: Resolveur = async (id, { client: db, orgId }) => {
   const tot = Number(f.total_cents) || 0; const sol = Number(f.balance_cents) || 0;
   return {
     libelle: L('Facture', 'Invoice'),
-    valeur: [`#${txt(f.invoice_number)}`, txt(f.client_name_snapshot), `total ${argentFr(tot)}`, `solde ${argentFr(sol)}`, txt(f.status)].filter(Boolean).join(' · '),
-    valeur_en: [`#${txt(f.invoice_number)}`, txt(f.client_name_snapshot), `total ${argentEn(tot)}`, `balance ${argentEn(sol)}`, txt(f.status)].filter(Boolean).join(' · '),
+    valeur: [`#${txt(f.invoice_number)}`, txt(f.client_name_snapshot), `total ${argentFr(tot)}`, `solde ${argentFr(sol)}`, statut(f.status, STATUT_FACTURE)[0]].filter(Boolean).join(' · '),
+    valeur_en: [`#${txt(f.invoice_number)}`, txt(f.client_name_snapshot), `total ${argentEn(tot)}`, `balance ${argentEn(sol)}`, statut(f.status, STATUT_FACTURE)[1]].filter(Boolean).join(' · '),
   };
 };
 const devis: Resolveur = async (id, { client: db, orgId }) => {
@@ -98,8 +119,8 @@ const devis: Resolveur = async (id, { client: db, orgId }) => {
   const tot = Number(q.total_cents) || 0;
   return {
     libelle: L('Devis', 'Quote'),
-    valeur: [`#${txt(q.quote_number)}`, txt(q.title), nomPersonne(c), argentFr(tot), txt(q.status)].filter(Boolean).join(' · '),
-    valeur_en: [`#${txt(q.quote_number)}`, txt(q.title), nomPersonne(c), argentEn(tot), txt(q.status)].filter(Boolean).join(' · '),
+    valeur: [`#${txt(q.quote_number)}`, txt(q.title), nomPersonne(c), argentFr(tot), statut(q.status, STATUT_DEVIS)[0]].filter(Boolean).join(' · '),
+    valeur_en: [`#${txt(q.quote_number)}`, txt(q.title), nomPersonne(c), argentEn(tot), statut(q.status, STATUT_DEVIS)[1]].filter(Boolean).join(' · '),
   };
 };
 const paiement: Resolveur = async (id, { client: db, orgId }, fuseau) => {
@@ -113,8 +134,8 @@ const paiement: Resolveur = async (id, { client: db, orgId }, fuseau) => {
   const quand = p.paid_at ? dateLocale(String(p.paid_at), fuseau, 'fr') : '';
   return {
     libelle: L('Paiement', 'Payment'),
-    valeur: [argentFr(m), quand, txt(p.method || p.provider), f ? `facture #${txt(f.invoice_number)}` : '', txt(f?.client_name_snapshot), r > 0 ? `déjà remboursé ${argentFr(r)}` : ''].filter(Boolean).join(' · '),
-    valeur_en: [argentEn(m), p.paid_at ? dateLocale(String(p.paid_at), fuseau, 'en') : '', txt(p.method || p.provider), f ? `invoice #${txt(f.invoice_number)}` : '', txt(f?.client_name_snapshot), r > 0 ? `already refunded ${argentEn(r)}` : ''].filter(Boolean).join(' · '),
+    valeur: [argentFr(m), quand, valeurConnue(p.method || p.provider)[0], f ? `facture #${txt(f.invoice_number)}` : '', txt(f?.client_name_snapshot), r > 0 ? `déjà remboursé ${argentFr(r)}` : ''].filter(Boolean).join(' · '),
+    valeur_en: [argentEn(m), p.paid_at ? dateLocale(String(p.paid_at), fuseau, 'en') : '', valeurConnue(p.method || p.provider)[1], f ? `invoice #${txt(f.invoice_number)}` : '', txt(f?.client_name_snapshot), r > 0 ? `already refunded ${argentEn(r)}` : ''].filter(Boolean).join(' · '),
   };
 };
 const membre: Resolveur = async (id, { client: db, orgId }) => {
@@ -128,7 +149,7 @@ const membre: Resolveur = async (id, { client: db, orgId }) => {
     const role = VALEURS_TRADUITES[txt(adhesion.role)];
     return { libelle: L('Membre', 'Member'), valeur: ['membre de l’entreprise', role ? role[0].toLowerCase() : txt(adhesion.role)].filter(Boolean).join(' · '), valeur_en: ['company member', role ? role[1].toLowerCase() : txt(adhesion.role)].filter(Boolean).join(' · ') };
   }
-  return { libelle: L('Membre', 'Member'), valeur: [nomPersonne(m), txt(m.email), txt(m.role)].filter(Boolean).join(' · ') };
+  return { libelle: L('Membre', 'Member'), valeur: [nomPersonne(m), txt(m.email), valeurConnue(m.role)[0]].filter(Boolean).join(' · '), valeur_en: [nomPersonne(m), txt(m.email), valeurConnue(m.role)[1]].filter(Boolean).join(' · ') };
 };
 const equipe: Resolveur = async (id, { client: db, orgId }) => {
   const { data: t } = await db.from('teams').select('name').eq('org_id', orgId).eq('id', id).maybeSingle();
@@ -151,12 +172,12 @@ const visite: Resolveur = async (id, { client: db, orgId }, fuseau) => {
 };
 const tache: Resolveur = async (id, { client: db, orgId }) => {
   const { data: t } = await db.from('tasks').select('title, status').eq('org_id', orgId).eq('id', id).maybeSingle();
-  return t ? { libelle: L('Tâche', 'Task'), valeur: [txt(t.title), txt(t.status)].filter(Boolean).join(' · ') } : introuvable(L('Tâche', 'Task'));
+  return t ? { libelle: L('Tâche', 'Task'), valeur: [txt(t.title), statut(t.status, STATUT_TACHE)[0]].filter(Boolean).join(' · '), valeur_en: [txt(t.title), statut(t.status, STATUT_TACHE)[1]].filter(Boolean).join(' · ') } : introuvable(L('Tâche', 'Task'));
 };
 const automatisation: Resolveur = async (id, { client: db, orgId }) => {
   const { data: a } = await db.from('automation_rules').select('name, trigger_event, is_active').eq('org_id', orgId).eq('id', id).maybeSingle();
   if (!a) return introuvable(L('Automatisation', 'Automation'));
-  return { libelle: L('Automatisation', 'Automation'), valeur: [txt(a.name), txt(a.trigger_event), a.is_active ? 'active' : 'en pause'].filter(Boolean).join(' · '), valeur_en: [txt(a.name), txt(a.trigger_event), a.is_active ? 'active' : 'paused'].filter(Boolean).join(' · ') };
+  return { libelle: L('Automatisation', 'Automation'), valeur: [txt(a.name), declencheur(a.trigger_event)[0], a.is_active ? 'active' : 'en pause'].filter(Boolean).join(' · '), valeur_en: [txt(a.name), declencheur(a.trigger_event)[1], a.is_active ? 'active' : 'paused'].filter(Boolean).join(' · ') };
 };
 const service: Resolveur = async (id, { client: db, orgId }) => {
   const { data: s } = await db.from('predefined_services').select('name, default_price_cents').eq('org_id', orgId).eq('id', id).maybeSingle();
@@ -164,7 +185,7 @@ const service: Resolveur = async (id, { client: db, orgId }) => {
 };
 const invitation: Resolveur = async (id, { client: db, orgId }) => {
   const { data: i } = await db.from('invitations').select('email, role, status').eq('org_id', orgId).eq('id', id).maybeSingle();
-  return i ? { libelle: L('Invitation', 'Invitation'), valeur: [txt(i.email), txt(i.role), txt(i.status)].filter(Boolean).join(' · ') } : introuvable(L('Invitation', 'Invitation'));
+  return i ? { libelle: L('Invitation', 'Invitation'), valeur: [txt(i.email), valeurConnue(i.role)[0], statut(i.status, STATUT_INVITATION)[0]].filter(Boolean).join(' · '), valeur_en: [txt(i.email), valeurConnue(i.role)[1], statut(i.status, STATUT_INVITATION)[1]].filter(Boolean).join(' · ') } : introuvable(L('Invitation', 'Invitation'));
 };
 // Le pipeline de ventes vit sur `deals` (étapes de l'entreprise, pipeline_stages) depuis que les
 // outils list_deals / update_deal_stage / delete_deal y ont été rebranchés (2026-10-01) : la carte
@@ -187,7 +208,7 @@ const deal: Resolveur = async (id, ctx, fuseau) => {
   if (!d) return introuvable(L('Carte du pipeline', 'Pipeline card'));
   const pid = estUuid(d.client_id) ? d.client_id : estUuid(d.lead_id) ? d.lead_id : null;
   const c = pid ? await client(pid, ctx, fuseau) : null;
-  return { libelle: L('Carte du pipeline', 'Pipeline card'), valeur: [txt(d.title), c?.valeur, txt(d.stage)].filter(Boolean).join(' · ') };
+  return { libelle: L('Carte du pipeline', 'Pipeline card'), valeur: [txt(d.title), c?.valeur, statut(d.stage, STATUT_LEAD)[0]].filter(Boolean).join(' · '), valeur_en: [txt(d.title), c?.valeur, statut(d.stage, STATUT_LEAD)[1]].filter(Boolean).join(' · ') };
 };
 // Taxe : nom et taux ACTUELS, pour voir l'avant → après sur la carte (audit 2026-09-30).
 const taxe: Resolveur = async (id, { client: db, orgId }) => {
@@ -200,7 +221,7 @@ const taxe: Resolveur = async (id, { client: db, orgId }) => {
 // requêtes explicites, la première qui trouve l'identifiant nomme le modèle.
 const modele: Resolveur = async (id, { client: db, orgId }) => {
   const { data: c } = await db.from('email_templates').select('name, type, is_active').eq('org_id', orgId).eq('id', id).maybeSingle();
-  if (c) return { libelle: L('Modèle de courriel', 'Email template'), valeur: [txt(c.name), txt(c.type), c.is_active === false ? 'inactif' : ''].filter(Boolean).join(' · ') };
+  if (c) return { libelle: L('Modèle de courriel', 'Email template'), valeur: [txt(c.name), valeurConnue(c.type)[0], c.is_active === false ? 'inactif' : ''].filter(Boolean).join(' · '), valeur_en: [txt(c.name), valeurConnue(c.type)[1], c.is_active === false ? 'inactive' : ''].filter(Boolean).join(' · ') };
   const { data: f } = await db.from('invoice_templates').select('name').eq('org_id', orgId).eq('id', id).is('deleted_at', null).maybeSingle();
   if (f) return { libelle: L('Modèle de facture', 'Invoice template'), valeur: txt(f.name) };
   const { data: q } = await db.from('quote_templates').select('name').eq('org_id', orgId).eq('id', id).is('deleted_at', null).maybeSingle();
@@ -211,7 +232,7 @@ const modele: Resolveur = async (id, { client: db, orgId }) => {
 const rapport: Resolveur = async (id, { client: db, orgId }) => {
   const { data: r } = await db.from('scheduled_reports').select('recipient_email, frequency, enabled').eq('org_id', orgId).eq('id', id).maybeSingle();
   if (!r) return introuvable(L('Rapport planifié', 'Scheduled report'));
-  return { libelle: L('Rapport planifié', 'Scheduled report'), valeur: [txt(r.recipient_email), txt(r.frequency), r.enabled ? 'actif' : 'en pause'].filter(Boolean).join(' · '), valeur_en: [txt(r.recipient_email), txt(r.frequency), r.enabled ? 'active' : 'paused'].filter(Boolean).join(' · ') };
+  return { libelle: L('Rapport planifié', 'Scheduled report'), valeur: [txt(r.recipient_email), valeurConnue(r.frequency)[0], r.enabled ? 'actif' : 'en pause'].filter(Boolean).join(' · '), valeur_en: [txt(r.recipient_email), valeurConnue(r.frequency)[1], r.enabled ? 'active' : 'paused'].filter(Boolean).join(' · ') };
 };
 
 // Contrat : le job, le client qui le recevra, son statut.
@@ -220,7 +241,7 @@ const contrat: Resolveur = async (id, ctx, fuseau) => {
   if (!c) return introuvable(L('Contrat', 'Contract'));
   const j = estUuid(c.job_id) ? await job(c.job_id, ctx, fuseau) : null;
   const cl = estUuid(c.client_id) ? await client(c.client_id, ctx, fuseau) : null;
-  return { libelle: L('Contrat', 'Contract'), valeur: [j?.valeur, cl?.valeur, txt(c.status)].filter(Boolean).join(' · ') };
+  return { libelle: L('Contrat', 'Contract'), valeur: [j?.valeur, cl?.valeur, statut(c.status, STATUT_CONTRAT)[0]].filter(Boolean).join(' · '), valeur_en: [j?.valeur, cl?.valeur, statut(c.status, STATUT_CONTRAT)[1]].filter(Boolean).join(' · ') };
 };
 // Facture récurrente : client, objet, fréquence, actif — c'est de l'argent qui part tout seul.
 const recurrence: Resolveur = async (id, ctx, fuseau) => {
@@ -229,8 +250,8 @@ const recurrence: Resolveur = async (id, ctx, fuseau) => {
   const cl = estUuid(r.client_id) ? await client(r.client_id, ctx, fuseau) : null;
   return {
     libelle: L('Facture récurrente', 'Recurring invoice'),
-    valeur: [cl?.valeur, txt(r.subject), txt(r.frequency), r.is_active ? 'active' : 'arrêtée', r.auto_send ? 'envoi automatique' : ''].filter(Boolean).join(' · '),
-    valeur_en: [cl?.valeur, txt(r.subject), txt(r.frequency), r.is_active ? 'active' : 'stopped', r.auto_send ? 'auto-send' : ''].filter(Boolean).join(' · '),
+    valeur: [cl?.valeur, txt(r.subject), valeurConnue(r.frequency)[0], r.is_active ? 'active' : 'arrêtée', r.auto_send ? 'envoi automatique' : ''].filter(Boolean).join(' · '),
+    valeur_en: [cl?.valeur, txt(r.subject), valeurConnue(r.frequency)[1], r.is_active ? 'active' : 'stopped', r.auto_send ? 'auto-send' : ''].filter(Boolean).join(' · '),
   };
 };
 // Préréglage de devis (stocké dans quote_templates).
@@ -249,7 +270,7 @@ const noteFiche: Resolveur = async (id, { client: db, orgId }) => {
   const { data: n } = await db.from('specific_notes').select('text, entity_type').eq('org_id', orgId).eq('id', id).maybeSingle();
   if (!n) return introuvable(L('Note', 'Note'));
   const t = txt(n.text);
-  return { libelle: L('Note', 'Note'), valeur: `« ${t.slice(0, 120)}${t.length > 120 ? '…' : ''} » (${txt(n.entity_type)})` };
+  return { libelle: L('Note', 'Note'), valeur: `« ${t.slice(0, 120)}${t.length > 120 ? '…' : ''} » (${valeurConnue(n.entity_type)[0]})`, valeur_en: `“${t.slice(0, 120)}${t.length > 120 ? '…' : ''}” (${valeurConnue(n.entity_type)[1]})` };
 };
 // Jalon de facturation : libellé et montant.
 const jalon: Resolveur = async (id, { client: db, orgId }) => {

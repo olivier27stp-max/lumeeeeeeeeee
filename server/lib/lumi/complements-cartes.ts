@@ -108,6 +108,35 @@ const periodeDePaie: Complement = async (args, ctx) => {
   return lignes;
 };
 
+/**
+ * Le texte ACTUEL du message qu'on s'apprête à réécrire — la même cible que l'outil
+ * (reecrireMessageAutomation, tools-reglages.ts) : les étapes du parcours quand il y en a,
+ * sinon la liste d'actions ; le n-ième message de ce type.
+ */
+const texteActuelAutomatisation = (typeForce?: 'send_sms'): Complement => async (args, ctx) => {
+  if (!estUuid(args.rule_id)) return [];
+  const { data: regle } = await ctx.client.from('automation_rules').select('actions, steps').eq('org_id', ctx.orgId).eq('id', args.rule_id).maybeSingle();
+  if (!regle) return [];
+  const type = typeForce ?? (args.action_type === 'send_email' ? 'send_email' : 'send_sms');
+  type Action = { type?: string; config?: { body?: unknown; subject?: unknown } };
+  const etapes = (Array.isArray(regle.steps) ? regle.steps : []) as Array<{ type?: string; action?: Action }>;
+  const actions = (Array.isArray(regle.actions) ? regle.actions : []) as Action[];
+  const messages = etapes.length
+    ? etapes.flatMap((e) => (e?.type === 'action' && e.action?.type === type ? [e.action] : []))
+    : actions.filter((a) => a?.type === type);
+  const libelle = L('Texte actuel', 'Current text');
+  if (!messages.length) return [{ libelle, valeur: `cette automatisation n’envoie pas de ${type === 'send_sms' ? 'texto' : 'courriel'} — rien à réécrire`, valeur_en: `this automation sends no ${type === 'send_sms' ? 'text message' : 'email'} — nothing to rewrite` }];
+  const numero = Number.isInteger(args.message_number) && Number(args.message_number) > 0 ? Number(args.message_number) : null;
+  if (messages.length > 1 && !numero) return [{ libelle, valeur: `cette automatisation envoie ${messages.length} messages de ce type — il faudra dire lequel`, valeur_en: `this automation sends ${messages.length} messages of this type — you will have to say which one` }];
+  const cible = messages[(numero ?? 1) - 1];
+  if (!cible) return [];
+  const lignes: LigneApercu[] = [];
+  const objet = txt(cible.config?.subject);
+  if (type === 'send_email' && objet && args.subject !== undefined) lignes.push({ libelle: L('Objet actuel', 'Current subject'), valeur: objet });
+  lignes.push({ libelle, valeur: txt(cible.config?.body) || '(vide)', ...(txt(cible.config?.body) ? {} : { valeur_en: '(empty)' }) });
+  return lignes;
+};
+
 const COMPLEMENTS: Record<string, Complement> = {
   refund_payment: async (args, ctx) => {
     if (!estUuid(args.payment_id)) return [];
@@ -246,6 +275,49 @@ const COMPLEMENTS: Record<string, Complement> = {
     const avant = fiche?.length ? ((remunerations ?? []) as Array<{ team_member_id: string; hourly_rate_cents: number | null }>).find((r) => r.team_member_id === fiche[0].id) : undefined;
     const taux = avant ? Number(avant.hourly_rate_cents) || 0 : 0;
     return [{ libelle: L('Taux actuel', 'Current rate'), valeur: taux > 0 ? `${argentFr(taux)} de l’heure` : 'aucun taux enregistré', valeur_en: taux > 0 ? `${argentEn(taux)} per hour` : 'no rate on record' }];
+  },
+
+  update_automation_message: texteActuelAutomatisation(),
+  update_automation_sms_body: texteActuelAutomatisation('send_sms'),
+
+  // La liste REMPLACE l'échéancier : un jalon existant absent de la liste est supprimé.
+  save_job_billing_milestones: async (args, ctx) => {
+    if (!estUuid(args.job_id) || !Array.isArray(args.milestones)) return [];
+    const { data } = await ctx.client.from('job_billing_milestones').select('id, label, amount_cents').eq('org_id', ctx.orgId).eq('job_id', args.job_id).order('position', { ascending: true });
+    const gardes = new Set((args.milestones as Array<{ id?: unknown }>).map((m) => txt(m?.id)).filter(Boolean));
+    const supprimes = ((data ?? []) as Array<{ id: string; label: string; amount_cents: number }>).filter((j) => !gardes.has(j.id));
+    if (!supprimes.length) return [];
+    return [{
+      libelle: L('Jalons supprimés', 'Milestones deleted'),
+      valeur: supprimes.map((j) => `${txt(j.label)} (${argentFr(Number(j.amount_cents) || 0)})`).join(', '),
+      valeur_en: supprimes.map((j) => `${txt(j.label)} (${argentEn(Number(j.amount_cents) || 0)})`).join(', '),
+    }];
+  },
+
+  // Un changement de rôle s'applique tout de suite à tous les membres de ce rôle.
+  update_role_preset: async (args, ctx) => {
+    const role = txt(args.role);
+    if (!role) return [];
+    const { count } = await ctx.client.from('memberships').select('user_id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('role', role).eq('status', 'active');
+    const n = count ?? 0;
+    return [{
+      libelle: L('Membres touchés', 'Members affected'),
+      valeur: n ? `${pluriel(n, 'membre actif a', 'membres actifs ont')} ce rôle — le changement s’applique tout de suite (sauf permissions sur mesure)` : 'aucun membre actif n’a ce rôle pour l’instant',
+      valeur_en: n ? `${n} active ${n > 1 ? 'members have' : 'member has'} this role — the change applies right away (except custom permissions)` : 'no active member has this role yet',
+    }];
+  },
+
+  update_member_role: async (args, ctx) => {
+    if (!estUuid(args.user_id) || args.role === undefined) return [];
+    const { data: m } = await ctx.client.from('memberships').select('role').eq('org_id', ctx.orgId).eq('user_id', args.user_id).maybeSingle();
+    if (!m) return [];
+    const NOMS: Record<string, [string, string]> = { owner: ['Propriétaire', 'Owner'], admin: ['Administrateur', 'Admin'], sales_rep: ['Représentant', 'Sales rep'], technician: ['Technicien', 'Technician'] };
+    const actuel = NOMS[txt(m.role)] ?? [txt(m.role), txt(m.role)];
+    return [{
+      libelle: L('Rôle actuel', 'Current role'),
+      valeur: `${actuel[0]} — ses permissions repartiront du modèle du nouveau rôle`,
+      valeur_en: `${actuel[1]} — their permissions will restart from the new role’s preset`,
+    }];
   },
 
   add_payroll_adjustment: periodeDePaie,

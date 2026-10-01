@@ -242,7 +242,7 @@ describe('cartes : facture récurrente, contrat, rapport planifié (audit 2026-0
       recurring_invoice_schedules: { client_id: C1, subject: 'Entretien mensuel', frequency: 'monthly', is_active: true, auto_send: true },
       clients: { first_name: 'Marie', last_name: 'Tremblay' },
     }));
-    expect(rec.cibles[0].valeur).toMatch(/Marie Tremblay.*Entretien mensuel.*monthly.*envoi automatique/);
+    expect(rec.cibles[0].valeur).toMatch(/Marie Tremblay.*Entretien mensuel.*chaque mois.*envoi automatique/);
     const rap: any = await apercuProposition('send_scheduled_report_now', { report_id: S1 }, ctx({ scheduled_reports: { recipient_email: 'externe@exemple.com', frequency: 'monthly', enabled: true } }));
     expect(rap.cibles[0].valeur).toMatch(/externe@exemple\.com/);
     const con: any = await apercuProposition('send_agreement_sms', { agreement_id: S1 }, ctx({
@@ -250,6 +250,6 @@ describe('cartes : facture récurrente, contrat, rapport planifié (audit 2026-0
       jobs: { job_number: '30', title: 'Revêtement', client_name: 'Marie Tremblay' },
       clients: { first_name: 'Marie', last_name: 'Tremblay' },
     }));
-    expect(con.cibles[0].valeur).toMatch(/#30.*Marie Tremblay.*draft/);
+    expect(con.cibles[0].valeur).toMatch(/#30.*Marie Tremblay.*brouillon/);
   });
 });
