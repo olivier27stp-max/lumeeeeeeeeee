@@ -1907,7 +1907,17 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
             metadata: await metadonneesFraiches(supabase, task, contexte),
           } as CRMEvent)
             && await conditionsChampsOk(supabase, task.org_id, task.entity_type, task.entity_id,
-              (etape.conditions as Record<string, unknown> | undefined)?.[CLE_CONDITIONS_CHAMPS]);
+              (etape.conditions as Record<string, unknown> | undefined)?.[CLE_CONDITIONS_CHAMPS])
+            /*
+             * « Si le client a / n'a pas l'étiquette » : jugé sur ses
+             * étiquettes RÉELLES, comme pour le déclencheur. `evaluateConditions`
+             * saute ces clés (elles ne sont pas dans les métadonnées) : sans
+             * cet appel, la condition était toujours vraie et la branche
+             * « sinon » n'était jamais prise (A-074, J-061).
+             */
+            && await conditionsEtiquettesOk(supabase,
+              () => clientDeLaTache(supabase, task.org_id, task.entity_type, task.entity_id),
+              etape.conditions as Record<string, unknown> | undefined);
 
           await planifierEtape(
             {

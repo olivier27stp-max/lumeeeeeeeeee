@@ -57,7 +57,7 @@ Statut : toutes les cellules avec un test PASSENT ; « NON COUVERT » / « NON C
 | A-071 | evaluateConditions | connu + inconnu, __proto__ | REFUSÉ |  |
 | A-072 | evaluateConditions | objet d’opérateurs vide {} | pas de filtre | documenté : Zod le refuse à l’enregistrement (A-352) |
 | A-073 | evaluateConditions | clé du prototype en nom de condition | ne lit pas Object.prototype |  |
-| A-074 | étape « si » | filtre d’étiquettes dans un si | — | NON COUVERT en unitaire : chemin asynchrone qui lit la base ; piste inv-1 §9-1, à couvrir en intégration (B) |
+| A-074 | étape « si » | filtre d’étiquettes dans un si | « alors » si le client a l’étiquette, « sinon » autrement (et l’inverse pour « n’a PAS ») | CORRIGÉ — le « si » appelle `conditionsEtiquettesOk` (avant : toujours vrai) ; couvert en intégration, `10-b-parcours.test.ts` ([A-074][J-061], 2 tests) |
 | A-080 | regleViseCetEvenement | règle sans portée | part |  |
 | A-081 | regleViseCetEvenement | même / autre étape | filtre |  |
 | A-082 | regleViseCetEvenement | autre pipeline / toutes étapes | filtre |  |

@@ -15,7 +15,7 @@ import { NUMERO_A } from '../harnais/bureau-test';
 import { marque, attendre, traiterFile } from '../harnais/moteur';
 import {
   preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, tachesPlanifiees, journaux,
-  traiterBase, creerClient, creerJob, creerFacture, drapeau, ok, smsEntrant, reserverTelephone, type Api, type Bureau,
+  traiterBase, traiterPipeline, creerClient, creerJob, creerFacture, creerDeal, pipelineParDefaut, drapeau, ok, smsEntrant, reserverTelephone, type Api, type Bureau,
 } from './10-b-outils';
 
 process.env.TWILIO_AUTH_TOKEN = 'qa_jeton_twilio_test_automatisations';
@@ -161,6 +161,48 @@ describe('[B] parcours : ordre, délais, branches', () => {
     } finally {
       await api2.fermer();
     }
+  });
+
+  /** La branche suivie par le « si » (étape s1) de CETTE fiche : on l'avance, puis on lit l'étape planifiée ensuite. */
+  async function brancheSuivie(ruleId: string, entityId: string): Promise<string[]> {
+    const duSi = async () => (await tachesPlanifiees(b.admin, ruleId)).filter((t) => t.entity_id === entityId);
+    const [si] = await attendre(duSi, (t) => t.some((x) => x.step_id === 's1'), 20_000);
+    expect(si?.step_id).toBe('s1');
+    await avancer(si.id);
+    const apres = await attendre(duSi, (t) => t.some((x) => x.step_id !== 's1'), 10_000);
+    return apres.filter((t) => t.step_id !== 's1').map((t) => String(t.step_id));
+  }
+
+  it('[A-074][J-061] si « le client a l’étiquette » : jugé sur ses étiquettes RÉELLES — sans l’étiquette → « sinon », avec → « alors »', async () => {
+    const m = marque('J-061');
+    const etiquette = `vip-${Date.now().toString(36)}`;
+    const sans = await creerClient(b, `${m} sans`);
+    const avec = await creerClient(b, `${m} avec`);
+    await ok(b.admin.from('client_tags').insert({ client_id: avec.id, tag: etiquette }), 'étiquette');
+    const id = await parcours(m, 'note.added', [
+      { id: 's1', type: 'si', conditions: { client_a_etiquette: etiquette }, alors: 'oui', sinon: 'non' },
+      tache('oui', `${m} alors`), tache('non', `${m} sinon`),
+    ]);
+    await noter(sans.id);
+    expect(await brancheSuivie(id, sans.id)).toEqual(['non']);
+    await noter(avec.id);
+    expect(await brancheSuivie(id, avec.id)).toEqual(['oui']);
+  });
+
+  it('[A-074][J-061] si « le client n’a PAS l’étiquette » : avec l’étiquette → « sinon », sans → « alors »', async () => {
+    const m = marque('J-061b');
+    const etiquette = `ne-pas-relancer-${Date.now().toString(36)}`;
+    const sans = await creerClient(b, `${m} sans`);
+    const avec = await creerClient(b, `${m} avec`);
+    await ok(b.admin.from('client_tags').insert({ client_id: avec.id, tag: etiquette }), 'étiquette');
+    const id = await parcours(m, 'note.added', [
+      { id: 's1', type: 'si', conditions: { client_sans_etiquette: etiquette }, alors: 'oui', sinon: 'non' },
+      tache('oui', `${m} alors`), tache('non', `${m} sinon`),
+    ]);
+    await noter(avec.id);
+    expect(await brancheSuivie(id, avec.id)).toEqual(['non']);
+    await noter(sans.id);
+    expect(await brancheSuivie(id, sans.id)).toEqual(['oui']);
   });
 
   it('[B-304] arrêter : rien n’est planifié après l’étape « arrêter »', async () => {
