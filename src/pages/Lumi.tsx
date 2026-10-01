@@ -427,7 +427,7 @@ export default function Lumi() {
           dernier.duree = Date.now() - (dernier.debut ?? Date.now());
           if (!dernier.text) dernier.text = e.message === 'refusal'
             ? (fr ? 'Je ne peux pas répondre à cette demande.' : "I can't help with that request.")
-            : (fr ? 'Désolé, je n’ai pas réussi à répondre. Réessayez.' : 'Sorry, I could not answer. Please try again.');
+            : (fr ? 'Désolé, je n’ai pas réussi à répondre. Réessaie dans un instant.' : 'Sorry, I could not answer. Please try again.');
           break;
         default:
           break;
