@@ -26,7 +26,7 @@
  *        [--forfait autopilot] [--budget 100000]   (staging : forfait avec Lumi et budget relevé le temps de la batterie, remis à la fin)   (staging : forfait avec Lumi le temps de la batterie, remis à la fin)
  */
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export interface Cas {
@@ -57,7 +57,7 @@ interface Resultat {
   interdit_propose: string | null;
   proposition: string | null; groupe: string[]; lectures: string[]; executes: number;
   args: Record<string, unknown> | null; apercu: unknown; params_manquants: string[];
-  reponse: string; cout_cents: number; duree_ms: number; erreur?: string;
+  reponse: string; cout_cents: number; duree_ms: number; erreur?: string; conversation_id?: string | null;
 }
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(k); return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : d; };
@@ -171,7 +171,7 @@ async function main() {
 
   async function demander(c: Cas): Promise<Resultat> {
     const debut = Date.now();
-    const r = { proposition: null as string | null, groupe: [] as string[], lectures: [] as string[], executes: 0, args: null as Record<string, unknown> | null, apercu: null as unknown, reponse: '', cout_cents: 0, erreur: undefined as string | undefined };
+    const r = { proposition: null as string | null, groupe: [] as string[], lectures: [] as string[], executes: 0, args: null as Record<string, unknown> | null, apercu: null as unknown, reponse: '', cout_cents: 0, erreur: undefined as string | undefined, conversation_id: null as string | null };
     for (let essai = 0; essai < 8; essai++) {
       try {
         const res = await fetch(`${API}/api/lumi/chat`, {
@@ -206,7 +206,7 @@ async function main() {
             r.proposition = j.tool; r.args = j.args ?? null; r.apercu = j.apercu ?? null;
             r.groupe = [...r.groupe, ...(j.groupe ?? []).map((g: any) => g.tool).filter((x: string) => x !== j.tool)];
             if (j.groupe) r.apercu = j.groupe.map((g: any) => g.apercu);
-          } else if (t === 'done') r.cout_cents = j.cost_cents ?? 0;
+          } else if (t === 'done') { r.cout_cents = j.cost_cents ?? 0; r.conversation_id = j.conversation_id ?? null; }
           else if (t === 'error') r.erreur = j.message;
         }
         r.erreur = r.erreur && r.erreur !== 'trop_d_etapes' ? r.erreur : undefined;
@@ -264,7 +264,15 @@ async function main() {
   };
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK'] as const) process.once(sig, () => { void remettre().finally(() => process.exit(130)); });
   await admin.from('memberships').update({ lumi_mode: 'demander' }).eq('user_id', userId).eq('org_id', orgId);
+  // Le serveur garde la session (forfait, budget, mode) 30 s en cache : sans cette attente,
+  // les premiers cas tombent sur l'ancien forfait (« Lumi is not included in this plan »).
+  if (FORFAIT || BUDGET > 0) { console.log('attente de 35 s (cache de session du serveur)'); await new Promise((ok) => setTimeout(ok, 35_000)); }
   const resultats: Resultat[] = [];
+  // Sauvegarde au fil de l'eau : une batterie tuée (session fermée, 175 cas perdus le
+  // 2026-10-01) se reprend avec `--reprendre <sortie>.partiel` au lieu de tout rejouer.
+  const PARTIEL = SORTIE + '.partiel';
+  mkdirSync(dirname(SORTIE), { recursive: true });
+  const fusion = () => { const nouveaux = new Set(resultats.map((r) => r.id)); return [...precedents.filter((r) => !nouveaux.has(r.id)), ...resultats]; };
   try {
     const file = [...tous];
     await Promise.all(Array.from({ length: PARALLELE }, async () => {
@@ -272,6 +280,7 @@ async function main() {
         const c = file.shift()!;
         const r = await demander(c);
         resultats.push(r);
+        if (resultats.length % 5 === 0) { writeFileSync(PARTIEL + '.tmp', JSON.stringify({ date: new Date().toISOString(), api: API, partiel: true, resultats: fusion() })); renameSync(PARTIEL + '.tmp', PARTIEL); }
         const ico = r.verdict_outil === 'exact' ? (r.verdict_params === 'faux' ? 'PARAM' : 'OK   ') : r.verdict_outil === 'partiel' ? 'PART ' : r.verdict_outil === 'erreur' ? 'ERR  ' : 'RATE ';
         console.log(`${ico}${r.faux_fait ? ' FAUX-FAIT' : ''} ${c.id.padEnd(34)} ${(r.proposition ? 'propose ' + r.proposition : r.lectures.length ? 'lit ' + r.lectures.join(',') : 'rien').slice(0, 60).padEnd(60)} ${r.cout_cents.toFixed(2)} ¢${r.params_manquants.length ? ' manque ' + r.params_manquants.join(',') : ''}${r.erreur ? ' ' + r.erreur : ''}`);
       }
@@ -279,13 +288,19 @@ async function main() {
   } finally {
     await remettre();
   }
-
-  if (REPRENDRE) {
-    const nouveaux = new Set(resultats.map((r) => r.id));
-    resultats.unshift(...precedents.filter((r) => !nouveaux.has(r.id)));
+  // Coût réel : l'événement « done » ne porte plus cost_cents depuis les crédits Lumi
+  // (il porte « credits ») — on somme ai_usage par conversation, routeur compris.
+  await new Promise((ok) => setTimeout(ok, 3000));
+  if (REPRENDRE) { const tout = fusion(); resultats.length = 0; resultats.push(...tout); }
+  const ids = resultats.filter((r) => !r.cout_cents).map((r) => r.conversation_id).filter((x): x is string => Boolean(x));
+  const cout = new Map<string, number>();
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data: lignes } = await admin.from('ai_usage').select('conversation_id, cost_cents').in('conversation_id', ids.slice(i, i + 100));
+    for (const l of (lignes ?? []) as Array<{ conversation_id: string; cost_cents: number | string }>) cout.set(l.conversation_id, (cout.get(l.conversation_id) ?? 0) + Number(l.cost_cents ?? 0));
   }
+  for (const r of resultats) if (!r.cout_cents && r.conversation_id) r.cout_cents = Math.round((cout.get(r.conversation_id) ?? 0) * 10000) / 10000;
+
   const bilan = bilanDe(resultats);
-  mkdirSync(dirname(SORTIE), { recursive: true });
   writeFileSync(SORTIE, JSON.stringify({ date: new Date().toISOString(), api: API, bilan, resultats }, null, 1));
   console.log('\n' + texteBilan(bilan));
   process.exit(0);
