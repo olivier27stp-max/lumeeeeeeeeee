@@ -44,7 +44,7 @@ const CANAL: Record<string, CanalModele> = {
 function atteignables(steps: Etape[]): Etape[] {
   const parId = new Map(steps.map((e) => [e.id, e]));
   const vues = new Set<string>();
-  const pile = [steps[0]?.id];
+  const pile: Array<string | undefined> = [steps[0]?.id];
   while (pile.length > 0) {
     const id = pile.pop();
     const e = id ? parId.get(id) : undefined;
