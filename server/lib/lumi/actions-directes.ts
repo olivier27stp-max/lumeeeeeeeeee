@@ -23,6 +23,7 @@
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../agent/garde';
+import { nettoyerTexteDicte } from '../agent/texte-dicte';
 import { masquerIds } from '../agent/refs';
 import { cleSouvenir } from '../agent/tools-etendus';
 import { executerEcriture, type ReçuExecution } from './execution';
@@ -732,8 +733,9 @@ export async function repondreActionDirecte(a: ActionDirecte, ctx: ContexteDirec
       };
     }
     // Carte
-    const args = await resoudre(a, ctx);
-    if (!args) return null;
+    const brut = await resoudre(a, ctx);
+    if (!brut) return null;
+    const args = nettoyerTexteDicte(brut); // même nettoyage que le modèle : la carte montre ce qui partira
     const toolUseId = `direct_${randomUUID()}`;
     const apercu = await apercuProposition(a.tool, args, { client: ctx.client, orgId: ctx.orgId, userId: ctx.userId });
     const masques = masquerIds(espace, args);

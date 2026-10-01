@@ -381,7 +381,9 @@ export function rendreRaccourci(r: Raccourci, resultat: any, opts: { fr: boolean
         const jobs = Number(c.nombre_de_jobs || 0);
         return `${i + 1}. ${c.nom || '—'} · ${fmtDollars(Number(c.total_cents || 0), fr)} · ${jobs} job${jobs > 1 ? 's' : ''}`;
       });
-      return `${fr ? `Tes ${lignes.length} meilleurs clients :` : `Your top ${lignes.length} clients:`}\n${lignes.join('\n')}`;
+      // « Tes 1 meilleurs clients » (lu en prod le 2026-10-01) : un seul client se dit au singulier.
+      const titre = lignes.length === 1 ? (fr ? 'Ton meilleur client :' : 'Your top client:') : (fr ? `Tes ${lignes.length} meilleurs clients :` : `Your top ${lignes.length} clients:`);
+      return `${titre}\n${lignes.join('\n')}`;
     }
     case 'taches': {
       const rows: any[] = Array.isArray(resultat?.tasks) ? resultat.tasks : [];
