@@ -37,6 +37,30 @@ export function maintenantPourLumi(fuseau: string, langue: 'fr' | 'en', instant:
     : `${jour} (${lisible}, company time, UTC${d}). Write every tool datetime with this offset, e.g. ${jour}T09:00:00${d}`;
 }
 
+/**
+ * Le JOUR seulement, pour le bloc système : il ne change qu'à minuit. L'heure à
+ * la minute de `maintenantPourLumi` y changeait le préfixe à chaque minute, et
+ * tout le cache de la conversation sautait (mesuré en prod le 2026-10-01 :
+ * écriture de TOUTE la conversation à chaque tour, sauf quand deux tours
+ * tombaient dans la même minute).
+ */
+export function jourPourLumi(fuseau: string, langue: 'fr' | 'en', instant: Date = new Date()): string {
+  const d = decalage(fuseau, instant);
+  const jour = jourDans(fuseau, instant);
+  const lisible = new Intl.DateTimeFormat(langue === 'fr' ? 'fr-CA' : 'en-CA', {
+    timeZone: fuseau, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  }).format(instant);
+  return langue === 'fr'
+    ? `${jour} (${lisible}, heure de l'entreprise, UTC${d}). Écris toute date-heure d'outil avec ce décalage, ex. ${jour}T09:00:00${d}`
+    : `${jour} (${lisible}, company time, UTC${d}). Write every tool datetime with this offset, e.g. ${jour}T09:00:00${d}`;
+}
+
+/** L'HEURE qu'il est, pour le contexte du tour (placé après le point de cache, jamais sauvegardé). */
+export function heurePourLumi(fuseau: string, langue: 'fr' | 'en', instant: Date = new Date()): string {
+  const heure = new Intl.DateTimeFormat(langue === 'fr' ? 'fr-CA' : 'en-CA', { timeZone: fuseau, hour: 'numeric', minute: '2-digit' }).format(instant);
+  return langue === 'fr' ? `Heure actuelle (heure de l'entreprise) : ${heure}.` : `Current time (company time): ${heure}.`;
+}
+
 const DATE_HEURE_NAIVE = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/;
 
 /**

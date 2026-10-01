@@ -177,9 +177,21 @@ async function lireFlux(res: Response, onEvent: (e: EvenementFlux) => void, sign
   if (!reader) throw new ErreurLumi('flux', 'No stream');
   const decoder = new TextDecoder();
   let tampon = '';
+  // Le serveur termine TOUJOURS par « done » (ou « error »). Un flux qui se
+  // ferme sans l'un des deux a été coupé : redémarrage du serveur pendant un
+  // déploiement, perte de réseau. Avant (2026-10-01), la lecture s'arrêtait en
+  // silence : la bulle restait à moitié écrite, sans aucun message.
+  let termine = false;
   for (;;) {
     if (signal?.aborted) { await reader.cancel(); return; }
-    const { value, done } = await reader.read();
+    let lecture: ReadableStreamReadResult<Uint8Array>;
+    try {
+      lecture = await reader.read();
+    } catch {
+      if (signal?.aborted) return;
+      throw new ErreurLumi('interrompu', 'Stream interrupted');
+    }
+    const { value, done } = lecture;
     if (done) break;
     tampon += decoder.decode(value, { stream: true });
     let sep: number;
@@ -193,11 +205,13 @@ async function lireFlux(res: Response, onEvent: (e: EvenementFlux) => void, sign
         else if (ligne.startsWith('data:')) donnees.push(ligne.slice(5).trim());
       }
       if (!donnees.length) continue;
+      if (type === 'done' || type === 'error') termine = true;
       try {
         onEvent({ ...(JSON.parse(donnees.join('\n')) as object), type } as EvenementFlux);
       } catch { /* événement illisible : on continue */ }
     }
   }
+  if (!termine && !signal?.aborted) throw new ErreurLumi('interrompu', 'Stream interrupted');
 }
 
 /** D'où vient un message (mesure côté serveur, table lumi_traces) : jamais une autorisation. */
