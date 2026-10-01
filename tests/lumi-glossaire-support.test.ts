@@ -175,11 +175,19 @@ describe('support — vouvoiement, escalade, aucune action réservée à Lumi', 
    * À l'inverse, Lumi (qui tutoie) sert les réponses de la FAQ écrites au « vous »
    * (server/routes/lumi.ts:614).
    */
-  it.fails('ÉCART : la réponse d’aide sans modèle ne tutoie pas dans le chat de support (articles-dabord.ts:136)', () => {
-    const source = lire('server/lib/support/articles-dabord.ts');
-    const fin = /Si ça ne règle pas [^`]*`/.exec(source)?.[0] ?? '';
-    expect(fin).toBeTruthy();
-    expect(TU.test(fin) || /dis-le-moi/.test(fin)).toBe(false);
+  // CORRIGÉ dans le même lot (voix de l'aide) : la relance suit la voix de celui qui
+  // parle — « dites-le-moi » par défaut (support), « dis-le-moi » seulement quand Lumi
+  // le demande. Le sens inverse (Lumi qui vouvoie) est tenu par lumi-aide-tutoiement.test.ts.
+  it('la réponse d’aide sans modèle vouvoie dans le chat de support, et ne tutoie que pour Lumi', async () => {
+    const { reponseAideDirecte } = await import('../server/lib/support/articles-dabord');
+    const q = 'est-ce que le GPS suit mes employés en dehors des heures ?';
+    const support = reponseAideDirecte(q, 'fr', { premierMessage: true })?.texte ?? '';
+    const lumi = reponseAideDirecte(q, 'fr', { premierMessage: true, voix: 'tu' })?.texte ?? '';
+    expect(support).toContain('Si ça ne règle pas votre cas, dites-le-moi');
+    expect(/dis-le-moi/.test(support)).toBe(false);
+    expect(lumi).toContain('Si ça ne règle pas ton cas, dis-le-moi');
+    // La route du support n'a pas à demander de voix : le défaut est le « vous ».
+    expect(lire('server/routes/support.ts')).not.toMatch(/voix: 'tu'/);
   });
 
   /**
