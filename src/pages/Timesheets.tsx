@@ -1,3 +1,4 @@
+import { horodatagesCorriges, pausesFermees } from '../lib/correctionPointage';
 import React, { useId, useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Timer, ChevronLeft, ChevronRight, Clock, Coffee, Download,
@@ -46,6 +47,8 @@ interface TimeEntry {
   breaks: Array<{ start: string; end: string }>;
   notes: string | null;
   approved?: boolean;
+  /** Horodatage d'arrivée lu par la paie — sert à garder le bon jour quand on corrige les heures. */
+  punch_in_at?: string | null;
 }
 
 interface EmployeeRow {
@@ -318,6 +321,7 @@ export default function Timesheets() {
         date: e.date, punch_in: e.punch_in?.slice(0, 5) || '09:00',
         punch_out: e.punch_out ? e.punch_out.slice(0, 5) : null,
         breaks: Array.isArray(e.breaks) ? e.breaks : [], notes: e.notes || null,
+        punch_in_at: e.punch_in_at ?? null,
       }));
       setEntries(mapped);
     }
@@ -549,9 +553,17 @@ export default function Timesheets() {
   const selectAll = () => setSelected(new Set(rows.map(r => r.id)));
   const selectNone = () => setSelected(new Set());
   const approveEntries = async (ids: string[]) => { const orgId = await getCurrentOrgIdOrThrow(); for (const id of ids) { const { error } = await supabase.from('time_entries').update({ approved_by: myUserId, approved_at: new Date().toISOString() }).eq('id', id).eq('org_id', orgId).is('approved_at', null); if (error) { toast.error(error.message); loadData(); return; } } toast.success(fr ? `${ids.length} approuvé(s)` : `${ids.length} approved`); loadData(); setSelected(new Set()); };
-  const forceClockOut = async (id: string) => { const orgId = await getCurrentOrgIdOrThrow(); const now = new Date(); const ts = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`; const { error } = await supabase.from('time_entries').update({ punch_out: ts, punch_out_at: now.toISOString(), status: 'completed' }).eq('id', id).eq('org_id', orgId); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Punch-out forcé' : 'Forced clock-out'); loadData(); loadMySession(); };
+  const forceClockOut = async (id: string) => { const orgId = await getCurrentOrgIdOrThrow(); const now = new Date(); const ts = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`; const ouverte = entries.find((e) => e.id === id); /* Une pause restée ouverte se ferme au départ : sans fin, la paie ne la déduit pas et elle est payée. */ const { error } = await supabase.from('time_entries').update({ punch_out: ts, punch_out_at: now.toISOString(), status: 'completed', ...(ouverte ? { breaks: pausesFermees(ouverte.breaks, `${ts}:00`) } : {}) }).eq('id', id).eq('org_id', orgId); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Punch-out forcé' : 'Forced clock-out'); loadData(); loadMySession(); };
   const deleteEntry = async (id: string) => { const orgId = await getCurrentOrgIdOrThrow(); const { error } = await supabase.from('time_entries').delete().eq('id', id).eq('org_id', orgId); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Entrée supprimée' : 'Entry deleted'); loadData(); loadMySession(); };
-  const saveEdit = async () => { if (!editingId) return; const orgId = await getCurrentOrgIdOrThrow(); const { error } = await supabase.from('time_entries').update({ punch_in: editPunchIn, punch_out: editPunchOut || null }).eq('id', editingId).eq('org_id', orgId); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Modifié' : 'Updated'); setEditingId(null); loadData(); };
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const orgId = await getCurrentOrgIdOrThrow();
+    // La paie additionne punch_in_at / punch_out_at, pas les heures affichées : les deux se corrigent ensemble
+    // (src/lib/correctionPointage.ts). Avant, l'écran montrait les nouvelles heures et la paie gardait les anciennes.
+    const corrigee = entries.find((e) => e.id === editingId);
+    const horodatages = corrigee ? horodatagesCorriges(corrigee, editPunchIn, editPunchOut || null) : null;
+    if (!horodatages) { toast.error(fr ? 'Heure invalide.' : 'Invalid time.'); return; }
+    const { error } = await supabase.from('time_entries').update({ punch_in: editPunchIn, punch_out: editPunchOut || null, ...horodatages, ...(horodatages.punch_out_at ? { status: 'completed' } : {}) }).eq('id', editingId).eq('org_id', orgId); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Modifié' : 'Updated'); setEditingId(null); loadData(); };
   const saveNote = async () => { if (!noteId) return; const orgId = await getCurrentOrgIdOrThrow(); const { error } = await supabase.from('time_entries').update({ notes: noteText }).eq('id', noteId).eq('org_id', orgId); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Note sauvegardée' : 'Note saved'); setNoteId(null); loadData(); };
   const handleExport = async (ids?: string[]) => {
     if (ids) {
