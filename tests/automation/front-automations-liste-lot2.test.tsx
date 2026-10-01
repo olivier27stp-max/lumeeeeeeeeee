@@ -371,6 +371,31 @@ describe('liste-04 — ce que la couleur disait seule est exposé aux lecteurs d
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('liste-09 — le même départ porte le même nom dans l’en-tête et dans le menu', () => {
+  const nomsDuDepartLumi = async (ouvrirMenu: RegExp) => {
+    const enTete = boutons().find((b) => !b.closest('[role="menu"]') && /Lumi|AI/.test(b.textContent || ''));
+    await cliquer(bouton(ouvrirMenu));
+    const item = Array.from(document.body.querySelectorAll('[role="menuitem"] span span:first-child'))
+      .map((s) => (s.textContent || '').trim()).find((t) => /Lumi|AI/.test(t));
+    return { enTete: (enTete?.textContent || '').trim(), item };
+  };
+
+  it('en anglais : « Build with Lumi » aux deux endroits (plus de « Build using AI »)', async () => {
+    await rendre('en');
+    const noms = await nomsDuDepartLumi(/^Create workflow$/);
+    expect(noms.item).toBe('Build with Lumi');
+    expect(noms.enTete).toBe('Build with Lumi');
+    expect(texte()).not.toContain('Build using AI');
+  });
+
+  it('en français : « Construire avec Lumi » aux deux endroits', async () => {
+    await rendre('fr');
+    const noms = await nomsDuDepartLumi(/^Créer$/);
+    expect(noms).toEqual({ enTete: 'Construire avec Lumi', item: 'Construire avec Lumi' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('liste-05 — langue du bureau illisible : l’écran ne prétend pas la connaître', () => {
   const surligne = (b: HTMLElement | undefined) => /\bbg-text-primary\b/.test(b?.className ?? '');
   const AVEU = 'Langue actuelle inconnue';

@@ -1448,7 +1448,8 @@ export default function Automations() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent/5 px-3 py-1.5 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <Sparkles size={14} aria-hidden="true" />
-              {fr ? 'Construire avec Lumi' : 'Build using AI'}
+              {/* Le même nom que dans le menu « Créer » (c'était « Build using AI »). */}
+              {fr ? 'Construire avec Lumi' : 'Build with Lumi'}
             </button>
 
             <div className="relative">
