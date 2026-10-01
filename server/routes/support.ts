@@ -26,6 +26,8 @@ import { isSupportIAConfigured, repondreSupportIA } from '../lib/support/ia';
 import { dossierClient } from '../lib/support/dossier';
 import { reponseFaqPour } from '../lib/support/faq';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
+import { demandeUnHumain } from '../lib/support/demande-humain';
+import { langueDuMessage } from '../lib/lumi/langue-message';
 import { reponseAideMulti } from '../lib/support/aide-multi';
 import { statutMigrationPour, demarrerMigrationPour } from '../lib/support/migration-outils';
 import { journaliserTrace } from '../lib/lumi/traces';
@@ -101,9 +103,15 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
       }
     }
 
+    // Une demande d'humain ÉCRITE vaut le bouton : avant, « je veux parler à une vraie
+    // personne » recevait l'article de la FAQ (« Dites-le simplement ici… »).
+    const veutHumain = !!humain || demandeUnHumain(message);
+    // La langue du MESSAGE, pas celle du compte : une question en anglais reçoit une
+    // réponse en anglais, comme dans Lumi (dans le doute, la langue du compte).
+    const langue = langueDuMessage(message, ctx.langue);
     let reply: string | null = null;
-    let transferer = !!humain;
-    let motif = humain ? 'Le client a demandé à parler à un humain' : '';
+    let transferer = veutHumain;
+    let motif = veutHumain ? 'Le client a demandé à parler à un humain' : '';
     // Étage 0 : une question classique a une réponse fixe — 0 appel modèle.
     // Depuis le 2026-09-18, la correspondance n'est plus seulement mot pour
     // mot : une reformulation sans ambiguïté sur le même sujet produit la même
@@ -112,16 +120,16 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
     // `reponseAideMulti` couvre le cas « plusieurs questions collées d'un
     // coup » : chacune a sa réponse écrite, mais le bloc entier ne ressemble
     // à rien de connu et partait au modèle. Tout ou rien (voir aide-multi.ts).
-    const fixe = humain
+    const fixe = veutHumain
       ? null
-      : reponseFaqPour(message, ctx.langue)
-        ?? (() => { const m = reponseAideMulti(message, ctx.langue); return m ? { id: `aide-multi:${m.ids.length}`, reponse: m.texte, path: null } : null; })();
+      : reponseFaqPour(message, langue)
+        ?? (() => { const m = reponseAideMulti(message, langue); return m ? { id: `aide-multi:${m.ids.length}`, reponse: m.texte, path: null } : null; })();
     if (fixe) {
       reply = fixe.reponse;
       await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
       if (chezHumain) await relayerMessageClient(admin, ticket, ctx, reply, 'lumi');
       void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 0, action: `faq:${fixe.id}`, resultat: 'ok', model: null, costCents: 0, dureeMs: 0 });
-    } else if (!humain) {
+    } else if (!veutHumain) {
       const historique = (await messagesPourVue(admin, ticket.id))
         .filter((m) => (m.author === 'user' || m.author === 'ai'))
         .slice(0, -1) // le message courant est passé à part
@@ -134,21 +142,21 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
       const vecteur = premierMessage ? await embed(message) : null;
       const version = vecteur ? await versionOrg(auth.orgId) : null;
       const memo = vecteur
-        ? (await chercherSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(ctx.langue), vecteur, null, message)) ?? (await chercherSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), vecteur, version, message))
+        ? (await chercherSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(langue), vecteur, null, message)) ?? (await chercherSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), vecteur, version, message))
         : null;
       // Plafond par entreprise et par jour : au-delà, réponses fixes seulement, jamais le modèle.
       const auPlafond = !memo && (await reponsesModeleAujourdhui(admin, auth.orgId)) >= PLAFOND_MODELE_PAR_JOUR;
       // Étage 5 : le centre d'aide avant le modèle (patron de tous les CRM).
       // Ne répond que si la recherche est franche ET sans ambiguïté ; sinon
       // `null` et le modèle prend la suite, exactement comme avant.
-      const aide = !memo && !auPlafond ? reponseAideDirecte(message, ctx.langue, { premierMessage }) : null;
+      const aide = !memo && !auPlafond ? reponseAideDirecte(message, langue, { premierMessage }) : null;
       if (memo) {
         reply = memo.entree.texte;
         await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
         if (chezHumain) await relayerMessageClient(admin, ticket, ctx, reply, 'lumi');
         void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 4, action: 'cache-semantique', resultat: 'ok', model: null, costCents: 0, dureeMs: Date.now() - debut });
       } else if (auPlafond) {
-        reply = texteAuPlafond(ctx.langue);
+        reply = texteAuPlafond(langue);
         await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
         void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 0, action: 'plafond-jour', resultat: 'refus', model: null, costCents: 0, dureeMs: Date.now() - debut });
       } else if (aide) {
@@ -163,7 +171,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         const dossier = await dossierClient(admin, auth.orgId, auth.user.id);
         const images = (await Promise.all(pieces.map((p) => lireCaptureBase64(admin, p)))).filter((i): i is NonNullable<typeof i> => !!i);
         const r = await repondreSupportIA(
-          { langue: ctx.langue, companyName: ctx.companyName, planLabel: ctx.planLabel, userName: ctx.userName, slaTexte: slaTexte(ctx.slaKey, ctx.langue), surface: 'app', dossier: dossier.texte, page: page ?? null, images, orgId: auth.orgId, userId: auth.user.id },
+          { langue, companyName: ctx.companyName, planLabel: ctx.planLabel, userName: ctx.userName, slaTexte: slaTexte(ctx.slaKey, langue), surface: 'app', dossier: dossier.texte, page: page ?? null, images, orgId: auth.orgId, userId: auth.user.id },
           historique, message,
           {
             statutMigration: () => statutMigrationPour(admin, auth.orgId),
@@ -180,7 +188,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         // Pour l'entreprise toujours ; pour toutes les entreprises si elle ne parle pas de ce compte (reponseGenerique).
         if (vecteur && !transferer && outilsDeDoc(r.outils) && !page && !pieces.length) {
           void memoriserSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), { enonce: message, vec: vecteur, texte: reply, fiches: [], outils: [], version: version ?? 0 });
-          if (reponseGenerique(reply, r.outils, ctx)) void memoriserSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(ctx.langue), { enonce: message, vec: vecteur, texte: reply, fiches: [], outils: [], version: 0 });
+          if (reponseGenerique(reply, r.outils, ctx)) void memoriserSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(langue), { enonce: message, vec: vecteur, texte: reply, fiches: [], outils: [], version: 0 });
         }
         void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 6, action: 'app', outils: r.outils, resultat: transferer ? 'proposition' : 'ok', model: 'claude-sonnet-5', costCents: r.coutCents, dureeMs: Date.now() - debut });
       } catch (e: any) {
@@ -295,7 +303,7 @@ router.post('/support/:id/messages/:mid/avis', validate(supportAvisSchema), asyn
       const { data: q } = await admin.from('support_messages').select('body').eq('ticket_id', ticket.id).eq('author', 'user').lt('created_at', m.created_at).order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (q?.body) {
         const ctx = await contexteOrg(admin, auth.orgId, auth.user);
-        await Promise.all([oublierSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), q.body), oublierSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(ctx.langue), q.body)]);
+        await Promise.all([oublierSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), q.body), oublierSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(langueDuMessage(q.body, ctx.langue)), q.body)]);
       }
     }
     void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: 'texte', enonce: `avis:${avis}`, etage: 0, action: `avis:${avis}`, resultat: 'ok', model: null, costCents: 0, dureeMs: 0 });

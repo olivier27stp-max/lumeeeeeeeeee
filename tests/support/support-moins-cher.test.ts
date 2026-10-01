@@ -67,11 +67,11 @@ describe('reponseGenerique', () => {
 describe('route du support', () => {
   const src = readFileSync('server/routes/support.ts', 'utf8');
   it('cherche le cache partagé avant celui de l’entreprise, et n’écrit dans le partagé qu’une réponse générique', () => {
-    const partage = src.indexOf('chercherSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(ctx.langue)');
+    const partage = src.indexOf('chercherSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(langue)');
     const org = src.indexOf('chercherSemantique(PORTEE_CACHE_SUPPORT(auth.orgId)');
     expect(partage).toBeGreaterThan(0);
     expect(partage).toBeLessThan(org);
-    expect(src).toContain('if (reponseGenerique(reply, r.outils, ctx)) void memoriserSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(ctx.langue)');
+    expect(src).toContain('if (reponseGenerique(reply, r.outils, ctx)) void memoriserSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(langue)');
     expect(src).toContain('outilsDeDoc(r.outils) && !page');
   });
 });
