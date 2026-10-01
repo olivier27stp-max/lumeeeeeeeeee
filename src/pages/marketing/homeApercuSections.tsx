@@ -100,27 +100,54 @@ function LogoMarquee({ fr }: { fr: boolean }) {
   );
 }
 
-/* ── Quatre fonctions, texte et capture en alternance. Le contenu vient de
-   fonctionsData (mêmes textes et captures que les pages « En savoir plus »),
-   dans l'ordre d'une job : demande → soumission → dispatch → facture. ── */
-const FEATURE_SLUGS = ['clients', 'soumissions', 'calendrier', 'finances'];
+/* ── Quatre fonctions, texte et capture en alternance, dans l'ordre d'une
+   job : demande → soumission → dispatch → facture. La 1re rangée est propre à
+   l'accueil (formulaire de demande intégré au site du client, options du
+   constructeur de RequestFormSettings) ; les trois autres reprennent
+   fonctionsData (mêmes textes et captures que les pages « En savoir plus »). ── */
+type FeatureRow = { slug: string; job: Bi; title: Bi; lead: Bi; points: Bi[]; shot: string; alt: Bi; h: number };
+const REQUEST_FORM_ROW: FeatureRow = {
+  slug: 'clients',
+  job: { fr: 'Formulaire de demande', en: 'Request form' },
+  title: { fr: 'Ton formulaire de demande, branché sur ton site.', en: 'Your request form, plugged into your own website.' },
+  lead: {
+    fr: "Garde ton site actuel. Colle le code d'intégration dans ta page et le formulaire Lume y apparaît. Chaque demande crée le client et le lead dans ton pipeline, sans rien retaper.",
+    en: 'Keep your current website. Paste the embed code into your page and the Lume form shows up there. Every request creates the client and the lead in your pipeline, with nothing retyped.',
+  },
+  points: [
+    { fr: "Intégration par script, iframe ou lien direct", en: 'Embed with a script, an iframe or a direct link' },
+    { fr: 'Ton logo, ton titre et ton message de remerciement', en: 'Your logo, your title and your thank-you message' },
+    { fr: 'Tes questions : texte, liste déroulante, cases à cocher, nombre, paragraphe', en: 'Your questions: text, dropdown, checkboxes, number, paragraph' },
+    { fr: 'Champs obligatoires, réponses rangées dans la fiche du client', en: "Required fields, answers saved to the client's record" },
+    { fr: "Avis par courriel et dans l'app à chaque nouvelle demande", en: 'Email and in-app alert on every new request' },
+  ],
+  shot: '/landing/apercu-formulaire.webp',
+  alt: { fr: 'Constructeur du formulaire de demande dans Lume', en: 'Request form builder in Lume' },
+  h: 1125,
+};
+const FEATURE_ROWS: FeatureRow[] = [
+  REQUEST_FORM_ROW,
+  ...['soumissions', 'calendrier', 'finances'].flatMap((slug) => {
+    const f = FONCTIONS.find((x) => x.slug === slug);
+    return f ? [{ slug, job: f.job, title: f.title, lead: f.lead, points: f.points.slice(0, 3).map((pt) => pt.t), shot: f.shot, alt: f.shotAlt, h: 1125 }] : [];
+  }),
+];
 
 export function FeatureRows({ fr }: { fr: boolean }) {
-  const rows = FEATURE_SLUGS.map((slug) => FONCTIONS.find((f) => f.slug === slug)).filter((f) => f !== undefined);
   return (
     <section className="hs-feat">
       <p className="ha-kicker">{fr ? 'Les fonctions' : 'The features'}</p>
       <h2>{fr ? 'De la demande au paiement, sans rien retaper.' : 'From request to payment, with nothing retyped.'}</h2>
-      {rows.map((f) => (
+      {FEATURE_ROWS.map((f) => (
         <div key={f.slug} className="hs-frow">
           <div className="hs-ftxt">
             <em>{pick(fr, f.job)}</em>
             <h3>{pick(fr, f.title)}</h3>
             <p>{pick(fr, f.lead)}</p>
-            <ul>{f.points.slice(0, 3).map((pt) => <li key={pt.t.en}>{pick(fr, pt.t)}</li>)}</ul>
+            <ul>{f.points.map((pt) => <li key={pt.en}>{pick(fr, pt)}</li>)}</ul>
             <Link to={`/fonctions/${f.slug}`} className="hs-link">{fr ? 'En savoir plus →' : 'Learn more →'}</Link>
           </div>
-          <img src={f.shot} alt={pick(fr, f.shotAlt)} loading="lazy" decoding="async" width={1800} height={f.slug === 'clients' ? 967 : 1125} />
+          <img src={f.shot} alt={pick(fr, f.alt)} loading="lazy" decoding="async" width={1800} height={f.h} />
         </div>
       ))}
     </section>
