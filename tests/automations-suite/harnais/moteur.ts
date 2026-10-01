@@ -97,11 +97,35 @@ export async function attendre<T>(lire: () => Promise<T>, ok: (v: T) => boolean,
   return v;
 }
 
-/** Les envois simulés d'une entreprise depuis un instant donné. */
+/**
+ * De combien l'horloge de CE poste avance sur celle de la base (ms, ≥ 0),
+ * marge d'aller-retour comprise. `depuis` est noté à l'heure du poste, mais
+ * `created_at` à celle de la base : poste en avance de 300 ms = les envois
+ * faits tout de suite après semblaient dater d'AVANT le test (canari rouge
+ * le 2026-10-01, 2 envois sur 3 « absents »). Mesurée une fois par fichier.
+ */
+let avanceDuPoste: Promise<number> | null = null;
+function mesurerAvance(admin: SupabaseClient, orgId: string): Promise<number> {
+  avanceDuPoste ??= (async () => {
+    const t0 = Date.now();
+    const { data, error } = await admin.from('envois_simules')
+      .insert({ org_id: orgId, canal: 'webhook', destinataire: 'horloge://mesure', meta: { mesure_horloge: true } })
+      .select('id, created_at').single();
+    const t1 = Date.now();
+    if (error || !data) return 2_000; // mesure impossible : marge prudente
+    await admin.from('envois_simules').delete().eq('id', data.id);
+    const avance = (t0 + t1) / 2 - Date.parse(data.created_at as string);
+    return Math.max(0, avance) + (t1 - t0) / 2 + 250;
+  })();
+  return avanceDuPoste;
+}
+
+/** Les envois simulés d'une entreprise depuis un instant donné (heure du poste). */
 export async function envoisSimules(admin: SupabaseClient, orgId: string, depuis: string) {
+  const borne = new Date(Date.parse(depuis) - (await mesurerAvance(admin, orgId))).toISOString();
   const { data, error } = await admin.from('envois_simules')
     .select('id, canal, destinataire, sujet, corps, meta, created_at')
-    .eq('org_id', orgId).gte('created_at', depuis).order('created_at');
+    .eq('org_id', orgId).gte('created_at', borne).neq('destinataire', 'horloge://mesure').order('created_at');
   if (error) throw new Error(error.message);
   return data ?? [];
 }
