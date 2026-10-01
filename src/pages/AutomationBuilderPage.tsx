@@ -44,6 +44,7 @@ import {
   apercuAutomatisation,
   changerPublication,
   chargerStatistiques,
+  restaurerAutomatisation,
   type StatsEtape,
   type BrouillonAutomatisation,
   type CatalogueAutomatisations,
@@ -236,6 +237,8 @@ export default function AutomationBuilderPage() {
   const [echangesLumi, setEchangesLumi] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   /** Le panneau de Lumi, replié par l'utilisateur (le fil est gardé). */
   const [lumiReduit, setLumiReduit] = useState(false);
+  /** « Restaurer » en cours, depuis l'écran d'une automatisation à la corbeille. */
+  const [restauration, setRestauration] = useState(false);
   /**
    * La 2e automatisation déjà créée dans cette conversation : quand Lumi la
    * corrige (« voici mon lien Calendly »), on la MET À JOUR au lieu d'en
@@ -1556,6 +1559,51 @@ export default function AutomationBuilderPage() {
         >
           {fr ? 'Mes automatisations' : 'My automations'}
         </button>
+      </div>
+    );
+  }
+
+  /*
+   * À LA CORBEILLE : ni canevas ni panneaux. L'éditeur s'ouvrait par son
+   * adresse (lien gardé, onglet resté ouvert) sur une automatisation
+   * supprimée comme sur une autre, sans le dire, et la laissait modifier
+   * (audit du 2026-10-01). On dit où elle est, et on offre de la restaurer.
+   */
+  if (regle.deleted_at) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-surface px-6 text-center">
+        <p className="text-base font-semibold text-text-primary">{nom || regle.name}</p>
+        <p className="max-w-md text-sm text-text-secondary">
+          {fr
+            ? 'Cette automatisation est à la corbeille : elle ne se déclenche plus et ne se modifie pas. Restaurez-la pour la retravailler — elle reviendra en brouillon.'
+            : 'This automation is in the bin: it no longer runs and cannot be edited. Restore it to work on it — it comes back as a draft.'}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={restauration}
+            onClick={() => {
+              setRestauration(true);
+              restaurerAutomatisation(regle.id)
+                .then((maj) => {
+                  setRegle((r) => (r ? { ...r, deleted_at: null, is_active: maj.is_active } : maj));
+                  toast.success(fr ? 'Automatisation restaurée, en brouillon.' : 'Automation restored, as a draft.');
+                })
+                .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)))
+                .finally(() => setRestauration(false));
+            }}
+            className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {restauration ? (fr ? 'Restauration…' : 'Restoring…') : (fr ? 'Restaurer' : 'Restore')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void quitterEditeur()}
+            className="rounded-lg border border-outline px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Mes automatisations' : 'My automations'}
+          </button>
+        </div>
       </div>
     );
   }

@@ -39,6 +39,7 @@ const api = {
   publier: vi.fn(async (_id: string, _a: boolean) => undefined),
   generer: vi.fn(),
   stats: vi.fn(async (_id?: string): Promise<any> => ({ par_regle: {}, par_etape: {} })),
+  restaurer: vi.fn(async (id: string) => ({ ...regle({ id }), deleted_at: null, is_active: false }) as any),
 };
 const confirmerMock = vi.fn(async (_o: unknown) => true);
 const toasts = { erreur: [] as string[], succes: [] as string[], info: [] as string[] };
@@ -71,6 +72,7 @@ vi.mock('../src/lib/automationBuilderApi', () => ({
   apercuAutomatisation: (id: string) => api.apercu(id),
   changerPublication: (id: string, a: boolean) => api.publier(id, a),
   chargerStatistiques: (id?: string) => api.stats(id),
+  restaurerAutomatisation: (id: string) => api.restaurer(id),
 }));
 vi.mock('../src/hooks/usePlanFeature', () => ({
   usePlanFeature: () => ({ hasFeature: etat.aLumi, loading: false }),
@@ -367,5 +369,54 @@ describe('textes de suppression d’étape', () => {
     const bloc = (debut: string) => src.slice(src.indexOf(debut), src.indexOf(debut) + 1600);
     expect(bloc('const supprimerEtape = useCallback')).toContain('danger: true');
     expect(bloc('const supprimerDepuis = useCallback')).toContain('danger: true');
+  });
+});
+
+// ─── Une automatisation à la corbeille ─────────────────────────
+
+describe('une automatisation à la corbeille ne s’édite pas (audit du 2026-10-01)', () => {
+  // Observé : ouverte par son adresse, elle s'affichait comme une autre et
+  // le texte d'une étape se réécrivait en base.
+  beforeEach(() => {
+    etat.regles = [regle({ id: 'r-corbeille', name: 'Relance supprimée', deleted_at: '2026-09-30T10:00:00Z' })];
+    api.restaurer.mockClear();
+  });
+
+  it('l’écran dit qu’elle est à la corbeille, sans canevas ni panneau', async () => {
+    await ouvrir('/automations/r-corbeille');
+    expect(container.textContent).toContain('Relance supprimée');
+    expect(container.textContent).toContain('Cette automatisation est à la corbeille');
+    expect(container.textContent).toContain('elle reviendra en brouillon');
+    // Rien de ce qui permet de modifier ou de publier.
+    expect(bouton('Ajouter')).toBeUndefined();
+    expect(container.querySelector('[role="switch"]')).toBeNull();
+    expect(container.querySelector('textarea')).toBeNull();
+    expect(api.modifier).not.toHaveBeenCalled();
+  });
+
+  it('« Restaurer » la sort de la corbeille et rend l’éditeur', async () => {
+    await ouvrir('/automations/r-corbeille');
+    cliquer(bouton('Restaurer'));
+    await attendre();
+    expect(api.restaurer).toHaveBeenCalledWith('r-corbeille');
+    expect(container.textContent).not.toContain('Cette automatisation est à la corbeille');
+    expect(toasts.succes).toContain('Automatisation restaurée, en brouillon.');
+    expect(container.querySelector('[role="switch"]')).not.toBeNull();
+  });
+
+  it('« Mes automatisations » ramène à la liste', async () => {
+    await ouvrir('/automations/r-corbeille');
+    cliquer(bouton('Mes automatisations'));
+    await attendre();
+    expect(lieu()).toBe('/automations');
+  });
+
+  it('une restauration refusée laisse l’écran en place et dit pourquoi', async () => {
+    api.restaurer.mockRejectedValueOnce(new Error('Permission refusée'));
+    await ouvrir('/automations/r-corbeille');
+    cliquer(bouton('Restaurer'));
+    await attendre();
+    expect(toasts.erreur).toContain('Permission refusée');
+    expect(container.textContent).toContain('Cette automatisation est à la corbeille');
   });
 });
