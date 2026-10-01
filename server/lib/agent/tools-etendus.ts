@@ -3335,7 +3335,7 @@ const markInvoicePaidTool: AgentTool = {
       // deviendrait payée-invisible (absente du filtre « payées », son montant
       // hors du revenu collecté). Il faut d'abord l'envoyer au client.
       if (inv.status === 'draft') {
-        throw new Error('Cette facture est encore un brouillon — envoie-la d’abord au client envoie-la d’abord au client, ensuite je pourrai la marquer payée.');
+        throw new Error('Cette facture est encore un brouillon — envoie-la d’abord au client, ensuite je pourrai la marquer payée.');
       }
       if (inv.status === 'void' || inv.status === 'cancelled') throw new Error('Cette facture est annulée — on ne la marque pas payée.');
       const reste = Number(inv.balance_cents) > 0 ? Number(inv.balance_cents) : Number(inv.total_cents);
