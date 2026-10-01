@@ -127,6 +127,11 @@ describe('[B] actions de communication (envois simulés, mot pour mot)', () => {
   it('[B-102] send_sms marketing : la mention de désabonnement (STOP) est ajoutée au corps final', async () => {
     const m = marque('B-102');
     const depuis = new Date().toISOString();
+    // Le plafond « 3 messages commerciaux / 24 h » se compte par NUMÉRO : ce
+    // numéro fixe en reçoit un à chaque passe, et la 4e passe de la journée
+    // était refusée (vu le 2026-10-01). Une suite rejouée avant chaque
+    // déploiement repart d'un compteur propre.
+    await b.admin.from('messages').delete().eq('org_id', b.orgA).eq('phone_number', '+15555550148');
     const client = await creerClient(b, m, { phone: '+15555550148' });
     const id = await regle(m, 'note.added', [{ type: 'send_sms', config: { body: `Promo ${m}`, type_envoi: 'marketing' } }]);
     await noter(client.id);

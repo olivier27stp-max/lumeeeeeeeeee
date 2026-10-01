@@ -559,11 +559,33 @@ export function genererParcours(params: Parameters<typeof genererParcoursUneFois
  */
 export function normaliserEtapes(etapes: unknown[]): Array<Record<string, unknown>> {
   return (etapes as Array<Record<string, unknown>>).map((e) => {
-    const action = e?.type === 'action' ? (e.action as { type?: string; config?: Record<string, unknown> } | undefined) : undefined;
-    if (!action?.config || typeof action.config !== 'object') return e;
+    const action = e?.type === 'action' ? (e.action as ({ type?: string; config?: unknown } & Record<string, unknown>) | undefined) : undefined;
+    if (!action || typeof action !== 'object') return e;
     const modele = action.type ? trouverAction(action.type) : undefined;
+    let source = action.config as Record<string, unknown> | undefined;
+    let enveloppeOubliee = false;
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+      /*
+       * L'ENVELOPPE `config` oubliée. Le modèle pose parfois les champs à plat
+       * sur l'action (`{ type: 'create_task', title: '…' }`), ou n'écrit rien
+       * pour une action sans champ obligatoire. La validation refusait alors
+       * TOUT le parcours (« config : expected object, received undefined ») et
+       * la personne lisait « Reformule ta demande » pour une demande claire —
+       * vu sur la batterie I contre la prod le 2026-10-01 (I-018). On remet
+       * dans `config` les champs CONNUS de cette action ; une action qui exige
+       * un champ et n'en porte aucun reste refusée, comme avant.
+       */
+      if (!modele) return e;
+      const aPlat: Record<string, unknown> = {};
+      for (const c of modele.champs) {
+        if (Object.prototype.hasOwnProperty.call(action, c.cle)) aPlat[c.cle] = action[c.cle];
+      }
+      if (!Object.keys(aPlat).length && modele.champs.some((c) => c.obligatoire)) return e;
+      source = aPlat;
+      enveloppeOubliee = true;
+    }
     const config: Record<string, unknown> = {};
-    for (const [cle, valeur] of Object.entries(action.config)) {
+    for (const [cle, valeur] of Object.entries(source)) {
       let v = valeur;
       if (typeof v === 'number' || typeof v === 'boolean') v = String(v);
       const champ = modele?.champs.find((c) => c.cle === cle);
@@ -571,7 +593,7 @@ export function normaliserEtapes(etapes: unknown[]): Array<Record<string, unknow
         && !champ.options.some((o) => o.cle === v) && !champ.obligatoire) continue;
       config[cle] = v;
     }
-    return { ...e, action: { ...action, config } };
+    return { ...e, action: enveloppeOubliee ? { type: action.type, config } : { ...action, config } };
   });
 }
 

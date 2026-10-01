@@ -722,6 +722,7 @@ Vrai chemin : `POST /api/lumi/chat` (orchestrateur, routeur actif, vrai modèle)
 | I-034 | list_automations | corbeille / purgée | non listées | corrigé (d6b41e5b) |
 | I-035 | Redemander la même automatisation < 24 h après l'avoir supprimée | — | doit créer | ROUGE ATTENDU — décision : empreinte d'idempotence 24 h (agent_actions) → « c'est fait » sans rien créer ; touche toutes les écritures de Lumi |
 | I-036 | Déclencheur en rodage non offert à l'entreprise (`payment.failed`, drapeau `auto_paiement_echoue`) | drapeau éteint, puis allumé | éteint : refusé par l'outil de Lumi, par la création, par le changement de déclencheur (code `declencheur_non_offert`), rien en base ; allumé : accepté | CORRIGÉ — l'éditeur cachait ces déclencheurs, mais le prompt de Lumi liste tout le catalogue et l'API acceptait : la règle était créée et ne partait jamais |
+| I-037 | Étape dont le modèle a oublié l'enveloppe `config` | champs posés à plat sur l'action ; aucun champ ; clé étrangère | les champs CONNUS de l'action sont remis dans `config` et le parcours passe la validation ; une action qui exige un champ et n'en porte aucun reste refusée | CORRIGÉ — vu sur I-018 contre la prod (vrai modèle) : la tâche finale sans `config` faisait refuser tout le parcours, « Reformule ta demande » |
 | I-040 | « Crée … » / « Create … » | — | jamais de réponse FAQ | corrigé (a78e61f7) |
 | I-041 | Vraie question produit | — | garde sa FAQ | |
 | I-042 | « crée un parcours / automatise / workflow » | — | indice → create_automation_from_text | corrigé (9d0abe1c) |
