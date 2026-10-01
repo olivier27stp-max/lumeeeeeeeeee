@@ -824,7 +824,7 @@ export async function resolveEntityVariables(
    * l'entreprise.
    */
   const langueDates: 'fr' | 'en' = company?.default_language === 'en' ? 'en' : 'fr';
-  const argent =(cents: number | null | undefined, devise = 'CAD') =>
+  const argent = (cents: number | null | undefined, devise = 'CAD') =>
     new Intl.NumberFormat(locale, { style: 'currency', currency: devise || 'CAD' })
       .format(Number(cents ?? 0) / 100);
 
