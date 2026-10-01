@@ -1579,7 +1579,9 @@
      "action_type": "create_notification",
      "action_config": {
       "body": "La soumission est acceptée depuis 2 jours, mais le dépôt n'a pas été reçu.",
-      "title": "Dépôt en attente — [client_name]"
+      "body_en": "The quote was accepted 2 days ago, but the deposit has not been received.",
+      "title": "Dépôt en attente — [client_name]",
+      "title_en": "Deposit pending — [client_name]"
      },
      "result_success": true,
      "result_data": {
@@ -8095,7 +8097,9 @@
      "action_type": "create_notification",
      "action_config": {
       "body": "Le rendez-vous de [client_name] a été annulé.",
-      "title": "Rendez-vous annulé"
+      "body_en": "The appointment with [client_name] was cancelled.",
+      "title": "Rendez-vous annulé",
+      "title_en": "Appointment cancelled"
      },
      "result_success": true,
      "result_data": {

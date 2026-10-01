@@ -592,16 +592,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   // Publier par ce chemin passe par les mêmes vérifications que la route de
   // publication (M8), sur la règle telle qu'elle SERA après modification.
   if (patch.is_active === true) {
-    // Une règle à la corbeille ne se publie pas : même refus que la route de
-    // publication (`changerPublication`). Sans lui, ce chemin écrivait
-    // `is_active: true` sur une règle supprimée — invisible dans la liste, et
-    // affichée « publiée » dès sa restauration (J-065).
-    if (existante.deleted_at) {
-      return res.status(422).json({
-        error: 'Cette automatisation est à la corbeille : restaurez-la avant de la publier.',
-        code: 'publication_refusee',
-      });
-    }
+    // (Une règle à la corbeille a déjà été refusée plus haut — J-065.)
     const problemes = problemesBloquants({ ...existante, ...patch }, fr);
     if (problemes.length) return res.status(422).json({ error: messageRefus(problemes, fr), code: 'publication_refusee', problemes });
   }
