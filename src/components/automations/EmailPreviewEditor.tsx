@@ -131,6 +131,9 @@ function ChampBloc({
   );
 }
 
+/** Au-delà de ce nombre de variables, la palette offre une recherche. */
+const SEUIL_RECHERCHE_VARIABLES = 12;
+
 /** Découpe le texte converti en blocs manipulables. */
 function texteEnBlocs(texte: string): Bloc[] {
   const lignes = texte.split('\n').filter((l) => l.trim());
@@ -215,6 +218,16 @@ export default function EmailPreviewEditor({
     // Champs personnalisés (v2) que le serveur remplit pour ce poste.
     ...variablesChampsPourCourriel(typeCourriel, champsPerso),
   ], [typeCourriel, champsPerso]);
+
+  /* Le filtre de la palette : sans accents ni casse, sur le libellé affiché
+     ET sur la clé — on cherche « prenom » comme « first_name ». */
+  const [filtreVariable, setFiltreVariable] = useState('');
+  const variablesAffichees = useMemo(() => {
+    const nu = (x: string) => x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const cherche = nu(filtreVariable.trim());
+    if (!cherche) return variables;
+    return variables.filter((v) => nu(`${fr ? v.fr : v.en} ${v.cle} ${v.jeton ?? ''}`).includes(cherche));
+  }, [variables, filtreVariable, fr]);
 
   /* Les variables ÉCRITES qui n'existent pas.
 
@@ -648,11 +661,34 @@ export default function EmailPreviewEditor({
 
         {/* Pied : variables + enregistrement */}
         <div className="border-t border-outline/50 px-5 py-3 shrink-0 bg-surface-secondary">
-          <div className="flex flex-wrap items-center gap-1 mb-2.5">
+          {/* La palette a une hauteur BORNÉE. Pour une automatisation, elle
+              porte les champs de base de cinq objets — plus de 120 boutons —
+              et occupait à elle seule plus de la moitié de l'écran : le
+              courriel qu'on écrit ne tenait plus que sur quelques lignes
+              (audit du 2026-10-01). Elle défile, et se filtre en tapant. */}
+          {variables.length > SEUIL_RECHERCHE_VARIABLES && (
+            <input
+              type="search"
+              value={filtreVariable}
+              onChange={(e) => setFiltreVariable(e.target.value)}
+              aria-label={fr ? 'Chercher une variable à insérer' : 'Search a variable to insert'}
+              placeholder={fr ? 'Chercher une variable…' : 'Search a variable…'}
+              className="mb-1.5 w-full max-w-[260px] rounded border border-outline/50 bg-surface px-2 py-1 text-[11px] text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            />
+          )}
+          <div
+            data-testid="palette-variables"
+            className="flex flex-wrap items-center gap-1 mb-2.5 max-h-[72px] overflow-y-auto"
+          >
             <span className="text-[10px] text-text-tertiary mr-1">
               {fr ? 'Insérer :' : 'Insert:'}
             </span>
-            {variables.map((v) => (
+            {variablesAffichees.length === 0 && (
+              <span className="text-[10px] text-text-tertiary italic">
+                {fr ? 'Aucune variable à ce nom.' : 'No variable by that name.'}
+              </span>
+            )}
+            {variablesAffichees.map((v) => (
               <button
                 key={v.cle}
                 title={v.jeton ?? `[${v.cle}]`}
