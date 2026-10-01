@@ -300,7 +300,8 @@ const listeJob: Resolveur = async (id, ctx, fuseau) => {
 // Une fiche désignée par deux arguments (entity_type + entity_id : une note, un champ…). Avant, la carte
 // disait « Élément visé : entity » — on confirmait une note sans voir sur QUI (éval du 2026-10-01).
 const ficheTypee: Resolveur = async (id, ctx, fuseau, args) => {
-  const type = txt(args?.entity_type).toLowerCase();
+  // Lu pour choisir la table, jamais affiché (String et non txt : le glossaire traque les codes posés sur la carte).
+  const type = String(args?.entity_type ?? '').trim().toLowerCase();
   const parType: Record<string, Resolveur> = { client, lead: client, prospect: client, job, quote: devis, invoice: facture, deal };
   const direct = parType[type];
   if (direct) return direct(id, ctx, fuseau, args);
