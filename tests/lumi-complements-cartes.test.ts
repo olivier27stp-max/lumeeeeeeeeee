@@ -183,3 +183,52 @@ describe('compléments des cartes de Lumi', () => {
     expect(JSON.stringify(carte)).toMatch(/remboursement COMPLET/);
   });
 });
+
+describe('cartes des outils ajoutés le 2026-10-01', () => {
+  it('une automatisation créée depuis un modèle dit lequel, et qu’elle naît éteinte', async () => {
+    const { MODELES_AUTOMATISATION } = await import('../server/lib/automationTemplates');
+    const modele = MODELES_AUTOMATISATION[0];
+    const t = await texte('create_automation_from_template', { template_key: modele.id }, base({}));
+    expect(t).toContain(`Modèle : ${modele.nom.fr}`);
+    expect(t).toMatch(/État à la création : brouillon, éteinte/);
+    expect(await texte('create_automation_from_template', { template_key: 'modele_invente' }, base({}))).toMatch(/n’existe pas dans la bibliothèque/);
+  });
+
+  it('« tout arrêter » dit combien d’automatisations sont touchées, et la reprise que des messages repartent', async () => {
+    const ctx = base({ automation_rules: [{ id: id(70), is_active: true }, { id: id(71), is_active: true }, { id: id(72), is_active: false }, { id: id(73), is_active: true, deleted_at: '2026-01-01' }] });
+    expect(await texte('pause_all_automations', { paused: true }, ctx)).toMatch(/plus aucun message automatique ne part \(2 automatisations actives\)/);
+    expect(await texte('pause_all_automations', { paused: false }, ctx)).toMatch(/les messages qui attendaient repartent/);
+  });
+
+  it('supprimer une automatisation annonce les envois prévus qui tombent', async () => {
+    const ctx = base({ automation_scheduled_tasks: [{ id: id(80), automation_rule_id: id(70), status: 'pending' }, { id: id(81), automation_rule_id: id(70), status: 'pending' }, { id: id(82), automation_rule_id: id(70), status: 'completed' }] });
+    expect(await texte('delete_automation_rule', { rule_id: id(70) }, ctx)).toBe('Envois prévus annulés : 2 envois en attente');
+    expect(await texte('delete_automation_rule', { rule_id: id(71) }, ctx)).toBe('Envois prévus annulés : aucun envoi en attente');
+  });
+
+  it('la carte nomme l’entrée de temps, la commission et l’élément archivé', async () => {
+    const { apercuAction } = await import('../server/lib/lumi/apercu-action');
+    const ctx = base({
+      time_entries: [{ id: id(90), employee_name: 'Zoé Roy', date: '2026-09-30', punch_in: '08:02:11', punch_out: null }],
+      fs_commission_entries: [{ id: id(91), user_id: id(60), amount: 125.5, status: 'pending', description: 'Vente Tremblay' }],
+      team_members: [{ user_id: id(60), first_name: 'Luc', last_name: 'Roy', email: 'l@x.ca', role: 'sales_rep' }],
+      jobs: [{ id: id(92), job_number: 44, title: 'Lavage', client_name: 'Marie Tremblay' }],
+    });
+    const cible = async (args: Ligne, outil: string) => (await apercuAction(args, ctx, outil)).cibles[0];
+    expect((await cible({ entry_id: id(90) }, 'force_punch_out')).valeur).toBe('Zoé Roy · 2026-09-30 · 08:02 → pointage encore ouvert');
+    expect((await cible({ commission_id: id(91) }, 'approve_commission')).valeur).toBe('125,50 $ · Luc Roy · l@x.ca · représentant · Vente Tremblay · en attente');
+    const archive = await cible({ entity_type: 'job', entity_id: id(92) }, 'restore_archived');
+    expect(archive.libelle.fr).toBe('Job archivé');
+    expect(archive.valeur).toMatch(/#44 · Lavage · Marie Tremblay/);
+    expect((await cible({ entity_type: 'client', entity_id: id(93) }, 'restore_archived')).alerte).toBe(true);
+  });
+
+  it('le rabais et le dépôt d’un devis portent leur unité', async () => {
+    const { apercuAction } = await import('../server/lib/lumi/apercu-action');
+    const a = await apercuAction({ discount_type: 'percentage', discount_value: 10, deposit_required: true, deposit_type: 'fixed', deposit_value: 150 }, base({}), 'set_quote_discount_deposit');
+    const lignes = a.details.map((d) => `${d.libelle.fr} : ${d.valeur}`);
+    expect(lignes).toContain('Rabais : 10 %');
+    expect(lignes).toContain('Type de rabais : Pourcentage');
+    expect(lignes.find((l) => l.startsWith('Montant du dépôt') || l.includes('150,00'))).toMatch(/150,00 \$/);
+  });
+});

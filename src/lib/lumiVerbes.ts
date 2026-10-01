@@ -36,6 +36,23 @@ export const VERBES_LUMI: Record<string, VerbeLumi> = {
   remove_client_tag: { fr: 'retirer une étiquette d’un client', en: 'remove a tag from a client' },
   update_deal_stage: { fr: 'changer un deal d’étape', en: 'move a deal to another stage' },
   delete_deal: { fr: 'abandonner un deal', en: 'abandon a deal' },
+  create_deal: { fr: 'créer un deal', en: 'create a deal' },
+  update_deal: { fr: 'modifier un deal', en: 'update a deal' },
+  set_quote_status: { fr: 'changer le statut d’un devis', en: 'change a quote status' },
+  set_quote_discount_deposit: { fr: 'régler le rabais ou le dépôt d’un devis', en: 'set a quote discount or deposit' },
+  set_client_consent: { fr: 'changer le consentement commercial d’un client', en: 'change a client’s marketing consent' },
+  restore_archived: { fr: 'restaurer un élément archivé', en: 'restore an archived item' },
+  update_time_entry: { fr: 'corriger une entrée de temps', en: 'correct a time entry' },
+  delete_time_entry: { fr: 'supprimer une entrée de temps', en: 'delete a time entry' },
+  force_punch_out: { fr: 'fermer le pointage d’un membre', en: 'close a member’s open shift' },
+  approve_commission: { fr: 'approuver une commission', en: 'approve a commission' },
+  mark_commission_paid: { fr: 'marquer une commission versée', en: 'mark a commission paid' },
+  update_company_settings: { fr: 'modifier les informations de l’entreprise', en: 'update the company details' },
+  create_automation_from_template: { fr: 'créer une automatisation à partir d’un modèle', en: 'create an automation from a template' },
+  duplicate_automation_rule: { fr: 'dupliquer une automatisation', en: 'duplicate an automation' },
+  rename_automation_rule: { fr: 'renommer une automatisation', en: 'rename an automation' },
+  delete_automation_rule: { fr: 'mettre une automatisation à la corbeille', en: 'move an automation to the bin' },
+  pause_all_automations: { fr: 'arrêter ou reprendre toutes les automatisations', en: 'stop or resume all automations' },
 
   // ── Devis ────────────────────────────────────────────────────────────────
   create_quote: { fr: 'créer une soumission', en: 'create a quote' },
@@ -225,6 +242,16 @@ export const VERBES_LUMI: Record<string, VerbeLumi> = {
 export function verbeLumi(tool: string, args: Record<string, unknown> | null | undefined): VerbeLumi | null {
   const a = args ?? {};
   switch (tool) {
+    case 'pause_all_automations':
+      return a.paused === false ? { fr: 'reprendre toutes les automatisations', en: 'resume all automations' } : { fr: 'arrêter toutes les automatisations', en: 'stop all automations' };
+    case 'set_quote_status':
+      if (a.status === 'approved') return { fr: 'marquer un devis approuvé', en: 'mark a quote approved' };
+      if (a.status === 'awaiting_response') return { fr: 'remettre un devis en attente de réponse', en: 'put a quote back to awaiting response' };
+      return VERBES_LUMI[tool];
+    case 'set_client_consent':
+      if (a.granted === true) return { fr: 'enregistrer le consentement d’un client', en: 'record a client’s consent' };
+      if (a.granted === false) return { fr: 'retirer le consentement d’un client', en: 'withdraw a client’s consent' };
+      return VERBES_LUMI[tool];
     case 'archive_job':
       return a.restore === true ? { fr: 'désarchiver un job', en: 'unarchive a job' } : { fr: 'archiver un job', en: 'archive a job' };
     case 'toggle_automation_rule':

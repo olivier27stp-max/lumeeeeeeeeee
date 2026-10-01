@@ -12,6 +12,21 @@
  */
 export const LIBELLES_PARAMETRES: Record<string, [fr: string, en: string]> = {
   action_type: ['Type d’envoi', 'Message type'],
+  clear_assignee: ['Retirer le responsable', 'Remove the owner'],
+  clock_in_at: ['Arrivée', 'Clock-in'],
+  clock_out_at: ['Départ', 'Clock-out'],
+  company_name: ['Nom de l’entreprise', 'Company name'],
+  discount_type: ['Type de rabais', 'Discount type'],
+  discount_value: ['Rabais', 'Discount'],
+  expected_close_date: ['Fermeture visée', 'Target close date'],
+  granted: ['Consentement accordé', 'Consent granted'],
+  paused: ['Tout arrêter', 'Stop everything'],
+  pipeline: ['Pipeline', 'Pipeline'],
+  revenue_goal_cents: ['Objectif de revenus annuel', 'Annual revenue goal'],
+  street1: ['Adresse (rue)', 'Street address'],
+  street2: ['Complément d’adresse', 'Address line 2'],
+  template_key: ['Modèle d’automatisation', 'Automation template'],
+  website: ['Site web', 'Website'],
   address: ['Adresse', 'Address'],
   ai_summaries_enabled: ['Résumés par IA', 'AI summaries'],
   amount_cents: ['Montant', 'Amount'],
@@ -206,7 +221,7 @@ export const LIBELLES_PARAMETRES: Record<string, [fr: string, en: string]> = {
 export const PARAMETRES_A_CHOIX = new Set([
   'status', 'stage', 'role', 'method', 'reason', 'send_via', 'channel', 'frequency', 'period', 'pay_period_type', 'priority',
   'action_type', 'type', 'scope', 'language', 'item_type', 'kind', 'deposit_type', 'pricing_unit', 'metric', 'metric_slug',
-  'event_type', 'd2d_status', 'visibility', 'content_type', 'entity_type', 'layout_type',
+  'event_type', 'd2d_status', 'visibility', 'content_type', 'entity_type', 'layout_type', 'discount_type',
 ]);
 
 export const VALEURS_TRADUITES: Record<string, [fr: string, en: string]> = {
@@ -244,6 +259,7 @@ export const VALEURS_TRADUITES: Record<string, [fr: string, en: string]> = {
   quotes_sent: ['Devis envoyés', 'Quotes sent'], callbacks: ['Rappels', 'Callbacks'], knock: ['Porte cognée', 'Door knocked'], cancel: ['Annulation', 'Cancellation'],
   all: ['Tout le monde', 'Everyone'], video: ['Vidéo', 'Video'], embed: ['Contenu intégré', 'Embedded content'], text: ['Texte', 'Text'], pdf: ['PDF', 'PDF'], link: ['Lien', 'Link'],
   classic: ['Classique', 'Classic'], modern: ['Moderne', 'Modern'], minimal: ['Minimaliste', 'Minimal'], bold: ['Affirmée', 'Bold'], executive: ['Exécutive', 'Executive'], contractor: ['Entrepreneur', 'Contractor'],
+  approved: ['Approuvé', 'Approved'], awaiting_response: ['En attente de réponse', 'Awaiting response'],
   high: ['Haute', 'High'], medium: ['Moyenne', 'Medium'], low: ['Basse', 'Low'], urgent: ['Urgente', 'Urgent'],
   client: ['Client', 'Client'], job: ['Job', 'Job'], quote: ['Devis', 'Quote'], invoice: ['Facture', 'Invoice'], deal: ['Deal', 'Deal'],
   note: ['Note', 'Note'], checkbox: ['Case à cocher', 'Checkbox'], number: ['Nombre', 'Number'], photo: ['Photo', 'Photo'], signature: ['Signature', 'Signature'],

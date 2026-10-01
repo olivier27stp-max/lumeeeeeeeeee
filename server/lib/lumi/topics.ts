@@ -38,26 +38,26 @@ export const TOPICS: readonly Topic[] = [
     description: 'Jobs, visites, calendrier, horaire, trajets, disponibilités, assignation, statuts de job, dépenses de job, météo (travail extérieur).',
     outils: ['query_schedule', 'list_jobs', 'get_job', 'get_day_route', 'find_free_slot', 'find_dates_in_location', 'propose_day_optimization', 'get_team_locations', 'get_weather',
       'create_job', 'update_job', 'update_job_status', 'assign_job', 'archive_job', 'add_visit', 'reschedule_job', 'apply_day_optimization', 'cancel_visit', 'set_job_expenses'],
-    refuse: 'Argent (devis, factures, paiements) → facturation ; textos et courriels → communications.',
+    refuse: 'Argent (devis, factures, paiements) → facturation ; textos et courriels → communications ; qui travaille tel jour, congés d’un employé → equipe.',
   },
   {
     // Mesuré le 2026-09-17 : « facturation » à 70 outils pesait 17 000 tokens relus à chaque étape ;
     // devis et factures sont deux moments différents de la vente → deux sujets, deux blocs deux fois plus légers.
     id: 'devis',
-    description: 'Devis (soumissions, estimés) : en faire un, l’envoyer, le modifier, le dupliquer, l’annuler, le convertir en job ou en facture ; préréglages et modèles de devis ; devis en attente.',
+    description: 'Devis (soumissions, estimés) : en faire un, l’envoyer, le modifier, le dupliquer, l’annuler, le convertir en job ou en facture ; préréglages et modèles de devis ; devis en attente ; marquer un devis approuvé, son rabais, son dépôt ; taux de gain des devis.',
     outils: ['list_quotes', 'get_quote', 'list_services', 'create_quote', 'send_quote', 'cancel_quote', 'convert_quote_to_job'],
     refuse: 'Factures, paiements, retards, revenus → facturation ; planifier une visite → planification ; fiche d’un client → clients.',
   },
   {
     id: 'facturation',
-    description: 'Factures, paiements, retards, relances, factures récurrentes, modèles de facture, taxes, catalogue de services, revenus, rentabilité, comparaisons de périodes.',
+    description: 'Factures, paiements, retards, relances, factures récurrentes, modèles de facture, taxes (taux et taxes perçues), catalogue de services, revenus, rentabilité, comparaisons de périodes, modes de paiement, versements Stripe.',
     outils: ['list_invoices', 'get_invoice', 'get_overdue_payments', 'get_revenue_summary', 'get_financial_overview', 'compare_revenue', 'analyze_profitability', 'get_top_services',
       'create_invoice', 'create_invoice_from_job', 'send_invoice', 'mark_invoice_paid', 'send_payment_reminders'],
     refuse: 'Un devis (soumission) → devis ; planifier une visite → planification ; fiche d’un client → clients ; CRÉER une automatisation ou un parcours automatique (même de relance de facture) → rapports.',
   },
   {
     id: 'clients',
-    description: 'Clients, prospects (leads), fiches, coordonnées, historique d’un client, doublons, notes, demandes web entrantes, meilleurs clients, risque de perte.',
+    description: 'Clients, prospects (leads), fiches, coordonnées, historique d’un client, doublons, notes, demandes web entrantes, meilleurs clients, risque de perte, pipeline de ventes (deals), consentement aux messages commerciaux, archives à restaurer.',
     outils: ['search_clients', 'search_leads', 'get_client_profile', 'get_top_clients', 'get_churn_risk', 'list_request_submissions',
       'create_client', 'update_client', 'convert_lead_to_client', 'merge_clients', 'add_note'],
     refuse: 'Envoyer un message → communications ; créer un devis → facturation.',
@@ -70,7 +70,7 @@ export const TOPICS: readonly Topic[] = [
   },
   {
     id: 'equipe',
-    description: 'Membres de l’équipe, invitations, rôles et permissions, équipes nommées, feuilles de temps, pointage, paie, tâches internes (à faire).',
+    description: 'Membres de l’équipe, invitations, rôles et permissions, équipes nommées, feuilles de temps, pointage et ses corrections, paie et ses montants, commissions, horaire de travail et congés des employés, performance par équipe, tâches internes (à faire).',
     outils: ['get_team', 'get_timesheets', 'get_payroll_summary', 'list_tasks',
       'create_task', 'update_task', 'update_task_status', 'delete_task'],
     refuse: 'Porte-à-porte, territoires, formations → terrain ; où est l’équipe en ce moment (positions) → planification ; assigner une job → planification.',
@@ -83,7 +83,7 @@ export const TOPICS: readonly Topic[] = [
   },
   {
     id: 'rapports',
-    description: 'Rapports et documents (PDF financier, retards, jobs, client), survol du jour, réglages de l’entreprise, automatisations : en CRÉER une (« crée un parcours / une relance automatique / un rappel automatique », attentes, conditions, textos, tâches), l’activer, la mettre en pause, changer ses messages ou leur langue.',
+    description: 'Rapports et documents (PDF financier, retards, jobs, client), survol du jour, réglages de l’entreprise, automatisations : en CRÉER une (« crée un parcours / une relance automatique / un rappel automatique », attentes, conditions, textos, tâches), l’activer, la mettre en pause, changer ses messages ou leur langue, la dupliquer, la renommer, la supprimer, partir d’un modèle, tout arrêter d’un coup ; modifier les informations de l’entreprise.',
     outils: ['build_report', 'get_morning_briefing', 'list_automations', 'get_automation_health', 'get_company_info'],
     refuse: 'Un chiffre précis sans document → le topic du chiffre (facturation, planification).',
   },

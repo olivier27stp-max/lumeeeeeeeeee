@@ -145,7 +145,6 @@ await ex('convert_lead_to_client', () => S.lead && { lead_id: S.lead }, (r) => {
 await ex('convert_lead_to_job', () => S.lead2 && { lead_id: S.lead2, job_title: 'Exec job du prospect' }, (r) => { S.jobDuLead = trouver(r, null, 'job_id'); });
 await ex('delete_lead', () => S.lead3 && { lead_id: S.lead3 });
 await ex('update_deal_stage', () => S.deal && { deal_id: S.deal, stage: 'nouveau' });
-exclu('delete_deal', 'seule carte du pipeline de l’org QA (irréversible)');
 exclu('process_request_submission', 'aucune demande de formulaire sur staging');
 exclu('delete_request_submission', 'aucune demande de formulaire sur staging');
 exclu('merge_clients', 'déjà exécuté par le seed (fusion Gagnon/Bouchard)');
@@ -184,6 +183,9 @@ await ex('create_job_template', { title: 'Exec modèle de job', line_items: [{ n
 await ex('create_job', () => S.client && { title: 'Exec job à facturer', client_id: S.client, line_items: [{ name: 'Lavage', qty: 1, unit_price_cents: 8000 }] }, (r) => { S.jobFacture = trouver(r, null, 'job_id', 'id'); });
 await ex('create_invoice_from_job', () => S.jobFacture && { job_id: S.jobFacture }, (r) => { S.factureJob = trouver(r, null, 'invoice_id', 'id'); });
 await ex('archive_job', () => S.job && { job_id: S.job });
+// Les Archives (archived_at, pas la corbeille) : le job archivé revient par l'outil des Archives,
+// puis par archive_job (sans effet s'il est déjà revenu ; le filet si la restauration a échoué).
+await ex('restore_archived', () => S.job && { entity_type: 'job', entity_id: S.job });
 await ex('archive_job', () => S.job && { job_id: S.job, restore: true });
 
 // ── Devis, préréglages, modèles ──
@@ -207,6 +209,17 @@ await ex('create_quote_template', { name: suffixer('Exec modèle devis'), servic
 if (!S.mdevis) S.mdevis = trouver(await lire('list_quote_templates'), suffixer('Exec modèle devis'), 'template_id', 'id');
 await ex('update_quote_template', () => S.mdevis && { template_id: S.mdevis, name: 'Exec modèle devis 2' });
 await ex('delete_quote_template', () => S.mdevis && { template_id: S.mdevis });
+
+// ── Lot ventes (2026-10-01) : deals, statut / rabais / dépôt d'un devis, consentement, archives ──
+// Un prospect neuf pour le deal : un client qui a déjà un devis a déjà son deal ouvert, et l'outil refuse d'en ouvrir un second.
+await ex('create_lead', { first_name: 'Exec', last_name: 'ProspectDeal', phone: '514-555-0116' }, (r) => { S.leadDeal = trouver(r, null, 'lead_id', 'id'); });
+await ex('create_deal', () => S.leadDeal && { client_id: S.leadDeal, title: 'Exec deal', amount_cents: 120000 }, (r) => { S.dealExec = trouver(r, null, 'deal_id', 'id'); });
+await ex('update_deal', () => S.dealExec && { deal_id: S.dealExec, title: 'Exec deal 2', expected_close_date: jour(30) });
+await ex('set_quote_discount_deposit', () => S.devis3 && { quote_id: S.devis3, discount_type: 'percentage', discount_value: 10, deposit_required: true, deposit_type: 'percentage', deposit_value: 25 });
+await ex('set_quote_status', () => S.devis3 && { quote_id: S.devis3, status: 'awaiting_response' });
+await ex('set_quote_status', () => S.devis3 && { quote_id: S.devis3, status: 'approved' });
+await ex('set_client_consent', () => S.client && { client_id: S.client, channel: 'email', granted: true });
+await ex('set_client_consent', () => S.client && { client_id: S.client, channel: 'email', granted: false });
 
 // ── Factures, paiements, récurrentes, modèles, relances ──
 await ex('create_invoice', () => S.client && { client_id: S.client, subject: 'Exec facture', items: [{ description: 'Lavage', qty: 1, unit_price_cents: 10000 }], due_date: jour(30) }, (r) => { S.facture = trouver(r, null, 'invoice_id', 'id'); });
@@ -270,6 +283,20 @@ await ex('punch_in', { notes: 'exec' }, (r) => { S.punch = trouver(r, null, 'ent
 await ex('start_break', () => ({ ...(S.punch ? { entry_id: S.punch } : {}) }));
 await ex('end_break', () => ({ ...(S.punch ? { entry_id: S.punch } : {}) }));
 await ex('punch_out', () => ({ ...(S.punch ? { entry_id: S.punch } : {}), notes: 'exec' }));
+// Lot paie (2026-10-01) : corriger, fermer de force, supprimer un pointage — sur les pointages créés ici.
+await ex('update_time_entry', () => S.punch && { entry_id: S.punch, clock_in_at: new Date(Date.now() - 2 * 3_600_000).toISOString() });
+await ex('punch_in', { notes: 'exec 2' }, (r) => { S.punch2 = trouver(r, null, 'entry_id', 'id'); });
+await ex('force_punch_out', () => S.punch2 && { entry_id: S.punch2 });
+await ex('delete_time_entry', () => S.punch2 && { entry_id: S.punch2 });
+await ex('delete_time_entry', () => S.punch && { entry_id: S.punch });
+S.commission = trouver(await lire('list_commissions', { status: 'pending', limit: 5 }), null, 'commission_id', 'id');
+if (S.commission) {
+  await ex('approve_commission', { commission_id: S.commission });
+  await ex('mark_commission_paid', { commission_id: S.commission });
+} else {
+  exclu('approve_commission', 'aucune commission en attente dans l’org QA de staging');
+  exclu('mark_commission_paid', 'aucune commission en attente dans l’org QA de staging');
+}
 await ex('approve_timesheet', () => S.tech && { user_id: S.tech, from: jour(-7), to: jour(0) });
 await ex('add_payroll_adjustment', () => S.tech && { user_id: S.tech, amount_cents: 100, note: 'exec' });
 await ex('mark_payroll_period_paid', () => S.tech && { user_id: S.tech });
@@ -308,6 +335,28 @@ await ex('toggle_automation_rule', () => S.regle && { rule_id: S.regle, is_activ
 await ex('update_automation_message', () => S.regle && { rule_id: S.regle, action_type: 'send_email', body: 'Bonjour {{client_name}}, petit rappel (exec).', subject: 'Rappel' });
 await ex('update_automation_sms_body', () => S.regle && { rule_id: S.regle, body: 'Rappel (exec).' });
 await ex('set_automation_language', { language: 'fr' });
+// Lot entreprise (2026-10-01). Les automatisations nées ici sont des brouillons éteints, et repartent à la corbeille.
+S.modeleAuto = trouver(await lire('list_automation_templates', { language: 'fr' }), null, 'template_key');
+await ex('create_automation_from_template', () => S.modeleAuto && { template_key: S.modeleAuto }, (r) => { S.regleModele = trouver(r, null, 'rule_id', 'id'); });
+await ex('rename_automation_rule', () => S.regleModele && { rule_id: S.regleModele, name: 'Exec automatisation' });
+await ex('duplicate_automation_rule', () => S.regleModele && { rule_id: S.regleModele }, (r) => { S.regleCopie = trouver(r, null, 'rule_id', 'id'); });
+await ex('delete_automation_rule', () => S.regleCopie && { rule_id: S.regleCopie });
+await ex('delete_automation_rule', () => S.regleModele && { rule_id: S.regleModele });
+// La règle créée par texte s'accumulait à chaque passe : elle a maintenant son outil de suppression.
+if (S.regleCreee) await ex('delete_automation_rule', { rule_id: S.regleCreee });
+// « Tout arrêter » : seulement si l'entreprise n'est PAS déjà en pause, et remis tel quel aussitôt
+// (reprendre une pause posée par quelqu'un d'autre ferait repartir ses envois).
+{
+  const { data: pause } = await admin.from('company_settings').select('automations_paused').eq('org_id', orgId).maybeSingle();
+  if (pause?.automations_paused === true) exclu('pause_all_automations', 'l’org QA est déjà en pause : la reprendre ferait repartir des envois arrêtés exprès');
+  else { await ex('pause_all_automations', { paused: true }); await ex('pause_all_automations', { paused: false }); }
+}
+// Le site web de l'entreprise, modifié puis remis à sa valeur d'origine.
+{
+  const { data: avant } = await admin.from('company_settings').select('website').eq('org_id', orgId).maybeSingle();
+  await ex('update_company_settings', { website: 'https://exec.example.com' });
+  await ex('update_company_settings', { website: avant?.website ?? '' });
+}
 await ex('create_tax_config', { name: suffixer('Exec taxe'), rate: 1.5, region: 'QC', country: 'CA' }, (r) => { S.taxe = trouver(r, null, 'tax_id', 'id'); });
 if (!S.taxe) S.taxe = trouver(await lire('get_tax_config'), suffixer('Exec taxe'), 'tax_id', 'id');
 await ex('update_tax_config', () => S.taxe && { tax_id: S.taxe, rate: 2 });
@@ -356,6 +405,8 @@ await ex('assign_course', () => S.cours && S.tech && { course_id: S.cours, user_
 if (S.jobDuLead) await ex('delete_job', { job_id: S.jobDuLead });
 if (S.clientDuLead) await ex('delete_client', { client_id: S.clientDuLead });
 if (S.lead2) await ex('delete_lead', { lead_id: S.lead2 });
+if (S.dealExec) await ex('delete_deal', { deal_id: S.dealExec, reason: 'exec' });
+if (S.leadDeal) await ex('delete_lead', { lead_id: S.leadDeal });
 await ex('delete_job', () => S.job && { job_id: S.job });
 if (S.jobFacture) await ex('delete_job', { job_id: S.jobFacture });
 await ex('delete_client', () => S.client && { client_id: S.client });

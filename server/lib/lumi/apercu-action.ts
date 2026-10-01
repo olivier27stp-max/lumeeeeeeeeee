@@ -312,6 +312,38 @@ const ficheTypee: Resolveur = async (id, ctx, fuseau, args) => {
   }
   return introuvable(L('Fiche', 'Record'));
 };
+// Entrée de temps : qui, quel jour, de quelle heure à quelle heure — avant de la corriger ou de la supprimer.
+const entreeDeTemps: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: e } = await db.from('time_entries').select('employee_name, date, punch_in, punch_out').eq('org_id', orgId).eq('id', id).maybeSingle();
+  if (!e) return introuvable(L('Entrée de temps', 'Time entry'));
+  const hm = (v: unknown) => txt(v).slice(0, 5);
+  return {
+    libelle: L('Entrée de temps (actuellement)', 'Time entry (currently)'),
+    valeur: [txt(e.employee_name), txt(e.date), `${hm(e.punch_in)} → ${e.punch_out ? hm(e.punch_out) : 'pointage encore ouvert'}`].filter(Boolean).join(' · '),
+    valeur_en: [txt(e.employee_name), txt(e.date), `${hm(e.punch_in)} → ${e.punch_out ? hm(e.punch_out) : 'shift still open'}`].filter(Boolean).join(' · '),
+  };
+};
+// Commission : son montant (en dollars dans la table), à qui, son état.
+const STATUT_COMMISSION: Record<string, string> = { pending: 'en attente', approved: 'approuvée', paid: 'versée', reversed: 'reversée' };
+const commission: Resolveur = async (id, ctx, fuseau) => {
+  const { data: c } = await ctx.client.from('fs_commission_entries').select('user_id, amount, status, description').eq('org_id', ctx.orgId).eq('id', id).is('deleted_at', null).maybeSingle();
+  if (!c) return introuvable(L('Commission', 'Commission'));
+  const qui = estUuid(c.user_id) ? await membre(c.user_id, ctx, fuseau) : null;
+  const cents = Math.round((Number(c.amount) || 0) * 100);
+  return {
+    libelle: L('Commission', 'Commission'),
+    valeur: [argentFr(cents), qui && !qui.alerte ? qui.valeur : '', txt(c.description).slice(0, 80), statut(c.status, STATUT_COMMISSION)[0]].filter(Boolean).join(' · '),
+    valeur_en: [argentEn(cents), qui && !qui.alerte ? (qui.valeur_en ?? qui.valeur) : '', txt(c.description).slice(0, 80), statut(c.status, STATUT_COMMISSION)[1]].filter(Boolean).join(' · '),
+  };
+};
+// Élément des archives (restore_archived) : un client, un prospect ou un job — la fiche est lue même supprimée.
+const elementArchive: Resolveur = async (id, ctx, fuseau) => {
+  const c = await client(id, ctx, fuseau);
+  if (c && !c.alerte) return { ...c, libelle: L(`${c.libelle.fr} archivé`, `Archived ${c.libelle.en.toLowerCase()}`) };
+  const j = await job(id, ctx, fuseau);
+  if (j && !j.alerte) return { ...j, libelle: L('Job archivé', 'Archived job') };
+  return introuvable(L('Élément archivé', 'Archived item'));
+};
 
 /** Nom d'argument → résolveur. Les identifiants non listés restent signalés comme « élément visé ». */
 const RESOLVEURS: Array<[RegExp, Resolveur]> = [
@@ -341,6 +373,8 @@ const RESOLVEURS: Array<[RegExp, Resolveur]> = [
   [/^group_id$/, groupeTaxes],
   [/^checklist_id$/, listeJob],
   [/^(report_id|scheduled_report_id)$/, rapport],
+  [/^entry_id$/, entreeDeTemps],
+  [/^commission_id$/, commission],
 ];
 // Règle de récurrence d'un JOB (job_recurrence_rules) — pas une automatisation.
 const recurrenceJob: Resolveur = async (id, ctx, fuseau) => {
@@ -371,6 +405,7 @@ const RESOLVEURS_PAR_OUTIL: Record<string, Record<string, Resolveur>> = {
   create_job_checklist: { template_id: modeleListe },
   update_checklist_template: { template_id: modeleListe },
   delete_checklist_template: { template_id: modeleListe },
+  restore_archived: { entity_id: elementArchive },
 };
 const resolveurDe = (cle: string, outil?: string | null) => (outil ? RESOLVEURS_PAR_OUTIL[outil]?.[cle] : undefined) ?? RESOLVEURS.find(([re]) => re.test(cle))?.[1] ?? null;
 
@@ -484,6 +519,18 @@ export async function apercuAction(args: Record<string, any>, ctx: Ctx, outil?: 
     // La cible d'un objectif de REVENUS est en cents : « 5000000 » se lit 50 000,00 $.
     if (cle === 'target_value' && typeof v === 'number' && args?.metric === 'revenue') {
       details.push({ libelle: libelleParametre(cle), valeur: argentFr(v), valeur_en: argentEn(v) });
+      continue;
+    }
+    // Rabais et dépôt d'un devis : un pourcentage ou des dollars selon le type choisi à côté — jamais un nombre nu.
+    if ((cle === 'discount_value' || cle === 'deposit_value') && typeof v === 'number') {
+      const type = txt(args?.[cle === 'discount_value' ? 'discount_type' : 'deposit_type']);
+      const enPourcent = type === 'percentage';
+      const enDollars = type === 'fixed';
+      details.push({
+        libelle: libelleParametre(cle),
+        valeur: enPourcent ? `${nombreFr(v)} %` : enDollars ? argentFr(Math.round(v * 100)) : `${nombreFr(v)} (dans l’unité déjà réglée sur le devis)`,
+        valeur_en: enPourcent ? `${v}%` : enDollars ? argentEn(Math.round(v * 100)) : `${v} (in the unit already set on the quote)`,
+      });
       continue;
     }
     if (res && estUuid(v)) { cibles.push((await res(v, ctx, fuseau, args)) ?? introuvable(L(cle, cle))); continue; }

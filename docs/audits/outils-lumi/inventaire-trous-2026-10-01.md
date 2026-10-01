@@ -12,19 +12,19 @@ Chiffres de départ : 248 outils, dont 181 d'écriture.
 |---|---|---|---|
 | 1 | Lire une facture au complet ; trouver une facture par numéro ou par client | `getInvoiceById` (`src/lib/invoicesApi.ts`) ; `list_invoices` passait `p_q: null` | **fait** (#865) |
 | 2 | Lire une soumission au complet (lignes, dépôt, ouvertures) | `getQuoteById` (`src/lib/quotesApi.ts`) | **fait** (#865) |
-| 3 | Le vrai pipeline de ventes | `list_deals`, `update_deal_stage`, `delete_deal` lisent l'ancienne table `pipeline_deals` (`tools-leads.ts:1025`) ; la page `/ventes` utilise `deals`, `pipelines_ventes`, `pipeline_stages` (`src/lib/pipelineVentesApi.ts`) | **fait** (#867) pour lire, déplacer, abandonner ; créer et assigner un deal : à faire |
-| 4 | Corriger une feuille de temps (heures, pointage forcé, suppression) | `src/pages/Timesheets.tsx:552-555` | à faire |
-| 5 | Montants de paie par période, et périodes passées | `GET /payroll/period-summary`, `/payroll/history` | à faire |
-| 6 | Marquer une soumission approuvée ou en attente à la main | `updateQuoteStatus` (`src/lib/quotesApi.ts`) | à faire |
-| 7 | Commissions : lister, approuver, marquer payées | `server/routes/commissions.ts` (aucun outil) | à faire |
-| 8 | Horaire d'équipe : qui travaille demain, congés | `src/lib/teamScheduleApi.ts` | à faire |
-| 9 | Taxes perçues sur une période | `GET /taxes/collected` | à faire |
-| 10 | Rabais et dépôt sur une soumission | champs de `createQuote` / `updateQuote` absents des outils | à faire |
-| 11 | Restaurer depuis les archives | `src/lib/archiveApi.ts` | à faire |
-| 12 | Modifier les infos de l'entreprise et l'objectif de revenus | `src/pages/CompanySettings.tsx:249-271` | à faire |
-| 13 | Automatisations : supprimer, dupliquer, partir d'un modèle, tout mettre en pause, renommer | `server/routes/automation-rules.ts` | à faire |
-| 14 | Consentement du client (texto, courriel) et champs étendus de la fiche | `definirConsentement` (`src/lib/clientsApi.ts`) | à faire |
-| 15 | Statistiques : taux de gain des soumissions, modes de paiement, performance d'équipe, versements Stripe | `src/lib/statistiquesApi.ts`, `GET /payments/payouts/*` | à faire |
+| 3 | Le vrai pipeline de ventes | `list_deals`, `update_deal_stage`, `delete_deal` lisent l'ancienne table `pipeline_deals` (`tools-leads.ts:1025`) ; la page `/ventes` utilise `deals`, `pipelines_ventes`, `pipeline_stages` (`src/lib/pipelineVentesApi.ts`) | **fait** : lire, déplacer, abandonner (#867) ; créer et modifier un deal (`create_deal`, `update_deal`, PR outils) |
+| 4 | Corriger une feuille de temps (heures, pointage forcé, suppression) | `src/pages/Timesheets.tsx:552-555` | **fait** (PR outils) : `list_time_entries`, `update_time_entry`, `force_punch_out`, `delete_time_entry` |
+| 5 | Montants de paie par période, et périodes passées | `GET /payroll/period-summary`, `/payroll/history` | **fait** (PR outils) : `get_payroll_amounts`, `get_payroll_history` |
+| 6 | Marquer une soumission approuvée ou en attente à la main | `updateQuoteStatus` (`src/lib/quotesApi.ts`) | **fait** (PR outils) : `set_quote_status` |
+| 7 | Commissions : lister, approuver, marquer payées | `server/routes/commissions.ts` (aucun outil) | **fait** (PR outils) : `list_commissions`, `approve_commission`, `mark_commission_paid` — non exécutés pour vrai (aucune commission en attente sur staging) |
+| 8 | Horaire d'équipe : qui travaille demain, congés | `src/lib/teamScheduleApi.ts` | **fait** (PR outils) : `get_team_schedule` |
+| 9 | Taxes perçues sur une période | `GET /taxes/collected` | **fait** (PR outils) : `get_taxes_collected` |
+| 10 | Rabais et dépôt sur une soumission | champs de `createQuote` / `updateQuote` absents des outils | **fait** (PR outils) : `set_quote_discount_deposit` |
+| 11 | Restaurer depuis les archives | `src/lib/archiveApi.ts` | **fait** (PR outils) : `list_archived`, `restore_archived` |
+| 12 | Modifier les infos de l'entreprise et l'objectif de revenus | `src/pages/CompanySettings.tsx:249-271` | **fait** (PR outils) : `update_company_settings` |
+| 13 | Automatisations : supprimer, dupliquer, partir d'un modèle, tout mettre en pause, renommer | `server/routes/automation-rules.ts` | **fait** (PR outils) : `delete_automation_rule`, `duplicate_automation_rule`, `rename_automation_rule`, `pause_all_automations`, `list_automation_templates`, `create_automation_from_template` |
+| 14 | Consentement du client (texto, courriel) et champs étendus de la fiche | `definirConsentement` (`src/lib/clientsApi.ts`) | **fait** (PR outils) pour le consentement : `get_client_consent`, `set_client_consent` ; champs étendus de la fiche : à faire |
+| 15 | Statistiques : taux de gain des soumissions, modes de paiement, performance d'équipe, versements Stripe | `src/lib/statistiquesApi.ts`, `GET /payments/payouts/*` | **fait** (PR outils) : `get_quote_win_rate`, `get_payment_methods_breakdown`, `get_team_performance`, `list_stripe_payouts` |
 
 Le trou n° 3 était le seul qui était aussi un risque d'erreur : vérifié en prod le 2026-10-01, Lumi lisait 8 cartes de l'ancien tableau là où l'écran montre 2 deals. Corrigé par #867.
 
@@ -157,6 +157,46 @@ Reste à faire sur les cartes : X9 (automatisations qui partiront), X10 (carte r
 ### Ce que la session fiabilité a déjà pris
 
 Dans #857 : pas de carte sur une cible introuvable, pas de carte pour un rôle sans le droit, paramètres inconnus refusés avant la carte.
+
+## 3. La PR des outils : ce qui a été prouvé, ce qui ne l'a pas été
+
+30 outils ajoutés (13 lectures, 17 écritures), dans trois modules : `tools-lot-ventes.ts`, `tools-lot-paie.ts`, `tools-lot-entreprise.ts`.
+
+**Exécution réelle sur staging** (org QA, identité et RLS d'un vrai compte, serveur local dont tous les envois sont redirigés vers une adresse invalide) :
+
+- les 13 lectures répondent (`scripts/qa/lire-outils-lots.mts`) ;
+- 15 écritures sur 17 passent (`scripts/qa/executer-outils-staging.mts`) ; les deux autres sont les commissions, ci-dessous ;
+- `approve_commission` et `mark_commission_paid` n'ont pas été exécutés : aucune commission en attente sur staging ;
+- `restore_archived` échouait sur un job à cause de la base (fonction STABLE qui écrit) ; il passe depuis la migration 20261007200000, appliquée sur staging et prod le 2026-10-01 (#883).
+
+**Coût** : le jeu d'outils de cinq sous-agents grossit (mesuré par `scripts/qa/compter-tokens-sous-agents.mts`, comptage gratuit).
+
+| Sous-agent | Outils | Tokens du jeu d'outils |
+|---|---|---|
+| devis | 27 → 30 | 6 864 → 7 682 (+12 %) |
+| facturation | 52 → 55 | 12 707 → 13 291 (+5 %) |
+| clients | 40 → 46 | 9 128 → 10 602 (+16 %) |
+| equipe | 42 → 53 | 8 062 → 10 197 (+26 %) |
+| rapports | 26 → 33 | 4 932 → 6 268 (+27 %) |
+
+Planification, communications, terrain, mémoire et le jeu de base ne changent pas. L'effet sur la qualité des réponses n'est pas mesuré : c'est la passe d'évaluation de la session fiabilité, après le merge, qui le dira.
+
+**Défauts de l'application trouvés en écrivant ces outils**
+
+| Défaut | Preuve | État |
+|---|---|---|
+| Corriger un pointage à l'écran ne change pas la paie (l'écran écrit `punch_in`/`punch_out`, la paie lit `punch_in_at`/`punch_out_at`) ; un pointage fermé de force laisse la pause ouverte, donc payée | `src/pages/Timesheets.tsx`, `server/lib/payroll.ts` ; en prod, 28 pointages, aucun corrigé à l'écran à ce jour | corrigé, PR #872 |
+| « Restaurer » un client ou un job depuis les Archives échoue : `restore_client`, `restore_job` (et `finish_job`) sont déclarées STABLE et font un UPDATE | `pg_proc.provolatile = 's'` en prod ; exécution réelle sur staging : « Impossible de restaurer ce job » ; 6 jobs archivés en prod | corrigé : migration 20261007200000 appliquée sur staging et prod le 2026-10-01, PR #883 |
+| `/taxes/collected` et `/payments/payouts/*` ne vérifient que l'appartenance à l'entreprise, pas un droit financier | `server/routes/taxes.ts:68`, `server/routes/payments.ts:1199-1290` | à décider ; la garde de Lumi exige `financial.view_reports` / `financial.view_payments` |
+| Supprimer une entrée de temps est une suppression définitive (pas de `deleted_at` sur `time_entries`) | `src/pages/Timesheets.tsx` | à décider (demande une migration) |
+
+**Choix à connaître**
+
+- `set_quote_status` exige `quotes.approve` ; l'écran laisse faire avec `quotes.update`.
+- `update_time_entry` écrit les deux jeux de colonnes (heures affichées et horodatages de paie), comme l'écran après #872.
+- `pause_all_automations` sait aussi reprendre (`paused: false`) ; la carte dit que les messages en attente repartent.
+- Une automatisation créée depuis un modèle ou dupliquée naît éteinte ; l'outil l'éteint lui-même si la route la rendait active.
+- Non construits : annuler un versement de commission, reverser une commission, supprimer un ajustement de paie, restaurer une automatisation de la corbeille.
 
 ## Ce qui n'a pas pu être déterminé
 
