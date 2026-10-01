@@ -141,7 +141,7 @@ export default function HomeApercu() {
         {/* ── 2. Aperçu interactif ── */}
         <div className="ha-stage" ref={frameRef}>
           <div className="ha-float ha-f1" aria-hidden="true"><span className="ha-ic">✓</span><div><b>{fr ? 'Soumission #1042 signée' : 'Quote #1042 signed'}</b><span>{fr ? 'Excavation Roy · il y a 2 min' : 'Excavation Roy · 2 min ago'}</span></div></div>
-          <div className="ha-float ha-f2" aria-hidden="true"><span className="ha-ic">$</span><div><b>{fr ? '1 250 $ reçus en ligne' : '$1,250 received online'}</b><span>{fr ? 'Vision Lavage · facture #877' : 'Vision Lavage · invoice #877'}</span></div></div>
+          <div className="ha-float ha-f2" aria-hidden="true"><span className="ha-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span><div><b>{fr ? 'Soumission #1043 ouverte' : 'Quote #1043 opened'}</b><span>{fr ? 'Prospect · Marc Gagnon · à l\'instant' : 'Prospect · Marc Gagnon · just now'}</span></div></div>
           <div className="ha-devices">
           <div className="ha-frame">
             <div className="ha-bar">
