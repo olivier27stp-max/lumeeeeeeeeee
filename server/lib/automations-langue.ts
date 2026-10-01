@@ -111,7 +111,16 @@ export function repondreDansLaLangue(req: Request, res: Response, next: NextFunc
   if (langueDe(req) === 'en') {
     const json = res.json.bind(res);
     res.json = ((corps: unknown) => {
-      const c = corps as { error?: unknown } | null;
+      const c = corps as { error?: unknown; details?: unknown } | null;
+      /* Refus de validation (`validate`) : chaque problème porte sa version
+         anglaise dans `params.en` (automations-validation-messages.ts). */
+      const details = c && typeof c === 'object' && Array.isArray(c.details)
+        ? (c.details as Array<{ message?: unknown; params?: { en?: unknown } }>) : null;
+      if (c && details?.some((d) => typeof d.params?.en === 'string')) {
+        const en = details.map((d) => (typeof d.params?.en === 'string' ? d.params.en
+          : MESSAGES_EN[String(d.message)] ?? String(d.message))).join('; ');
+        return json({ ...c, error: en });
+      }
       if (c && typeof c === 'object' && typeof c.error === 'string' && MESSAGES_EN[c.error]) {
         return json({ ...c, error: MESSAGES_EN[c.error] });
       }

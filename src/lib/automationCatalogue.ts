@@ -1451,7 +1451,9 @@ export function problemesAvantPublication(regle: {
 
       // Les renvois. `problemesDuGraphe` les vérifie déjà côté serveur, mais
       // le dire ICI évite un aller-retour et nomme l'étape fautive.
-      for (const cle of ['suivant', 'alors', 'sinon', 'si_reponse']) {
+      // `si_depasse` (attente « avant la date ») aussi : oublié, un renvoi
+      // cassé n'était dit qu'au refus du serveur, sans nommer l'étape.
+      for (const cle of ['suivant', 'alors', 'sinon', 'si_reponse', 'si_depasse']) {
         const cible = etape[cle];
         if (cible && !ids.has(String(cible))) {
           dire(

@@ -110,25 +110,31 @@ async function marquer(supabase: SupabaseClient, id: number, champs: Record<stri
 
 /**
  * Traite la file. Ne lève jamais.
+ * `options.orgId` : ne traite que la file de CETTE entreprise (suite
+ * d'intégration des automatisations, bureau de test) — sans lui, toute la file.
  * @returns le nombre d'événements passés au bus.
  */
-export async function traiterEvenementsBase(supabase: SupabaseClient): Promise<number> {
+export async function traiterEvenementsBase(supabase: SupabaseClient, options: { orgId?: string } = {}): Promise<number> {
   const depuis = await dateDeMiseEnService(supabase);
   if (!depuis) return 0; // sans repère, on ne sait pas quoi est déjà parti : on attend
 
   // L'arriéré d'avant la mise en service a été émis par l'ancien chemin.
-  const { error: errArriere } = await supabase
+  let arriere = supabase
     .from('automation_evenements_base')
     .update({ traite_at: new Date().toISOString(), last_error: 'Antérieur à la mise en service : émis par l’ancien chemin' })
     .is('traite_at', null)
     .lt('created_at', depuis);
+  if (options.orgId) arriere = arriere.eq('org_id', options.orgId);
+  const { error: errArriere } = await arriere;
   if (errArriere) logger.error('[evenements-base] arriéré non marqué', { message: errArriere.message });
 
-  const { data, error } = await supabase
+  let file = supabase
     .from('automation_evenements_base')
     .select('id, org_id, type, entity_type, entity_id, related_entity_type, related_entity_id, metadata, attempts, created_at')
     .is('traite_at', null)
-    .lt('attempts', MAX_TENTATIVES_BASE)
+    .lt('attempts', MAX_TENTATIVES_BASE);
+  if (options.orgId) file = file.eq('org_id', options.orgId);
+  const { data, error } = await file
     .order('id')
     .limit(TAILLE_LOT);
   if (error) {

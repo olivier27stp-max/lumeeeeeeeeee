@@ -117,6 +117,7 @@ const REGLES: Array<[RegExp, (...g: string[]) => string]> = [
   [re('Valeur manquante pour « (.+?) »\\.'), (o) => `Missing value for “${o}”.`],
   [re('Valeur manquante pour « (.+?) » \\(oui ou non\\)\\.'), (o) => `Missing value for “${o}” (yes or no).`],
   [re('Date manquante pour « (.+?) »\\.'), (o) => `Missing date for “${o}”.`],
+  [re('Durée manquante pour « (.+?) »\\.'), (o) => `Missing duration for “${o}”.`],
   [re('Aucune option choisie\\.'), () => 'No option selected.'],
   [re('Un champ du filtre n\'existe plus\\.'), () => 'A field in the filter no longer exists.'],
   [re('Champ inconnu dans le filtre\\.'), () => 'Unknown field in the filter.'],

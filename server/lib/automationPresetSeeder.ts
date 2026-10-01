@@ -119,6 +119,31 @@ export async function ensureAutomationPresets(
     .select('id');
   if (revErr) throw revErr;
 
+  // 1c. Paiement reçu / dépôt reçu : le seed SQL (seed_automation_presets,
+  // trigger de création d'org, qui passe AVANT ce filet) les pose SANS la
+  // condition payment_type. Chaque paiement déclenchait les DEUX : le client
+  // d'un paiement complet recevait « Paiement reçu » et l'équipe « Dépôt
+  // reçu » ; un dépôt valait aussi « Paiement reçu ». On remet la condition du
+  // catalogue — seulement là où elle est encore vide (jamais une condition
+  // choisie par l'entreprise).
+  const conditionsPaiement: Record<string, Record<string, unknown>> = {};
+  for (const p of AUTOMATION_PRESETS) {
+    if (p.preset_key === 'payment_confirmation' || p.preset_key === 'deposit_received') conditionsPaiement[p.preset_key] = p.conditions as Record<string, unknown>;
+  }
+  const { data: paiements, error: payErr } = await admin
+    .from('automation_rules')
+    .select('id, preset_key, conditions')
+    .eq('org_id', orgId)
+    .in('preset_key', Object.keys(conditionsPaiement));
+  if (payErr) throw payErr;
+  let conditionsReparees = 0;
+  for (const r of (paiements ?? []) as Array<{ id: string; preset_key: string; conditions: Record<string, unknown> | null }>) {
+    if (r.conditions && Object.keys(r.conditions).length > 0) continue;
+    const { error: e } = await admin.from('automation_rules').update({ conditions: conditionsPaiement[r.preset_key] }).eq('id', r.id).eq('org_id', orgId);
+    if (e) throw e;
+    conditionsReparees++;
+  }
+
   // 2. Insérer les presets manquants
   const { data: existing, error: exErr } = await admin
     .from('automation_rules')
@@ -219,5 +244,5 @@ export async function ensureAutomationPresets(
     if (marqueErr) throw marqueErr;
   }
 
-  return { inserted: missing.length, repaired: (repairedRows?.length || 0) + (reviewRows?.length || 0) };
+  return { inserted: missing.length, repaired: (repairedRows?.length || 0) + (reviewRows?.length || 0) + conditionsReparees };
 }

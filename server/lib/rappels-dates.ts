@@ -28,20 +28,31 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { eventBus } from './eventBus';
 import { logger } from './logger';
+import { fuseauOrg } from './automations-fuseau-org';
 
-/** Le fuseau dans lequel « aujourd'hui » se juge — celui de l'entreprise. */
+/** Fuseau de repli, quand celui de l'entreprise est illisible. */
 const FUSEAU = 'America/Toronto';
 
-/** AAAA-MM-JJ dans le fuseau de l'entreprise, pas celui du serveur. */
-export function jourLocal(d: Date = new Date()): string {
+/**
+ * AAAA-MM-JJ dans le fuseau de l'entreprise, pas celui du serveur. Le
+ * balayage passe le fuseau de CHAQUE entreprise (company_settings.timezone) :
+ * figé sur Toronto, une entreprise de Vancouver voyait « aujourd'hui » changer
+ * à 21 h, heure de chez elle, et ses rappels partaient la veille.
+ */
+export function jourLocal(d: Date = new Date(), fuseau: string = FUSEAU): string {
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone: FUSEAU, year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: fuseau, year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(d);
 }
 
 /** Le jour visé, décalé de `jours` (négatif = avant). */
-export function jourDecale(jours: number, base: Date = new Date()): string {
-  return jourLocal(new Date(base.getTime() + jours * 86_400_000));
+export function jourDecale(jours: number, base: Date = new Date(), fuseau: string = FUSEAU): string {
+  // En jours CIVILS : près de minuit, le jour du changement d'heure, « + 24 h »
+  // retombait sur la veille (25 h) ou sautait un jour (23 h).
+  const [a, m, j] = jourLocal(base, fuseau).split('-').map(Number);
+  const d = new Date(Date.UTC(a, m - 1, j + jours));
+  const deux = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${deux(d.getUTCMonth() + 1)}-${deux(d.getUTCDate())}`;
 }
 
 export interface ResumeRappels {
@@ -75,18 +86,22 @@ function decalageDeLaRegle(conditions: Record<string, unknown> | null): number {
 export async function balayerRappelsDates(
   supabase: SupabaseClient,
   maintenant: Date = new Date(),
+  // `options.orgId` : une seule entreprise (suite d'intégration, bureau de test).
+  options: { orgId?: string } = {},
 ): Promise<ResumeRappels> {
   const resume: ResumeRappels = { regles: 0, emis: 0, erreurs: 0 };
 
   // Les règles qui écoutent ce déclencheur, actives seulement : une règle
   // en brouillon ne doit rien envoyer.
-  const { data: regles, error } = await supabase
+  let requete = supabase
     .from('automation_rules')
     .select('id, org_id, conditions')
     .eq('trigger_event', 'date.reached')
     .eq('is_active', true)
     // Une règle à la corbeille ne balaie plus rien.
     .is('deleted_at', null);
+  if (options.orgId) requete = requete.eq('org_id', options.orgId);
+  const { data: regles, error } = await requete;
 
   if (error) {
     logger.error('[rappels-dates] lecture des règles échouée', { message: error.message });
@@ -164,7 +179,8 @@ export async function balayerRappelsDates(
        * pourtant présente.
        */
       const decalage = decalageDeLaRegle(conditions);
-      const jourVise = jourDecale(decalage, maintenant);
+      const fuseau = await fuseauOrg(supabase, regle.org_id);
+      const jourVise = jourDecale(decalage, maintenant, fuseau);
 
       /*
        * Les valeurs qui tombent sur le jour visé.
@@ -221,7 +237,7 @@ export async function balayerRappelsDates(
               jours_avant: decalage,
               date: v.value_date,
               // Même anti-doublon que pour un client : le jour du balayage.
-              jour: jourLocal(maintenant),
+              jour: jourLocal(maintenant, fuseau),
             },
           });
           resume.emis += 1;
@@ -256,7 +272,7 @@ export async function balayerRappelsDates(
             date: v.value_date,
             // Le jour du balayage entre dans l'anti-doublon du moteur :
             // rejouer le cron le même jour ne renvoie rien.
-            jour: jourLocal(maintenant),
+            jour: jourLocal(maintenant, fuseau),
           },
         });
         resume.emis += 1;

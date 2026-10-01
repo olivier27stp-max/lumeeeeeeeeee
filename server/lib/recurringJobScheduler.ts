@@ -60,12 +60,13 @@ export function stopRecurringJobScheduler() {
   }
 }
 
-async function processRecurringJobs(supabase: SupabaseClient) {
+/** Exporté pour la suite d'intégration : `orgId` borne le passage à une entreprise. */
+export async function processRecurringJobs(supabase: SupabaseClient, options: { orgId?: string } = {}) {
   try {
     const now = new Date().toISOString();
 
     // Find active rules that are due
-    const { data: rules, error } = await supabase
+    let lecture = supabase
       .from('job_recurrence_rules')
       // La clé étrangère est nommée EXPLICITEMENT : depuis le durcissement
       // multi-tenant du 30 juillet (20260751100200), job_recurrence_rules a DEUX
@@ -75,8 +76,9 @@ async function processRecurringJobs(supabase: SupabaseClient) {
       // (constaté dans les journaux de production le 2026-07-31).
       .select('*, jobs!job_recurrence_rules_job_id_fkey!inner(id, org_id, client_id, property_id, title, description, job_type, property_address, team_id, created_by)')
       .eq('is_active', true)
-      .lte('next_run_at', now)
-      .limit(50);
+      .lte('next_run_at', now);
+    if (options.orgId) lecture = lecture.eq('org_id', options.orgId);
+    const { data: rules, error } = await lecture.limit(50);
 
     if (error) {
       console.error('[recurring-jobs] fetch error:', error.message);
@@ -155,6 +157,11 @@ async function processRecurringJobs(supabase: SupabaseClient) {
               job_id: newJob.id,
               // schedule_events n'a pas de client_id : le client se resout via le job.
               team_id: job.team_id,
+              // Obligatoire hors contexte d'authentification (trigger) : sans
+              // lui, CHAQUE visite récurrente était refusée (« created_by is
+              // required when no auth context ») — le job existait, absent du
+              // calendrier, sans confirmation ni rappel au client.
+              created_by: job.created_by,
               start_at: scheduledAt,
               end_at: new Date(nextDate.getTime() + 2 * 60 * 60 * 1000).toISOString(), // 2h default
               status: 'scheduled',
@@ -192,7 +199,10 @@ async function processRecurringJobs(supabase: SupabaseClient) {
           nextDate,
           rule.frequency,
           rule.interval_days || 7,
-          rule.timezone,
+          // Série sans fuseau = celui de l'ENTREPRISE (colonne documentée « NULL =
+          // hériter de company_settings.timezone »). Le repli 'America/Toronto'
+          // passé en dur plaçait la visite de 9 h d'une entreprise de Vancouver à 6 h.
+          rule.timezone || await fuseauEntreprise(supabase, job.org_id),
           rule.local_time,
         );
 
@@ -239,6 +249,13 @@ async function processRecurringJobs(supabase: SupabaseClient) {
  * 'America/Toronto' (identifiant IANA canonique de l'Est canadien) ne sert que
  * si le tenant n'a rien configuré.
  */
+/** Fuseau de l'entreprise (company_settings.timezone), repli America/Toronto. */
+async function fuseauEntreprise(supabase: SupabaseClient, orgId: string): Promise<string> {
+  const { data, error } = await supabase.from('company_settings').select('timezone').eq('org_id', orgId).maybeSingle();
+  if (error) console.error('[recurring-jobs] fuseau de l’entreprise illisible, repli America/Toronto:', error.message);
+  return (data as { timezone?: string | null } | null)?.timezone || 'America/Toronto';
+}
+
 async function calculateNextRunTz(
   supabase: SupabaseClient,
   from: Date,

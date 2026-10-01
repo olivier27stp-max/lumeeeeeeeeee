@@ -366,8 +366,10 @@ export function applyTemplate(
   // Une seule passe : une valeur insérée n'est jamais relue (un nom « [QA] Équipe »
   // ou une note « voir [annexe] » perdait son texte entre crochets en trois passes).
   return template.replace(
-    /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}|\{([A-Za-z]\w*)\}|\[([A-Za-z]\w*)\]/g,
-    (entier: string, objet: string | undefined, cle: string | undefined, accolade: string | undefined, crochet: string | undefined) =>
-      objet ? remplacerChamp(entier, objet, cle as string) : remplacer(entier, (accolade ?? crochet) as string),
+    // `{{cle}}` (sans point) = `{cle}` — le format que Lumi annonce pour les
+    // modèles de courriel (« {{client_name}} ») ; il partait « {Marie} ».
+    /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}|\{\{\s*([A-Za-z]\w*)\s*\}\}|\{([A-Za-z]\w*)\}|\[([A-Za-z]\w*)\]/g,
+    (entier: string, objet: string | undefined, cle: string | undefined, double: string | undefined, accolade: string | undefined, crochet: string | undefined) =>
+      objet ? remplacerChamp(entier, objet, cle as string) : remplacer(entier, (double ?? accolade ?? crochet) as string),
   );
 }

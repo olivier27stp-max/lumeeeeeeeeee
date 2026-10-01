@@ -33,8 +33,22 @@ export const COMPTES = {
 
 export const NOM_ORG_A = `[TEST] QA Automatisations A${SUFFIXE ? ` (${SUFFIXE})` : ''} — ne pas utiliser`;
 export const NOM_ORG_B = `[TEST] QA Automatisations B${SUFFIXE ? ` (${SUFFIXE})` : ''} — ne pas utiliser`;
-export const NUMERO_A = '+15555550100';
-export const NUMERO_B = '+15555550101';
+/**
+ * Numéros texto FICTIFS (555-01xx), DISTINCTS par jeu de bureaux : un texto
+ * entrant est routé vers l'entreprise par son numéro « To ». Quand tous les
+ * jeux partageaient +15555550100, le texto d'un test arrivait chez le bureau
+ * d'un autre agent (B-041 rouge dans la suite complète, vert seul).
+ * Sans suffixe : 0100 / 0101. Avec suffixe : une paire dans 0102…0199.
+ */
+function numerosDuJeu(suffixe: string): [string, string] {
+  if (!suffixe) return ['+15555550100', '+15555550101'];
+  let h = 0;
+  for (const c of suffixe) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const base = 102 + (h % 49) * 2;
+  const n = (k: number) => `+155555501${String(k).padStart(2, '0').slice(-2)}`;
+  return [n(base - 100), n(base - 99)];
+}
+export const [NUMERO_A, NUMERO_B] = numerosDuJeu(SUFFIXE);
 
 export interface BureauTest {
   admin: SupabaseClient;
@@ -115,7 +129,11 @@ export async function assurerBureauTest(admin = adminStaging()): Promise<BureauT
         current_period_end: new Date(Date.now() + 365 * 86400_000).toISOString(),
       }), 'subscription');
     }
-    const { data: canal } = await admin.from('communication_channels').select('id').eq('org_id', org).eq('channel_type', 'sms').maybeSingle();
+    const { data: canal } = await admin.from('communication_channels').select('id, phone_number').eq('org_id', org).eq('channel_type', 'sms').maybeSingle();
+    if (canal && canal.phone_number !== numero) {
+      // Un test a pu changer le numéro, ou le jeu date d'avant les numéros distincts.
+      await ok(admin.from('communication_channels').update({ phone_number: numero }).eq('id', canal.id), 'numéro du bureau');
+    }
     if (!canal) {
       await ok(admin.from('communication_channels').insert({
         org_id: org, channel_type: 'sms', provider: 'twilio', phone_number: numero, is_default: true, status: 'active',

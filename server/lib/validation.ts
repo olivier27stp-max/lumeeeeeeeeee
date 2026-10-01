@@ -15,6 +15,7 @@ import {
   type ChampAction,
 } from '../../src/lib/automationCatalogue';
 import { problemesDuGraphe, type Etape } from './automationSequences';
+import { signalerClairement } from './automations-validation-messages';
 import { INDUSTRIES_MODELES } from '../../src/lib/champs/modeles';
 
 // ─── Middleware factory ───────────────────────────────────────────────────────
@@ -1239,7 +1240,8 @@ const corpsAutomatisation = z.object({
   name: z.string().trim().min(1, 'Name is required.').max(120),
   description: z.string().trim().max(500).optional().nullable(),
   trigger_event: cleDeclencheur,
-  conditions: conditionsAutomatisation.optional().default({}),
+  // `null` accepté (l'éditeur garde `regle.conditions ?? null`) : vaut « aucune condition ».
+  conditions: conditionsAutomatisation.nullable().optional().default({}).transform((c) => c ?? {}),
   // Borné des deux côtés : un délai négatif signifie « avant la date de
   // référence » et n'a de sens que pour un rendez-vous — la route le vérifie
   // contre le catalogue, qui sait quels déclencheurs portent une date future.
@@ -1310,7 +1312,20 @@ const plafondActions = (corps: { steps?: unknown; actions?: unknown[] }, ctx: z.
   }
 };
 
-export const automationRuleCreateSchema = corpsAutomatisation.superRefine(plafondActions);
+const creationAutomatisation = corpsAutomatisation.superRefine(plafondActions);
+/**
+ * Les refus parlent la langue de l'entrepreneur : l'éditeur affiche `error`
+ * tel quel, et il lisait « Invalid input: expected string, received null »
+ * (voir automations-validation-messages.ts).
+ */
+export const automationRuleCreateSchema = z.unknown().transform((brut, ctx) => {
+  const r = creationAutomatisation.safeParse(brut);
+  if (!r.success) {
+    signalerClairement(r.error.issues, brut, ctx);
+    return z.NEVER;
+  }
+  return r.data;
+});
 
 /**
  * La modification accepte un sous-ensemble, mais jamais un objet vide.
@@ -1344,11 +1359,11 @@ export const automationCopieBureauxSchema = z.object({
 const majAutomatisation = corpsAutomatisation.partial().superRefine(plafondActions);
 export const automationRuleUpdateSchema = z
   .record(z.string(), z.unknown())
-  .refine((o) => Object.keys(o).length > 0, 'Nothing to update.')
+  .refine((o) => Object.keys(o).length > 0, { message: 'Rien à modifier.', params: { en: 'Nothing to change.' } })
   .transform((brut, ctx) => {
     const r = majAutomatisation.safeParse(brut);
     if (!r.success) {
-      for (const i of r.error.issues) ctx.addIssue({ ...i, code: 'custom', message: i.message, path: i.path });
+      signalerClairement(r.error.issues, brut, ctx);
       return z.NEVER;
     }
     /*

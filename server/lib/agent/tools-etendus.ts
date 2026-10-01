@@ -911,6 +911,10 @@ const listAutomations: AgentTool = {
       .from('automation_rules')
       .select('id, name, trigger_event, is_active, is_preset')
       .eq('org_id', ctx.orgId)
+      // La corbeille n'est pas une automatisation existante : Lumi la
+      // proposait à l'activation (« active “Relance” » visait la copie jetée).
+      // Une règle supprimée définitivement porte aussi deleted_at.
+      .is('deleted_at', null)
       .order('name', { ascending: true })
       .limit(50);
     if (error) return erreurOutil('automations', error);
@@ -933,7 +937,7 @@ const getAutomationHealth: AgentTool = {
   handler: async (_args, ctx) => {
     const { data, error } = await ctx.client
       .from('automation_execution_logs')
-      .select('action_type, trigger_event, result_success, result_error, created_at')
+      .select('action_type, trigger_event, result_success, result_error, result_data, created_at')
       .eq('org_id', ctx.orgId)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -952,8 +956,20 @@ const getAutomationHealth: AgentTool = {
       if (e.includes('unsubscribed') || e.includes('opt') || e.includes('stop')) return 'le destinataire s’est désabonné';
       return err ? String(err).slice(0, 120) : 'raison inconnue';
     };
-    const reussites = logs.filter((l: any) => l.result_success).length;
-    const echecs = logs.filter((l: any) => !l.result_success);
+    // Un envoi SAUTÉ (client sans téléphone, sans consentement, désabonné…)
+    // est journalisé en succès technique avec son motif dans result_data.saute :
+    // il était compté « parti » alors que le client n'a rien reçu. Une action
+    // encore « en cours » (ligne réservée avant l'appel) n'est ni l'un ni l'autre.
+    const motifSaut = (l: any): string | null => (l.result_success && l.result_data && typeof l.result_data.saute === 'string') ? l.result_data.saute : null;
+    const enCours = (l: any) => !l.result_success && l.result_error === 'en cours';
+    const reussites = logs.filter((l: any) => l.result_success && !motifSaut(l)).length;
+    const sautes = logs.filter((l: any) => motifSaut(l));
+    const parMotif = new Map<string, number>();
+    for (const l of sautes) {
+      const motif = String(motifSaut(l)).slice(0, 120);
+      parMotif.set(motif, (parMotif.get(motif) || 0) + 1);
+    }
+    const echecs = logs.filter((l: any) => !l.result_success && !enCours(l));
     // Regroupe les échecs par cause.
     const parCause = new Map<string, number>();
     for (const l of echecs) {
@@ -963,12 +979,16 @@ const getAutomationHealth: AgentTool = {
     return {
       sur_les_dernieres: logs.length,
       partis: reussites,
+      sautes: sautes.length,
+      raisons_des_sauts: [...parMotif.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([motif, nombre]) => ({ motif, nombre })),
       echoues: echecs.length,
       raisons_des_echecs: [...parCause.entries()]
         .sort((a, b) => b[1] - a[1])
         .map(([cause, nombre]) => ({ cause, nombre })),
-      note: echecs.length
-        ? 'Corrige les causes ci-dessus (coordonnées des clients, numéro d’envoi de l’entreprise) pour que les prochains messages partent.'
+      note: echecs.length || sautes.length
+        ? 'Corrige les causes ci-dessus (coordonnées et consentements des clients, numéro d’envoi de l’entreprise) pour que les prochains messages partent.'
         : 'Tout est parti sans échec récent.',
     };
   },

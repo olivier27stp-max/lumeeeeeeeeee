@@ -106,36 +106,83 @@ export async function updateRuleMessage(
 
   const { data: rule, error: readErr } = await supabase
     .from('automation_rules')
-    .select('actions')
+    .select('actions, steps')
     .eq('id', id)
     .single();
   if (readErr) throw readErr;
 
+  const reecrire = (config: Record<string, any> | undefined) => ({
+    ...(config || {}),
+    body,
+    ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}),
+  });
   const actions = ((rule?.actions || []) as AutomationRule['actions']).map((a) =>
-    a.type === actionType
-      ? {
-          ...a,
-          config: {
-            ...a.config,
-            body,
-            ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}),
-          },
-        }
-      : a,
+    a.type === actionType ? { ...a, config: reecrire(a.config) } : a,
   );
+
+  /*
+   * UNE AUTOMATISATION À ÉTAPES : le moteur exécute `steps` et ignore
+   * `actions`, qui n'en est qu'un reflet. Réécrire `actions` seul répondait
+   * « Message enregistré » pendant que le client recevait l'ancien texte
+   * (Réglages › Messagerie et Avis ; même correctif que l'outil Lumi,
+   * server/lib/agent/tools-reglages.ts). Plusieurs envois du même type :
+   * on ne devine pas lequel, l'éditeur les distingue.
+   */
+  const etapes = etapesDe(rule);
+  let nouvellesEtapes: Array<Record<string, any>> | null = null;
+  if (etapes.length > 0) {
+    const cibles = etapes.filter((e) => e?.type === 'action' && e?.action?.type === actionType);
+    if (cibles.length > 1) {
+      throw new Error(fr
+        ? `Cette automatisation envoie ${cibles.length} messages de ce type : modifiez celui que vous voulez dans Automatisations.`
+        : `This automation sends ${cibles.length} messages of this kind: edit the one you want in Automations.`);
+    }
+    if (cibles.length === 1) {
+      nouvellesEtapes = etapes.map((e) => (e === cibles[0] ? { ...e, action: { ...e.action, config: reecrire(e.action?.config) } } : e));
+    }
+  }
 
   // `.select()` force PostgREST à retourner les lignes touchées : sans lui, un
   // filtrage par la RLS produirait un « succès » silencieux (0 ligne modifiée)
   // et l'utilisateur croirait avoir enregistré son texte.
   const { data: updated, error } = await supabase
     .from('automation_rules')
-    .update({ actions, updated_at: new Date().toISOString() })
+    .update({ actions, ...(nouvellesEtapes ? { steps: nouvellesEtapes } : {}), updated_at: new Date().toISOString() })
     .eq('id', id)
     .select('id');
   if (error) throw error;
   if (!updated || updated.length === 0) {
     throw new Error("Modification refusée — vous n'avez pas accès à cette automatisation.");
   }
+}
+
+function etapesDe(rule: { steps?: unknown } | null | undefined): Array<Record<string, any>> {
+  return Array.isArray(rule?.steps) ? (rule.steps as Array<Record<string, any>>) : [];
+}
+
+/**
+ * Le texte que le moteur ENVERRA pour ce type d'envoi : celui des étapes
+ * quand la règle en a (le moteur ne lit alors plus `actions`), sinon celui
+ * de l'action d'origine. Ce que les écrans affichent doit être ce qui part.
+ */
+export function texteDuMessage(rule: Pick<AutomationRule, 'actions' | 'steps'>, actionType: 'send_sms' | 'send_email'): string {
+  const etapes = etapesDe(rule);
+  if (etapes.length > 0) {
+    const e = etapes.find((x) => x?.type === 'action' && x?.action?.type === actionType);
+    if (e) return String(e.action?.config?.body ?? '');
+  }
+  return String((rule.actions || []).find((a) => a.type === actionType)?.config?.body ?? '');
+}
+
+/** La règle telle qu'après `updateRuleMessage` (mise à jour locale d'un écran). */
+export function avecTexteDuMessage<T extends Pick<AutomationRule, 'actions' | 'steps'>>(rule: T, actionType: 'send_sms' | 'send_email', body: string): T {
+  const etapes = etapesDe(rule);
+  const cible = etapes.find((x) => x?.type === 'action' && x?.action?.type === actionType);
+  return {
+    ...rule,
+    actions: (rule.actions || []).map((a) => (a.type === actionType ? { ...a, config: { ...a.config, body } } : a)),
+    ...(cible ? { steps: etapes.map((e) => (e === cible ? { ...e, action: { ...e.action, config: { ...e.action?.config, body } } } : e)) } : {}),
+  };
 }
 
 /** @deprecated Utiliser `updateRuleMessage`. Conservé le temps de migrer les appelants. */

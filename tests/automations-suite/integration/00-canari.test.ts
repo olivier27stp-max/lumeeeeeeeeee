@@ -57,6 +57,7 @@ describe('canari — les pièges détectent un envoi réel (témoin positif)', (
 
 describe('canari — le bureau de test n’envoie rien de réel', () => {
   it('appels directs : texto, courriel, webhook du bureau A → envois_simules, aucun piège', async () => {
+    const m = marque('canari-direct');
     const depuis = new Date().toISOString();
     const { envelopperBacASable, contexteEnvoi } = await import('../../../server/lib/bac-a-sable');
     const { sendEmail } = await import('../../../server/lib/mailer');
@@ -65,14 +66,16 @@ describe('canari — le bureau de test n’envoie rien de réel', () => {
     const httpAvant = appelsHttpBloques().length;
 
     const sms = (await contexteEnvoi.run({ orgId: b.orgA }, () =>
-      envelopperBacASable(clientTwilioPiege)!.messages.create({ to: '+15145551234', body: 'canari direct' }))) as unknown as { sid: string };
+      envelopperBacASable(clientTwilioPiege)!.messages.create({ to: '+15145551234', body: `canari direct ${m}` }))) as unknown as { sid: string };
     expect(sms.sid).toMatch(/^SM_SIMULE_/);
-    const courriel = await sendEmail({ to: 'canari-qa@lumecrm-canari.com', subject: 'Canari direct', html: '<p>canari</p>', suivi: { orgId: b.orgA, entityType: 'client', entityId: randomUUID() } });
+    const courriel = await sendEmail({ to: 'canari-qa@lumecrm-canari.com', subject: `Canari direct ${m}`, html: '<p>canari</p>', suivi: { orgId: b.orgA, entityType: 'client', entityId: randomUUID() } });
     expect(courriel.sent).toBe(true);
-    const hook = await posterSansSsrf('https://example.com/canari', { canari: true }, { orgId: b.orgA, resoudre: async () => [{ address: '93.184.215.14' }] });
+    const hook = await posterSansSsrf('https://example.com/canari', { canari: m }, { orgId: b.orgA, resoudre: async () => [{ address: '93.184.215.14' }] });
     expect(hook.status).toBe(200);
 
-    const rows = await envoisSimules(b.admin, b.orgA, depuis);
+    // Par la MARQUE, pas seulement par l'heure : rien d'un autre test ne s'y mêle.
+    const rows = (await envoisSimules(b.admin, b.orgA, depuis))
+      .filter((r) => `${r.sujet ?? ''} ${r.corps ?? ''}`.includes(m));
     expect(rows.map((r) => r.canal).sort()).toEqual(['courriel', 'sms', 'webhook']);
     expect(rows.every((r) => (r.meta as { raison?: string }).raison === 'entreprise')).toBe(true);
     expect(appelsTwilio.length).toBe(twilioAvant);
@@ -111,11 +114,15 @@ describe('canari — le bureau de test n’envoie rien de réel', () => {
       async () => (await envoisSimules(b.admin, b.orgA, depuis)).filter((r) =>
         String(r.corps ?? '').includes(m) || String(r.sujet ?? '').includes(m) || r.destinataire.includes('canari-moteur')),
       (r) => r.length >= 3,
+      // Une base lente n'est pas un envoi réel : sur un staging saturé, un envoi
+      // SIMULÉ a mis plus de 5 s (CI du 2026-10-01). Le canari attend ; ce qui
+      // le rend rouge, ce sont les pièges, vérifiés juste après.
+      75_000, 500,
     );
     const { data: journal } = await b.admin.from('automation_execution_logs').select('*').eq('automation_rule_id', regle!.id).limit(5);
     expect(rows.map((r) => r.canal).sort(), `journal : ${JSON.stringify(journal)}`).toEqual(['courriel', 'sms', 'webhook']);
     expect(rows.every((r) => (r.meta as { raison?: string }).raison === 'entreprise')).toBe(true);
     expect(appelsTwilio.length, 'un texto a atteint le fournisseur').toBe(twilioAvant);
     expect(appelsHttpBloques().length, 'un appel HTTP a atteint le réseau').toBe(httpAvant);
-  });
+  }, 150_000);
 });
