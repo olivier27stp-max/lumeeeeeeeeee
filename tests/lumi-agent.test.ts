@@ -313,6 +313,22 @@ describe('orchestrateur', () => {
     expect(emis.some((e) => e.type === 'tool' && e.statut === 'refus')).toBe(false);
   });
 
+  it('plafond de coût du tour : les outils sont retirés ET le modèle en est averti', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    // Un premier appel très cher (30 000 tokens d'entrée plein tarif ≈ 9 ¢, au-dessus du plafond de 6 ¢).
+    const cher = { input_tokens: 30_000, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+    reponses.push({ content: [{ type: 'tool_use', id: 'l1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage: cher });
+    reponses.push({ content: [{ type: 'text', text: 'Voici ce que j’ai : une facture. Il resterait à vérifier les paiements.' }], stop_reason: 'end_turn', usage });
+    const r = await tourLumi({ ...baseTour([], []), contexteTour: 'Il est 9 h.' });
+    expect(r.texte).toContain('Voici ce que j’ai');
+    expect(instantanes[0].tool_choice).toBeUndefined();
+    expect(instantanes[1].tool_choice).toEqual({ type: 'none' });
+    // Avant, le modèle perdait ses outils sans le savoir : il annonçait « je vérifie » et s'arrêtait là.
+    const dernier = JSON.stringify(instantanes[1].messages[instantanes[1].messages.length - 1]);
+    expect(dernier).toContain('tu ne peux plus appeler d’outil');
+    expect(dernier).toContain('Il est 9 h.');
+  });
+
   it('limite d’étapes : une ÉCRITURE à la dernière étape reste une carte (aucun appel de plus)', async () => {
     const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
     reponses.push({ content: [{ type: 'tool_use', id: 'l1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage });

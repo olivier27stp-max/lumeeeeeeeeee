@@ -587,7 +587,7 @@ export async function tourLumi(opts: {
       max_tokens: MAX_TOKENS,
       system: opts.systeme,
       tools: outils,
-      messages: avecContexteDuTour(avecCacheConversation(messages), [opts.contexteTour, conclusionFinale ? consigneDeConclusion(fr) : null].filter(Boolean).join('\n') || null),
+      messages: avecContexteDuTour(avecCacheConversation(messages), [opts.contexteTour, sansOutils ? consigneDeConclusion(fr) : null].filter(Boolean).join('\n') || null),
       // Haiku 4.5 n'accepte ni la réflexion adaptative ni l'effort (400
       // « adaptive thinking is not supported on this model ») : sans ce
       // garde, la pente économe à 60 % du plafond répondait « Lumi failed
