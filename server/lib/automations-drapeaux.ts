@@ -24,6 +24,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './logger';
+import { trouverDeclencheur } from '../../src/lib/automationCatalogue';
 
 /** Les cinq capacités, dans l'ordre de livraison. */
 export const DRAPEAUX_AUTOMATISATIONS = {
@@ -75,4 +76,32 @@ export async function drapeauActif(
     logger.error('[automations-drapeaux] lecture impossible — capacité considérée OFF', { orgId, cle, error: err?.message || String(err) });
     return false;
   }
+}
+
+/**
+ * Ce déclencheur est-il OFFERT à cette entreprise ?
+ *
+ * Un déclencheur du catalogue peut dépendre d'une capacité en rodage
+ * (`drapeau`) : sans elle, son événement n'est jamais émis. L'éditeur le
+ * cache déjà ; Lumi et l'API l'acceptaient quand même — « préviens-moi quand
+ * un paiement échoue » créait une automatisation qui ne partait jamais, sans
+ * un mot. Déclencheur sans drapeau, ou inconnu (d'autres gardes le refusent) :
+ * offert.
+ */
+export async function declencheurOffertA(
+  supabase: SupabaseClient,
+  orgId: string | null | undefined,
+  cle: string | null | undefined,
+): Promise<boolean> {
+  const drapeau = cle ? trouverDeclencheur(cle)?.drapeau : undefined;
+  if (!drapeau) return true;
+  return drapeauActif(supabase, orgId, drapeau as CleDrapeauAutomatisation);
+}
+
+/** Le refus, dans la langue de l'utilisateur, avec le nom affiché du déclencheur. */
+export function refusDeclencheurNonOffert(cle: string, fr = true): string {
+  const d = trouverDeclencheur(cle);
+  return fr
+    ? `Le déclencheur « ${d?.fr ?? cle} » n’est pas encore offert à votre entreprise : une automatisation bâtie dessus ne partirait jamais.`
+    : `The “${d?.en ?? cle}” trigger is not available to your company yet: an automation built on it would never run.`;
 }

@@ -290,8 +290,8 @@ describe('F — anti-spam : plafonds', () => {
    * 30 / min. Une règle mal faite (étiquette posée en lot sur 5 000 clients,
    * message typé transactionnel) enverrait donc 5 000 textos en ≈ 2 h 47,
    * chacun à un client différent : le plafond par client ne mord jamais.
-   * Proposition : un plafond quotidien par automatisation (ex. 500) au-delà
-   * duquel la règle est mise en brouillon et le propriétaire notifié.
+   * F-083 le MESURE (et le garde : c'est la décision) ; F-084 prouve que le
+   * propriétaire en est averti.
    */
   let etatGlobal: { envoye: boolean; journal: { logs: Array<{ result_success: boolean }>; taches: unknown } } | null = null;
   it('[F-083] mesure : une automatisation qui a déjà envoyé 500 textos aujourd’hui en envoie encore', async () => {
@@ -312,11 +312,55 @@ describe('F — anti-spam : plafonds', () => {
     etatGlobal = { envoye, journal: { logs: (await journaux(regle)).filter((l) => l.created_at > depuis), taches } };
     expect(etatGlobal.journal.logs, JSON.stringify(etatGlobal.journal)).toHaveLength(1);
     expect(etatGlobal.journal.logs[0].result_success, JSON.stringify(etatGlobal.journal)).toBe(true);
+    // Pas de plafond global : le 501e texto du jour part (décision ; l'alerte de rafale est en F-084).
+    expect(etatGlobal.envoye, JSON.stringify(etatGlobal.journal)).toBe(true);
   });
 
-  it.fails('[F-084] ROUGE ATTENDU — décision requise : plafond global par automatisation (le 501e texto du jour ne devrait pas partir ; F11 écarté le 2026-09-23)', () => {
-    expect(etatGlobal, 'la mesure F-083 n’a pas tourné').not.toBeNull();
-    expect(etatGlobal!.envoye, `texto parti malgré 500 déjà envoyés aujourd'hui par la même automatisation : ${JSON.stringify(etatGlobal!.journal)}`).toBe(false);
+  /*
+   * Décision (2026-10-01) : pas de plafond — la décision du 2026-09-23 tient,
+   * tout part, étalé — mais le propriétaire est PRÉVENU dès qu'une rafale est
+   * étalée. C'est ce qui manquait à « un humain a le temps de voir et
+   * d'arrêter » : personne ne le lui disait.
+   */
+  it('[F-084] rafale de textos : le propriétaire est prévenu dès le premier report, UNE fois, avec le nom de l’automatisation ; le texto reste prévu', async () => {
+    const { DEBIT_SMS_PAR_MINUTE, oublierRafalesSignalees } = await import('../../../server/lib/automationEngine');
+    const alertes = async () => ((await b.admin.from('notifications').select('id, title, body, reference_id, link').eq('org_id', b.orgA).eq('type', 'automation_burst')).data ?? []);
+    // Une alerte d'un test précédent (F-082) compterait pour celle-ci.
+    await b.admin.from('notifications').delete().eq('org_id', b.orgA).eq('type', 'automation_burst');
+    oublierRafalesSignalees();
+    const faux = Array.from({ length: DEBIT_SMS_PAR_MINUTE }, () => ({
+      org_id: b.orgA, trigger_event: 'client.tagged', entity_type: 'client', entity_id: randomUUID(),
+      action_type: 'send_sms', action_config: { rafale: m }, result_success: true,
+    }));
+    const inseres = await ok(b.admin.from('automation_execution_logs').insert(faux).select('id'), 'rafale');
+    const retirerRafale = () => b.admin.from('automation_execution_logs').delete().in('id', inseres.map((r: { id: string }) => r.id));
+    nettoyer.push(retirerRafale);
+    nettoyer.push(() => b.admin.from('notifications').delete().eq('org_id', b.orgA).eq('type', 'automation_burst'));
+    try {
+      const regle = await uneRegle(b.orgA, { trigger_event: 'client.tagged', actions: [{ type: 'send_sms', config: { body: `Alerte ${m}`, type_envoi: 'transactionnel' } }] });
+      const tachesDe = async () => (await b.admin.from('automation_scheduled_tasks').select('action_config, status').eq('automation_rule_id', regle)).data ?? [];
+      const premier = await unClient(b.orgA);
+      await b.eventBus.emit('client.tagged', { orgId: b.orgA, entityType: 'client', entityId: premier.id, metadata: { tag: 'qa-secu' } });
+      await attendre(tachesDe, (t) => t.length >= 1);
+      const apresUn = await attendre(alertes, (a) => a.length >= 1);
+      expect(apresUn).toHaveLength(1);
+      expect(apresUn[0].title).toContain(`${m} client.tagged`);
+      expect(apresUn[0].body).toMatch(/Tout arrêter/);
+      expect(apresUn[0].reference_id).toBe(regle);
+      expect(apresUn[0].link).toBe('/automations');
+
+      // Un 2e texto reporté dans la même rafale : pas de 2e alerte — même si
+      // un AUTRE processus (mémoire vide) traite ce report.
+      oublierRafalesSignalees();
+      const second = await unClient(b.orgA);
+      await b.eventBus.emit('client.tagged', { orgId: b.orgA, entityType: 'client', entityId: second.id, metadata: { tag: 'qa-secu' } });
+      const taches = await attendre(tachesDe, (t) => t.length >= 2);
+      expect(taches.every((t) => (t.action_config as { report_rafale?: boolean }).report_rafale === true && t.status === 'pending')).toBe(true);
+      expect(await alertes()).toHaveLength(1);
+    } finally {
+      // La rafale posée ne doit pas reporter les textos des tests suivants.
+      await retirerRafale();
+    }
   });
 
   it('[F-085] aucun envoi du bureau de test n’a atteint un fournisseur réel', () => {

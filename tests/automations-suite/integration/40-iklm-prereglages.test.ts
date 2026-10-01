@@ -309,9 +309,11 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     // …et le rappel « 1 semaine avant » attend SON moment : forcer l'échéance ne
     // le fait pas partir en avance, le moteur le replanifie (issue « replanifie »).
     const regleRdv = (await etatPresets(b.orgA)).find((r) => r.preset_key === 'pack_rendez_vous')!;
-    const { data: attente } = await b.admin.from('automation_scheduled_tasks').select('execute_at')
-      .eq('automation_rule_id', regleRdv.id).eq('entity_id', ev!.id).eq('status', 'pending');
-    expect(attente?.length).toBe(1);
+    // La replanification suit l'exécution de l'étape précédente : on l'attend
+    // (lue une seconde trop tôt, la tâche n'existait pas encore — vu en prod).
+    const attente = await attendre(async () => (await b.admin.from('automation_scheduled_tasks').select('execute_at')
+      .eq('automation_rule_id', regleRdv.id).eq('entity_id', ev!.id).eq('status', 'pending')).data ?? [], (l) => l.length === 1, 30_000, 500);
+    expect(attente.length).toBe(1);
     const ecart = Math.abs(new Date(attente![0].execute_at as string).getTime() - (debut.getTime() - 7 * 86400_000));
     expect(ecart).toBeLessThan(2 * 3600_000);
     nettoyer.push(() => b.admin.from('automation_scheduled_tasks').delete().eq('automation_rule_id', regleRdv.id).eq('entity_id', ev!.id));

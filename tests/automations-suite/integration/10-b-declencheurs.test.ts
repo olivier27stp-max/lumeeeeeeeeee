@@ -471,6 +471,66 @@ describe('[B] champs personnalisés, dates, webhooks entrants', () => {
     expect(await actions(idTrop)).toEqual([dans365.id]);
   });
 
+  it('[I-036] API : créer une règle sur un déclencheur en rodage non offert (drapeau éteint) → 400 ; y basculer une règle existante → 400 ; drapeau allumé → acceptée', async () => {
+    const m = marque('I-036');
+    const { data: ligne } = await b.admin.from('org_features').select('enabled').eq('org_id', b.orgA).eq('feature', 'auto_paiement_echoue').maybeSingle();
+    const corps = (nom: string, declencheur: string) => ({
+      name: nom, trigger_event: declencheur, conditions: {}, delay_seconds: 0,
+      actions: [{ type: 'create_task', config: { title: nom } }], is_active: false,
+    });
+    try {
+      await drapeau(b, 'auto_paiement_echoue', false);
+      const refus = await api.appeler('POST', '/api/automations/rules', corps(`${m} refusée`, 'payment.failed'));
+      expect(refus.status, JSON.stringify(refus.json)).toBe(400);
+      expect(refus.json.code).toBe('declencheur_non_offert');
+      expect(refus.json.error).toMatch(/« Paiement échoué » n’est pas encore offert/);
+
+      const devis = await api.appeler('POST', '/api/automations/rules', corps(`${m} devis`, 'quote.sent'));
+      expect(devis.status, JSON.stringify(devis.json)).toBe(201);
+      regles.push(devis.json.id);
+      const bascule = await api.appeler('PATCH', `/api/automations/rules/${devis.json.id}`, { trigger_event: 'payment.failed' });
+      expect(bascule.status, JSON.stringify(bascule.json)).toBe(400);
+      expect(bascule.json.code).toBe('declencheur_non_offert');
+      // Le reste de la règle demeure modifiable.
+      expect((await api.appeler('PATCH', `/api/automations/rules/${devis.json.id}`, { description: 'toujours modifiable' })).status).toBe(200);
+
+      await drapeau(b, 'auto_paiement_echoue', true);
+      const acceptee = await api.appeler('POST', '/api/automations/rules', corps(`${m} acceptée`, 'payment.failed'));
+      expect(acceptee.status, JSON.stringify(acceptee.json)).toBe(201);
+      regles.push(acceptee.json.id);
+    } finally {
+      await drapeau(b, 'auto_paiement_echoue', ligne?.enabled === true);
+    }
+  });
+
+  it('[D-044] date.reached : le balayage REJOUÉ le même jour (reprise, double cron, réessai manuel) n’agit qu’une fois par fiche', async () => {
+    const m = marque('D-044');
+    const champ = await creerChamp(api, { label: `Garantie ${Date.now().toString(36)}`, field_type: 'date', object_type: 'client' });
+    const { jourLocal, balayerRappelsDates } = await import('../../../server/lib/rappels-dates');
+    const client = await creerClient(b, m);
+    const maintenant = new Date();
+    await ecrireChamps(api, 'client', client.id, [{ field_id: champ.id, value: jourLocal(maintenant, b.fuseau) }]);
+    const regle = await ok<{ id: string }>(b.admin.from('automation_rules').insert({
+      org_id: b.orgA, name: `${m} rappel`, trigger_event: 'date.reached', conditions: { champ_id: champ.id, jours_avant: 0 }, delay_seconds: 0,
+      is_active: true, is_preset: false, actions: [{ type: 'create_task', config: { title: `${m} rappel` } }],
+    }).select('id').single(), 'règle');
+    regles.push(regle.id);
+
+    const premier = await balayerRappelsDates(b.admin, maintenant, { orgId: b.orgA });
+    expect(premier.erreurs).toBe(0);
+    expect(premier.emis).toBe(1);
+    await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} rappel`), (t) => t.length > 0, 20_000);
+
+    // Le cron repasse (deux fois) : la même date est revue, rien ne repart.
+    for (let i = 0; i < 2; i++) {
+      const rejeu = await balayerRappelsDates(b.admin, maintenant, { orgId: b.orgA });
+      expect(rejeu.erreurs).toBe(0);
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+    expect(await tachesTitrees(b.admin, b.orgA, `${m} rappel`)).toHaveLength(1);
+    expect((await journaux(b.admin, regle.id)).filter((l) => l.action_type === 'create_task')).toHaveLength(1);
+  });
+
   it('[B-049][B-050] webhook.received (POST /api/hooks/:clé, clé créée par la route) : champ JSON source=site vrai / facebook faux', async () => {
     const m = marque('B-049');
     const cree = await api.appeler('POST', '/api/automations/webhooks', { name: `Site ${m}` });

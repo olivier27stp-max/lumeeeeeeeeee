@@ -466,6 +466,12 @@ const createAutomationFromText: AgentTool = {
       if (!trouverDeclencheur(resultat.parcours.trigger_event)) {
         throw new Error('Lumi a choisi un déclencheur qui n’existe pas. Reformule ta demande.');
       }
+      // Déclencheur en rodage, pas offert à cette entreprise : son événement
+      // n'est jamais émis — la règle dormirait en base.
+      const { declencheurOffertA, refusDeclencheurNonOffert } = await import('../automations-drapeaux');
+      if (!(await declencheurOffertA(ctx.client, ctx.orgId, resultat.parcours.trigger_event))) {
+        throw new Error(refusDeclencheurNonOffert(resultat.parcours.trigger_event));
+      }
       if (await refAutomatisationInventee(ctx.client, ctx.orgId, verdict.data)) {
         throw new Error('Lumi a voulu relier une automatisation qui n’existe pas. Redemande-le autrement.');
       }
@@ -475,6 +481,7 @@ const createAutomationFromText: AgentTool = {
       const a = resultat.parcours.autre;
       const verdictAutre = a ? sequenceEtapes.safeParse(a.steps) : null;
       const autre = a && verdictAutre?.success && trouverDeclencheur(a.trigger_event)
+        && await declencheurOffertA(ctx.client, ctx.orgId, a.trigger_event)
         && !(await refAutomatisationInventee(ctx.client, ctx.orgId, verdictAutre.data))
         ? { ...a, steps: verdictAutre.data }
         : null;

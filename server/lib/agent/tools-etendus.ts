@@ -38,6 +38,7 @@ import { ecrireValeurs } from '../champs/service';
 import { etatDesabonnement } from '../desabonnement';
 import { resolveTaxesForOrg, computeTaxLines, type TaxLine as LigneTaxe } from '../taxResolve';
 import { adresseInjoignable } from '../mailer';
+import { estPrereglageRetire } from '../../../src/lib/automationCatalogue';
 import type { AgentTool, ToolContext } from './tools';
 
 interface TaxLine { code: string; label: string; rate: number; enabled: boolean }
@@ -938,7 +939,7 @@ const listAutomations: AgentTool = {
   handler: async (_args, ctx) => {
     const { data, error } = await ctx.client
       .from('automation_rules')
-      .select('id, name, trigger_event, is_active, is_preset')
+      .select('id, name, trigger_event, is_active, is_preset, preset_key')
       .eq('org_id', ctx.orgId)
       // La corbeille n'est pas une automatisation existante : Lumi la
       // proposait à l'activation (« active “Relance” » visait la copie jetée).
@@ -947,7 +948,12 @@ const listAutomations: AgentTool = {
       .order('name', { ascending: true })
       .limit(50);
     if (error) return erreurOutil('automations', error);
-    return { count: data?.length || 0, automations: data || [] };
+    // Un préréglage retiré (déclencheur que plus rien n'émet) n'est pas une
+    // automatisation à proposer : Lumi l'annonçait « active ».
+    const automations = (data || [])
+      .filter((r) => !estPrereglageRetire(r))
+      .map(({ preset_key: _cle, ...reste }) => reste);
+    return { count: automations.length, automations };
   },
 };
 

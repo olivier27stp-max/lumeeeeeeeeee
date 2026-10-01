@@ -39,6 +39,7 @@ Vrai chemin : `POST /api/lumi/chat` (orchestrateur, routeur actif, vrai modèle)
 | I-033 | Outil : langue de l'entreprise = en | — | consignes anglaises au générateur | corrigé (46a9fc92) |
 | I-034 | list_automations | corbeille / purgée | non listées | corrigé (d6b41e5b) |
 | I-035 | Redemander la même automatisation < 24 h après l'avoir supprimée | suppression définitive ; corbeille (`deleted_at`) ; témoin : la règle existe toujours | recréée (nouvelle règle, en pause) ; témoin : « déjà fait », aucun doublon, modèle non rappelé | CORRIGÉ — `40-iklm-lumi-outils.test.ts` [I-035] (3) : `executerIdempotent` accepte `encoreValable` (replacé dans la boucle de main #849 : empreinte de 10 min par personne). Intégration verte le 2026-10-01 AVANT la fusion de main ; non revérifiée après (staging dégradé) |
+| I-036 | Déclencheur en rodage non offert à l'entreprise (`payment.failed`, drapeau `auto_paiement_echoue`) | drapeau éteint, puis allumé | éteint : refusé par l'outil de Lumi, par la création, par le changement de déclencheur (code `declencheur_non_offert`), rien en base ; allumé : accepté | CORRIGÉ — l'éditeur cachait ces déclencheurs, mais le prompt de Lumi liste tout le catalogue et l'API acceptait : la règle était créée et ne partait jamais |
 | I-040 | « Crée … » / « Create … » | — | jamais de réponse FAQ | corrigé (a78e61f7) |
 | I-041 | Vraie question produit | — | garde sa FAQ | |
 | I-042 | « crée un parcours / automatise / workflow » | — | indice → create_automation_from_text | corrigé (9d0abe1c) |

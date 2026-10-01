@@ -11,6 +11,7 @@ import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
 import { changerPublication } from './automationBuilderApi';
 import { interfaceEnFrancais } from './champs/messages';
+import { estPrereglageRetire } from './automationCatalogue';
 
 export interface AutomationRule {
   id: string;
@@ -55,7 +56,9 @@ export async function getAutomationRules(): Promise<AutomationRule[]> {
     .is('purged_at', null)
     .order('name');
   if (error) throw error;
-  return (data || []) as AutomationRule[];
+  // Un préréglage retiré (déclencheur que plus rien n'émet) n'est pas montré :
+  // il s'afficherait « publié » sans jamais partir.
+  return ((data || []) as AutomationRule[]).filter((r) => !estPrereglageRetire(r));
 }
 
 /**

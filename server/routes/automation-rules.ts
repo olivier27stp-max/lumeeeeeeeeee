@@ -46,7 +46,7 @@ import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie
 import { logger } from '../lib/logger';
 import { messageCorbeille, STATUT_CORBEILLE } from '../lib/automations-corbeille';
 import { oublierPause } from '../lib/automations-pause-org';
-import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
+import { drapeauActif, declencheurOffertA, refusDeclencheurNonOffert, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
 import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee } from '../lib/automations-publication';
 import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
 import { problemeJoursAvant } from '../lib/rappels-dates';
@@ -56,6 +56,7 @@ import {
   trouverDeclencheur,
   conditionsApresChangement,
   declencheurOffert,
+  estPrereglageRetire,
   DELAI_NEGATIF_MAX_SECONDES,
 } from '../../src/lib/automationCatalogue';
 
@@ -150,7 +151,8 @@ router.get('/automations/rules', async (req, res) => {
   }
 
   return res.json({
-    rules: data ?? [],
+    // Un préréglage retiré s'afficherait « publié » sans jamais partir.
+    rules: ((data ?? []) as unknown as Array<{ preset_key: string | null; trigger_event: string | null }>).filter((r) => !estPrereglageRetire(r)),
     catalogue: await catalogueOffert(auth.client, auth.orgId),
   });
 });
@@ -193,7 +195,7 @@ router.get('/automations/editeur', async (req, res) => {
       : Promise.resolve({ data: null, error: null }),
     auth.client
       .from('automation_rules')
-      .select('id, name')
+      .select('id, name, preset_key, trigger_event')
       .eq('org_id', auth.orgId)
       .eq('is_active', true)
       .is('deleted_at', null)
@@ -207,7 +209,10 @@ router.get('/automations/editeur', async (req, res) => {
     rule: regle.data ?? null,
     catalogue: await catalogueOffert(auth.client, auth.orgId),
     // Jamais la règle ouverte elle-même : une automatisation qui se démarre boucle.
-    autres: ((autres.data ?? []) as Array<{ id: string; name: string }>).filter((r) => r.id !== ruleId),
+    // Ni un préréglage retiré : « Démarrer » une automatisation qui ne part jamais.
+    autres: ((autres.data ?? []) as Array<{ id: string; name: string; preset_key: string | null; trigger_event: string | null }>)
+      .filter((r) => r.id !== ruleId && !estPrereglageRetire(r))
+      .map((r) => ({ id: r.id, name: r.name })),
   });
 });
 
@@ -234,6 +239,10 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
   const fr = langueDe(req) === 'fr';
   const probleme = verifierCoherence(req.body, fr);
   if (probleme) return res.status(400).json({ error: probleme });
+  // Un déclencheur en rodage, pas offert à cette entreprise : la règle ne partirait jamais.
+  if (!(await declencheurOffertA(auth.client, auth.orgId, req.body.trigger_event))) {
+    return res.status(400).json({ error: refusDeclencheurNonOffert(req.body.trigger_event, fr), code: 'declencheur_non_offert' });
+  }
 
   // Naître publiée = publier : mêmes vérifications que la route de publication (M8).
   if (req.body.is_active === true) {
@@ -403,6 +412,12 @@ router.post('/automations/rules/generer', async (req, res) => {
         : 'Lumi picked a trigger that does not exist. Rephrase your request.',
     });
   }
+  // Le prompt de Lumi liste tout le catalogue (il est partagé entre les
+  // entreprises, donc en cache) : c'est ici qu'un déclencheur en rodage, pas
+  // offert à CETTE entreprise, est refusé.
+  if (!(await declencheurOffertA(auth.client, auth.orgId, decl.cle))) {
+    return refuser({ error: refusDeclencheurNonOffert(decl.cle, langue === 'fr'), code: 'declencheur_non_offert' });
+  }
 
   /*
    * Une étape qui désigne une AUTRE automatisation doit viser une règle qui
@@ -433,7 +448,7 @@ router.post('/automations/rules/generer', async (req, res) => {
     const inventeeAutre = verdictAutre.success
       ? await refAutomatisationInventee(auth.client, auth.orgId, verdictAutre.data)
       : null;
-    if (verdictAutre.success && trouverDeclencheur(a.trigger_event) && !inventeeAutre) {
+    if (verdictAutre.success && trouverDeclencheur(a.trigger_event) && !inventeeAutre && await declencheurOffertA(auth.client, auth.orgId, a.trigger_event)) {
       autre = { nom: a.nom, trigger_event: a.trigger_event, resume: a.resume, steps: verdictAutre.data, une_fois_par_client_jours: a.une_fois_par_client_jours };
     } else {
       logger.error('[lumi/parcours] deuxième automatisation écartée', {
@@ -588,6 +603,12 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     conditions: patch.conditions,
   }, fr);
   if (probleme) return res.status(400).json({ error: probleme });
+  // Seulement si ce PATCH CHANGE le déclencheur : une règle existante reste
+  // renommable, déplaçable, dépubliable.
+  if (typeof patch.trigger_event === 'string' && patch.trigger_event !== existante.trigger_event
+    && !(await declencheurOffertA(auth.client, auth.orgId, patch.trigger_event))) {
+    return res.status(400).json({ error: refusDeclencheurNonOffert(patch.trigger_event, fr), code: 'declencheur_non_offert' });
+  }
 
   // Publier par ce chemin passe par les mêmes vérifications que la route de
   // publication (M8), sur la règle telle qu'elle SERA après modification.
