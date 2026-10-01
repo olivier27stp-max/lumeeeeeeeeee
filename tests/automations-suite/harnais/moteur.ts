@@ -35,6 +35,14 @@ let pret: Promise<BureauTest & { eventBus: typeof import('../../../server/lib/ev
 export function demarrerMoteur() {
   pret ??= (async () => {
     const bureau = await assurerBureauTest();
+    // « En journée » pour les deux bureaux : la suite ne dépend plus de l'heure
+    // à laquelle elle tourne (le canari était rouge à 20 h 31 : texto reporté).
+    const fuseau = fuseauEnJournee();
+    const { error: eFuseau } = await bureau.admin.from('company_settings')
+      .update({ timezone: fuseau }).in('org_id', [bureau.orgA, bureau.orgB]);
+    if (eFuseau) throw new Error(`fuseau des bureaux de test : ${eFuseau.message}`);
+    const { viderCacheFuseau } = await import('../../../server/lib/automations-fuseau-org');
+    viderCacheFuseau();
     const { envelopperBacASable, oublierBacASable } = await import('../../../server/lib/bac-a-sable');
     oublierBacASable();
     const { initAutomationEngine } = await import('../../../server/lib/automationEngine');
@@ -47,6 +55,30 @@ export function demarrerMoteur() {
     return { ...bureau, eventBus };
   })();
   return pret;
+}
+
+/**
+ * Un fuseau où il est, en ce moment, entre 10 h et 16 h. La fenêtre d'envoi
+ * (8 h-20 h, heures calmes) reporte un texto au lendemain : sans ceci, la
+ * suite passait le jour et échouait le soir. On change le FUSEAU des bureaux
+ * de test, pas le moteur : report, jours locaux et délais suivent le vrai code.
+ * Un test qui éprouve la fenêtre elle-même pose son propre fuseau.
+ */
+export function fuseauEnJournee(maintenant = new Date()): string {
+  const heure = (tz: string) =>
+    Number(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hour12: false }).format(maintenant)) % 24;
+  const candidats = [
+    'America/Toronto', 'America/Vancouver', 'Pacific/Honolulu', 'Asia/Tokyo', 'Europe/Paris',
+    'Asia/Kolkata', 'Pacific/Auckland', 'America/Sao_Paulo', 'Asia/Dubai', 'Asia/Bangkok', 'Atlantic/Azores',
+  ];
+  for (const tz of candidats) {
+    const h = heure(tz);
+    if (h >= 10 && h <= 16) return tz;
+  }
+  // Aucune ville dans la fenêtre : un décalage fixe qui met 13 h maintenant.
+  // « Etc/GMT+5 » = UTC−5 (le signe IANA est inversé).
+  const decalage = ((13 - maintenant.getUTCHours() + 36) % 24) - 12;
+  return decalage === 0 ? 'Etc/GMT' : `Etc/GMT${decalage > 0 ? '-' : '+'}${Math.abs(decalage)}`;
 }
 
 /** Marque unique d'un test : tout ce qu'il crée la porte, le ménage la cherche. */
