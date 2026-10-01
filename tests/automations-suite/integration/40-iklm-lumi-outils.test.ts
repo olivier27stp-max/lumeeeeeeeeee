@@ -96,6 +96,32 @@ describe('I — create_automation_from_text : les gardes de la route « Construi
     expect(await reglesDepuis(depuis)).toEqual([]);
   });
 
+  it('[I-036] un déclencheur en rodage, pas offert à l’entreprise (drapeau éteint), est REFUSÉ et rien n’est enregistré ; drapeau allumé, la règle est créée', async () => {
+    const { oublierDrapeaux } = await import('../../../server/lib/automations-drapeaux');
+    const poser = async (enabled: boolean) => {
+      await b.admin.from('org_features').upsert({ org_id: b.orgA, feature: 'auto_paiement_echoue', enabled }, { onConflict: 'org_id,feature' });
+      oublierDrapeaux(b.orgA);
+    };
+    const { data: avant } = await b.admin.from('org_features').select('enabled').eq('org_id', b.orgA).eq('feature', 'auto_paiement_echoue').maybeSingle();
+    try {
+      await poser(false);
+      const depuis = new Date().toISOString();
+      reponsesModele.push(PARCOURS_SIMPLE('payment.failed'));
+      const refus = await outil('create_automation_from_text', { description: `Écris au client quand son paiement échoue ${marque('I-036')}` });
+      expect(refus.created, JSON.stringify(refus)).not.toBe(true);
+      expect(String(refus.error ?? '')).toMatch(/« Paiement échoué » n’est pas encore offert/);
+      expect(await reglesDepuis(depuis)).toEqual([]);
+
+      await poser(true);
+      reponsesModele.push(PARCOURS_SIMPLE('payment.failed'));
+      const cree = await outil('create_automation_from_text', { description: `Écris au client dès que son paiement échoue ${marque('I-036')}` });
+      expect(cree.created, JSON.stringify(cree)).toBe(true);
+      expect((await reglesDepuis(depuis)).map((x) => x.trigger_event)).toEqual(['payment.failed']);
+    } finally {
+      await poser(avant?.enabled === true);
+    }
+  });
+
   it('[I-032] la 2e automatisation proposée (autre déclencheur) est créée elle aussi, en pause, avec sa limite par client', async () => {
     const depuis = new Date().toISOString();
     reponsesModele.push(PARCOURS_SIMPLE('quote.sent', {
@@ -196,5 +222,19 @@ describe('I — list_automations', () => {
     const r = await outil('list_automations', {});
     const noms = (r.automations as Array<{ name: string }>).map((a) => a.name).filter((n) => n.startsWith(m));
     expect(noms).toEqual([`${m} vivante`]);
+  });
+
+  it('[K-004] le préréglage retiré (estimate_followup, déclencheur que plus rien n’émet) existe en base mais n’est pas listé', async () => {
+    // Le trigger SQL de création d'entreprise l'a semé : il est bien là.
+    const { data: enBase } = await b.admin.from('automation_rules').select('id, trigger_event')
+      .eq('org_id', b.orgA).eq('preset_key', 'estimate_followup').is('deleted_at', null);
+    expect(enBase?.map((r) => r.trigger_event)).toEqual(['estimate.sent']);
+    const r = await outil('list_automations', {});
+    const listees = r.automations as Array<{ id: string; trigger_event: string; preset_key?: string }>;
+    expect(listees.length).toBeGreaterThan(0);
+    expect(listees.filter((a) => a.id === enBase![0].id || a.trigger_event === 'estimate.sent')).toEqual([]);
+    expect(r.count).toBe(listees.length);
+    // La clé interne ne sort pas de l'outil.
+    expect(listees.every((a) => !('preset_key' in a))).toBe(true);
   });
 });

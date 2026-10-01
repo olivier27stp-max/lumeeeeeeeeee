@@ -547,7 +547,7 @@ Tests : `tests/automations-suite/integration/20-cde-idempotence.test.ts` (vrai m
 | D-041 | boucle `demarrer_automatisation` | A → B → A | 2e démarrage sauté `boucle` | PASS |
 | D-042 | boucle de deal | A : S1→S2, B : S2→S1, 6 ticks de 5 min | 2 déplacements puis arrêt, deal en S1 | PASS après correctif `e163a414` (avant : 6 déplacements en 6 ticks, sans fin) |
 | D-043 | `pipeline_events` sans réclamation atomique | 2 instances hors verrou | — | NON COUVERT : le tick est sous `withAdvisoryLock` ; deux consommateurs concurrents exigeraient d'appeler la file hors verrou (inv-1 §9.4), non reproduit |
-| D-044 | `rappels-dates` rejoué le même jour | — | — | NON COUVERT : relève des déclencheurs temporels (plage B/K), route cron sans verrou (inv-1 §9.6) |
+| D-044 | `rappels-dates` rejoué le même jour | champ date = aujourd'hui, balayage passé 3 fois | une seule tâche créée, une seule ligne d'action au journal | l'anti-doublon est la clé d'exécution du moteur (règle + fiche + jour) ; `10-b-declencheurs.test.ts` |
 
 ## E — Échecs et reprise
 
@@ -634,7 +634,7 @@ Fichiers : `integration/30-fgh-rls.test.ts`, `integration/30-fgh-routes.test.ts`
 | F-081 | plafond par client, courriel commercial | 4 envois / 24 h | idem | PASS |
 | F-082 | étalement par bureau | 30 textos dans la minute | le suivant est reporté (+60 s, `report_rafale`) | PASS |
 | F-083 | mesure du plafond global | règle ayant déjà 500 textos aujourd'hui | le 501e part | PASS (mesure) |
-| F-084 | plafond global par automatisation | idem | ROUGE ATTENDU — décision requise : aucun plafond global (décision F11 du 2026-09-23), seulement 30/min/bureau et 3 commerciaux/client/24 h ; un envoi transactionnel n'est jamais plafonné → 5 000 clients étiquetés = 5 000 textos en ≈ 2 h 47 | it.fails |
+| F-084 | rafale de textos : alerte au propriétaire | 30 textos partis dans la minute, 2 étiquettes posées | les 2 textos sont reportés (prévus, pas perdus) ; UNE notification `automation_burst` au nom de l'automatisation, lien /automations, « Tout arrêter » ; pas de 2e alerte même depuis un autre processus | CORRIGÉ — décision du 2026-10-01 : pas de plafond (la décision du 2026-09-23 tient : tout part, étalé à 30/min), mais le propriétaire est prévenu dès le premier report. Avant : 5 000 clients étiquetés = 5 000 textos en ≈ 2 h 47 sans que personne ne soit averti |
 | F-085 | fournisseurs réels | tout le fichier moteur | 0 appel Twilio, 0 appel HTTP | PASS |
 | F-090 | events/deal-stage-changed (ancien pipeline porte-à-porte) | `dealId` d'un autre bureau | — | NON COUVERT : émet `pipeline_deal.stage_changed` (table `pipeline_deals`, ancien pipeline) ; le lead est filtré par org, aucune variable de B ne sort, mais `dealId` reste non vérifié — à traiter avec le retrait de l'ancien pipeline |
 
@@ -721,6 +721,7 @@ Vrai chemin : `POST /api/lumi/chat` (orchestrateur, routeur actif, vrai modèle)
 | I-033 | Outil : langue de l'entreprise = en | — | consignes anglaises au générateur | corrigé (46a9fc92) |
 | I-034 | list_automations | corbeille / purgée | non listées | corrigé (d6b41e5b) |
 | I-035 | Redemander la même automatisation < 24 h après l'avoir supprimée | — | doit créer | ROUGE ATTENDU — décision : empreinte d'idempotence 24 h (agent_actions) → « c'est fait » sans rien créer ; touche toutes les écritures de Lumi |
+| I-036 | Déclencheur en rodage non offert à l'entreprise (`payment.failed`, drapeau `auto_paiement_echoue`) | drapeau éteint, puis allumé | éteint : refusé par l'outil de Lumi, par la création, par le changement de déclencheur (code `declencheur_non_offert`), rien en base ; allumé : accepté | CORRIGÉ — l'éditeur cachait ces déclencheurs, mais le prompt de Lumi liste tout le catalogue et l'API acceptait : la règle était créée et ne partait jamais |
 | I-040 | « Crée … » / « Create … » | — | jamais de réponse FAQ | corrigé (a78e61f7) |
 | I-041 | Vraie question produit | — | garde sa FAQ | |
 | I-042 | « crée un parcours / automatise / workflow » | — | indice → create_automation_from_text | corrigé (9d0abe1c) |
@@ -775,6 +776,7 @@ Fichiers : `40-iklm-prereglages.test.ts`, `40-iklm-adjacents.test.ts`. Bureau A 
 | K-001 | Socle par métier | Nettoyage vs Toiture | même ensemble de préréglages et d'états | l'UI propose 10 métiers, aucun « construction » (seulement marketing/pipeline) |
 | K-002 | Publiés d'office | création | = PACK_ACTIF ; sollicitations, avis, estimate_followup en brouillon | le trigger SQL sème 35 préréglages TOUS ACTIFS (sollicitations comprises) avant le filet serveur — observé sur nos bureaux ; non testé automatiquement (il faudrait créer une entreprise jetable) |
 | K-003 | estimate_followup | — | mort : seul émetteur /emails/send-quote, jamais appelé par l'UI | brouillon |
+| K-004 | estimate_followup (préréglage retiré) | encore sur `estimate.sent` | absent de la liste de l'écran, de la route, de l'éditeur et de `list_automations` ; plus semé par le filet serveur ; rebranché sur un vrai déclencheur, il redevient visible | CORRIGÉ — 9 entreprises l'affichaient « publié » en prod sans qu'il puisse partir. Les lignes en base ne sont pas touchées |
 | K-010 | lead.created | — | pack_suivi_prospect complet, aucun échec, envois simulés | |
 | K-011 | quote.sent | — | pack_relance_devis + quote_sent_move_deal | temps compressé : plafond 3 messages/24 h ignoré (artefact) |
 | K-012 | quote.approved (transition en base) | drapeau auto_sortie_parcours éteint | pack_depot doit demander le dépôt | ROUGE ATTENDU — décision : la tâche s'annule elle-même (condition d'arrêt « devis approuvé ») ; test existant fige « drapeau OFF → annulée » ; correctif prêt (exception comme lead perdu) |
