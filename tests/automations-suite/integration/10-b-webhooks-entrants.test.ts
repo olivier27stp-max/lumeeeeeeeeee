@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { randomBytes } from 'node:crypto';
-import { marque, attendre, envoisSimules, appelsHttpBloques } from '../harnais/moteur';
+import { marque, attendre, envoisSimules, appelsHttpBloques, journalDefinitif } from '../harnais/moteur';
 import {
   preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux, lignesDAction,
   creerClient, creerDevis, creerFacture, drapeau, ok, type Api, type Bureau,
@@ -234,7 +234,10 @@ describe('[B] webhooks Stripe signés', () => {
     expect(r.status, JSON.stringify(r.json)).toBe(200);
     const [t] = await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} vrai`), (x) => x.length > 0);
     expect(t).toMatchObject({ linked_entity_type: 'invoice', linked_entity_id: f.id });
-    expect((await journaux(b.admin, vrai))[0]).toMatchObject({ trigger_event: 'payment.failed', entity_id: f.id, result_success: true });
+    // La ligne du journal est d'abord une RÉSERVATION (« en cours », échec provisoire) :
+    // on lit le résultat définitif, pas l'instant où la tâche vient d'être créée.
+    const [ligne] = await attendre(() => journaux(b.admin, vrai), (j) => j.length > 0 && j.every((l) => journalDefinitif(l.result_error)));
+    expect(ligne).toMatchObject({ trigger_event: 'payment.failed', entity_id: f.id, result_success: true });
     // Écartée par sa condition : aucune action (seulement la trace « conditions non remplies », L-004).
     expect(lignesDAction(await journaux(b.admin, faux))).toHaveLength(0);
     const { data: p } = await b.admin.from('payments').select('status, failure_reason').eq('provider_payment_id', pi).single();

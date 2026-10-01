@@ -84,7 +84,10 @@ describe('M — rafale de 1 000 événements', () => {
       await enParallele(entites.map((e) => async () => {
         emis.set(e, Date.now());
         await b.eventBus.emit('note.added', { orgId: b.orgA, entityType: 'client', entityId: e, metadata: {} });
-      }), 50);
+        // 20 en vol (pas 50) : le 2026-09-30, une 2e passe à 50 en vol, pendant
+        // que d'autres suites tournaient, a coïncidé avec une panne de l'API
+        // staging (521/525 Cloudflare) — staging est partagé.
+      }), 20);
       await attendre(() => compterEffets(type), (c) => c >= N, 300_000, 2000);
     });
     const duree = Date.now() - debut;

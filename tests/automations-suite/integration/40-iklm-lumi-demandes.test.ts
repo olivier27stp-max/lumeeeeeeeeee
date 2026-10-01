@@ -322,7 +322,9 @@ describe('I — demande ambiguë : Lumi demande au lieu de deviner', () => {
       expect(x.r1.statut, d).toBe(200);
       expect(x.r1.proposition, `Lumi a proposé une écriture sans préciser — ${d}`).toBeNull();
       expect(x.regle, `une règle a été créée — ${d}`).toBeNull();
-      expect(x.r1.texte, `pas de question — ${d}`).toMatch(/\?/);
+      // Une question, ou une demande de précision à l'impératif (« Dis-moi quel
+      // déclencheur… ») : dans les deux cas Lumi DEMANDE au lieu de deviner.
+      expect(x.r1.texte, `pas de demande de précision — ${d}`).toMatch(/\?|dis-moi|précise|indique|tell me|let me know|which|what/i);
     });
   }
 });

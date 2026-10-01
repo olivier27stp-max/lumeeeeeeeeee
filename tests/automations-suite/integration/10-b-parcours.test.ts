@@ -493,7 +493,7 @@ describe('[B] réglages : ré-entrée, arrêt sur réponse, sortie de parcours, 
     expect(await tachesTitrees(b.admin, b.orgA, `${m} relance`)).toHaveLength(0);
   });
 
-  it('[J-065] PATCH { is_active: true } sur une règle à la CORBEILLE → 422, elle reste en brouillon dans la corbeille ; restaurée, elle se publie', async () => {
+  it('[J-065] PATCH { is_active: true } sur une règle à la CORBEILLE → refusé, elle reste en brouillon dans la corbeille ; restaurée, elle se publie', async () => {
     const m = marque('J-065');
     const id = await parcours(m, 'note.added', [tache('a1', `${m} tâche`)]);
     expect((await api.appeler('DELETE', `/api/automations/rules/${id}`)).status).toBe(200);
@@ -501,12 +501,15 @@ describe('[B] réglages : ré-entrée, arrêt sur réponse, sortie de parcours, 
     expect(await etat()).toMatchObject({ is_active: false });
     expect((await etat()).deleted_at).not.toBeNull();
 
+    // Refusé. Depuis #859, TOUTE modification d'une règle à la corbeille est
+    // refusée d'abord (409, « restaurez-la pour la modifier ») ; le refus de
+    // publier (422) reste derrière, pour le jour où la première garde bougerait.
     const r = await api.appeler('PATCH', `/api/automations/rules/${id}`, { is_active: true });
-    expect(r.status, JSON.stringify(r.json)).toBe(422);
-    expect(r.json.error).toBe('Cette automatisation est à la corbeille : restaurez-la avant de la publier.');
+    expect([409, 422], JSON.stringify(r.json)).toContain(r.status);
+    expect(r.json.error).toMatch(/^Cette automatisation est à la corbeille : restaurez-la (pour la modifier|avant de la publier)\.$/);
     // Même refus quand la publication voyage avec une autre modification.
     const r2 = await api.appeler('PATCH', `/api/automations/rules/${id}`, { name: `${m} renommée`, is_active: true });
-    expect(r2.status, JSON.stringify(r2.json)).toBe(422);
+    expect([409, 422], JSON.stringify(r2.json)).toContain(r2.status);
     const apres = await etat();
     expect(apres).toMatchObject({ is_active: false, name: m });
     expect(apres.deleted_at).not.toBeNull();
