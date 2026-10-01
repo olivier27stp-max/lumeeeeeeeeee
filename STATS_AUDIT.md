@@ -342,7 +342,7 @@ Deux défauts trouvés par cette mesure, et corrigés dans la migration C avant 
 
 M-15 (inchangé) : la carte Rentabilité, à 50 000 jobs, sature encore le pool de connexions (`toutLire` pagine par OFFSET) ; aucun effet aux volumes actuels.
 
-### Restes traités le 2026-10-01 (migration `20261005600000_stats_restes_paie_et_fonction_morte.sql`, staging puis prod)
+### Restes traités le 2026-10-01 (migration `20261005600600_stats_restes_paie_et_fonction_morte.sql`, staging puis prod)
 
 - **M-11** : `rpc_insights_budget_vs_actual` (fonction morte, table inexistante) supprimée.
 - **Paie sur `memberships`** : un membre pouvait modifier `hourly_rate_cents`, `labour_cost_hourly` et `compensation_mode` de SA propre ligne (colonnes que la copie vers un nouveau bureau reprend). Un déclencheur les réserve désormais à qui a `team.update` ; le serveur n'est pas concerné. Vérifié sur staging : technicien refusé (42501) sur son taux et son mode de paie, accepté sur sa langue ; propriétaire accepté.

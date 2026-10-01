@@ -133,7 +133,7 @@ describe.skipIf(!ACTIF)('Statistiques — sécurité', () => {
     expect(r.error?.code).toBe('PGRST202');
   });
 
-  // Paie sur memberships (migration 20261005600000) : la politique d'UPDATE laisse un membre
+  // Paie sur memberships (migration 20261005600600) : la politique d'UPDATE laisse un membre
   // modifier sa propre ligne ; la rémunération, elle, exige team.update.
   describe('rémunération sur memberships : réservée à qui gère l’équipe', () => {
     it('technicien : ne change ni son taux ni son mode de paie, mais garde ses préférences', async () => {
