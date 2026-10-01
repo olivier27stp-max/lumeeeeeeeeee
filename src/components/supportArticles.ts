@@ -128,6 +128,19 @@ export const ARTICLES: Article[] = [
     tags: 'automatisation automation règle rule déclencheur trigger relance rappel avis pause activer',
   },
   {
+    // « C'est combien, le forfait Autopilot ? » tombait sur l'article « changer de
+    // forfait », qui ne donne aucun prix, et l'assistant de l'app n'en a aucun dans
+    // ses consignes (batterie du support, 2026-10-01). Les montants sont ceux de la
+    // page Tarifs : `tests/lumi-glossaire-support.test.ts` les compare un par un.
+    id: 'pricing',
+    path: '/settings/billing',
+    q_fr: 'Combien coûtent les forfaits de Lume ?',
+    q_en: 'How much do the Lume plans cost?',
+    a_fr: "Trois forfaits, en dollars canadiens : Minimum à 150 $ par mois, Scale à 347 $ par mois et Autopilot à 495 $ par mois. Un utilisateur de plus que ceux inclus coûte 35 $ par mois avec Minimum, 30 $ avec Scale et 25 $ avec Autopilot. Les textos, les automatisations et l'exportation QuickBooks arrivent avec Scale ; Lumi (l'assistant IA), le porte-à-porte et l'accès à l'API sont réservés à Autopilot. Votre forfait actuel se voit et se change dans Paramètres → Forfait & facturation.",
+    a_en: 'Three plans, in Canadian dollars: Minimum at $150 per month, Scale at $347 per month and Autopilot at $495 per month. Each user beyond those included costs $35 per month on Minimum, $30 on Scale and $25 on Autopilot. Texting, automations and the QuickBooks export start with Scale; Lumi (the AI assistant), door-to-door and API access are Autopilot only. You can see and change your current plan under Settings → Plan & billing.',
+    tags: 'prix tarif tarifs cout coute coutent combien forfait forfaits minimum scale autopilot abonnement mensuel price prices pricing cost costs plan plans much',
+  },
+  {
     id: 'change-plan',
     path: '/settings/billing',
     q_fr: 'Comment changer ou annuler mon forfait ?',
