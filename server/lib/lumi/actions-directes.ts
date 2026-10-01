@@ -32,6 +32,7 @@ import { normaliser } from './normaliser';
 import { fmtDollars, jourLocal, minuitLocal } from './raccourcis';
 import { REFUS_PERMISSION } from '../rentabilite';
 import { resumer } from '../rentabilite/resume';
+import { localizeAutomationName } from '../../../src/lib/automationNames';
 
 export type GenreDirect = 'lecture' | 'directe' | 'carte' | 'fixe';
 
@@ -569,7 +570,10 @@ export function rendreActionDirecte(a: ActionDirecte, resultat: any, opts: { fr:
   const nom = fr ? l.nom.fr : l.nom.en;
   if (!rows.length) return fr ? `Aucun${/^[aeéiou]/i.test(nom) ? 'e' : ''} ${nom} pour l’instant.` : `No ${nom} yet.`;
   const total = Number(resultat?.total_matching ?? resultat?.count ?? rows.length);
-  const lignes = rows.slice(0, 15).map((x) => { const s = secondaire(x, fr); return `• ${libelle(x)}${s ? ` · ${s}` : ''}`; });
+  // Une automatisation préréglée est rangée sous son nom ANGLAIS (« Job Reminder — 1 Day Before ») ;
+  // la page Automatisations l'affiche traduit. Même table ici : Lumi dit le nom que l'écran montre.
+  const nomAffiche = (x: any) => (l.id === 'automatisations' ? localizeAutomationName(libelle(x), fr ? 'fr' : 'en') : libelle(x));
+  const lignes = rows.slice(0, 15).map((x) => { const s = secondaire(x, fr); return `• ${nomAffiche(x)}${s ? ` · ${s}` : ''}`; });
   const reste = total - Math.min(15, rows.length);
   return `${pluriel(total, nom, fr)} :\n${lignes.join('\n')}${reste > 0 ? (fr ? `\n… et ${reste} autre${reste > 1 ? 's' : ''}.` : `\n… and ${reste} more.`) : ''}`;
 }
