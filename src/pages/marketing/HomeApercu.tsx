@@ -171,7 +171,7 @@ export default function HomeApercu() {
             ))}
           </div>
           {/* Téléphone posé sur la droite du screenshot : écran Accueil de l'app iOS
-              (maquette scripts/marketing/apercu-accueil-mobile.html). */
+              (maquette scripts/marketing/apercu-accueil-mobile.html). */}
           <div className="ha-phone">
             <i className="ha-btn-side ha-btn-power" aria-hidden="true" />
             <i className="ha-btn-side ha-btn-vol1" aria-hidden="true" />
