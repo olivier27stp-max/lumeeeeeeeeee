@@ -54,6 +54,7 @@ import {
   type DossierAutomatisation,
 } from '../lib/automationBuilderApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
+import { textesDExemple } from '../lib/publicationAutomatisation';
 import { apercuClientsInactifs } from '../lib/reservationApi';
 import { creerFileBascule } from '../lib/fileBascule';
 import {
@@ -754,6 +755,36 @@ export default function Automations() {
   // page, recherche, filtres, taille de page.
   useEffect(() => { setCochees(new Set()); }, [onglet, dossierActif, page, parPage, search, filterCategory, filterStatut]);
 
+  /**
+   * Publier une étape restée sur le TEXTE D'EXEMPLE de l'éditeur : on demande.
+   *
+   * L'interrupteur et le lot publiaient sans un mot ; le texte d'exemple
+   * (« Bonjour [client_name], c'est [company_name]. Merci ! ») partait alors
+   * à chaque client (audit du 2026-10-01, vécu en prod). Rien à signaler :
+   * aucune fenêtre, comme avant.
+   */
+  const confirmerTextesDExemple = async (aPublier: AutomationRule[]): Promise<boolean> => {
+    const concernees = aPublier
+      .map((r) => ({ r, exemples: textesDExemple({ trigger_event: r.trigger_event, steps: r.steps, actions: r.actions, conditions: (r.conditions ?? null) as Record<string, unknown> | null, is_preset: r.is_preset, fr }) }))
+      .filter((x) => x.exemples.length > 0);
+    if (concernees.length === 0) return true;
+    confirmationOuverte.current = true;
+    try {
+      return await confirmer({
+        title: fr ? 'Publier avec le texte d’exemple ?' : 'Publish with the sample text?',
+        message: [
+          ...concernees.flatMap(({ r, exemples }) => exemples.map((e) => (concernees.length > 1 ? `${localizeAutomationName(r.name, language)} — ${e.message}` : e.message))),
+          fr
+            ? 'Ce texte partira tel quel. Ouvrez l’automatisation pour l’écrire, ou publiez si c’est bien ce que vous voulez envoyer.'
+            : 'This text will go out as is. Open the automation to write it, or publish if that is what you want to send.',
+        ].join('\n\n'),
+        confirmLabel: fr ? 'Publier quand même' : 'Publish anyway',
+      });
+    } finally {
+      confirmationOuverte.current = false;
+    }
+  };
+
   const handleToggle = async (rule: AutomationRule) => {
     // Une confirmation déjà à l'écran : les clics suivants n'en ouvrent pas d'autres.
     if (confirmationOuverte.current) return;
@@ -782,6 +813,7 @@ export default function Automations() {
         confirmationOuverte.current = false;
       }
     }
+    if (versActive && !(await confirmerTextesDExemple([rule]))) return;
     setRestentAffichees((prev) => (prev.has(rule.id) ? prev : new Set(prev).add(rule.id)));
     const voulu = fileBascule.basculer(rule.id, rule.is_active);
     setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: voulu } : r)));
@@ -1127,6 +1159,7 @@ export default function Automations() {
   const publierEnLot = async (actif: boolean) => {
     const cibles = reglesCochees.filter((r) => !r.deleted_at && r.is_active !== actif);
     if (cibles.length === 0) { setCochees(new Set()); return; }
+    if (actif && !(await confirmerTextesDExemple(cibles))) return;
     setLotEnCours(true);
     try {
       const resultats = await changerPublicationEnLot(cibles.map((r) => r.id), actif);
@@ -1247,7 +1280,9 @@ export default function Automations() {
   const ONGLETS = [
     { cle: 'toutes' as const, fr: 'Toutes', en: 'All workflows', n: mesAutos.length },
     { cle: 'verifier' as const, fr: 'À vérifier', en: 'Needs review', n: aVerifier.length },
-    { cle: 'modeles' as const, fr: 'Modèles', en: 'Templates', n: modeles.length },
+    // « Prêtes à publier », plus « Modèles » : ce mot désigne la bibliothèque du menu Créer (copies en
+    // brouillon). Ici, ce sont les automatisations fournies pas encore publiées, qu'on publie en place.
+    { cle: 'modeles' as const, fr: 'Prêtes à publier', en: 'Ready to publish', n: modeles.length },
     { cle: 'corbeille' as const, fr: 'Corbeille', en: 'Deleted', n: supprimees.length },
   ];
 
@@ -1798,7 +1833,7 @@ export default function Automations() {
                             className="glass-button mt-4 inline-flex items-center gap-1.5"
                           >
                             <FileText size={13} aria-hidden="true" />
-                            {fr ? 'Voir les modèles' : 'Browse templates'}
+                            {fr ? 'Voir les automatisations prêtes à publier' : 'See ready-to-publish automations'}
                           </button>
                         )}
                       </td>

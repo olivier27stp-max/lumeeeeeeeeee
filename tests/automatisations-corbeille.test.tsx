@@ -361,7 +361,7 @@ describe('les actions groupées — les cases à cocher commandent enfin quelque
      */
     reglesServies = [regle({ id: 'm', name: 'Modèle', is_preset: true, is_active: false })];
     await rendre();
-    ouvrirOnglet('Modèles');
+    ouvrirOnglet('Prêtes à publier');
     await act(async () => {});
     cocherPremiere();
     await act(async () => {});

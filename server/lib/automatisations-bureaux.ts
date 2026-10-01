@@ -20,6 +20,7 @@ import { buildSupabaseWithAuth, getServiceClient } from './supabase';
 import { getUserContext, hasPermission } from './rbac';
 import { bureauxMemeEntreprise } from './boite-unifiee';
 import { logger } from './logger';
+import { activerApresEcritureUtilisateur } from './automations-publication';
 
 export interface Correspondances {
   pipelines: Map<string, string>;
@@ -217,17 +218,33 @@ export async function copierVersBureaux(
       if (eEx) throw eEx;
       if (existante && existante.length) {
         if (!regle.preset_key && !lier) { resultats.push({ org_id: org, name, statut: 'existe_deja', rule_id: existante[0].id }); continue; }
-        const { error: eMaj } = await cible.from('automation_rules')
-          .update({ ...contenu, ...lien, is_active: active, updated_at: new Date().toISOString() })
-          .eq('id', existante[0].id).eq('org_id', org);
+        /*
+         * « Publiée » ne s'écrit plus avec le client de l'utilisateur : la base
+         * le refuse à une session (roles-05, déclencheur `automation_rules_garde`).
+         * Le contenu part avec SON client — la RLS de CE bureau fait foi, et
+         * `.select()` prouve que la ligne a bien été écrite — puis le serveur
+         * reprend l'état publié de l'original.
+         */
+        const { data: majs, error: eMaj } = await cible.from('automation_rules')
+          .update({ ...contenu, ...lien, ...(active ? {} : { is_active: false }), updated_at: new Date().toISOString() })
+          .eq('id', existante[0].id).eq('org_id', org).select('id');
         if (eMaj) throw eMaj;
+        if (!majs || !majs.length) throw Object.assign(new Error('aucune ligne modifiée'), { code: '42501' });
+        if (active) {
+          const { error: ePub } = await activerApresEcritureUtilisateur(org, existante[0].id);
+          if (ePub) throw ePub;
+        }
         resultats.push({ org_id: org, name, statut: regle.preset_key ? 'preset_mis_a_jour' : 'mise_a_jour', active, a_revoir, rule_id: existante[0].id });
         continue;
       }
       const { data: cree, error: eIns } = await cible.from('automation_rules')
-        .insert({ ...contenu, ...lien, org_id: org, is_active: active, is_preset: false, preset_key: null })
+        .insert({ ...contenu, ...lien, org_id: org, is_active: false, is_preset: false, preset_key: null })
         .select('id').single();
       if (eIns) throw eIns;
+      if (active) {
+        const { error: ePub } = await activerApresEcritureUtilisateur(org, cree.id);
+        if (ePub) throw ePub;
+      }
       resultats.push({ org_id: org, name, statut: 'copiee', active, a_revoir, rule_id: cree.id });
     } catch (e: any) {
       logger.error('[automatisations-bureaux] copie échouée', { rule_id: ruleId, org_cible: org, code: e?.code, message: e?.message });

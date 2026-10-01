@@ -23,10 +23,10 @@ const MODELE = 'aaaaaaaa-0000-4000-8000-000000000003';
 
 type Ligne = Record<string, unknown>;
 let lignes: Record<string, Ligne> = {};
-const ecritures: Array<{ id: string; patch: Ligne }> = [];
+const ecritures: Array<{ id: string; patch: Ligne; par: 'utilisateur' | 'service' }> = [];
 
-/** Un faux client qui lit `lignes` et note chaque update. */
-function fauxClient() {
+/** Un faux client qui lit `lignes` et note chaque update — et QUI l'a faite (session de l'utilisateur ou rôle de service). */
+function fauxClient(par: 'utilisateur' | 'service' = 'utilisateur') {
   return {
     from: () => {
       let filtreId: string | null = null;
@@ -45,7 +45,7 @@ function fauxClient() {
         },
         single: async () => {
           if (patch && filtreId && lignes[filtreId]) {
-            ecritures.push({ id: filtreId, patch });
+            ecritures.push({ id: filtreId, patch, par });
             lignes[filtreId] = { ...lignes[filtreId], ...patch };
           }
           return { data: filtreId ? lignes[filtreId] ?? null : null, error: null };
@@ -54,7 +54,7 @@ function fauxClient() {
         then: (ok: (r: unknown) => unknown) => {
           // `update(...).eq(...).eq(...).select(...)` attendu directement.
           if (patch && filtreId && lignes[filtreId]) {
-            ecritures.push({ id: filtreId, patch });
+            ecritures.push({ id: filtreId, patch, par });
             lignes[filtreId] = { ...lignes[filtreId], ...patch };
             return Promise.resolve({ data: [lignes[filtreId]], error: null }).then(ok);
           }
@@ -67,8 +67,8 @@ function fauxClient() {
 }
 
 vi.mock('../server/lib/supabase', () => ({
-  requireAuthedClient: async () => ({ client: fauxClient(), orgId: ORG, user: { id: 'u1' } }),
-  getServiceClient: () => fauxClient(),
+  requireAuthedClient: async () => ({ client: fauxClient('utilisateur'), orgId: ORG, user: { id: 'u1' } }),
+  getServiceClient: () => fauxClient('service'),
 }));
 vi.mock('../server/lib/automatisations-bureaux', () => ({
   bureauxCibles: vi.fn(), copierVersBureaux: vi.fn(), propagerAuxCopies: vi.fn(async () => []),
@@ -139,7 +139,7 @@ describe('publier une automatisation, une à la fois', () => {
     const r = await appeler('POST', `/automations/rules/${SAINE}/publication`, { actif: true });
     expect(r.status).toBe(200);
     expect(r.json).toEqual({ id: SAINE, is_active: true });
-    expect(ecritures[0].patch.is_active).toBe(true);
+    expect(ecritures.some((e) => e.patch.is_active === true)).toBe(true);
   });
 
   it('repasser en brouillon n’est JAMAIS refusé, même cassé', async () => {
@@ -205,5 +205,88 @@ describe('les modèles semés ne sont pas bloqués par la nouvelle garde', () =>
       trigger_event: p.trigger_event, steps: null, actions: p.actions, conditions: p.conditions, is_preset: true,
     }).length > 0);
     expect(refuses.map((p) => p.preset_key)).toEqual([]);
+  });
+});
+
+/*
+ * « PUBLIÉE » NE S'ÉCRIT QUE PAR LE SERVEUR (audit du 2026-10-01, roles-05).
+ *
+ * Un membre qui a le droit de modifier les automatisations pouvait écrire
+ * `is_active = true` directement par l'API de la base : une règle au texto
+ * vide se publiait sans contrôle. La base refuse maintenant ce passage à une
+ * session d'utilisateur (déclencheur `automation_rules_garde`). Le serveur doit
+ * donc ne JAMAIS écrire `is_active: true` avec le client de l'utilisateur :
+ * celui-ci prouve son droit par une écriture sans effet, puis le rôle de
+ * service publie.
+ */
+describe('qui écrit « publiée »', () => {
+  const parUtilisateur = () => ecritures.filter((e) => e.par === 'utilisateur');
+  const parService = () => ecritures.filter((e) => e.par === 'service');
+
+  it('publication : l’utilisateur prouve son droit (sans toucher is_active), le service publie', async () => {
+    const r = await appeler('POST', `/automations/rules/${SAINE}/publication`, { actif: true });
+    expect(r.status).toBe(200);
+    expect(parUtilisateur()).toHaveLength(1);
+    expect(Object.keys(parUtilisateur()[0].patch)).toEqual(['updated_at']);
+    expect(parService()).toHaveLength(1);
+    expect(parService()[0].patch.is_active).toBe(true);
+    // Dans cet ordre : la preuve d'abord.
+    expect(ecritures.map((e) => e.par)).toEqual(['utilisateur', 'service']);
+  });
+
+  it('preuve refusée (la RLS ne laisse rien écrire) : 403, et le service n’écrit RIEN', async () => {
+    // La règle est lisible, mais l'écriture de l'utilisateur ne touche aucune ligne.
+    const { changerPublication } = await import('../server/lib/automations-publication');
+    const lecture = fauxClient('utilisateur');
+    const sansDroit = {
+      from: () => {
+        const c = lecture.from() as Record<string, unknown> & { update: (p: Ligne) => unknown };
+        const chaine: Record<string, unknown> = { ...c };
+        let ecrit = false;
+        chaine.update = () => { ecrit = true; return chaine; };
+        chaine.eq = (col: string, v: string) => { (c.eq as (a: string, b: string) => unknown)(col, v); return chaine; };
+        chaine.is = (col: string, v: unknown) => { (c.is as (a: string, b: unknown) => unknown)(col, v); return chaine; };
+        chaine.select = () => chaine;
+        chaine.maybeSingle = c.maybeSingle;
+        chaine.then = (ok: (x: unknown) => unknown) => Promise.resolve({ data: ecrit ? [] : [lignes[SAINE]], error: null }).then(ok);
+        return chaine;
+      },
+    };
+    const res = await changerPublication(sansDroit as never, ORG, SAINE, true);
+    expect(res).toMatchObject({ ok: false, statut: 403 });
+    expect(parService()).toHaveLength(0);
+    expect(lignes[SAINE].is_active).toBe(false);
+  });
+
+  it('repasser en brouillon : une seule écriture, par l’utilisateur', async () => {
+    lignes[SAINE].is_active = true;
+    const r = await appeler('POST', `/automations/rules/${SAINE}/publication`, { actif: false });
+    expect(r.status).toBe(200);
+    expect(parService()).toHaveLength(0);
+    expect(parUtilisateur().map((e) => e.patch.is_active)).toEqual([false]);
+  });
+
+  it('PATCH { is_active: true, name } : le nom part par l’utilisateur SANS is_active, la publication par le service', async () => {
+    const r = await appeler('PATCH', `/automations/rules/${SAINE}`, { is_active: true, name: 'Relance renommée' });
+    expect(r.status).toBe(200);
+    expect(r.json.is_active).toBe(true);
+    expect(parUtilisateur().every((e) => !('is_active' in e.patch))).toBe(true);
+    expect(parUtilisateur().some((e) => e.patch.name === 'Relance renommée')).toBe(true);
+    expect(parService().map((e) => e.patch.is_active)).toEqual([true]);
+    expect(lignes[SAINE].is_active).toBe(true);
+  });
+
+  it('PATCH sur une règle déjà publiée : aucun détour par le service', async () => {
+    lignes[SAINE].is_active = true;
+    const r = await appeler('PATCH', `/automations/rules/${SAINE}`, { name: 'Autre nom' });
+    expect(r.status).toBe(200);
+    expect(parService()).toHaveLength(0);
+  });
+
+  it('dans tout ce fichier de routes, l’utilisateur n’écrit jamais is_active: true', async () => {
+    await appeler('POST', `/automations/rules/${SAINE}/publication`, { actif: true });
+    await appeler('POST', '/automations/rules/publication', { actif: true, ids: [SAINE, MODELE] });
+    await appeler('PATCH', `/automations/rules/${MODELE}`, { is_active: true });
+    expect(parUtilisateur().filter((e) => e.patch.is_active === true)).toEqual([]);
   });
 });

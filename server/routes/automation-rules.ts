@@ -47,7 +47,7 @@ import { logger } from '../lib/logger';
 import { messageCorbeille, STATUT_CORBEILLE } from '../lib/automations-corbeille';
 import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, declencheurOffertA, refusDeclencheurNonOffert, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
-import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee } from '../lib/automations-publication';
+import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee, activerApresEcritureUtilisateur } from '../lib/automations-publication';
 import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
 import { problemeJoursAvant } from '../lib/rappels-dates';
 import {
@@ -265,8 +265,10 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
       steps: req.body.steps ?? null,
       settings: req.body.settings ?? null,
       // Une automatisation naît en pause : elle écrit aux clients, personne ne
-      // doit en démarrer une par accident en fermant le formulaire.
-      is_active: req.body.is_active ?? false,
+      // doit en démarrer une par accident en fermant le formulaire. TOUJOURS
+      // en brouillon ici : la base refuse à une session d'utilisateur d'écrire
+      // « publiée » (roles-05) ; la publication demandée suit, par le serveur.
+      is_active: false,
       is_preset: false,
       preset_key: null,
     })
@@ -280,6 +282,25 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
     }
     logger.error('[automation-rules] création échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de créer l\'automatisation.' });
+  }
+
+  // Naître publiée : les contrôles ont passé plus haut, et l'insertion par
+  // l'utilisateur vient de prouver son droit sur ce bureau.
+  if (req.body.is_active === true) {
+    const creee = data as unknown as { id: string; is_active: boolean };
+    const { error: ePub } = await activerApresEcritureUtilisateur(auth.orgId, creee.id);
+    if (ePub) {
+      // Elle existe, en brouillon : on le dit plutôt que de laisser croire qu'elle tourne.
+      logger.error('[automation-rules] publication à la création échouée', { rule_id: creee.id, message: ePub.message });
+      return res.status(201).json({
+        ...creee,
+        is_active: false,
+        avis: fr
+          ? 'Créée en brouillon : la publication a échoué, publiez-la depuis la liste.'
+          : 'Created as a draft: publishing failed, publish it from the list.',
+      });
+    }
+    return res.status(201).json({ ...creee, is_active: true });
   }
 
   return res.status(201).json(data);
@@ -637,6 +658,17 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     }
   }
 
+  /*
+   * PUBLIER par ce chemin (roles-05) : la base refuse à une session
+   * d'utilisateur de faire passer `is_active` de faux à vrai. Le reste de la
+   * modification part avec le client de l'utilisateur — c'est aussi la preuve
+   * de son droit — puis le serveur publie. Les contrôles de publication ont
+   * passé juste au-dessus, sur la règle telle qu'elle sera.
+   */
+  const aPublier = patch.is_active === true && !existante.is_active;
+  // Déjà publiée : rien à écrire non plus — l'utilisateur n'envoie JAMAIS `is_active: true`.
+  if (patch.is_active === true) delete patch.is_active;
+
   const { data, error } = await auth.client
     .from('automation_rules')
     .update({ ...patch, updated_at: new Date().toISOString() })
@@ -644,6 +676,19 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     .eq('org_id', auth.orgId)
     .select(COLONNES)
     .single();
+
+  if (!error && aPublier) {
+    const { error: ePub } = await activerApresEcritureUtilisateur(auth.orgId, req.params.id);
+    if (ePub) {
+      logger.error('[automation-rules] publication par modification échouée', { rule_id: req.params.id, message: ePub.message });
+      return res.status(500).json({
+        error: fr
+          ? 'La modification est enregistrée, mais la publication a échoué — réessayez de publier.'
+          : 'The change is saved, but publishing failed — try publishing again.',
+      });
+    }
+    (data as unknown as { is_active: boolean }).is_active = true;
+  }
 
   if (error) {
     if (error.code === '42501') {

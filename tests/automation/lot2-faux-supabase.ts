@@ -44,7 +44,8 @@ export function creerFausseBase() {
           const nouvelles = aInserer.map((v) => ({ id: `nouvelle-${lignes().length + 1}`, deleted_at: null, purged_at: null, ...v }));
           for (const n of nouvelles) {
             lignes().push(n);
-            etat.ecritures.push({ table, op: 'insert', ids: [n.id], valeurs: n });
+            // Une COPIE : la ligne insérée peut être modifiée ensuite, la trace de l'écriture, elle, ne bouge plus.
+            etat.ecritures.push({ table, op: 'insert', ids: [n.id], valeurs: { ...n } });
           }
           return nouvelles;
         }
@@ -100,6 +101,12 @@ export function creerFausseBase() {
         neq: (col: string, v: unknown) => { filtres.push((l) => l[col] !== v); return q; },
         in: (col: string, vs: unknown[]) => { filtres.push((l) => vs.includes(l[col])); return q; },
         is: (col: string, v: unknown) => { filtres.push((l) => (l[col] ?? null) === v); return q; },
+        // `ilike` sans joker ni échappement utile ici : égalité sans casse (les routes s'en servent pour retrouver un nom).
+        ilike: (col: string, motif: string) => {
+          const attendu = motif.replace(/\\([%_\\])/g, '$1').toLowerCase();
+          filtres.push((l) => String(l[col] ?? '').toLowerCase() === attendu);
+          return q;
+        },
         not: (col: string, operateur: string, v: unknown) => {
           if (operateur !== 'is' || v !== null) throw new Error(`faux client : not(${col}, ${operateur}) non simulé`);
           filtres.push((l) => (l[col] ?? null) !== null);

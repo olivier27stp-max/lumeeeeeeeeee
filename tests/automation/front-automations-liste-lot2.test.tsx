@@ -84,6 +84,7 @@ vi.mock('../../src/lib/supabase', () => {
 
 import * as api from '../../src/lib/automationRulesApi';
 import * as builder from '../../src/lib/automationBuilderApi';
+import { confirmer } from '../../src/components/ui/ConfirmDialog';
 import { LanguageProvider } from '../../src/i18n';
 import Automations from '../../src/pages/Automations';
 
@@ -573,5 +574,72 @@ describe('tablette — l’interrupteur et le menu « ⋮ » restent à l’écr
     expect(noms.some((n) => /^(Publier|Repasser) /.test(n))).toBe(true);
     expect(noms.some((n) => /^Voir les messages de /.test(n))).toBe(true);
     expect(noms.some((n) => /^Actions pour /.test(n))).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+describe('P-008 — publier depuis la liste une étape restée sur le texte d’exemple', () => {
+  /*
+   * Vécu en prod (2026-10-01) : une étape ajoutée à la main garde le texte
+   * d'exemple de l'éditeur ; l'interrupteur de la liste publiait sans un mot,
+   * et ce texte partait à chaque client. La liste demande maintenant.
+   */
+  const EXEMPLE = 'Bonjour [client_name], c’est [company_name]. Merci !';
+  const avecExemple = () => regle({
+    name: 'Relance maison', is_active: false, is_preset: false, trigger_event: 'lead.created',
+    steps: [{ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: EXEMPLE } }, suivant: null }] as never,
+  });
+  const redigee = () => regle({
+    name: 'Relance rédigée', is_active: false, is_preset: false, trigger_event: 'lead.created',
+    steps: [{ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Bonjour [client_first_name], on vous rappelle demain.' } }, suivant: null }] as never,
+  });
+  const interrupteur = () => conteneur.querySelector('tbody button[role="switch"]') as HTMLButtonElement;
+  const demandes = () => vi.mocked(confirmer).mock.calls.map((c) => c[0] as { title: string; message: string; confirmLabel?: string });
+
+  it('la fenêtre cite le texte d’exemple et propose « Publier quand même »', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([avecExemple()]);
+    await rendre();
+    await cliquer(interrupteur());
+    const d = demandes().find((x) => /texte d’exemple/.test(x.title));
+    expect(d, 'aucune confirmation demandée').toBeDefined();
+    expect(d!.message).toContain(EXEMPLE);
+    expect(d!.message).toContain('Ce texte partira tel quel.');
+    expect(d!.confirmLabel).toBe('Publier quand même');
+  });
+
+  it('refusée : rien n’est publié, l’interrupteur reste sur « brouillon »', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([avecExemple()]);
+    vi.mocked(confirmer).mockResolvedValueOnce(false);
+    await rendre();
+    await cliquer(interrupteur());
+    await laisser();
+    expect(builder.changerPublication).not.toHaveBeenCalled();
+    expect(interrupteur().getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('acceptée : la publication part', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([avecExemple()]);
+    await rendre();
+    await cliquer(interrupteur());
+    await laisser(); await laisser();
+    expect(builder.changerPublication).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(builder.changerPublication).mock.calls[0][1]).toBe(true);
+  });
+
+  it('texte rédigé : aucune fenêtre, la publication part comme avant', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([redigee()]);
+    await rendre();
+    await cliquer(interrupteur());
+    await laisser(); await laisser();
+    expect(demandes().filter((x) => /texte d’exemple/.test(x.title))).toEqual([]);
+    expect(builder.changerPublication).toHaveBeenCalledTimes(1);
+  });
+
+  it('repasser en brouillon ne demande rien', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([{ ...avecExemple(), is_active: true }]);
+    await rendre();
+    await cliquer(interrupteur());
+    await laisser();
+    expect(demandes().filter((x) => /texte d’exemple/.test(x.title))).toEqual([]);
   });
 });

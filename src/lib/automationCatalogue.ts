@@ -1393,6 +1393,12 @@ export interface ProblemePublication {
    * mérite un coup d'œil.
    */
   gravite: 'bloquant' | 'avertissement';
+  /**
+   * Le genre d'avertissement, quand un écran doit le reconnaître sans lire la
+   * phrase. `texte_exemple` : une étape porte encore le texte d'exemple de
+   * l'éditeur — la liste demande confirmation avant de publier.
+   */
+  code?: 'texte_exemple';
 }
 
 /**
@@ -1523,6 +1529,32 @@ export function problemesAvantPublication(regle: {
           'bloquant', etapeId,
         );
       }
+    }
+
+    /*
+     * LE TEXTE D'EXEMPLE, JAMAIS RÉDIGÉ (audit du 2026-10-01, vécu en prod).
+     * Une étape ajoutée à la main naît avec un texte envoyable (« Bonjour
+     * [client_name], c'est [company_name]. Merci ! ») : sans ça l'éditeur
+     * n'enregistrerait pas l'étape. Mais rien ne disait, à la publication,
+     * que personne ne l'avait écrit — il partait tel quel à chaque client.
+     * Un avertissement, pas un blocage : le texte EST envoyable. Un seul par
+     * étape, sur le premier champ resté à l'exemple.
+     */
+    const aplatir = (t: string) => t.replace(/\s+/g, ' ').trim();
+    for (const champ of modele.champs) {
+      if (champ.type !== 'zone' && champ.type !== 'texte') continue;
+      const valeur = aplatir(String(config[champ.cle] ?? ''));
+      if (!valeur) continue;
+      const exemples = [champ.defaut_fr, champ.defaut_en].filter((t): t is string => !!t?.trim()).map(aplatir);
+      if (!exemples.includes(valeur)) continue;
+      const court = valeur.length > 90 ? `${valeur.slice(0, 87)}…` : valeur;
+      dire(
+        `« ${modele.fr} » porte encore le texte d’exemple (« ${court} »)${ou} : personne ne l’a rédigé.`,
+        `“${modele.en}” still carries the sample text (“${court}”)${ou}: nobody wrote it.`,
+        'avertissement', etapeId,
+      );
+      out[out.length - 1].code = 'texte_exemple';
+      break;
     }
   };
 
