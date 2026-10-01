@@ -411,6 +411,66 @@ describe('[B] champs personnalisés, dates, webhooks entrants', () => {
     await verifier(p, { declencheur: 'date.reached', entityType: 'client', entityId: client.id, lienType: 'client', lienId: client.id });
   });
 
+  it('[J-063] date.reached : une règle EXISTANTE à « 3.5 » ou « 400 » jours avant n’est plus muette (3 et 365, comme le balayage) ; l’éditeur refuse désormais ces valeurs', async () => {
+    const m = marque('J-063');
+    const champ = await creerChamp(api, { label: `Fin de contrat ${Date.now().toString(36)}`, field_type: 'date', object_type: 'client' });
+    const { jourDecale, balayerRappelsDates } = await import('../../../server/lib/rappels-dates');
+
+    // L'éditeur (vraie route) refuse ce que le balayage ne sait pas viser, avec un message clair.
+    for (const jours of ['3.5', 400]) {
+      const refus = await api.appeler('POST', '/api/automations/rules', {
+        name: `${m} refusée`, trigger_event: 'date.reached', conditions: { champ_id: champ.id, jours_avant: jours }, delay_seconds: 0,
+        actions: [{ type: 'create_task', config: { title: `${m} refusée` } }], is_active: true,
+      });
+      expect(refus.status, JSON.stringify(refus.json)).toBe(400);
+      expect(refus.json.error).toMatch(/nombre entier de jours, entre -365 et 365/);
+    }
+
+    // Règles DÉJÀ en base avec ces valeurs (écrites avant le refus, par Lumi ou par l'API d'alors).
+    const existante = async (jours: unknown, titre: string) => {
+      const r = await ok<{ id: string }>(b.admin.from('automation_rules').insert({
+        org_id: b.orgA, name: titre, trigger_event: 'date.reached', conditions: { champ_id: champ.id, jours_avant: jours }, delay_seconds: 0,
+        is_active: true, is_preset: false, actions: [{ type: 'create_task', config: { title: titre } }],
+      }).select('id').single(), 'règle existante');
+      regles.push(r.id);
+      return r.id;
+    };
+    const idDemi = await existante('3.5', `${m} trois et demi`);
+    const idTrop = await existante('400', `${m} quatre cents`);
+
+    // Le PATCH des conditions refuse aussi ; renommer la règle existante reste permis.
+    const patch = await api.appeler('PATCH', `/api/automations/rules/${idTrop}`, { conditions: { champ_id: champ.id, jours_avant: '400' } });
+    expect(patch.status, JSON.stringify(patch.json)).toBe(400);
+    expect(patch.json.error).toMatch(/nombre entier de jours/);
+    expect((await api.appeler('PATCH', `/api/automations/rules/${idTrop}`, { description: 'toujours modifiable' })).status).toBe(200);
+
+    const dans3 = await creerClient(b, `${m} dans 3 jours`);
+    const dans365 = await creerClient(b, `${m} dans 365 jours`);
+    const autreJour = await creerClient(b, `${m} dans 4 jours`);
+    const maintenant = new Date();
+    await ecrireChamps(api, 'client', dans3.id, [{ field_id: champ.id, value: jourDecale(3, maintenant, b.fuseau) }]);
+    await ecrireChamps(api, 'client', dans365.id, [{ field_id: champ.id, value: jourDecale(365, maintenant, b.fuseau) }]);
+    await ecrireChamps(api, 'client', autreJour.id, [{ field_id: champ.id, value: jourDecale(4, maintenant, b.fuseau) }]);
+
+    const resume = await balayerRappelsDates(b.admin, maintenant, { orgId: b.orgA });
+    expect(resume.erreurs).toBe(0);
+    expect(resume.emis).toBe(2);
+
+    const [demi] = await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} trois et demi`), (t) => t.length > 0, 20_000);
+    expect(demi, 'la règle « 3.5 jours avant » est restée muette').toBeTruthy();
+    expect(demi.linked_entity_id).toBe(dans3.id);
+    const [trop] = await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} quatre cents`), (t) => t.length > 0, 20_000);
+    expect(trop, 'la règle « 400 jours avant » est restée muette').toBeTruthy();
+    expect(trop.linked_entity_id).toBe(dans365.id);
+    // Chaque règle n'a agi QUE sur sa fiche : l'événement de l'une ne fait pas partir l'autre.
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(await tachesTitrees(b.admin, b.orgA, `${m} trois et demi`)).toHaveLength(1);
+    expect(await tachesTitrees(b.admin, b.orgA, `${m} quatre cents`)).toHaveLength(1);
+    const actions = async (id: string) => (await journaux(b.admin, id)).filter((l) => l.action_type === 'create_task').map((l) => l.entity_id);
+    expect(await actions(idDemi)).toEqual([dans3.id]);
+    expect(await actions(idTrop)).toEqual([dans365.id]);
+  });
+
   it('[B-049][B-050] webhook.received (POST /api/hooks/:clé, clé créée par la route) : champ JSON source=site vrai / facebook faux', async () => {
     const m = marque('B-049');
     const cree = await api.appeler('POST', '/api/automations/webhooks', { name: `Site ${m}` });

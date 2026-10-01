@@ -34,6 +34,7 @@ import { noterRegleTraitee } from './outbox';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
 import { typeEnvoi } from './desabonnement';
 import { verdictSortie } from './sortie-parcours';
+import { normaliserJoursAvant } from './rappels-dates';
 
 interface AutomationRule {
   id: string;
@@ -77,6 +78,14 @@ interface AutomationRule {
  * règle que de perdre l'action sans trace.
  */
 export function regleViseCetEvenement(rule: AutomationRule, event: CRMEvent): boolean {
+  // « Date atteinte » : le balayage émet UN événement par règle (son champ,
+  // son décalage). Rejoué sur les autres règles du même déclencheur, il
+  // faisait partir une règle « le jour même » sur l'événement d'une règle
+  // « 7 jours avant » du même champ dès qu'elle ne portait pas `jours_avant`.
+  if (event.type === 'date.reached') {
+    const visee = event.metadata?.rule_id;
+    return !visee || visee === rule.id;
+  }
   if (!event.type.startsWith('deal.')) return true;
   const m = event.metadata ?? {};
   if (rule.pipeline_id && m.pipeline_id && rule.pipeline_id !== m.pipeline_id) return false;
@@ -233,7 +242,16 @@ export function evaluateConditions(
      */
     const suffixe = /^(.+)__(gt|gte|lt|lte)$/.exec(cleBrute);
     const key = suffixe ? suffixe[1] : cleBrute;
-    const expected = suffixe ? { [suffixe[2]]: attenduBrut } : attenduBrut;
+    /*
+     * « Date atteinte » : le balayage borne et tronque `jours_avant` (±365,
+     * entier) et émet CETTE valeur. Comparée à la valeur brute de la règle
+     * (« 3.5 », « 400 »), elle ne correspondait jamais : la règle restait
+     * muette, sans erreur (J-063). Même normalisation des deux côtés.
+     */
+    const attendu = event.type === 'date.reached' && cleBrute === 'jours_avant'
+      ? normaliserJoursAvant(attenduBrut)
+      : attenduBrut;
+    const expected = suffixe ? { [suffixe[2]]: attendu } : attendu;
     const actual = event.metadata[key];
 
     // Support operators

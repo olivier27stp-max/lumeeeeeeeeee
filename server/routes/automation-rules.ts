@@ -48,6 +48,7 @@ import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
 import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee } from '../lib/automations-publication';
 import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
+import { problemeJoursAvant } from '../lib/rappels-dates';
 import {
   DECLENCHEURS,
   ACTIONS,
@@ -74,8 +75,18 @@ export function verifierCoherence(corps: {
   trigger_event?: string;
   delay_seconds?: number;
   actions?: Array<{ type: string }>;
+  /** Les conditions qu'on s'apprête à ÉCRIRE (absentes d'un PATCH qui n'y touche pas). */
+  conditions?: Record<string, unknown> | null;
 }, fr = true): string | null {
-  const { trigger_event, delay_seconds, actions } = corps;
+  const { trigger_event, delay_seconds, actions, conditions } = corps;
+
+  // « Date atteinte » : le balayage ne sait viser qu'un nombre ENTIER de
+  // jours, entre -365 et 365. « 3.5 » ou « 400 » s'enregistraient, et la
+  // règle ne partait jamais, sans erreur (J-063).
+  if (trigger_event === 'date.reached' && conditions) {
+    const probleme = problemeJoursAvant(conditions.jours_avant, fr);
+    if (probleme) return probleme;
+  }
 
   // Un délai négatif = « X avant la date de référence ». Le moteur ne sait le
   // calculer que pour les rendez-vous (`resolveExecuteAt`) : ailleurs, il n'y
@@ -537,6 +548,9 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     trigger_event: patch.trigger_event ?? existante.trigger_event,
     delay_seconds: patch.delay_seconds ?? existante.delay_seconds,
     actions: patch.actions,
+    // Seulement si ce PATCH écrit les conditions : une règle déjà hors bornes
+    // reste renommable, déplaçable, dépubliable.
+    conditions: patch.conditions,
   }, fr);
   if (probleme) return res.status(400).json({ error: probleme });
 
