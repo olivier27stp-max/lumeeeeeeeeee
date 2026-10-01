@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { marque, attendre, envoisSimules, appelsTwilio, appelsHttpBloques } from '../harnais/moteur';
 import {
-  preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux, tachesPlanifiees,
+  preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux, lignesDAction, tachesPlanifiees,
   traiterBase, traiterPipeline, creerClient, creerJob, creerDevis, creerFacture, creerDeal, pipelineParDefaut,
   creerChamp, ecrireChamps, ok, reserverTelephone, type Api, type Bureau,
 } from './10-b-outils';
@@ -71,7 +71,8 @@ async function noter(clientId: string, texte = 'Note de test') {
 
 /** Le journal définitif (une action lente est d'abord « en attente du résultat »). */
 async function journalFinal(ruleId: string, n = 1) {
-  return attendre(() => journaux(b.admin, ruleId), (l) => l.length >= n && l.every((x) => x.result_success || !/attente|^en cours$/.test(String(x.result_error ?? ''))), 20_000);
+  // Les lignes d'ACTION : une règle à condition peut aussi porter la trace d'un événement qu'elle a écarté (L-004).
+  return attendre(async () => lignesDAction(await journaux(b.admin, ruleId)), (l) => l.length >= n && l.every((x) => x.result_success || !/attente|^en cours$/.test(String(x.result_error ?? ''))), 20_000);
 }
 
 describe('[B] actions de communication (envois simulés, mot pour mot)', () => {

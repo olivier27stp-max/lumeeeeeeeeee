@@ -12,7 +12,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { marque, attendre, envoisSimules, appelsHttpBloques } from '../harnais/moteur';
 import {
-  preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux,
+  preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux, lignesDAction,
   creerClient, creerDevis, creerFacture, drapeau, ok, type Api, type Bureau,
 } from './10-b-outils';
 
@@ -82,7 +82,8 @@ describe('[B] formulaire de demande public', () => {
     const [t] = await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} vrai`), (x) => x.length > 0);
     expect(t).toMatchObject({ linked_entity_type: 'lead', linked_entity_id: lead!.id });
     expect((await journaux(b.admin, vrai))[0]).toMatchObject({ trigger_event: 'lead.created', entity_id: lead!.id, result_success: true });
-    expect(await journaux(b.admin, faux)).toHaveLength(0);
+    // Écartée par sa condition : aucune action (seulement la trace « conditions non remplies », L-004).
+    expect(lignesDAction(await journaux(b.admin, faux))).toHaveLength(0);
     expect(appelsHttpBloques().length, 'le formulaire a tenté un appel réseau').toBe(httpAvant);
   });
 });
@@ -117,7 +118,8 @@ describe('[B] webhooks Stripe signés', () => {
     const [t] = await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} vrai`), (x) => x.length > 0);
     expect(t).toMatchObject({ linked_entity_type: 'invoice', linked_entity_id: f.id });
     expect((await journaux(b.admin, vrai))[0]).toMatchObject({ trigger_event: 'invoice.paid', entity_type: 'invoice', entity_id: f.id, result_success: true });
-    expect(await journaux(b.admin, faux)).toHaveLength(0);
+    // Écartée par sa condition : aucune action (seulement la trace « conditions non remplies », L-004).
+    expect(lignesDAction(await journaux(b.admin, faux))).toHaveLength(0);
     // Rejeu du même événement Stripe : idempotent, aucune 2e exécution.
   });
 
@@ -174,7 +176,8 @@ describe('[B] webhooks Stripe signés', () => {
     const [t] = await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} vrai`), (x) => x.length > 0);
     expect(t).toMatchObject({ linked_entity_type: 'invoice', linked_entity_id: f.id });
     expect((await journaux(b.admin, vrai))[0]).toMatchObject({ trigger_event: 'payment.failed', entity_id: f.id, result_success: true });
-    expect(await journaux(b.admin, faux)).toHaveLength(0);
+    // Écartée par sa condition : aucune action (seulement la trace « conditions non remplies », L-004).
+    expect(lignesDAction(await journaux(b.admin, faux))).toHaveLength(0);
     const { data: p } = await b.admin.from('payments').select('status, failure_reason').eq('provider_payment_id', pi).single();
     expect(p).toMatchObject({ status: 'failed', failure_reason: 'insufficient_funds' });
   });

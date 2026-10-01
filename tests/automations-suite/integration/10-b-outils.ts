@@ -187,6 +187,15 @@ export async function journaux(admin: SupabaseClient, ruleId: string) {
   return data ?? [];
 }
 
+/**
+ * Les lignes d'ACTION d'un journal. Depuis L-004, une règle écartée par ses
+ * conditions laisse une trace (`action_type = 'conditions'`, saut) : ce n'est
+ * pas une action. « La règle fausse n'a rien fait » = aucune ligne d'action.
+ */
+export function lignesDAction<T extends { action_type: string }>(lignes: T[]): T[] {
+  return lignes.filter((l) => l.action_type !== 'conditions');
+}
+
 export async function tachesPlanifiees(admin: SupabaseClient, ruleId: string) {
   const { data, error } = await admin.from('automation_scheduled_tasks')
     .select('id, status, step_id, execute_at, attempts, last_error, action_config, sequence_context, entity_type, entity_id, created_at, completed_at')
