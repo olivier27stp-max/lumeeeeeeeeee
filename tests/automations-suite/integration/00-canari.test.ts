@@ -114,11 +114,15 @@ describe('canari — le bureau de test n’envoie rien de réel', () => {
       async () => (await envoisSimules(b.admin, b.orgA, depuis)).filter((r) =>
         String(r.corps ?? '').includes(m) || String(r.sujet ?? '').includes(m) || r.destinataire.includes('canari-moteur')),
       (r) => r.length >= 3,
+      // Une base lente n'est pas un envoi réel : sur un staging saturé, un envoi
+      // SIMULÉ a mis plus de 5 s (CI du 2026-10-01). Le canari attend ; ce qui
+      // le rend rouge, ce sont les pièges, vérifiés juste après.
+      75_000, 500,
     );
     const { data: journal } = await b.admin.from('automation_execution_logs').select('*').eq('automation_rule_id', regle!.id).limit(5);
     expect(rows.map((r) => r.canal).sort(), `journal : ${JSON.stringify(journal)}`).toEqual(['courriel', 'sms', 'webhook']);
     expect(rows.every((r) => (r.meta as { raison?: string }).raison === 'entreprise')).toBe(true);
     expect(appelsTwilio.length, 'un texto a atteint le fournisseur').toBe(twilioAvant);
     expect(appelsHttpBloques().length, 'un appel HTTP a atteint le réseau').toBe(httpAvant);
-  });
+  }, 150_000);
 });
