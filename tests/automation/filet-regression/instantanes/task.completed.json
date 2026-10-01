@@ -523,7 +523,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "create_notification",
      "action_config": {
-      "title": "Suivi a faire pour [client_name]"
+      "title": "Suivi à faire pour [client_name]"
      },
      "result_success": false,
      "result_error": "en cours",
@@ -537,7 +537,7 @@
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
      "type": "automation",
-     "title": "Suivi a faire pour Marie Tremblay",
+     "title": "Suivi à faire pour Marie Tremblay",
      "body": "",
      "reference_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "link": null
@@ -555,11 +555,11 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "create_notification",
      "action_config": {
-      "title": "Suivi a faire pour [client_name]"
+      "title": "Suivi à faire pour [client_name]"
      },
      "result_success": true,
      "result_data": {
-      "title": "Suivi a faire pour Marie Tremblay",
+      "title": "Suivi à faire pour Marie Tremblay",
       "destinataires": "equipe",
       "courriels": 0
      },
@@ -590,7 +590,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_config": {
       "type": "create_notification",
-      "config": "#53d09b403d36",
+      "config": "#6cb3dc7f8665",
       "trigger_event": "task.completed",
       "event_metadata": {
        "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
@@ -652,7 +652,7 @@
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
      "type": "automation",
-     "title": "Suivi a faire pour Marie Tremblay",
+     "title": "Suivi à faire pour Marie Tremblay",
      "body": "",
      "reference_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "link": null
@@ -671,11 +671,11 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "create_notification",
      "action_config": {
-      "title": "Suivi a faire pour [client_name]"
+      "title": "Suivi à faire pour [client_name]"
      },
      "result_success": true,
      "result_data": {
-      "title": "Suivi a faire pour Marie Tremblay",
+      "title": "Suivi à faire pour Marie Tremblay",
       "destinataires": "equipe",
       "courriels": 0
      },
@@ -1141,7 +1141,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "envoyer_slack",
      "action_config": {
-      "body": "[client_name] — suivi a faire"
+      "body": "[client_name] — suivi à faire"
      },
      "result_success": false,
      "result_error": "en cours",
@@ -1160,7 +1160,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "envoyer_slack",
      "action_config": {
-      "body": "[client_name] — suivi a faire"
+      "body": "[client_name] — suivi à faire"
      },
      "result_success": false,
      "result_data": null,
@@ -1191,7 +1191,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_config": {
       "type": "envoyer_slack",
-      "config": "#55f014bdd1f1",
+      "config": "#fe65e37fbb3f",
       "trigger_event": "task.completed",
       "event_metadata": {
        "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
@@ -1259,7 +1259,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "envoyer_slack",
      "action_config": {
-      "body": "[client_name] — suivi a faire"
+      "body": "[client_name] — suivi à faire"
      },
      "result_success": false,
      "result_data": null,
@@ -3378,7 +3378,7 @@
      "step_id": "e1",
      "action_config": {
       "type": "create_notification",
-      "config": "#ab27f1dcaebc",
+      "config": "#ab088448f7ae",
       "event_metadata": {
        "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
        "title": "Rappeler"
@@ -3444,7 +3444,7 @@
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
      "type": "automation",
-     "title": "Suivi a faire pour Marie Tremblay",
+     "title": "Suivi à faire pour Marie Tremblay",
      "body": "Suivi du parcours",
      "reference_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "link": null
@@ -3463,12 +3463,12 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "create_notification",
      "action_config": {
-      "title": "Suivi a faire pour [client_name]",
+      "title": "Suivi à faire pour [client_name]",
       "body": "Suivi du parcours"
      },
      "result_success": true,
      "result_data": {
-      "title": "Suivi a faire pour Marie Tremblay",
+      "title": "Suivi à faire pour Marie Tremblay",
       "destinataires": "equipe",
       "courriels": 0
      },

@@ -87,6 +87,7 @@ import {
   configParDefaut,
   declencheurOffert,
   trouverAction,
+  trouverDeclencheur,
 } from '../lib/automationCatalogue';
 import { problemesPublication } from '../lib/publicationAutomatisation';
 import { useModuleAccess } from '../hooks/useModuleAccess';
@@ -98,6 +99,18 @@ import { creerFileBascule } from '../lib/fileBascule';
 import { captureClientException } from '../lib/sentry';
 
 type Onglet = 'parcours' | 'reglages' | 'historique' | 'journaux';
+
+/** Un déclencheur et SES réglages : ce qu'un choix dans le tiroir écrit. */
+interface ChoixDeclencheur { trigger_event: string; conditions: Record<string, unknown> }
+
+/**
+ * Le serveur répond-il que la règle N'EXISTE PLUS (404) ? `automationBuilderApi`
+ * pose le statut HTTP sur l'erreur. Lu par sa forme, sans rien importer de
+ * plus : une panne (500, réseau) n'a pas ce statut et reste une panne.
+ */
+function estIntrouvable(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { status?: unknown }).status === 404;
+}
 
 /** Bornes du zoom. Au-delà, on ne lit plus rien ; en deçà, on se perd. */
 const ZOOM_MIN = 0.4;
@@ -136,6 +149,14 @@ export default function AutomationBuilderPage() {
   const regleCourante = useRef<AutomationRule | null>(null);
   useEffect(() => { regleCourante.current = regle; }, [regle]);
   const { isEnabled: sortieALaCreation } = useModuleAccess('auto_sortie_parcours');
+  /*
+   * LA RÈGLE N'EXISTE PLUS (audit du 2026-10-01). Supprimée ailleurs pendant
+   * que l'éditeur restait ouvert, le serveur refuse chaque écriture — et
+   * l'enregistrement automatique annonçait « nouvel essai automatique » pour
+   * un essai qui ne pouvait jamais réussir. Au premier 404, l'éditeur le dit
+   * et s'arrête.
+   */
+  const [disparue, setDisparue] = useState(false);
 
   /**
    * Toute écriture de la règle passe par ici. Brouillon jamais enregistré :
@@ -143,10 +164,14 @@ export default function AutomationBuilderPage() {
    * attendent cette création puis modifient.
    */
   const ecrire = useCallback(async (patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => {
-    if (idReel.current) return modifierAutomatisation(idReel.current, patch);
+    const modifier = (idRegle: string) => modifierAutomatisation(idRegle, patch).catch((e: unknown) => {
+      if (estIntrouvable(e)) setDisparue(true);
+      throw e;
+    });
+    if (idReel.current) return modifier(idReel.current);
     if (creationEnVol.current) {
       const creee = await creationEnVol.current;
-      return modifierAutomatisation(creee.id, patch);
+      return modifier(creee.id);
     }
     const base = regleCourante.current;
     const enCreation = creerAutomatisation({
@@ -199,6 +224,8 @@ export default function AutomationBuilderPage() {
     surEchec: (id, retour, erreur) => {
       setRegle((r) => (r && r.id === id ? { ...r, is_active: retour } : r));
       setVersionBascule((v) => v + 1);
+      // Règle supprimée entre-temps : l'écran « n'existe plus » le dit.
+      if (estIntrouvable(erreur)) { setDisparue(true); return; }
       toast.error(erreur instanceof Error ? erreur.message : String(erreur), { id: `bascule-${id}` });
     },
   }));
@@ -254,24 +281,9 @@ export default function AutomationBuilderPage() {
   /** Le panneau ouvert a-t-il un brouillon non enregistré ? (PanneauEtape.onModifie) */
   const brouillonEtapeModifie = useRef(false);
   const signalerBrouillonEtape = useCallback((m: boolean) => { brouillonEtapeModifie.current = m; }, []);
-  /**
-   * Ouvrir une AUTRE carte : si l'étape ouverte a des modifications non
-   * enregistrées, on demande avant de les jeter (audit 2026-09-28).
-   */
-  const ouvrirEtape = useCallback(async (idEtape: string) => {
-    if (etapeChoisie && idEtape !== etapeChoisie && brouillonEtapeModifie.current) {
-      const ok = await confirmer({
-        title: language === 'fr' ? 'Changer d’étape sans enregistrer ?' : 'Switch step without saving?',
-        message: language === 'fr'
-          ? 'Les modifications de l’étape ouverte ne sont pas enregistrées : elles seront perdues.'
-          : 'The open step’s changes are not saved: they will be lost.',
-        confirmLabel: language === 'fr' ? 'Changer d’étape' : 'Switch step',
-        danger: true,
-      });
-      if (!ok) return;
-    }
-    setEtapeChoisie(idEtape);
-  }, [etapeChoisie, language]);
+  /** Même chose pour les réglages du déclencheur (PanneauDeclencheur.onModifie). */
+  const brouillonDeclencheurModifie = useRef(false);
+  const signalerBrouillonDeclencheur = useCallback((m: boolean) => { brouillonDeclencheurModifie.current = m; }, []);
 
   // ── De quoi remplir les menus du panneau ──
   // Les membres (pour « assigner a ») et les etiquettes deja utilisees.
@@ -309,6 +321,71 @@ export default function AutomationBuilderPage() {
   const [tiroirDeclencheur, setTiroirDeclencheur] = useState(false);
   /** Le panneau de RÉGLAGE du déclencheur (« quelle date surveiller ? »). */
   const [reglageDeclencheur, setReglageDeclencheur] = useState(false);
+
+  /*
+   * UN SEUL PANNEAU À DROITE À LA FOIS (audit du 2026-10-01). Cliquer la
+   * carte « Quand » pendant qu'une étape était ouverte posait deux panneaux
+   * de 380 px côte à côte (trois « Annuler », deux « Enregistrer ») ; et
+   * « + » pendant que les réglages du déclencheur étaient ouverts ne faisait
+   * rien. Ouvrir l'un ferme l'autre — après avoir demandé, si une saisie non
+   * enregistrée s'y perdrait (la règle du changement d'étape, audit
+   * 2026-09-28).
+   *
+   * Rien à confirmer : la suite s'exécute TOUT DE SUITE, dans le même geste.
+   */
+  const quandPanneauLibre = useCallback((suite: () => void, versEtape?: string) => {
+    const enFrancais = language === 'fr';
+    const questions: Array<Parameters<typeof confirmer>[0]> = [];
+    if (etapeChoisie && versEtape !== etapeChoisie && brouillonEtapeModifie.current) {
+      questions.push(versEtape
+        ? {
+          title: enFrancais ? 'Changer d’étape sans enregistrer ?' : 'Switch step without saving?',
+          message: enFrancais
+            ? 'Les modifications de l’étape ouverte ne sont pas enregistrées : elles seront perdues.'
+            : 'The open step’s changes are not saved: they will be lost.',
+          confirmLabel: enFrancais ? 'Changer d’étape' : 'Switch step',
+          danger: true,
+        }
+        : {
+          title: enFrancais ? 'Fermer l’étape sans enregistrer ?' : 'Close the step without saving?',
+          message: enFrancais
+            ? 'Les modifications de l’étape ouverte ne sont pas enregistrées : elles seront perdues.'
+            : 'The open step’s changes are not saved: they will be lost.',
+          confirmLabel: enFrancais ? 'Fermer sans enregistrer' : 'Close without saving',
+          danger: true,
+        });
+    }
+    if (reglageDeclencheur && brouillonDeclencheurModifie.current) {
+      questions.push({
+        title: enFrancais ? 'Fermer les réglages sans enregistrer ?' : 'Close the settings without saving?',
+        message: enFrancais
+          ? 'Les réglages du déclencheur ne sont pas enregistrés : ils seront perdus.'
+          : 'The trigger settings are not saved: they will be lost.',
+        confirmLabel: enFrancais ? 'Fermer sans enregistrer' : 'Close without saving',
+        danger: true,
+      });
+    }
+    if (questions.length === 0) { suite(); return; }
+    void (async () => {
+      for (const question of questions) {
+        if (!(await confirmer(question))) return;
+      }
+      suite();
+    })();
+  }, [etapeChoisie, reglageDeclencheur, language]);
+
+  /** Affiche le panneau d'une étape — SEUL : tiroirs et réglages du déclencheur se ferment. */
+  const montrerEtape = useCallback((idEtape: string) => {
+    setTiroirDeclencheur(false);
+    setReglageDeclencheur(false);
+    setAjoutEnCours(null);
+    setEtapeChoisie(idEtape);
+  }, []);
+
+  /** Ouvrir une carte du canevas, à la demande de l'utilisateur. */
+  const ouvrirEtape = useCallback((idEtape: string) => {
+    quandPanneauLibre(() => montrerEtape(idEtape), idEtape);
+  }, [quandPanneauLibre, montrerEtape]);
   /**
    * Les champs personnalisés actifs de l'entreprise (tous objets) : « quel
    * champ ? » de « Champ modifié », « Mettre à jour un champ », les filtres
@@ -383,7 +460,13 @@ export default function AutomationBuilderPage() {
 
   /** Ouvre le choix du type d'étape à insérer. */
   const ouvrirAjout = (apresId: string | null, branche?: 'alors' | 'sinon') => {
-    setAjoutEnCours({ apresId, branche });
+    quandPanneauLibre(() => {
+      // Le tiroir « Actions » prend la place des réglages du déclencheur :
+      // resté ouvert, leur panneau le cachait et « + » ne faisait rien.
+      setTiroirDeclencheur(false);
+      setReglageDeclencheur(false);
+      setAjoutEnCours({ apresId, branche });
+    });
   };
 
   /**
@@ -413,8 +496,7 @@ export default function AutomationBuilderPage() {
       // brouillon, envoyable tel quel et réécrit en un clic.
       : { ...etapeVierge('action', id), action: { type: cle, config: configParDefaut(cle, fr) } };
     memoriser(insererEtape(steps, nouvelle, ajoutEnCours.apresId, ajoutEnCours.branche));
-    setEtapeChoisie(nouvelle.id);
-    setAjoutEnCours(null);
+    montrerEtape(nouvelle.id);
   };
 
   /**
@@ -484,22 +566,74 @@ export default function AutomationBuilderPage() {
     [fr, drapeauxActifs],
   );
 
+  /*
+   * LE DERNIER CHOIX GAGNE, ET L'ÉCRAN LE DIT TOUT DE SUITE (audit du
+   * 2026-10-01). Chaque choix partait aussitôt en PATCH, en parallèle : cinq
+   * choix rapprochés, et c'est la dernière RÉPONSE arrivée qui restait — pas
+   * le dernier clic. Pendant ce temps la carte gardait l'ancien déclencheur
+   * sous un « Enregistré » : un clic y ouvrait les réglages de l'ancien.
+   *
+   * Même principe que la file de publication (`fileBascule.ts`) :
+   *   · la carte suit le DERNIER choix, tout de suite ;
+   *   · un seul enregistrement en vol ; à sa réponse, si le choix a changé
+   *     entre-temps, on envoie le nouveau — jamais deux en parallèle ;
+   *   · un refus ramène la carte au dernier déclencheur CONFIRMÉ par le
+   *     serveur, et le dit.
+   */
+  const fileDeclencheur = useRef<{
+    confirme: ChoixDeclencheur | null;
+    voulu: ChoixDeclencheur | null;
+    /** Résout à `true` quand la base porte le dernier choix, `false` sur un refus. */
+    enVol: Promise<boolean> | null;
+  }>({ confirme: null, voulu: null, enVol: null });
+  /** Un changement de déclencheur attend la réponse du serveur. */
+  const [declencheurEnVol, setDeclencheurEnVol] = useState(false);
+
   /** Changer le déclencheur de la règle depuis le tiroir. */
-  const choisirDeclencheur = useCallback(async (cle: string) => {
+  const choisirDeclencheur = useCallback((cle: string) => {
     if (!regle) return;
     setTiroirDeclencheur(false);
     if (cle === regle.trigger_event) return;
-    try {
-      // Les réglages de l'ANCIEN déclencheur partent avec lui ; ceux du
-      // nouveau sont posés d'office (voir `conditionsApresChangement`).
-      const maj = await ecrire({
-        trigger_event: cle,
-        conditions: conditionsApresChangement(regle.trigger_event, cle, (regle.conditions ?? {}) as Record<string, unknown>),
-      });
-      setRegle(maj);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+    const file = fileDeclencheur.current;
+    // Rien en vol : ce que l'écran montre EST ce que la base contient.
+    if (!file.enVol) {
+      file.confirme = { trigger_event: regle.trigger_event, conditions: (regle.conditions ?? {}) as Record<string, unknown> };
     }
+    // Les réglages de l'ANCIEN déclencheur partent avec lui ; ceux du
+    // nouveau sont posés d'office (voir `conditionsApresChangement`).
+    const voulu: ChoixDeclencheur = {
+      trigger_event: cle,
+      conditions: conditionsApresChangement(regle.trigger_event, cle, (regle.conditions ?? {}) as Record<string, unknown>),
+    };
+    file.voulu = voulu;
+    setRegle((r) => (r ? { ...r, ...voulu } : r));
+    if (file.enVol) return;
+    setDeclencheurEnVol(true);
+    file.enVol = (async () => {
+      try {
+        while (file.voulu) {
+          const cible = file.voulu;
+          const maj = await ecrire(cible);
+          file.confirme = { trigger_event: maj.trigger_event, conditions: (maj.conditions ?? {}) as Record<string, unknown> };
+          // Un autre choix a été fait pendant l'envoi : il part au tour suivant.
+          if (file.voulu === cible) {
+            file.voulu = null;
+            setRegle(maj);
+          }
+        }
+        return true;
+      } catch (e: unknown) {
+        const retour = file.confirme;
+        file.voulu = null;
+        if (retour) setRegle((r) => (r ? { ...r, ...retour } : r));
+        // Règle supprimée entre-temps : l'écran « n'existe plus » le dit déjà.
+        if (!estIntrouvable(e)) toast.error(e instanceof Error ? e.message : String(e));
+        return false;
+      } finally {
+        file.enVol = null;
+        setDeclencheurEnVol(false);
+      }
+    })();
   }, [regle, ecrire]);
 
   /**
@@ -684,6 +818,7 @@ export default function AutomationBuilderPage() {
     // toast) : les écritures doivent la viser, elle.
     idReel.current = estNouvelle ? null : (id ?? null);
     creationEnVol.current = null;
+    setDisparue(false);
     // La langue au moment du chargement, lue par ref : changer de langue en
     // cours d'édition ne doit PAS relancer ce chargement — il remplaçait les
     // étapes non enregistrées par la version du serveur (audit 2026-09-28).
@@ -803,6 +938,36 @@ export default function AutomationBuilderPage() {
     setEtatSauvegarde('modifie');
   };
 
+  /*
+   * Ctrl+Z / Ctrl+Y (Cmd+Z / Cmd+Maj+Z sur Mac) — les deux flèches de la
+   * barre, au clavier (audit du 2026-10-01 : Ctrl+Z ne faisait rien, la carte
+   * supprimée par erreur ne revenait pas).
+   *
+   * JAMAIS quand le focus est dans un champ de saisie : là, Ctrl+Z est celui
+   * du navigateur, qui annule la frappe. Ni hors de l'onglet Parcours (on
+   * défaisait un canevas qu'on ne voit pas), ni sous une boîte de dialogue.
+   */
+  const canevasAffiche = onglet === 'parcours' && !chargement && !!regle && !regle.deleted_at && !disparue;
+  const raccourcisCanevas = useRef({ annuler, refaire, actifs: canevasAffiche });
+  raccourcisCanevas.current = { annuler, refaire, actifs: canevasAffiche };
+  useEffect(() => {
+    const surTouche = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.defaultPrevented) return;
+      const touche = e.key.toLowerCase();
+      const veutAnnuler = touche === 'z' && !e.shiftKey;
+      const veutRefaire = (touche === 'z' && e.shiftKey) || (touche === 'y' && e.ctrlKey && !e.shiftKey);
+      if (!veutAnnuler && !veutRefaire) return;
+      const cible = e.target instanceof Element ? e.target : null;
+      if (cible?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
+      if (!raccourcisCanevas.current.actifs || document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      e.preventDefault();
+      if (veutAnnuler) raccourcisCanevas.current.annuler();
+      else raccourcisCanevas.current.refaire();
+    };
+    document.addEventListener('keydown', surTouche);
+    return () => document.removeEventListener('keydown', surTouche);
+  }, []);
+
   // ── Le panneau d'edition ──
   // Ouvrir une carte, la modifier, l'enregistrer ou la supprimer. C'etait
   // le trou du builder : cliquer une carte la selectionnait et n'ouvrait
@@ -846,8 +1011,8 @@ export default function AutomationBuilderPage() {
     }
     memoriser(insererEtape(steps, copie, idEtape));
     setMenuEtape(null);
-    setEtapeChoisie(copie.id);
-  }, [steps, memoriser, fr]);
+    montrerEtape(copie.id);
+  }, [steps, memoriser, fr, montrerEtape]);
 
   /**
    * Supprimer cette étape ET tout ce qui la suit.
@@ -989,7 +1154,8 @@ export default function AutomationBuilderPage() {
    */
   const echecsSauvegarde = useRef(0);
   useEffect(() => {
-    if (etatSauvegarde !== 'modifie' || !regle) return;
+    // Règle disparue (404) : plus rien à enregistrer, donc plus d'essai.
+    if (etatSauvegarde !== 'modifie' || !regle || disparue) return;
     if (etapesIncompletes > 0) { setEtatSauvegarde('incomplet'); return; }
     let annule = false;
     const delai = 3000 * 2 ** Math.min(echecsSauvegarde.current, 4);
@@ -1035,6 +1201,14 @@ export default function AutomationBuilderPage() {
           });
           return;
         } catch (e: unknown) {
+          /*
+           * 404 : l'automatisation n'existe plus. Ni toast « nouvel essai
+           * automatique », ni reprise — `ecrire` a déjà basculé l'écran.
+           */
+          if (estIntrouvable(e)) {
+            setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
+            return;
+          }
           const message = e instanceof Error ? e.message : String(e);
           const tropVite = /too many requests|429|rate limit/i.test(message);
           if (tropVite && essai < attentes.length) {
@@ -1059,7 +1233,7 @@ export default function AutomationBuilderPage() {
       }
     }, delai);
     return () => { annule = true; clearTimeout(minuterie); };
-  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire]);
+  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire, disparue]);
 
   // Dès que la dernière étape vide est remplie, on repart en enregistrement.
   useEffect(() => {
@@ -1099,7 +1273,7 @@ export default function AutomationBuilderPage() {
       const bloquants = problemes.filter((p) => p.gravite === 'bloquant');
       if (bloquants.length > 0) {
         const premier = bloquants[0];
-        if (premier.etapeId) setEtapeChoisie(premier.etapeId);
+        if (premier.etapeId) montrerEtape(premier.etapeId);
         toast.error(
           bloquants.length === 1
             ? premier.message
@@ -1258,14 +1432,14 @@ export default function AutomationBuilderPage() {
       const maj = await modifierAutomatisation(regle.id, { steps: conversion.etapes });
       setRegle(maj);
       setSteps((maj.steps as Etape[] | undefined) ?? []);
-      if (ouvrir) setEtapeChoisie(ouvrir);
+      if (ouvrir) montrerEtape(ouvrir);
       toast.success(fr ? 'Parcours converti — il est modifiable' : 'Journey converted — it is editable');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
       setConversionEnCours(false);
     }
-  }, [regle, conversion, fr]);
+  }, [regle, conversion, fr, montrerEtape]);
 
   /**
    * Y a-t-il du travail NON ENREGISTRÉ ?
@@ -1276,7 +1450,8 @@ export default function AutomationBuilderPage() {
    */
   // « en cours » compte aussi : fermer l'onglet pendant l'enregistrement
   // peut couper la requête avant que le serveur l'ait reçue (P2-13).
-  const travailNonEnregistre = etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours';
+  // … et un changement de déclencheur dont le serveur n'a pas encore répondu.
+  const travailNonEnregistre = declencheurEnVol || etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours';
 
   /**
    * Prévenir avant de FERMER l'onglet.
@@ -1308,8 +1483,9 @@ export default function AutomationBuilderPage() {
    * d'enregistrer, est DIT par un message (le toast vit hors de la page).
    */
   const sortieGeree = useRef(false);
-  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle });
-  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle };
+  // Une règle disparue (404) n'a plus rien à enregistrer au départ.
+  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue });
+  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue };
   useEffect(() => () => {
     const d = etatAuDepart.current;
     if (sortieGeree.current || !d.aRegle) return;
@@ -1376,7 +1552,14 @@ export default function AutomationBuilderPage() {
 
   const declencheurLabel = useMemo(() => {
     if (!catalogue || !regle) return fr ? '— à choisir —' : '— to pick —';
-    const d = catalogue.declencheurs.find((x) => x.cle === regle.trigger_event);
+    /*
+     * Le catalogue du SERVEUR est filtré par drapeau : une règle posée sur un
+     * déclencheur que le bureau n'a pas (drapeau coupé après coup, modèle,
+     * Lumi) n'y est pas, et la carte affichait sa clé technique —
+     * « QUAND payment.failed » (audit du 2026-10-01). Le NOM se lit alors dans
+     * le catalogue complet, comme le fait la liste des automatisations.
+     */
+    const d = catalogue.declencheurs.find((x) => x.cle === regle.trigger_event) ?? trouverDeclencheur(regle.trigger_event);
     return d ? (fr ? d.fr : d.en) : regle.trigger_event;
   }, [catalogue, regle, fr]);
 
@@ -1503,6 +1686,14 @@ export default function AutomationBuilderPage() {
   /** Enregistrer les réglages du déclencheur. */
   const enregistrerDeclencheur = useCallback(async (conditions: Record<string, unknown>, arreterSiResolu?: boolean) => {
     if (!regle) return;
+    /*
+     * Un changement de déclencheur encore en vol : ces réglages attendent sa
+     * réponse. Partis en parallèle, les deux se doublaient, et le plus lent
+     * écrasait l'autre. Changement refusé : la carte est revenue à l'ancien
+     * déclencheur (c'est déjà dit) — ces réglages n'étaient pas les siens.
+     */
+    const changementEnVol = fileDeclencheur.current.enVol;
+    if (changementEnVol && !(await changementEnVol)) return;
     try {
       // La case « Arrêter si… » vit dans `settings` : on la fusionne avec les
       // réglages existants (fenêtre, réentrée…) au lieu de les écraser.
@@ -1513,14 +1704,41 @@ export default function AutomationBuilderPage() {
       setReglageDeclencheur(false);
       toast.success(fr ? 'Réglages enregistrés' : 'Settings saved');
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      // Règle supprimée entre-temps : l'écran « n'existe plus » le dit déjà.
+      if (!estIntrouvable(e)) toast.error(e instanceof Error ? e.message : String(e));
     }
   }, [regle, fr, ecrire]);
+
+  /** Les réglages du déclencheur sont-ils à l'écran ? */
+  const panneauDeclencheurAffiche = reglageDeclencheur && !!declencheurCourant && declencheurReglable;
+
+  /**
+   * Un clic sur la carte « Quand » ouvre ses RÉGLAGES quand il y en a
+   * (« quelle date surveiller ? »), et le tiroir de changement sinon. C'est
+   * le geste de GHL : on règle d'abord, on change de déclencheur depuis le
+   * tiroir que le panneau propose. Le panneau d'étape ouvert lui cède la
+   * place (un seul panneau à droite).
+   */
+  const ouvrirDeclencheur = () => {
+    if (panneauDeclencheurAffiche || tiroirDeclencheur) return;
+    quandPanneauLibre(() => {
+      setEtapeChoisie(null);
+      setAjoutEnCours(null);
+      if (declencheurReglable) setReglageDeclencheur(true);
+      else setTiroirDeclencheur(true);
+    });
+  };
 
   if (chargement) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface">
-        <Loader2 className="h-6 w-6 animate-spin text-text-tertiary" aria-hidden="true" />
+        {/* L'écran DIT qu'il charge : un rond gris seul, sur un serveur lent,
+            ne distinguait pas « ça charge » de « c'est figé » — et un lecteur
+            d'écran n'annonçait rien (audit du 2026-10-01). */}
+        <div role="status" className="flex flex-col items-center gap-2 text-sm text-text-secondary">
+          <Loader2 className="h-6 w-6 animate-spin text-text-tertiary" aria-hidden="true" />
+          <span>{fr ? 'Chargement de l’automatisation…' : 'Loading the automation…'}</span>
+        </div>
       </div>
     );
   }
@@ -1560,6 +1778,36 @@ export default function AutomationBuilderPage() {
         <button
           type="button"
           onClick={() => void quitterEditeur()}
+          className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          {fr ? 'Mes automatisations' : 'My automations'}
+        </button>
+      </div>
+    );
+  }
+
+  /*
+   * ELLE N'EXISTE PLUS : supprimée ailleurs pendant que l'éditeur restait
+   * ouvert (le serveur répond 404 à toute écriture). Ni canevas ni panneaux —
+   * rien de ce qu'on y ferait ne pourrait s'enregistrer. On sort par la liste,
+   * SANS repasser par l'enregistrement de sortie (il échouerait encore).
+   */
+  if (disparue) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-surface px-6 text-center">
+        <div role="alert">
+          <p className="text-base font-semibold text-text-primary">
+            {fr ? 'Cette automatisation n’existe plus.' : 'This automation no longer exists.'}
+          </p>
+          <p className="mt-1 max-w-md text-sm text-text-secondary">
+            {fr
+              ? 'Elle a été supprimée, ou vous n’y avez plus accès : les dernières modifications n’ont pas pu être enregistrées.'
+              : 'It was deleted, or you no longer have access to it: the latest changes could not be saved.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { sortieGeree.current = true; navigate('/automations'); }}
           className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {fr ? 'Mes automatisations' : 'My automations'}
@@ -1687,7 +1935,9 @@ export default function AutomationBuilderPage() {
                   ? `${etapesIncompletes} étape(s) à compléter`
                   : `${etapesIncompletes} step(s) to complete`}
               </span>
-            ) : etatSauvegarde === 'en_cours' ? (
+            ) : etatSauvegarde === 'en_cours' || declencheurEnVol ? (
+              // Le changement de déclencheur compte aussi : « Enregistré »
+              // pendant que son PATCH était en vol mentait (audit 2026-10-01).
               <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />{fr ? 'Enregistrement…' : 'Saving…'}</>
             ) : etatSauvegarde === 'modifie' ? (
               <><Cloud className="h-3.5 w-3.5" aria-hidden="true" />{fr ? 'Modifié' : 'Edited'}</>
@@ -2084,17 +2334,7 @@ export default function AutomationBuilderPage() {
                       onSelection={(idEtape) => (formatOrigine ? void convertirParcours(idEtape) : void ouvrirEtape(idEtape))}
                       onAjouter={ouvrirAjout}
                       onMenu={setMenuEtape}
-                      /*
-                       * Un clic sur la carte « Quand » ouvre ses RÉGLAGES
-                       * quand il y en a (« quelle date surveiller ? »), et
-                       * le tiroir de changement sinon. C'est le geste de
-                       * GHL : on règle d'abord, on change de déclencheur
-                       * depuis le tiroir que le panneau propose.
-                       */
-                      onDeclencheur={() => {
-                        if (declencheurReglable) setReglageDeclencheur(true);
-                        else setTiroirDeclencheur(true);
-                      }}
+                      onDeclencheur={ouvrirDeclencheur}
                       declencheurDetail={declencheurDetail}
                       etapesEnErreur={etapesEnErreur}
                     />
@@ -2390,6 +2630,7 @@ export default function AutomationBuilderPage() {
           onChanger={() => { setReglageDeclencheur(false); setTiroirDeclencheur(true); }}
           onEnregistrer={enregistrerDeclencheur}
           onFermer={() => setReglageDeclencheur(false)}
+          onModifie={signalerBrouillonDeclencheur}
         />
       )}
 
@@ -2408,8 +2649,9 @@ export default function AutomationBuilderPage() {
         />
       )}
 
-      {/* Le panneau d'edition — la moitie qui manquait. */}
-      {onglet === 'parcours' && !tiroirDeclencheur && !ajoutEnCours && etapeOuverte && (
+      {/* Le panneau d'edition — la moitie qui manquait. Jamais À CÔTÉ des
+          réglages du déclencheur : un seul panneau à droite. */}
+      {onglet === 'parcours' && !tiroirDeclencheur && !panneauDeclencheurAffiche && !ajoutEnCours && etapeOuverte && (
         <PanneauEtape
           etape={etapeOuverte}
           fr={fr}
