@@ -37,7 +37,12 @@ vi.mock('../server/lib/agent/tools', () => ({
     { kind: 'write', declaration: { name: 'mark_invoice_paid', description: 'Paie', parameters: { type: 'object', properties: {} } } },
     { kind: 'write', declaration: { name: 'assign_job', description: 'Assigne', parameters: { type: 'object', properties: {} } } },
   ],
-  TOOLS_BY_NAME: { mark_invoice_paid: { kind: 'write', handler: async () => ({}) }, assign_job: { kind: 'write', handler: async () => ({}) } },
+  TOOLS_BY_NAME: {
+    mark_invoice_paid: { kind: 'write', handler: async () => ({}) },
+    assign_job: { kind: 'write', handler: async () => ({}) },
+    // Seul cet outil porte sa déclaration : c'est elle que la carte doit respecter.
+    create_job: { kind: 'write', handler: async () => ({}), declaration: { name: 'create_job', parameters: { type: 'object', properties: { title: { type: 'string' }, client_id: { type: 'string' } }, required: ['title'] } } },
+  },
 }));
 vi.mock('../server/lib/supabase', () => ({ getServiceClient: () => ({}) }));
 let apercu: any = { genre: 'action', cibles: [], details: [] };
@@ -97,6 +102,38 @@ describe('écriture sur une cible introuvable', () => {
     const r = await tourLumi(tour(emis));
     expect(r.proposition).toMatchObject({ tool: 'mark_invoice_paid', tool_use_id: 'tu_3' });
     expect(emis.find((e) => e.type === 'proposal').apercu.cibles[0].valeur).toContain('INV-0007');
+  });
+});
+
+describe('la carte montre ce qui s’exécutera', () => {
+  it('un champ que l’outil ne déclare pas (« total_cents ») : aucune carte, le modèle doit reformuler', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'tu_4', name: 'create_job', input: { title: 'Lavage de vitres', total_cents: 24000 } }], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Je reprends avec une ligne à 240 $.' }], stop_reason: 'end_turn', usage });
+    const emis: any[] = [];
+    const r = await tourLumi(tour(emis));
+    expect(r.proposition).toBeNull();
+    expect(emis.some((e) => e.type === 'proposal')).toBe(false);
+    const dernier = envoyes[1].messages[envoyes[1].messages.length - 1].content[0];
+    expect(dernier).toMatchObject({ type: 'tool_result', tool_use_id: 'tu_4', is_error: true });
+    expect(dernier.content).toContain('total_cents');
+    expect(dernier.content).toContain('ignorés à l');
+  });
+
+  it('un paramètre requis manquant : aucune carte non plus', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'tu_5', name: 'create_job', input: { client_id: '33333333-3333-4333-8333-333333333333' } }], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Quel titre pour ce job ?' }], stop_reason: 'end_turn', usage });
+    const r = await tourLumi(tour([]));
+    expect(r.proposition).toBeNull();
+    expect(envoyes[1].messages[envoyes[1].messages.length - 1].content[0].content).toContain('Paramètres invalides');
+  });
+
+  it('témoin : des paramètres déclarés et complets donnent la carte', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'tu_6', name: 'create_job', input: { title: 'Lavage de vitres' } }], stop_reason: 'tool_use', usage });
+    const r = await tourLumi(tour([]));
+    expect(r.proposition).toMatchObject({ tool: 'create_job', args: { title: 'Lavage de vitres' } });
   });
 });
 
