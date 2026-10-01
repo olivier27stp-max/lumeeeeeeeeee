@@ -20,7 +20,7 @@ Mission du 30 septembre au 1er octobre 2026 : prouver que tout ce qui touche aux
 | Rapport de chaque passe | `rapports/automatisations/RAPPORT.md` (lisible) et `synthese.json` (pour QA Smoke) |
 | Inventaire tiré du code | `AUTOMATIONS_INVENTORY.md` |
 | Matrice | `AUTOMATIONS_TEST_MATRIX.md` — le statut de chaque cas est recalculé à chaque passe |
-| Job CI | « Automatisations (npm run test:automations) » dans `.github/workflows/ci.yml` |
+| Job CI | « Automatisations (npm run test:automations) » dans `.github/workflows/ci.yml` : tests unitaires de la suite sur chaque PR ; suite complète contre staging à la demande (Actions → CI → Run workflow) |
 | Bac à sable des envois | `server/lib/bac-a-sable.ts`, tables `orgs_envois_simules` et `envois_simules` (staging et prod) |
 
 ### Comment la suite reste sans danger
@@ -239,14 +239,14 @@ Deux choix de produit. Chacun est documenté par un test marqué « ROUGE ATTEND
 Deux choix d'exploitation.
 
 3. **Bloquer le déploiement quand un test échoue.** Le job CI existe, mais `main` n'exige aucun check : une PR rouge peut être fusionnée, et Railway déploie à chaque poussée. Pour bloquer vraiment, il faut rendre les checks obligatoires sur `main` et activer « Wait for CI » sur Railway. Je ne l'ai pas fait seul : cela change la façon de travailler de toutes les sessions.
-4. **Cible du job CI : staging ou prod.** Il vise staging. Tu as dit « en prod, jamais en staging » ; je les y ai fait tourner à la main (`npm run test:automations -- --prod`). Pour que la CI vise la prod, il faudrait mettre la clé de service de prod dans les secrets GitHub, ce que `CLAUDE.md` interdit par défaut (règle 7). Sur staging, le job est fragile quand plusieurs sessions chargent la base en même temps : elle est tombée une fois le 1er octobre.
+4. **Où et quand jouer la suite complète.** Depuis le 1er octobre au soir, chaque PR ne joue plus que les tests unitaires de la suite (aucune base touchée) ; la suite complète part à la demande, contre staging. Je l'ai retirée des PR après deux pannes le même soir : la prod, puis staging, chacune sous plusieurs charges de test à la fois. Tu avais dit « en prod, jamais en staging » ; je déconseille la suite complète contre la prod que tes clients utilisent. Le plus sûr serait un projet Supabase réservé aux tests, ou une instance plus grosse.
 
 ## Risques restants avant le 26 octobre
 
 - **Aucun numéro texto actif en prod.** L'achat de numéros attend l'approbation du dossier Trust Hub chez Twilio. Tant que ce n'est pas fait, aucun texto automatique ne part, pour personne. Le code est prêt ; à vérifier par un vrai envoi dès le premier numéro obtenu.
 - **Sauvegardes.** Celles de la prod étaient en panne du 26 au 30 septembre (mot de passe Postgres périmé) ; une autre session les a réparées le 30 au soir, et le dernier dump date du 1er octobre (`../lume-backups/prod-20261001-1438.dump`, 9,5 Mo). Au début de la mission, faute de mot de passe, le filet a été un export complet par l'API (prod : 265 tables, 59 649 lignes, vérifié sans écart). Le mot de passe staging de `.env.local` est toujours refusé : `npm run db:diff` ne tourne pas.
 - **Tests unitaires sensibles à la charge du poste.** Quand plusieurs sessions saturent la machine, 2 à 6 tests unitaires à vraies minuteries échouent, jamais les mêmes (`tests/automation/launch-*`, `vague2-*`, `desabonnement-canal`). Rejoués seuls, ils passent tous (61 sur 61). Sur la CI, qui a sa propre machine, ils sont verts. Je n'ai ajouté ni réessai automatique ni délai plus long : cela masquerait un vrai test instable.
-- **Staging est une petite instance partagée.** Elle a saturé puis est tombée sous la charge de plusieurs sessions. Le job CI en dépend.
+- **Staging est une petite instance partagée.** Elle a saturé le 1er octobre vers 16 h 35 UTC, puis elle est tombée à 22 h 08 UTC : le job CI jouait alors la suite complète sur chaque PR, et six PR de plusieurs sessions l'enchaînaient. Ce job ne joue plus que les tests unitaires sur les PR.
 - **Le verrou des passages planifiés est un bail de 10 minutes.** Un passage plus long peut se chevaucher avec le suivant. La file passe désormais jusqu'à 1 000 tâches en 3 minutes au plus, ce qui reste dans le bail, mais les autres passages (rappels sur date, relances) n'ont pas tous de verrou propre. Les rappels sur date restent protégés par la clé d'exécution du moteur : rejoués trois fois le même jour, ils n'agissent qu'une fois (D-044).
 - **Les drapeaux `auto_*` sont encore éteints** pour les vraies entreprises (désabonnement par canal, sortie de parcours, paiement échoué, client inactif). La suite les éprouve allumés et éteints ; les allumer reste une décision. Tant qu'ils sont éteints, l'éditeur cache ces déclencheurs, et Lumi comme l'API refusent d'y bâtir une automatisation.
 - **Pas de plafond d'envois par automatisation** (ta décision du 23 septembre, maintenue). Une étiquette posée sur 5 000 clients envoie toujours 5 000 textos, à 30 par minute ; la différence est que le propriétaire reçoit une notification dès le début, avec « Tout arrêter ».
