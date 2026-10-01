@@ -57,7 +57,49 @@ describe('compacter / serialiserResultat', () => {
     const c = compacter(r) as any;
     expect(c.rows[2][1]).toEqual({ name: 'C2' });
   });
-  it('tronque à la taille maximale', () => {
-    expect(serialiserResultat({ t: 'x'.repeat(100) }, 20)).toHaveLength(20);
+});
+
+/**
+ * Un JSON coupé au caractère est illisible : le modèle repart en exploration et
+ * paie un deuxième tour. La borne retire des LIGNES et laisse un objet valide.
+ */
+describe('serialiserResultat — borne de taille', () => {
+  const liste = (n: number) => ({ total_matching: n, sum_total_cents: 999_000, jobs: Array.from({ length: n }, (_, i) => job(i)) });
+
+  it('rend toujours du JSON valide, sous la borne', () => {
+    for (const max of [2_000, 900, 300, 40]) {
+      const t = serialiserResultat(liste(400), max);
+      expect(t.length).toBeLessThanOrEqual(max);
+      expect(() => JSON.parse(t)).not.toThrow();
+    }
+  });
+
+  it('retire des lignes et dit combien, en gardant les champs de tête', () => {
+    const c = JSON.parse(serialiserResultat(liste(400), 3_000));
+    expect(c.total_matching).toBe(400);          // le vrai total reste annonçable
+    expect(c.sum_total_cents).toBe(999_000);
+    expect(c.jobs.rows.length).toBeLessThan(400);
+    expect(c.jobs.rows_omitted).toBe(400 - c.jobs.rows.length);
+    expect(c.jobs.rows[0][c.jobs.columns.indexOf('title')]).toBe('Nettoyage 0');
+  });
+
+  it('raccourcit un champ texte démesuré quand il n y a pas de liste', () => {
+    const c = JSON.parse(serialiserResultat({ note: 'x'.repeat(50_000) }, 3_000));
+    expect(c.note).toContain('…[coupé]');
+    expect(c.note.length).toBeLessThan(50_000);
+  });
+
+  it('le dit plutôt que de rendre un JSON cassé quand rien ne suffit', () => {
+    const c = JSON.parse(serialiserResultat({ note: 'x'.repeat(50_000) }, 40));
+    expect(c.error).toBe('result_too_large');
+  });
+
+  it('reste déterministe sous la borne', () => {
+    expect(serialiserResultat(liste(300), 2_500)).toBe(serialiserResultat(liste(300), 2_500));
+  });
+
+  it('ne touche à rien quand ça rentre', () => {
+    const petit = { total_matching: 2, jobs: [job(0), job(1)] };
+    expect(serialiserResultat(petit, 100_000)).toBe(JSON.stringify(compacter(petit)));
   });
 });
