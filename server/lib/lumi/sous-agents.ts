@@ -42,9 +42,20 @@ export function estSousAgent(topic: string | null | undefined): topic is IdTopic
  * atteint. Un jeu complet coûte 0,2 ¢ par étape en lecture cachée et évite
  * l'étape de recherche (≈ 0,6 ¢ + 3 s). Hors sujet courant, tool_search reste.
  */
+/**
+ * Outils d'un AUTRE sujet chargés aussi avec ce sous-agent (un outil n'appartient qu'à un topic).
+ * planification + analyze_profitability : « combien j'ai mis en dépenses sur la job 19 », « combien
+ * d'heures pointées sur la job 21 » sont classés « job », mais le chiffre vient de la rentabilité.
+ * Sans l'outil, Lumi répondait avec get_job — « aucune dépense » (il y en avait 77,00 $), « 2 h »
+ * (la durée de la visite, 4 h pointées). Passe de référence en prod, 2026-10-01.
+ */
+export const OUTILS_VOISINS: Partial<Record<IdTopic, readonly string[]>> = {
+  planification: ['analyze_profitability'],
+};
+
 export function outilsDuSousAgent(topic: IdTopic): string[] {
   const t = TOPICS.find((x) => x.id === topic);
-  const noms = [...(t?.outils ?? []), ...OUTILS_TRANSVERSES];
+  const noms = [...(t?.outils ?? []), ...(OUTILS_VOISINS[topic] ?? []), ...OUTILS_TRANSVERSES];
   const vus = new Set<string>();
   return noms.filter((n) => TOOLS_BY_NAME[n] && !vus.has(n) && vus.add(n));
 }

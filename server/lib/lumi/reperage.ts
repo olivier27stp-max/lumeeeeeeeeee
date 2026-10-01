@@ -66,7 +66,8 @@ function mots(message: string): MotLu[] {
   const s = String(message || '');
   for (const m of s.matchAll(MOT)) {
     const avant = s.slice(0, m.index).trimEnd();
-    out.push({ texte: m[0].replace(/’/g, "'"), debutDePhrase: avant === '' || /[.!?:;«"“(]$/.test(avant) });
+    // « Lévesque's quote » : le possessif anglais ne fait pas partie du nom.
+    out.push({ texte: m[0].replace(/’/g, "'").replace(/'s$/i, ''), debutDePhrase: avant === '' || /[.!?:;«"“(]$/.test(avant) });
   }
   return out;
 }
