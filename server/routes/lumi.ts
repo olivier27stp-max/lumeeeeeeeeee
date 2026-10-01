@@ -381,7 +381,7 @@ async function executerTourSse(opts: {
   // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
   // entre dans la trace pour être comparé à ce que le modèle a fait.
   const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce, contexteRouteur(opts.historique)) : null);
-  type MesureTour = { stop_reason?: string | null; appels_modele?: number; outils_charges?: number; premier_token_ms?: number | null; tronque?: boolean; erreur?: string; erreur_type?: string; erreur_statut?: number };
+  type MesureTour = { stop_reason?: string | null; appels_modele?: number; outils_charges?: number; premier_token_ms?: number | null; tronque?: boolean; reprises_modele?: number; erreur?: string; erreur_type?: string; erreur_statut?: number };
   const tracer = async (resultat: 'ok' | 'proposition' | 'erreur' | 'refus', cost_cents: number, action?: string | null, chiffresSuspects?: string[], mesure?: MesureTour) => {
     const routeur = observation ? await observation : null;
     // Règle stricte : le routeur en OBSERVATION coûte aussi (Haiku) — journalisé
@@ -519,7 +519,7 @@ async function executerTourSse(opts: {
     const issue = resultat.proposition ? 'proposition' : erreurModele === 'refusal' ? 'refus' : erreurModele ? 'erreur' : 'ok';
     void tracer(issue, resultat.cost_cents, resultat.plafond ? (!plafondJour.autorise ? 'plafond_plateforme' : 'budget_epuise') : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
       stop_reason: resultat.stop_reason ?? null, appels_modele: resultat.appels_modele ?? 0, outils_charges: resultat.outils_charges ?? 0,
-      premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}),
+      premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}), ...(resultat.reprises_modele ? { reprises_modele: resultat.reprises_modele } : {}),
     });
     // Étages 3-4 : une réponse de lecture au premier message se mémorise (exacte + sémantique).
     if (opts.cache && opts.enonce && !erreurModele && !resultat.plafond && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee, enonce: opts.enonce })) {
