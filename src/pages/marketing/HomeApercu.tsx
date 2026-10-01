@@ -146,7 +146,7 @@ export default function HomeApercu() {
             <div className="ha-bar">
               <i /><i /><i />
               <span className="ha-url">{TABS.find((x) => x.key === tab)?.url}</span>
-              <span className="ha-hint">{fr ? 'Cliquez pour explorer ↗' : 'Click to explore ↗'}</span>
+              <span className="ha-hint">{fr ? 'Clique pour explorer ↗' : 'Click to explore ↗'}</span>
               <div className="ha-seg" role="tablist" aria-label={fr ? "Écrans de l'app" : 'App screens'}>
                 {TABS.map((x) => (
                   <button key={x.key} type="button" role="tab" aria-selected={tab === x.key} onClick={() => setTab(x.key)}>

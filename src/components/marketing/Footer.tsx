@@ -181,14 +181,14 @@ export default function Footer() {
               <p className="mt-3 text-xs text-text-tertiary leading-relaxed max-w-[44ch]">{f.tagline}</p>
             </div>
             <div className="text-sm">
-              <p className="text-[11px] uppercase tracking-[0.15em] font-semibold text-text-tertiary">{fr ? 'Écrivez-nous' : 'Write to us'}</p>
+              <p className="text-[11px] uppercase tracking-[0.15em] font-semibold text-text-tertiary">{fr ? 'Écris-nous' : 'Write to us'}</p>
               <a href="mailto:support@lumecrm.net" className="mt-1 block text-lg font-bold text-[#111] hover:underline">support@lumecrm.net</a>
               <Link to="/contact" className="mt-1 inline-block text-sm text-[#1F5F4F] font-semibold hover:underline">{fr ? 'Voir toutes les options pour nous contacter →' : 'See all the ways to contact us →'}</Link>
             </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-10">
-            <FooterCol title={fr ? 'Vous débutez avec Lume ?' : 'New to Lume?'} links={START} />
+            <FooterCol title={fr ? 'Tu débutes avec Lume ?' : 'New to Lume?'} links={START} />
             <FooterCol title="Industries" links={INDUSTRIES} />
             <FooterCol title={fr ? 'À propos de Lume' : 'About Lume'} links={ABOUT} />
             <FooterCol title={fr ? 'Liens utiles' : 'Useful links'} links={USEFUL} />
