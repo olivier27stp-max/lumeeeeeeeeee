@@ -91,6 +91,30 @@ describe('D — la liste des automatisations contre le jeu connu (état des lieu
     });
   });
 
+  it('[D-23] une notification interne n’est pas comptée comme un « envoi »', async () => {
+    await ouvrirListe(fr);
+    const A = jeu.regles.A;
+    await expect.poll(async () => (await cellules(fr.page, A))[3]).toBe('1');
+    await ligneListe(fr.page, A).getByRole('button', { name: /^Statistiques de/ }).click();
+    const panneau = propre(await ligneListe(fr.page, A).locator('xpath=following-sibling::tr[1]').innerText());
+    // La règle A ne fait que créer une notification pour l'équipe : aucun message n'est parti vers un client.
+    expect(panneau, `panneau : « ${panneau.slice(0, 120)} »`).not.toContain('1 envoi(s)');
+  });
+
+  it('[D-24] la liste et la Vue d’ensemble laissent choisir la période des chiffres', async () => {
+    const controles = async () =>
+      (await fr.page.getByRole('combobox', { name: /période|period/i }).count())
+      + (await fr.page.getByRole('button', { name: /7 jours|30 jours|90 jours|période/i }).count())
+      + (await fr.page.locator('input[type="date"]').count());
+    await ouvrirListe(fr);
+    const liste = await controles();
+    await fr.page.goto(`${fr.base}/automations/apercu`);
+    await fr.page.locator('[role="img"]').first().waitFor();
+    const apercu = await controles();
+    // Aujourd'hui : 7 jours (échecs), 49 jours (Vue d'ensemble), 60 jours (liste, onglets) — fixes, et pas toujours dites.
+    expect({ liste: liste > 0, apercu: apercu > 0 }).toEqual({ liste: true, apercu: true });
+  });
+
   it('[D-EL-12] pastille « N échec(s) dans les 7 derniers jours » et onglet « À vérifier (N) » = le jeu', async () => {
     await avecCapture(fr, 'd-liste-echecs', async () => {
       await ouvrirListe(fr);
@@ -168,6 +192,14 @@ describe('D — l’onglet Journaux contre le jeu connu', () => {
       expect(detail).not.toContain('exécution antérieure au journal détaillé');
       expect(detail).toContain('Bonjour, votre demande est bien reçue.');
     });
+  });
+
+  it('[D-26] le détail d’une ligne donne l’événement déclencheur (les Journaux sont la vue technique)', async () => {
+    await ouvrirOngletEditeur(fr, jeu.regles.S.id, 'journaux');
+    await lignesJournaux(fr.page).first().click();
+    const detail = propre(await fr.page.locator('table tbody tr').nth(1).innerText());
+    // `trigger_event` et `duration_ms` sont lus en base par l'écran, et jamais affichés.
+    expect(detail, `détail affiché : « ${detail} »`).toMatch(/Nouveau prospect|lead\.created/);
   });
 
   it('[D-12] en anglais, la raison d’un envoi sauté est en anglais (Journaux et panneau de la liste)', async () => {

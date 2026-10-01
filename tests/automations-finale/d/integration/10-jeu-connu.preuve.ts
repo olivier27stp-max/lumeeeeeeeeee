@@ -123,6 +123,14 @@ describe('D — preuves des constats (rouges tant que le constat n’est pas cor
     expect(String(t.last_error ?? ''), 'raison lisible du report').toMatch(/heures/i);
   });
 
+  it('[D-25] la route de statistiques rend les envois ignorés PAR RAISON (code → nombre), pas seulement un total', async () => {
+    const { calculerStatistiques } = await import('../../../../server/routes/automation-stats');
+    const { par_regle } = await calculerStatistiques(clientA, b.orgA, null);
+    const t = par_regle[jeu.regles.T.id] as unknown as Record<string, unknown>;
+    // Aujourd'hui : { declenches, en_cours, envoyes, sautes, echecs, dernier_saut } — la raison n'est donnée que pour le DERNIER saut.
+    expect(t.sautes_par_raison ?? null, `clés rendues par la route : ${Object.keys(t).join(', ')}`).toEqual({ sans_telephone: 2 });
+  });
+
   it('[D-06] « déclenchée » compte des DÉCLENCHEMENTS : le même client repassé deux fois compte deux fois', async () => {
     // Le doublon mis à part : un même prospect qui redéclenche une règle 10 jours plus tard est un 2e déclenchement.
     const s = jeu.regles.S;
