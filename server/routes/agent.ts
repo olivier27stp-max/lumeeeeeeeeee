@@ -10,7 +10,9 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { journaliserTrace, usageGemini } from '../lib/lumi/traces';
-import { journaliserUsage } from '../lib/lumi/budget';
+import { journaliserUsage, etatBudget } from '../lib/lumi/budget';
+import { redisRateLimit } from '../lib/rate-limiter';
+import { userKey } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
 import { validate, agentTranscribeSchema } from '../lib/validation';
 import { isGeminiConfigured } from '../lib/agent/gemini';
@@ -24,7 +26,19 @@ const router = Router();
 /* Transcription du micro : l'audio enregistré par le navigateur arrive en
    base64, Gemini le transcrit, le texte revient au chat comme s'il avait été
    tapé. Réservé aux membres connectés (même limite de débit que le chat). */
-router.post('/agent/transcribe', validate(agentTranscribeSchema), async (req, res) => {
+/**
+ * La dictée est le micro de Lumi : elle obéit aux mêmes portes que lui.
+ * Inventaire S7 (2026-10-01) : la route était ouverte à tout compte connecté —
+ * forfait sans Lumi, rôle sans Lumi, crédits à zéro — et bornée seulement par
+ * un plafond commun à toute la plateforme (300 appels par jour) : une seule
+ * personne, ou un script, pouvait priver tous les clients du micro.
+ *  - droit `external_agent.use` : server/lib/route-permissions.ts ;
+ *  - forfait avec Lumi et crédits non épuisés : vérifiés ici ;
+ *  - 60 dictées par personne et par heure (même fenêtre que le chat).
+ */
+const limiteDictee = redisRateLimit({ preset: 'lumi', keyFn: (req) => `voix:${userKey(req)}`, repliMemoire: true });
+
+router.post('/agent/transcribe', limiteDictee, validate(agentTranscribeSchema), async (req, res) => {
   try {
     if (!isGeminiConfigured()) {
       return res.status(503).json({ error: 'Lume Agent is not configured. Set GEMINI_API_KEY on the server.', code: 'agent_not_configured' });
@@ -32,6 +46,15 @@ router.post('/agent/transcribe', validate(agentTranscribeSchema), async (req, re
     const authed = await requireAuthedClient(req, res);
     if (!authed) return;
     const { audio, mimeType, language } = req.body as { audio: string; mimeType: TranscribeMimeType; language?: 'fr' | 'en' };
+    const fr = (language ?? 'fr') === 'fr';
+    const budget = await etatBudget(getServiceClient(), authed.orgId);
+    if (!budget.includes_ai) {
+      return res.status(403).json({ error: fr ? 'Lumi n’est pas inclus dans ton forfait.' : 'Lumi is not included in this plan.', code: 'plan_sans_lumi' });
+    }
+    if (budget.palier === 'epuise') {
+      // À zéro crédit, Lumi ne répond plus : transcrire ne servirait qu'à contourner le blocage.
+      return res.status(402).json({ error: fr ? 'Tes crédits Lumi sont épuisés : la dictée reprendra avec eux.' : 'Your Lumi credits are used up: dictation resumes with them.', code: 'quota_epuise' });
+    }
     // La dictée a sa PROPRE source (« voix ») : avant, elle puisait dans le
     // plafond de « lumi » et une journée chargée en dictées aurait coupé le
     // chat, alors que ce sont deux usages distincts.
