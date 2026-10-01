@@ -36,7 +36,9 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
           "destinataire": "equipe_du_deal",
           "par_courriel": "true",
           "title": "👀 {{client.nom}} vient d'ouvrir la soumission #{{soumission.numero}} ({{soumission.total}}). Bon moment pour appeler.",
+          "title_en": "👀 {{client.nom}} just opened quote #{{soumission.numero}} ({{soumission.total}}). Good time to call.",
           "body": "Ouverte le {{soumission.ouverte_le}} · {{soumission.nb_vues}} vue(s)",
+          "body_en": "Opened on {{soumission.ouverte_le}} · {{soumission.nb_vues}} view(s)",
           "lien": "{{soumission.lien_interne}}"
         }
       }
@@ -234,7 +236,9 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_notification",
         "config": {
           "body": "La soumission est acceptée depuis 2 jours, mais le dépôt n'a pas été reçu.",
-          "title": "Dépôt en attente — [client_name]"
+          "body_en": "The quote was accepted 2 days ago, but the deposit has not been received.",
+          "title": "Dépôt en attente — [client_name]",
+          "title_en": "Deposit pending — [client_name]"
         }
       },
       {
@@ -275,7 +279,9 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_notification",
         "config": {
           "body": "Le dépôt de la facture [invoice_number] est confirmé. La job peut être planifiée.",
-          "title": "Dépôt reçu — [client_name]"
+          "body_en": "The deposit for invoice [invoice_number] is confirmed. The job can be scheduled.",
+          "title": "Dépôt reçu — [client_name]",
+          "title_en": "Deposit received — [client_name]"
         }
       },
       {
@@ -397,14 +403,18 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_task",
         "config": {
           "title": "Relancer la facture [invoice_number] — 14 jours de retard",
-          "description": "[client_name] n'a pas payé depuis 14 jours. Un appel est recommandé."
+          "title_en": "Follow up on invoice [invoice_number] — 14 days overdue",
+          "description": "[client_name] n'a pas payé depuis 14 jours. Un appel est recommandé.",
+          "body_en": "[client_name] has not paid for 14 days. A call is recommended."
         }
       },
       {
         "type": "create_notification",
         "config": {
           "body": "Une tâche de relance a été créée.",
-          "title": "Facture [invoice_number] — 14 jours de retard"
+          "body_en": "A follow-up task has been created.",
+          "title": "Facture [invoice_number] — 14 jours de retard",
+          "title_en": "Invoice [invoice_number] — 14 days overdue"
         }
       },
       {
@@ -474,14 +484,18 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_notification",
         "config": {
           "body": "Cette facture demande une intervention rapide.",
-          "title": "Facture [invoice_number] — 30 jours de retard"
+          "body_en": "This invoice needs prompt attention.",
+          "title": "Facture [invoice_number] — 30 jours de retard",
+          "title_en": "Invoice [invoice_number] — 30 days overdue"
         }
       },
       {
         "type": "create_task",
         "config": {
           "title": "Facture [invoice_number] — 30 jours de retard, à escalader",
-          "description": "Le retard dépasse 30 jours. À transmettre à un responsable ou à mettre en recouvrement."
+          "title_en": "Invoice [invoice_number] — 30 days overdue, to escalate",
+          "description": "Le retard dépasse 30 jours. À transmettre à un responsable ou à mettre en recouvrement.",
+          "body_en": "It is more than 30 days overdue. Hand it over to a manager or send it to collections."
         }
       },
       {
@@ -559,7 +573,9 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_notification",
         "config": {
           "body": "[client_name] n'a pas encore payé cette facture.",
-          "title": "Facture [invoice_number] — 7 jours impayée"
+          "body_en": "[client_name] has not paid this invoice yet.",
+          "title": "Facture [invoice_number] — 7 jours impayée",
+          "title_en": "Invoice [invoice_number] — unpaid for 7 days"
         }
       },
       {
@@ -690,14 +706,18 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_task",
         "config": {
           "title": "Prospect sans réponse — [client_name]",
-          "description": "Aucune réponse depuis 14 jours. Faire un dernier appel, ou clore le dossier."
+          "title_en": "Unresponsive lead — [client_name]",
+          "description": "Aucune réponse depuis 14 jours. Faire un dernier appel, ou clore le dossier.",
+          "body_en": "No reply for 14 days. Make one last call, or close the file."
         }
       },
       {
         "type": "create_notification",
         "config": {
           "body": "[client_name] ne répond plus. Une tâche de suivi a été créée.",
-          "title": "Prospect sans réponse — 14 jours"
+          "body_en": "[client_name] is no longer replying. A follow-up task has been created.",
+          "title": "Prospect sans réponse — 14 jours",
+          "title_en": "Unresponsive lead — 14 days"
         }
       },
       {
@@ -821,7 +841,9 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_notification",
         "config": {
           "body": "Le rendez-vous de [client_name] a été annulé.",
-          "title": "Rendez-vous annulé"
+          "body_en": "The appointment with [client_name] was cancelled.",
+          "title": "Rendez-vous annulé",
+          "title_en": "Appointment cancelled"
         }
       },
       {
@@ -864,7 +886,9 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_notification",
         "config": {
           "body": "[client_name] a payé la facture [invoice_number].",
-          "title": "Paiement reçu"
+          "body_en": "[client_name] paid invoice [invoice_number].",
+          "title": "Paiement reçu",
+          "title_en": "Payment received"
         }
       },
       {
@@ -929,14 +953,18 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_task",
         "config": {
           "title": "Relancer la soumission — [client_name]",
-          "description": "[client_name] n'a pas répondu depuis 14 jours. Un appel direct est recommandé."
+          "title_en": "Follow up on the quote — [client_name]",
+          "description": "[client_name] n'a pas répondu depuis 14 jours. Un appel direct est recommandé.",
+          "body_en": "[client_name] has not answered for 14 days. A direct call is recommended."
         }
       },
       {
         "type": "create_notification",
         "config": {
           "body": "La soumission de [client_name] date de 14 jours. Une tâche de relance a été créée.",
-          "title": "Soumission sans réponse — 14 jours"
+          "body_en": "The quote for [client_name] is 14 days old. A follow-up task has been created.",
+          "title": "Soumission sans réponse — 14 jours",
+          "title_en": "Quote with no answer — 14 days"
         }
       },
       {
@@ -1006,7 +1034,9 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_notification",
         "config": {
           "body": "[client_name] n'a jamais répondu après 21 jours. Le dossier est clos.",
-          "title": "Soumission close — aucune réponse"
+          "body_en": "[client_name] never answered after 21 days. The file is closed.",
+          "title": "Soumission close — aucune réponse",
+          "title_en": "Quote closed — no answer"
         }
       },
       {
@@ -1083,7 +1113,9 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_notification",
         "config": {
           "body": "[client_name] n'a pas répondu à sa soumission depuis 7 jours.",
-          "title": "Soumission sans réponse — 7 jours"
+          "body_en": "[client_name] has not answered the quote for 7 days.",
+          "title": "Soumission sans réponse — 7 jours",
+          "title_en": "Quote with no answer — 7 days"
         }
       },
       {
@@ -1209,7 +1241,9 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_notification",
         "config": {
           "body": "Aucune activité sur le dossier de [client_name] depuis 7 jours.",
-          "title": "Prospect inactif — 7 jours"
+          "body_en": "No activity on the file for [client_name] in 7 days.",
+          "title": "Prospect inactif — 7 jours",
+          "title_en": "Inactive lead — 7 days"
         }
       },
       {
@@ -1274,7 +1308,9 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "create_notification",
         "config": {
           "body": "[client_name] — [client_phone]",
-          "title": "Nouveau prospect"
+          "body_en": "[client_name] — [client_phone]",
+          "title": "Nouveau prospect",
+          "title_en": "New lead"
         }
       },
       {

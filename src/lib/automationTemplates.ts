@@ -70,53 +70,119 @@ const CANAL_DE_L_ACTION: Record<string, CanalModele> = {
   move_deal_stage: 'pipeline',
 };
 
-/** Actions de journal interne : invisibles pour l'entreprise, jamais comptées. */
+/**
+ * Actions de journal interne (« note dans l'historique ») : absentes du
+ * catalogue de l'éditeur, on ne peut ni les ajouter ni les régler.
+ *
+ * Elles sont pourtant COMPTÉES et montrées dans l'aperçu : la copie les garde
+ * et l'éditeur en fait une carte (« Note dans l'historique — étape technique,
+ * automatique »). Les retirer du compte annonçait « 3 étapes » pour une copie
+ * qui en montrait 4, sur 33 modèles (audit du 2026-10-01).
+ */
 const ACTIONS_INTERNES = new Set(['log_activity']);
 
+/** L'action figure-t-elle au catalogue de l'éditeur (faux = étape technique) ? */
 export function actionVisible(type: string): boolean {
   return !ACTIONS_INTERNES.has(type);
 }
 
+/**
+ * De quel côté d'un « si » se trouve l'étape : `alors` (si oui) ou `sinon`
+ * (si non). Absent = le tronc du parcours, que tout le monde traverse.
+ */
+export type BrancheApercu = 'alors' | 'sinon';
+
 /** Une étape telle que l'aperçu la montre, dans l'ordre d'exécution. */
 export type EtapeApercu =
-  | { genre: 'attente'; secondes: number; mode: 'duree' | 'reponse' | 'avant_date' }
-  | { genre: 'action'; type: string; config: Record<string, unknown> }
-  | { genre: 'condition'; conditions: Record<string, unknown> }
-  | { genre: 'fin' };
+  | { genre: 'attente'; secondes: number; mode: 'duree' | 'reponse' | 'avant_date'; branche?: BrancheApercu }
+  | { genre: 'action'; type: string; config: Record<string, unknown>; branche?: BrancheApercu }
+  | { genre: 'condition'; conditions: Record<string, unknown>; branche?: BrancheApercu }
+  | { genre: 'fin'; branche?: BrancheApercu };
 
 /**
- * Les étapes dans l'ordre. Un parcours suit `suivant` depuis la première
- * étape (la branche « alors » d'une condition, la plus fréquente) ; un modèle
- * simple = une attente (s'il a un délai) puis ses actions.
+ * Les étapes dans l'ordre, TOUTES branches comprises — chacune une seule fois.
+ *
+ * Avant (audit du 2026-10-01) : on ne suivait que la branche « alors » d'un
+ * « si ». La relance de devis (texto si le devis est parti par texto, sinon
+ * courriel) était annoncée « 18 étapes » sans l'icône Courriel, alors qu'elle
+ * en compte 23 dont 5 courriels — et l'aperçu ne montrait aucun courriel.
+ *
+ * Un « si » donne : la condition, sa branche « alors », sa branche « sinon »,
+ * puis la suite commune à partir de l'étape où les deux se rejoignent. Les
+ * sorties « si réponse » et « moment dépassé » d'une attente sont suivies à
+ * la fin, si elles mènent à des étapes qu'on n'a pas encore vues.
+ *
+ * Un modèle simple = une attente (s'il a un délai) puis ses actions.
  */
 export function etapesApercu(m: Pick<ModeleAutomatisation, 'steps' | 'actions' | 'delai_secondes'>): EtapeApercu[] {
   if (m.steps && m.steps.length > 0) {
     const parId = new Map(m.steps.map((e) => [e.id, e]));
     const out: EtapeApercu[] = [];
     const vues = new Set<string>();
-    let courante: Etape | undefined = m.steps[0];
-    while (courante && !vues.has(courante.id)) {
-      vues.add(courante.id);
-      if (courante.type === 'action') {
-        if (actionVisible(courante.action.type)) out.push({ genre: 'action', type: courante.action.type, config: courante.action.config });
-        courante = courante.suivant ? parId.get(courante.suivant) : undefined;
-      } else if (courante.type === 'attendre') {
-        const mode = courante.mode ?? 'duree';
-        out.push({ genre: 'attente', secondes: mode === 'avant_date' ? -(courante.secondes_avant ?? 0) : courante.delai_secondes, mode });
-        courante = courante.suivant ? parId.get(courante.suivant) : undefined;
-      } else if (courante.type === 'si') {
-        out.push({ genre: 'condition', conditions: courante.conditions });
-        courante = courante.alors ? parId.get(courante.alors) : undefined;
-      } else {
-        out.push({ genre: 'fin' });
-        courante = undefined;
+    /** Sorties secondaires d'une attente, à reprendre une fois le tronc parcouru. */
+    const aReprendre: string[] = [];
+
+    const sorties = (e: Etape): Array<string | null | undefined> => (
+      e.type === 'si' ? [e.alors, e.sinon]
+        : e.type === 'attendre' ? [e.suivant, e.si_reponse, e.si_depasse]
+          : e.type === 'action' ? [e.suivant] : []);
+
+    /** Tout ce qu'on atteint depuis `depart`, du plus proche au plus lointain. */
+    const atteignables = (depart: string | null | undefined): string[] => {
+      const ordre: string[] = [];
+      const file = depart ? [depart] : [];
+      const dejaVu = new Set<string>();
+      while (file.length > 0) {
+        const id = file.shift() as string; // la file n'est pas vide
+        const e = parId.get(id);
+        if (!e || dejaVu.has(id)) continue;
+        dejaVu.add(id);
+        ordre.push(id);
+        for (const s of sorties(e)) if (s) file.push(s);
       }
-    }
+      return ordre;
+    };
+
+    const suivre = (depart: string | null | undefined, arret: ReadonlySet<string>, branche?: BrancheApercu): void => {
+      let id = depart ?? undefined;
+      while (id && !vues.has(id) && !arret.has(id)) {
+        const e = parId.get(id);
+        if (!e) return;
+        vues.add(id);
+        const cote = branche ? { branche } : {};
+        if (e.type === 'action') {
+          out.push({ genre: 'action', type: e.action.type, config: e.action.config, ...cote });
+          id = e.suivant ?? undefined;
+        } else if (e.type === 'attendre') {
+          const mode = e.mode ?? 'duree';
+          out.push({ genre: 'attente', secondes: mode === 'avant_date' ? -(e.secondes_avant ?? 0) : e.delai_secondes, mode, ...cote });
+          for (const s of [e.si_reponse, e.si_depasse]) if (s) aReprendre.push(s);
+          id = e.suivant ?? undefined;
+        } else if (e.type === 'si') {
+          out.push({ genre: 'condition', conditions: e.conditions, ...cote });
+          // Là où les deux branches se rejoignent : la première étape du côté
+          // « alors » qu'on atteint aussi par « sinon ». Sans jonction (une
+          // branche s'arrête), chaque côté va jusqu'au bout.
+          const coteSinon = new Set(atteignables(e.sinon));
+          const jonction = atteignables(e.alors).find((x) => coteSinon.has(x));
+          const borne = jonction ? new Set([...arret, jonction]) : arret;
+          suivre(e.alors, borne, 'alors');
+          suivre(e.sinon, borne, 'sinon');
+          id = jonction;
+        } else {
+          out.push({ genre: 'fin', ...cote });
+          return;
+        }
+      }
+    };
+
+    suivre(m.steps[0].id, new Set());
+    while (aReprendre.length > 0) suivre(aReprendre.shift(), new Set());
     return out;
   }
   const out: EtapeApercu[] = [];
   if (m.delai_secondes !== 0) out.push({ genre: 'attente', secondes: m.delai_secondes, mode: 'duree' });
-  for (const a of m.actions) if (actionVisible(a.type)) out.push({ genre: 'action', type: a.type, config: a.config });
+  for (const a of m.actions) out.push({ genre: 'action', type: a.type, config: a.config });
   return out;
 }
 
