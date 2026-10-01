@@ -39,6 +39,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 import { reponseFaqPour } from '../lib/support/faq';
 import { estDemandeDAction } from '../lib/lumi/demande-action';
 import { langueDuMessage } from '../lib/lumi/langue-message';
+import { reponseAidePartageable } from '../lib/lumi/cache-aide-global';
 import { repererFiches } from '../lib/lumi/reperage';
 import { sujetParRegle } from '../lib/lumi/sujet-par-regle';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
@@ -56,7 +57,7 @@ import type { IdTopic } from '../lib/lumi/topics';
 import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
-import { journaliserTrace, normaliserEnonce, enoncePourTrace, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
+import { journaliserTrace, normaliserEnonce, enoncePourTrace, masquerCoordonnees, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL, outilsPermis, membreVoitLesMontants, restrictionsDe } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
@@ -64,7 +65,7 @@ import { jourPourLumi, heurePourLumi } from '../lib/lumi/temps';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs, espaceRefsDe } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
-import { assainirPourApi } from '../lib/lumi/historique';
+import { assainirPourApi, fenetreAvecRappel } from '../lib/lumi/historique';
 
 const router = Router();
 router.use(maxBodySize());
@@ -175,14 +176,11 @@ async function chargerHistorique(conversationId: string, cleRefs?: string, max =
   // Les réfs courtes (ref3 → UUID) sont rejouées depuis la base : un
   // redémarrage du serveur n'efface plus ce que l'assistant sait désigner.
   if (cleRefs) for (const m of data ?? []) if ((m as any).refs) restaurerRefs(cleRefs, (m as any).refs);
-  let msgs = (data ?? []).map((m: any) => ({ role: m.role, content: m.content }) as Msg);
-  if (msgs.length > max) {
-    // On coupe à une frontière de message utilisateur TEXTE (jamais entre un
-    // tool_use et son tool_result, sinon l'API refuse la conversation).
-    let i = msgs.length - max;
-    while (i < msgs.length && !(msgs[i].role === 'user' && typeof msgs[i].content === 'string')) i++;
-    msgs = msgs.slice(i);
-  }
+  // Fenêtre des `max` derniers messages : la coupe tombe sur un message texte de la
+  // personne (jamais entre un tool_use et son tool_result), avance par pas pour que
+  // le cache de la conversation reste lisible d'un tour à l'autre, et ce que la
+  // personne a dit AVANT la coupe est gardé en rappel (historique.ts).
+  const msgs = fenetreAvecRappel((data ?? []).map((m: any) => ({ role: m.role, content: m.content }) as Msg), max);
   // Les vieux résultats d'outils sont allégés en mémoire seulement (voir purgerVieuxResultats).
   // Blocs d'affichage (« fiches » du briefing) et conversation commencée par
   // Lumi : l'API refuserait l'historique tel quel (voir historique.ts).
@@ -380,7 +378,7 @@ async function executerTourSse(opts: {
   // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
   // entre dans la trace pour être comparé à ce que le modèle a fait.
   const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce, contexteRouteur(opts.historique)) : null);
-  type MesureTour = { stop_reason?: string | null; appels_modele?: number; outils_charges?: number; premier_token_ms?: number | null; tronque?: boolean };
+  type MesureTour = { stop_reason?: string | null; appels_modele?: number; outils_charges?: number; premier_token_ms?: number | null; tronque?: boolean; reprises_modele?: number; erreur?: string; erreur_type?: string; erreur_statut?: number };
   const tracer = async (resultat: 'ok' | 'proposition' | 'erreur' | 'refus', cost_cents: number, action?: string | null, chiffresSuspects?: string[], mesure?: MesureTour) => {
     const routeur = observation ? await observation : null;
     // Règle stricte : le routeur en OBSERVATION coûte aussi (Haiku) — journalisé
@@ -518,7 +516,7 @@ async function executerTourSse(opts: {
     const issue = resultat.proposition ? 'proposition' : erreurModele === 'refusal' ? 'refus' : erreurModele ? 'erreur' : 'ok';
     void tracer(issue, resultat.cost_cents, resultat.plafond ? (!plafondJour.autorise ? 'plafond_plateforme' : 'budget_epuise') : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
       stop_reason: resultat.stop_reason ?? null, appels_modele: resultat.appels_modele ?? 0, outils_charges: resultat.outils_charges ?? 0,
-      premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}),
+      premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}), ...(resultat.reprises_modele ? { reprises_modele: resultat.reprises_modele } : {}),
     });
     // Étages 3-4 : une réponse de lecture au premier message se mémorise (exacte + sémantique).
     if (opts.cache && opts.enonce && !erreurModele && !resultat.plafond && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee, enonce: opts.enonce })) {
@@ -527,9 +525,9 @@ async function executerTourSse(opts: {
       void (async () => {
         const vec = opts.cache?.vecteur ? await opts.cache.vecteur : null;
         if (vec) await memoriserSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, { enonce: opts.enonce!, vec, texte: resultat.texte, fiches, outils, version: await versionOrg(p.orgId) });
-        // Réponse d'aide pure (seul search_help a servi, aucun nom d'org ni de personne dedans) → cache global 24 h.
-        const nomsSensibles = [ctx.promptCtx.companyName, ctx.promptCtx.userName].filter((x): x is string => !!x && x.length > 2);
-        if (vec && outils.length > 0 && outils.every((o) => o === 'search_help') && !nomsSensibles.some((n) => resultat.texte.toLowerCase().includes(n.toLowerCase()))) {
+        // Réponse d'aide pure → cache global 24 h, servi à TOUTES les entreprises : seulement si rien du
+        // compte n'a pu y entrer (ni fiche repérée, ni note de mémoire, ni chiffre, ni état) — cache-aide-global.ts.
+        if (vec && reponseAidePartageable({ texte: resultat.texte, outils, companyName: ctx.promptCtx.companyName, userName: ctx.promptCtx.userName, souvenirs: ctx.promptCtx.souvenirs, reperage })) {
           await memoriserSemantique({ genre: 'global', espace: 'aide' }, { enonce: opts.enonce!, vec, texte: resultat.texte, fiches: [], outils, version: 0 });
         }
       })();
@@ -537,10 +535,24 @@ async function executerTourSse(opts: {
   } catch (err: any) {
     logger.error('[lumi] tour échoué', { error: err?.message || String(err), orgId: ctx.auth.orgId });
     if (!ferme) emettreSse('error', { message: 'Lumi failed to respond.' });
-    void tracer('erreur', 0);
+    // La CAUSE entre au journal (passe du 2026-10-01 : un tour planté ne laissait que
+    // « erreur », sans rien pour le diagnostiquer hors des journaux du serveur).
+    // Coordonnées masquées, texte borné : c'est un message d'erreur, pas une donnée.
+    void tracer('erreur', 0, null, undefined, { stop_reason: null, appels_modele: 0, outils_charges: 0, premier_token_ms: null, ...causeDuPlantage(err) });
   } finally {
     res.end();
   }
+}
+
+/** Ce qu'on garde d'une exception pour la trace : son type, le statut HTTP s'il y en a un, et un message court sans coordonnées. */
+export function causeDuPlantage(err: unknown): { erreur: string; erreur_type?: string; erreur_statut?: number } {
+  const e = err as { message?: unknown; name?: unknown; status?: unknown } | null;
+  const message = masquerCoordonnees(String(e?.message ?? err ?? '')).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/\s+/g, ' ').trim().slice(0, 300);
+  return {
+    erreur: message || 'inconnue',
+    ...(typeof e?.name === 'string' && e.name !== 'Error' ? { erreur_type: e.name } : {}),
+    ...(typeof e?.status === 'number' ? { erreur_statut: e.status } : {}),
+  };
 }
 
 // ── POST /lumi/chat ─────────────────────────────────────────────

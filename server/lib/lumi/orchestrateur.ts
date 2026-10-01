@@ -38,7 +38,7 @@ import { CONSIGNES_COLLEGUE_LUMI } from '../agent/consignesCollegue';
 import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 import { estimationCoutAppel, type Reservation } from './budget';
-import { serialiserResultat } from './compress';
+import { serialiserResultat, TAILLE_MAX_RESULTAT, TAILLE_MAX_TOUR } from './compress';
 import { reglesCout } from './regles-cout';
 import { verifierChiffres } from './verifier-chiffres';
 import { outilsDuSousAgent } from './sous-agents';
@@ -120,6 +120,75 @@ export function avecCacheConversation(messages: Anthropic.Messages.MessageParam[
  * lieu d'être relue (0,1 ×). Mesuré en prod sur une conversation de 11 tours :
  * 2 088 → 9 103 tokens écrits par tour.
  */
+/**
+ * Retire d'un texte destiné à la PERSONNE les références internes (« ref12 ») —
+ * ces étiquettes désignent une fiche pour le modèle, à la place de son
+ * identifiant ; elles n'ont aucun sens à l'écran. Le prompt l'interdit, mais
+ * une consigne ne suffit pas : passe du 2026-10-01, « la fiche de Longueuil
+ * (ref2) a plus d'historique ». « (ref12) » disparaît avec ses parenthèses,
+ * « ref12 » nu avec l'espace qui le précède.
+ */
+export function sansRefsInternes(texte: string): string {
+  return texte
+    .replace(/ ?\((?:ref\d{1,6}(?:, ?| et )?)+\)/g, '')
+    .replace(/ ?\bref\d{1,6}\b/g, '');
+}
+
+/**
+ * À partir d'où retenir la fin d'un texte en cours de flux : là où pourrait
+ * commencer une référence interne encore incomplète. Trois cas, le plus tôt
+ * l'emporte sur les suivants :
+ *  1. une parenthèse ouverte dont le contenu ne peut encore être qu'une liste
+ *     de références (« ( », « (re », « (ref2, r ») — avec l'espace qui la précède ;
+ *  2. un mot qui commence peut-être une référence nue (« r », « re », « ref1 ») —
+ *     avec l'espace qui le précède ;
+ *  3. une espace finale : elle doit pouvoir partir avec la référence qui suivrait.
+ * Ce qui est retenu à tort (« (re » de « (regardée) », « r » de « réserver »)
+ * repart intact au morceau suivant : aucun texte n'est perdu, seulement
+ * retardé de quelques lettres.
+ */
+function debutRetenu(t: string): number {
+  const avecEspace = (i: number): number => (i > 0 && t[i - 1] === ' ' ? i - 1 : i);
+  const p = t.lastIndexOf('(');
+  if (p !== -1 && t.length - p <= 60 && t.indexOf(')', p) === -1 && /^[ref\d, t]*$/.test(t.slice(p + 1))) return avecEspace(p);
+  const m = /(?:^|[^\p{L}\p{N}_])(r|re|ref\d{0,6})$/u.exec(t);
+  if (m) return avecEspace(t.length - m[1].length);
+  if (t.endsWith(' ')) return t.length - 1;
+  return t.length;
+}
+
+/**
+ * Filtre le flux de texte morceau par morceau : rend ce qui peut partir à
+ * l'écran (références retirées) et garde la queue qui pourrait être une
+ * référence encore incomplète. `fin` vide tout.
+ */
+export function filtrerRefsDuFlux(tampon: string, delta: string, fin = false): { pret: string; tampon: string } {
+  const tout = tampon + delta;
+  const coupe = fin ? tout.length : debutRetenu(tout);
+  return { pret: sansRefsInternes(tout.slice(0, coupe)), tampon: tout.slice(coupe) };
+}
+
+/** Attentes avant chaque reprise d'un appel au modèle (donc 2 reprises au plus). `LUMI_REPRISE_MODELE_MS` pour les tests. */
+export const DELAIS_REPRISE_MODELE_MS: readonly number[] = (process.env.LUMI_REPRISE_MODELE_MS ?? '700,2000').split(',').map((x) => Number(x)).filter((n) => Number.isFinite(n) && n >= 0);
+
+/**
+ * L'erreur du modèle vaut-elle une reprise ? Oui pour ce qui passe tout seul :
+ * surcharge (529, `overloaded_error`), limite de débit (429), erreurs serveur
+ * (5xx), coupure ou expiration de la connexion. Non pour ce qui reviendrait à
+ * l'identique : requête invalide (400), clé ou droit (401, 403), trop gros (413).
+ */
+export function erreurPassagereDuModele(err: unknown): boolean {
+  const e = err as { status?: unknown; name?: unknown; message?: unknown; error?: { type?: unknown; error?: { type?: unknown } } } | null;
+  if (!e) return false;
+  const statut = typeof e.status === 'number' ? e.status : null;
+  if (statut !== null) return statut === 408 || statut === 409 || statut === 429 || statut >= 500;
+  const type = String(e.error?.error?.type ?? e.error?.type ?? '');
+  if (type === 'overloaded_error' || type === 'api_error' || type === 'rate_limit_error' || type === 'timeout_error') return true;
+  const nom = String(e.name ?? '');
+  if (nom === 'APIConnectionError' || nom === 'APIConnectionTimeoutError') return true;
+  return /overloaded|ECONNRESET|ETIMEDOUT|EPIPE|socket hang up|fetch failed|terminated|network/i.test(String(e.message ?? ''));
+}
+
 /**
  * Glissée dans le contexte du tour à l'appel de conclusion : le modèle n'a plus
  * d'outil, il doit le savoir — sinon il annonce « je vérifie » et s'arrête là.
@@ -378,6 +447,8 @@ export interface ResultatTour {
   outils_charges?: number;
   /** Délai entre le début du tour et le premier texte reçu du modèle (null : aucun texte). */
   premier_token_ms?: number | null;
+  /** Appels au modèle repris après une erreur passagère (surcharge, coupure) pendant ce tour. */
+  reprises_modele?: number;
 }
 
 export async function tourLumi(opts: {
@@ -434,12 +505,19 @@ export async function tourLumi(opts: {
   let premierTokenMs: number | null = null;
   let appelsModele = 0;
   let dernierStop: string | null = null;
+  let reprisesModele = 0;
   const outilsCharges = outils.filter((o) => !('defer_loading' in o && o.defer_loading) && !('type' in o && o.type)).length;
-  const mesure = () => ({ stop_reason: dernierStop, appels_modele: appelsModele, outils_charges: outilsCharges, premier_token_ms: premierTokenMs });
+  const mesure = () => ({ stop_reason: dernierStop, appels_modele: appelsModele, outils_charges: outilsCharges, premier_token_ms: premierTokenMs, ...(reprisesModele ? { reprises_modele: reprisesModele } : {}) });
   const fr = opts.langue !== 'en';
   // Tous les résultats d'outils du tour, pour vérifier après coup que les
   // montants cités dans la réponse en viennent bien.
   const resultatsBruts: string[] = [];
+  // Caractères de résultats d'outils déjà donnés au modèle dans CE tour. Ils
+  // arrivent après le point de cache, donc chaque étape les repaie plein tarif
+  // d'entrée : huit résultats raisonnables coûtent autant qu'un démesuré
+  // (mesuré le 2026-09-30 : 61 776 tokens d'entrée non cachés en un appel,
+  // 16,88 ¢). Le budget du tour rétrécit la borne de chaque résultat suivant.
+  let caracteresOutils = 0;
 
   const maxEtapes = Math.min(MAX_ETAPES, Math.max(0, opts.reglages?.max_etapes ?? MAX_ETAPES));
   if (maxEtapes === 0) return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true };
@@ -467,21 +545,44 @@ export async function tourLumi(opts: {
     // sans repartir en exploration. On ne coupe que si même ça ne suffit pas,
     // au double du plafond, où il est acquis que le tour est parti en vrille.
     const plafondTour = reglesCout().plafond_cout_tour_cents;
-    const doitConclure = coutHorsCacheFroid >= plafondTour;
-    const sansOutils = doitConclure || conclusionFinale;
     if (coutHorsCacheFroid >= plafondTour * 2) {
       opts.emettre({ type: 'error', message: 'plafond_tour' });
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, ...mesure() };
     }
+    // Ce que coûterait CET appel, au pire (toute l'entrée plein tarif, sortie
+    // au plafond). Sert deux fois : à réserver sur le budget de l'org, et à
+    // décider de dégrader AVANT d'envoyer.
+    const estimation = estimationCoutAppel(model, JSON.stringify(messages).length + opts.systeme.reduce((n, b) => n + b.text.length, 0), MAX_TOKENS);
+    // Le cran cumulatif ne voyait le coût qu'APRÈS l'appel : un seul appel
+    // chargé de résultats d'outils passait donc entier avant d'être compté
+    // (mesuré le 2026-09-30 : 16,88 ¢ en un coup sur un plafond de 6 ¢). On
+    // dégrade aussi quand l'ESTIMATION de l'appel à venir ferait franchir le
+    // point d'abandon — même dégradation, un appel plus tôt.
+    const doitConclure = coutHorsCacheFroid >= plafondTour
+      || coutHorsCacheFroid + estimation >= plafondTour * 2;
+    // Dernière étape : un appel de CONCLUSION sans outils, même sous le plafond
+    // (passe de référence du 2026-10-01). Les deux raisons de retirer les outils
+    // se cumulent ici.
+    const sansOutils = doitConclure || conclusionFinale;
     // Plafond dur : le coût maximal de l'appel est réservé AVANT de l'envoyer
     // (verrou en base) ; `capped` = rien ne part, la route sert le gabarit.
-    const reservation = opts.budget
-      ? await opts.budget.reserver(estimationCoutAppel(model, JSON.stringify(messages).length + opts.systeme.reduce((n, b) => n + b.text.length, 0), MAX_TOKENS))
-      : null;
+    const reservation = opts.budget ? await opts.budget.reserver(estimation) : null;
     if (reservation?.statut === 'capped') {
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true, ...mesure() };
     }
-    const stream = clientAnthropic().messages.stream({
+    // ── Appel au modèle, avec REPRISE sur une erreur passagère ──
+    // Passe d'évaluation du 2026-10-01 : 4 tours sur 221 ont fini en « Lumi failed
+    // to respond ». La réservation de budget avait réussi, puis le flux du modèle
+    // a échoué en moins d'une seconde (surcharge annoncée DANS le flux : le SDK ne
+    // la reprend pas, il ne reprend que les erreurs d'avant le flux). Rien n'était
+    // retenté, et la réservation restait ouverte jusqu'au balayage (5 min).
+    // On reprend donc l'appel — seulement si l'erreur est passagère ET qu'aucun
+    // texte n'est encore parti à l'écran (sinon l'utilisateur le lirait deux fois).
+    let reponse: Anthropic.Messages.Message | null = null;
+    for (let essai = 0; reponse === null; essai++) {
+      let texteParti = false;
+      try {
+        const stream = clientAnthropic().messages.stream({
       model,
       max_tokens: MAX_TOKENS,
       system: opts.systeme,
@@ -497,11 +598,29 @@ export async function tourLumi(opts: {
       // préfixe et coûterait une réécriture, exactement ce qu'on veut éviter).
       ...(sansOutils ? { tool_choice: { type: 'none' as const } } : {}),
     });
-    stream.on('text', (delta) => {
-      if (premierTokenMs === null) premierTokenMs = Date.now() - debutTour;
-      texteTotal += delta; opts.emettre({ type: 'text', delta });
-    });
-    const reponse = await stream.finalMessage();
+        let tamponRefs = '';
+        const partir = (delta: string, fin = false): void => {
+          const f = filtrerRefsDuFlux(tamponRefs, delta, fin);
+          tamponRefs = f.tampon;
+          if (!f.pret) return;
+          texteParti = true;
+          if (premierTokenMs === null) premierTokenMs = Date.now() - debutTour;
+          texteTotal += f.pret; opts.emettre({ type: 'text', delta: f.pret });
+        };
+        stream.on('text', (delta) => partir(delta));
+        reponse = await stream.finalMessage();
+        partir('', true);
+      } catch (err) {
+        if (essai < DELAIS_REPRISE_MODELE_MS.length && !texteParti && erreurPassagereDuModele(err)) {
+          reprisesModele += 1;
+          await new Promise((r) => setTimeout(r, DELAIS_REPRISE_MODELE_MS[essai]));
+          continue;
+        }
+        // On abandonne : la réservation est rendue tout de suite (coût réel 0), pas au prochain balayage.
+        if (reservation && opts.budget) await opts.budget.regler(reservation.id, 0).catch(() => {});
+        throw err;
+      }
+    }
     appelsModele += 1;
     dernierStop = reponse.stop_reason ?? null;
     signalerAppelLumi(model, { systeme: opts.systeme, outils }, opts.sousAgent ?? 'base'); // arme le maintien du cache 1 h sur CE préfixe (cache-chaud.ts)
@@ -556,7 +675,7 @@ export async function tourLumi(opts: {
       }
       // Jamais un message assistant vide (refusé par l'API au tour suivant).
       const contenu: Anthropic.Messages.TextBlockParam[] = [
-        ...textes.map((b) => ({ type: 'text' as const, text: b.text })),
+        ...textes.map((b) => ({ type: 'text' as const, text: sansRefsInternes(b.text) })),
         ...(avis ? [{ type: 'text' as const, text: avis }] : []),
       ];
       const fin: Anthropic.Messages.MessageParam = { role: 'assistant', content: contenu };
@@ -566,7 +685,8 @@ export async function tourLumi(opts: {
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, tronque: coupee, ...mesure() };
     }
 
-    const assistant: Anthropic.Messages.MessageParam = { role: 'assistant', content: reponse.content };
+    // Le texte sauvegardé est celui que la personne a lu : sans référence interne. Les blocs d'outils gardent les leurs.
+    const assistant: Anthropic.Messages.MessageParam = { role: 'assistant', content: reponse.content.map((b) => (b.type === 'text' ? { ...b, text: sansRefsInternes(b.text) } : b)) };
     messages.push(assistant);
     nouveaux.push(assistant);
     // pause_turn : l'API a interrompu le tour après un outil serveur (recherche
@@ -689,7 +809,13 @@ export async function tourLumi(opts: {
           if (LECTURES_A_CONTENU_EXTERNE.has(appel.name)) contenuExterneLu = true;
           const masque = masquerIds(espaceRefs, r.result);
           // Compacté (vides retirés, listes en table) : −35 à −45 % de tokens sur une liste, sans perte (compress.ts).
-          const contenuOutil = serialiserResultat(masque);
+          // Borne de CE résultat : la plus petite des deux (par résultat, et ce
+          // qui reste du budget du tour). Jamais zéro — un résultat vide ferait
+          // repartir le modèle en exploration, ce qui coûte plus cher que de
+          // lui donner une liste courte et honnête (`rows_omitted`).
+          const reste = Math.max(2_000, TAILLE_MAX_TOUR - caracteresOutils);
+          const contenuOutil = serialiserResultat(masque, Math.min(TAILLE_MAX_RESULTAT, reste));
+          caracteresOutils += contenuOutil.length;
         resultatsBruts.push(contenuOutil);
         resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: contenuOutil });
         }

@@ -11,7 +11,7 @@
  * légitime. D'où les garde-fous ci-dessous, tous testés.
  */
 import { describe, it, expect } from 'vitest';
-import { peutRepondreHorsScope, mentionneLume, reponseHorsScope } from '../server/lib/lumi/hors-scope';
+import { peutRepondreHorsScope, mentionneLume, reponseHorsScope, aideConnaitLeSujet } from '../server/lib/lumi/hors-scope';
 
 const SEUIL = 0.85;
 const base = { decision: 'hors_scope', confiance: 0.95, seuil: SEUIL, premierMessage: true };
@@ -102,6 +102,27 @@ describe('compromis assumé : dans le doute, le modèle répond', () => {
       'quelle est ma job la moins rentable',
     ]) {
       expect(peutRepondreHorsScope({ ...base, message }), message).toBe(false);
+    }
+  });
+});
+
+describe('un sujet que le centre d’aide documente n’est jamais hors-sujet (passe du 2026-10-01)', () => {
+  // La phrase exacte de la passe : classée hors_scope à haute confiance, refusée à tort.
+  const produit = [
+    'comment je mets le formulaire de demande sur mon site web',
+    'how do I embed the request form on my website',
+    'où je change mon logo',
+  ];
+  for (const message of produit) {
+    it(`« ${message.slice(0, 45)} » → le modèle répond, pas le refus`, () => {
+      expect(aideConnaitLeSujet(message)).toBe(true);
+      expect(peutRepondreHorsScope({ ...base, message })).toBe(false);
+    });
+  }
+  it('le vrai hors-sujet reste court-circuité : la doc ne le connaît pas', () => {
+    for (const message of ['comment faire une omelette', 'c est quoi la capitale de l australie', 'raconte-moi une blague', 'who won the hockey game last night', 'comment réparer mon lave-vaisselle']) {
+      expect(aideConnaitLeSujet(message), message).toBe(false);
+      expect(peutRepondreHorsScope({ ...base, message }), message).toBe(true);
     }
   });
 });
