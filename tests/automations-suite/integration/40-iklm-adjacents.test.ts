@@ -145,6 +145,54 @@ describe('K — relances de factures (cron payment-reminders)', () => {
     const { data: log } = await b.admin.from('reminder_log').select('id').eq('invoice_id', inv);
     expect(log).toEqual([]);
   });
+
+  /** Une règle « Facture en retard » PUBLIÉE (elle crée une tâche : aucun envoi). Retirée par l'appelant. */
+  async function regleEnRetard(m: string, conditions: Record<string, unknown>): Promise<string> {
+    const { data, error } = await b.admin.from('automation_rules').insert({
+      org_id: b.orgA, name: m, trigger_event: 'invoice.overdue', conditions, delay_seconds: 0,
+      is_active: true, is_preset: false, actions: [{ type: 'create_task', config: { title: m } }],
+    }).select('id').single();
+    if (error) throw new Error(error.message);
+    nettoyer.push(() => b.admin.from('automation_rules').delete().eq('id', data.id));
+    return data.id as string;
+  }
+
+  it('[K-026] une facture = UNE source de relances : avec une règle « Facture en retard » publiée, le cron ne relance pas (aucun courriel, rien au journal)', async () => {
+    const depuis = new Date().toISOString();
+    const m = marque('K-026');
+    const adresse = `k026-${Date.now().toString(36)}@lume-qa.test`;
+    const inv = await facture(b.orgA, await client(b.orgA, m, adresse), { status: 'sent', due_date: jour(-3) });
+    const regle = await regleEnRetard(m, {});
+    try {
+      await relancer(b.orgA);
+    } finally {
+      await b.admin.from('automation_rules').delete().eq('id', regle);
+    }
+    expect((await courrielsVers(adresse, depuis)).length).toBe(0);
+    const { data: log } = await b.admin.from('reminder_log').select('id').eq('invoice_id', inv);
+    expect(log).toEqual([]);
+  });
+
+  it('[K-027] règle « en retard d’au moins 3 jours » : la facture en retard de 30 jours est couverte (le cron se tait, pas de doublon le 30e jour) ; celle en retard d’1 jour ne l’est pas encore (le cron relance)', async () => {
+    const depuis = new Date().toISOString();
+    const m = marque('K-027');
+    const vieille = `k027a-${Date.now().toString(36)}@lume-qa.test`;
+    const recente = `k027b-${Date.now().toString(36)}@lume-qa.test`;
+    const inv30 = await facture(b.orgA, await client(b.orgA, m, vieille), { status: 'sent', due_date: jour(-30) });
+    const inv1 = await facture(b.orgA, await client(b.orgA, m, recente), { status: 'sent', due_date: jour(-1) });
+    const regle = await regleEnRetard(m, { days_overdue__gte: 3 });
+    try {
+      await relancer(b.orgA);
+    } finally {
+      await b.admin.from('automation_rules').delete().eq('id', regle);
+    }
+    expect((await courrielsVers(vieille, depuis)).length, 'le cron a relancé une facture que l’automatisation « Facture en retard » relance déjà').toBe(0);
+    const { data: log30 } = await b.admin.from('reminder_log').select('id').eq('invoice_id', inv30);
+    expect(log30).toEqual([]);
+    expect((await courrielsVers(recente, depuis)).length).toBe(1);
+    const { data: log1 } = await b.admin.from('reminder_log').select('days_after_due, status').eq('invoice_id', inv1);
+    expect(log1).toEqual([{ days_after_due: 1, status: 'sent' }]);
+  });
 });
 
 /* ═══════════════════════ Factures récurrentes ═══════════════════════ */

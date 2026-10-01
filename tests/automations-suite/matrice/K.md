@@ -22,6 +22,8 @@ Fichiers : `40-iklm-prereglages.test.ts`, `40-iklm-adjacents.test.ts`. Bureau A 
 | K-023 | Relances — négatif | payée / pas échue | rien | |
 | K-024 | Relances — panne | fournisseur en panne | log « failed » + erreur, passage non interrompu | un « failed » n'est jamais retenté par le cron (la file de reprise du mailer s'en charge) |
 | K-025 | Relances — isolation | facture de B | rien | |
+| K-026 | Relances — doublon avec une automatisation « Facture en retard » (inv-3 §5.1) | règle `invoice.overdue` publiée, sans condition | le cron ne relance pas : aucun courriel, rien dans `reminder_log` | PASS — `40-iklm-adjacents.test.ts` [K-026], `unitaires/K-relances-couverture.test.ts` (la couverture existait déjà : vérifiée) |
+| K-027 | Relances — doublon, règle conditionnée sur le retard | `days_overdue__gte: 3` ; facture à 30 j et à 1 j de retard | 30 j : couverte, le cron se tait ; 1 j : pas encore couverte, le cron relance (palier J+1) | FAIL → CORRIGÉ — `40-iklm-adjacents.test.ts` [K-027], `unitaires/K-relances-couverture.test.ts` (avant : la couverture jugeait la règle SANS `days_overdue` → fausse → cron ET automatisation relançaient, le 30e jour le même jour) |
 | — | Relances — réponse HTTP | lecture des réglages en échec | une seule réponse | corrigé dans 97048c37 (non testé : panne de lecture non provoquable proprement) |
 | K-030 | Factures récurrentes | échéance du jour | 1 brouillon, échéance +1 mois | |
 | K-031 | Factures récurrentes — double exécution | 2 passages simultanés | 1 facture | PASS (n'a pas reproduit le doublon soupçonné) |
