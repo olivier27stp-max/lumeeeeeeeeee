@@ -638,5 +638,61 @@
   "type": "clarification",
   "q": "Fais une facture à Marc Gagnon.",
   "sensible": true
+ },
+ {
+  "id": "prod-send_sms",
+  "section": "communications",
+  "outil": "send_sms",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Texte à Sophie Tremblay : « Bonjour Sophie, on arrive vers 13 h pour le déneigement. »",
+  "params": {
+   "message_text": "on arrive vers 13 h"
+  },
+  "cible": [
+   "Sophie Tremblay"
+  ],
+  "interdits": [
+   "send_email",
+   "send_quote_sms"
+  ],
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "prod-send_quote_sms",
+  "section": "devis",
+  "outil": "send_quote_sms",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Envoie la soumission 2 par texto à Sophie Tremblay.",
+  "cible": [
+   "Tremblay"
+  ],
+  "interdits": [
+   "send_quote",
+   "send_sms"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "prod-void-ou-supprime",
+  "section": "facturation",
+  "outil": "delete_invoice",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "La facture n° 1 est une erreur, enlève-la complètement.",
+  "interdits": [
+   "void_invoice"
+  ],
+  "voisins": [
+   "list_invoices"
+  ]
  }
 ]
