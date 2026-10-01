@@ -39,3 +39,27 @@ describe('raccourci « meilleurs clients »', () => {
     expect(src).toContain("lignes.length === 1 ? (fr ? 'Ton meilleur client :' : 'Your top client:')");
   });
 });
+
+describe('recollerDictee : les mots que la dictée coupe en deux', () => {
+  it('« sous missions » redevient « soumissions », au singulier comme au pluriel', async () => {
+    const { recollerDictee } = await import('../server/lib/agent/texte-dicte');
+    expect(recollerDictee('les sous missions acceptées c’est lesquelles')).toBe('les soumissions acceptées c’est lesquelles');
+    expect(recollerDictee('envoie la sous mission de Marie')).toBe('envoie la soumission de Marie');
+    expect(recollerDictee('Sous missions en attente ?')).toBe('Soumissions en attente ?');
+    expect(recollerDictee('la sous-mission 12')).toBe('la soumission 12');
+  });
+
+  it('ne touche à rien d’autre', async () => {
+    const { recollerDictee } = await import('../server/lib/agent/texte-dicte');
+    for (const t of ['mes soumissions en attente', 'sous la mission de demain', 'il est en mission chez Gagnon', 'nous missionnons', 'sous missionnaire']) {
+      expect(recollerDictee(t), t).toBe(t);
+    }
+  });
+
+  it('la route du chat et la transcription s’en servent', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    expect(readFileSync(resolve(__dirname, '../server/routes/lumi.ts'), 'utf8')).toContain('const message = recollerDictee(messageRecu);');
+    expect(readFileSync(resolve(__dirname, '../server/routes/agent.ts'), 'utf8')).toContain('recollerDictee(r.text)');
+  });
+});

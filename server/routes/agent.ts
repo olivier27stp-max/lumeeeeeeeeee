@@ -19,6 +19,7 @@ import { isGeminiConfigured } from '../lib/agent/gemini';
 import { verifierPlafond, compterRefus, ajouterAppel, ajouterDepense } from '../lib/lumi/plafond-journalier';
 import { coutEnCents } from '../lib/lumi/tarifs';
 import { transcribeAudioAvecUsage, type TranscribeMimeType } from '../lib/agent/transcribe';
+import { recollerDictee } from '../lib/agent/texte-dicte';
 
 const router = Router();
 
@@ -96,7 +97,8 @@ router.post('/agent/transcribe', limiteDictee, validate(agentTranscribeSchema), 
       resultat: 'ok', model: r.model, usage: usageGemini(r.usage),
       costCents: coutGemini, dureeMs: Date.now() - debut,
     });
-    res.json({ text: r.text });
+    // « sous missions » dicté → « soumissions » : la personne lit le bon mot avant d'envoyer (texte-dicte.ts).
+    res.json({ text: recollerDictee(r.text) });
   } catch (err) {
     sendSafeError(res, err, 'Transcription failed.');
   }

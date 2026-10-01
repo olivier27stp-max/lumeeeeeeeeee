@@ -64,6 +64,7 @@ import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
 import { jourPourLumi, heurePourLumi } from '../lib/lumi/temps';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs, espaceRefsDe } from '../lib/agent/refs';
+import { recollerDictee } from '../lib/agent/texte-dicte';
 import { logger } from '../lib/logger';
 import { assainirPourApi, fenetreAvecRappel } from '../lib/lumi/historique';
 
@@ -587,7 +588,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
   try {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;
-    const { conversation_id, message, origine = 'texte' } = req.body as z.infer<typeof chatSchema>;
+    const { conversation_id, message: messageRecu, origine = 'texte' } = req.body as z.infer<typeof chatSchema>;
+    // Dictée du clavier du téléphone (elle ne passe pas par notre transcription) : « sous missions » → « soumissions ».
+    const message = recollerDictee(messageRecu);
     // La clé porte la personne : nul ne peut occuper la conversation d'un autre.
     const cleVerrou = conversation_id ? `${ctx.auth.user.id}:${conversation_id}` : null;
     if (cleVerrou) {
