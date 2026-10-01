@@ -153,7 +153,16 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
       return ids.every((id) => vues.has(id));
     }, (ok) => ok, 40_000, 1000);
     await derouler(ids);
-    const lignes = await attendre(() => journal(ids, depuis), (l) => l.every((x) => journalDefinitif(x.result_error)), 20_000, 500);
+    // Chaque règle doit avoir AU MOINS une ligne : `[].every()` est vrai à vide,
+    // et l'attente rendait la main avant toute exécution quand un AUTRE processus
+    // (le serveur de prod, à son passage de 5 min) avait pris la tâche juste
+    // avant nous — K-010 rouge en prod le 2026-10-01, alors que le parcours
+    // s'était bien exécuté 3 s plus tard.
+    const lignes = await attendre(
+      () => journal(ids, depuis),
+      (l) => ids.every((id) => l.some((x) => x.automation_rule_id === id)) && l.every((x) => journalDefinitif(x.result_error)),
+      60_000, 500,
+    );
     const diag = JSON.stringify(lignes.map((l) => [etat.find((r) => r.id === l.automation_rule_id)?.preset_key, l.action_type, l.result_success, l.result_error, (l.result_data as Record<string, unknown> | null)?.saute ?? null]));
     for (const r of regles) {
       const siennes = lignes.filter((l) => l.automation_rule_id === r.id);

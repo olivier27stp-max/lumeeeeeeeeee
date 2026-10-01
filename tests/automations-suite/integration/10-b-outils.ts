@@ -212,7 +212,11 @@ export async function traiterBase(b: Bureau): Promise<number> {
 
 /** Traite la file `pipeline_events` de NOTRE bureau. */
 export async function traiterPipeline(b: Bureau): Promise<number> {
-  const { traiterEvenementsPipeline } = await import('../../../server/lib/pipelineEvenements');
+  const { traiterEvenementsPipeline, DELAI_GRACE_MS } = await import('../../../server/lib/pipelineEvenements');
+  // La file ne lit un événement qu'après son délai de grâce (chaîne
+  // anti-boucle écrite) : on laisse ce délai passer, comme le ferait le
+  // passage toutes les 5 min. +1,5 s pour l'écart d'horloge poste/base.
+  await new Promise((r) => setTimeout(r, DELAI_GRACE_MS + 1500));
   return traiterEvenementsPipeline(b.admin, { orgId: b.orgA });
 }
 
