@@ -698,12 +698,31 @@ export default function Automations() {
    * (`automationCatalogue.ts`) : une seule lecture des règles suffit.
    */
 
-  // Fermer les menus au clic ailleurs.
+  /*
+   * Fermer les menus au clic ailleurs — et à la touche Échap.
+   *
+   * Échap ne fermait rien (audit du 2026-10-01, vu sur lumecrm.net) : au
+   * clavier, le menu « ⋮ » d'une ligne restait ouvert jusqu'à ce qu'on
+   * clique ailleurs. Le focus revient au bouton qui a ouvert le menu, sinon
+   * il se perd en haut de page.
+   */
   useEffect(() => {
     if (!menuCreer && !menuLigne) return;
-    const fermer = () => { setMenuCreer(false); setMenuLigne(null); };
+    const fermer = () => { setMenuCreer(false); setMenuLigne(null); setSousMenuDossier(null); };
+    const auClavier = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const ouvreur = menuCreer
+        ? boutonCreer.current
+        : document.querySelector<HTMLElement>('button[aria-haspopup="menu"][aria-expanded="true"]');
+      fermer();
+      ouvreur?.focus();
+    };
     document.addEventListener('click', fermer);
-    return () => document.removeEventListener('click', fermer);
+    document.addEventListener('keydown', auClavier);
+    return () => {
+      document.removeEventListener('click', fermer);
+      document.removeEventListener('keydown', auClavier);
+    };
   }, [menuCreer, menuLigne]);
 
   // Changer d'onglet ou de filtre remet à la première page : rester en page 3

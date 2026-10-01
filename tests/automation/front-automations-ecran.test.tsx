@@ -640,3 +640,39 @@ describe('T13.11 — langue des messages envoyés', () => {
     expect(api.setAutomationLanguage).not.toHaveBeenCalled();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+describe('T13.12 — clavier : Échap ferme les menus de la liste (audit du 2026-10-01)', () => {
+  const echap = async () => {
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    await laisser();
+  };
+  const menuOuvert = () => conteneur.querySelector('[role="menu"]');
+
+  it('le menu « ⋮ » d’une ligne se ferme à Échap, et le focus revient au bouton qui l’a ouvert', async () => {
+    await rendre();
+    const ouvreur = bouton(new RegExp(`^Actions pour ${NOM_FR}$`));
+    await cliquer(ouvreur);
+    expect(menuOuvert()).not.toBeNull();
+    await echap();
+    expect(menuOuvert()).toBeNull();
+    expect(document.activeElement).toBe(ouvreur);
+  });
+
+  it('le menu « Créer » se ferme à Échap, focus rendu au bouton « Créer »', async () => {
+    await rendre();
+    const creer = bouton(/^Créer$/);
+    await cliquer(creer);
+    expect(menuOuvert()).not.toBeNull();
+    await echap();
+    expect(menuOuvert()).toBeNull();
+    expect(document.activeElement).toBe(creer);
+  });
+
+  it('une autre touche ne ferme rien', async () => {
+    await rendre();
+    await cliquer(bouton(new RegExp(`^Actions pour ${NOM_FR}$`)));
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true })); });
+    expect(menuOuvert()).not.toBeNull();
+  });
+});
