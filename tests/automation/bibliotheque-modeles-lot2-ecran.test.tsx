@@ -106,3 +106,34 @@ describe('modeles-05 — une catégorie cochée reste visible', () => {
     expect(compteur()).toBe(`Affichage de ${MODELES_AUTOMATISATION.length} modèles`);
   });
 });
+
+const saisir = (el: HTMLInputElement, v: string) => {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, v); // setter natif : React lit l'événement
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+describe('modeles-06 — « Tous les modèles » ne dit « tout est affiché » que si c’est vrai', () => {
+  it('pendant une recherche qui réduit la liste, le bouton n’est plus enfoncé ; il l’est de nouveau après', async () => {
+    await monter();
+    const tous = () => bouton(/^Tous les modèles$/);
+    expect(tous().getAttribute('aria-pressed')).toBe('true');
+
+    act(() => saisir(document.querySelector('input[type="search"]') as HTMLInputElement, 'dépôt'));
+    await attendre(260);
+    expect(compteur()).not.toBe(`Affichage de ${MODELES_AUTOMATISATION.length} modèles`); // la liste est bien réduite
+    expect(tous().getAttribute('aria-pressed')).toBe('false');
+    expect(tous().className).not.toMatch(/(^| )bg-surface-secondary( |$)/); // plus surligné
+
+    cliquer(tous());
+    await attendre(260);
+    expect(compteur()).toBe(`Affichage de ${MODELES_AUTOMATISATION.length} modèles`);
+    expect(tous().getAttribute('aria-pressed')).toBe('true');
+    expect((document.querySelector('input[type="search"]') as HTMLInputElement).value).toBe('');
+  });
+
+  it('une catégorie cochée le relâche aussi (inchangé)', async () => {
+    await monter();
+    cliquer(caseDe(/Facturation et paiements/)!); // présente : première partie de la liste
+    expect(bouton(/^Tous les modèles$/).getAttribute('aria-pressed')).toBe('false');
+  });
+});

@@ -258,6 +258,8 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
     return s;
   });
   const reinitialiser = () => { setSaisie(''); setRecherche(''); setCategories(new Set()); };
+  /** « Tous les modèles » n'est enfoncé que si RIEN ne réduit la liste : ni catégorie, ni recherche. */
+  const aucunFiltre = categories.size === 0 && recherche.trim() === '';
 
   const ouvrirApercu = (m: ModeleAutomatisation) => {
     cleIdempotence.current = nouvelleCle();
@@ -450,9 +452,9 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
         <div className="flex flex-col gap-4 md:flex-row">
           {/* Colonne gauche (tablette et ordinateur). */}
           <nav className="hidden w-56 shrink-0 md:block" aria-label={fr ? 'Filtres' : 'Filters'}>
-            <button type="button" onClick={reinitialiser} aria-pressed={categories.size === 0}
+            <button type="button" onClick={reinitialiser} aria-pressed={aucunFiltre}
               className={cn('w-full rounded-lg px-2 py-1.5 text-left text-[13px] font-medium',
-                categories.size === 0 ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary hover:bg-surface-secondary')}>
+                aucunFiltre ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary hover:bg-surface-secondary')}>
               {fr ? 'Tous les modèles' : 'All templates'}
             </button>
             <div className="mt-3 border-t border-border pt-3">
