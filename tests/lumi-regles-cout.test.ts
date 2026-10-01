@@ -50,6 +50,9 @@ describe('les règles sont branchées dans le code (pas seulement écrites)', ()
     expect(s).toContain('coutHorsCacheFroid >= plafondTour * 2');
     expect(s).toContain("tool_choice: { type: 'none' as const }");
     expect(s).toContain('ephemeral_1h_input_tokens: 0');
+    // Depuis le 2026-10-01 : au PREMIER appel du tour, toute écriture de cache est écartée (5 min comprise).
+    expect(s).toContain('const premierAppel = appelsModele === 1;');
+    expect(s).toContain('cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 }');
     expect(s).toContain("message: 'plafond_tour'");
   });
   it('orchestrateur : les résultats d outils sont bornés, par résultat ET par tour', () => {
