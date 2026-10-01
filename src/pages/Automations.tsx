@@ -25,6 +25,7 @@ import { cn } from '../lib/utils';
 import { localizeAutomationName } from '../lib/automationNames';
 import { trouverDeclencheur } from '../lib/automationCatalogue';
 import { remplacerVariables } from '../lib/emailBodyText';
+import { raisonEchecListe as raisonLisible } from '../lib/automationJournauxApi';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
@@ -69,38 +70,8 @@ import {
 // Couvre toutes les variantes de noms semées par les migrations
 // (default_workflow_presets, advanced_automation_presets, dedup, activate_all).
 
-/**
- * La cause d'un échec, dite à quelqu'un qui n'est pas développeur.
- *
- * La page affichait « 2 échecs » et s'arrêtait là : l'entrepreneur voyait que
- * ça n'avait pas marché, sans jamais savoir POURQUOI ni quoi faire. Les
- * messages bruts (« SMTP not configured », « Frequency cap reached for
- * +1514… ») sont en anglais, techniques, et ne doivent jamais sortir tels
- * quels.
- *
- * Une cause non reconnue est rendue `null` : on préfère n'afficher que le
- * compteur plutôt qu'un jargon anglais qui n'aide personne.
- */
-function raisonLisible(erreur: string | null, fr: boolean): string | null {
-  const e = (erreur || '').toLowerCase();
-  if (!e) return null;
-  // Les causes de M1 (audit 2026-09-28), telles que la base les porte encore
-  // pour les échecs d'avant le correctif du moteur.
-  if (e.includes('no sms number') || e.includes('no active twilio sms number')) return fr ? 'Aucun numéro texto n’est configuré pour ce bureau.' : 'No texting number is set up for this office.';
-  if (e.includes('no recipient phone') || e.includes('no phone number')) return fr ? 'Ce client n’a pas de numéro de téléphone.' : 'This client has no phone number.';
-  if (e.includes('no recipient email') || e.includes('no email address')) return fr ? 'Ce client n’a pas d’adresse courriel.' : 'This client has no email address.';
-  if (e.includes('injoignable') || e.includes('bounce')) return fr ? 'L’adresse courriel de ce client est injoignable.' : 'This client’s email address bounces.';
-  if (e.includes('review link')) return fr ? 'Aucun lien d’avis Google ou Facebook n’est configuré.' : 'No Google or Facebook review link is set up.';
-  if (e.includes('opted out') || e.includes('unsubscribed')) return fr ? 'Ce client s’est désabonné.' : 'This client unsubscribed.';
-  if (e.includes('frequency cap')) return fr ? 'Plafond atteint : ce client a déjà reçu plusieurs messages aujourd’hui.' : 'Cap reached: this client already got several messages today.';
-  if (e.includes('consentement') || e.includes('consent')) return fr ? 'Le consentement de ce client n’est pas enregistré.' : 'This client’s consent is not recorded.';
-  if (e.includes('smtp') && e.includes('not configured')) return fr ? 'Courriel non configuré : impossible d’envoyer.' : 'Email not configured: cannot send.';
-  if (e.includes('twilio') && e.includes('not configured')) return fr ? 'Envoi de textos non configuré : impossible d’envoyer.' : 'SMS sending not configured: cannot send.';
-  if (e.includes('not configured')) return fr ? 'Envoi non configuré dans les réglages.' : 'Sending is not configured in settings.';
-  if (e.includes('plan does not include')) return fr ? 'Votre forfait n’inclut pas cet envoi.' : 'Your plan does not include this send.';
-  if (e.includes('are disabled')) return fr ? 'Cette fonctionnalité est désactivée dans les réglages.' : 'This feature is disabled in settings.';
-  return null;
-}
+// La cause d'un échec en clair : `raisonEchecListe` (src/lib/automationJournauxApi), à côté de la
+// traduction de l'onglet Journaux — un même test vérifie que les deux connaissent tous les messages du moteur.
 
 // ── Category definitions ────────────────────────────────────
 // Order matters — this defines the display order of sections
