@@ -22,7 +22,7 @@ import { avertirSiSeuilCredits } from '../lib/lumi/avis-credits';
 import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { etatBudget, etatCredits, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause } from '../lib/lumi/budget';
+import { etatBudget, etatCredits, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause, messagePausePlateforme } from '../lib/lumi/budget';
 import { verifierPlafond, ajouterDepense, compterRefus, etatPlafonds } from '../lib/lumi/plafond-journalier';
 import { modeleLumi, coutEnCents } from '../lib/lumi/tarifs';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
@@ -433,7 +433,12 @@ async function executerTourSse(opts: {
     // batterie d'évaluation partie en boucle sur un environnement de test, là
     // où le budget mensuel par org l'autorisait à dépenser 45 $.
     const plafondJour = verifierPlafond('lumi');
-    if (!plafondJour.autorise) { compterRefus('lumi'); reglages.modele_autorise = false; }
+    if (!plafondJour.autorise) {
+      compterRefus('lumi');
+      reglages.modele_autorise = false;
+      // Chaque refus se voit : c'est TOUS les clients qui sont arrêtés, pas un seul.
+      logger.error('[lumi] tour refusé par le plafond journalier de la plateforme', { orgId: ctx.auth.orgId, depense_cents: plafondJour.depense_cents, plafond_cents: plafondJour.plafond_cents });
+    }
     // Palier épuisé : aucun appel au modèle, même si la RPC de réservation manque.
     // RBAC : le modèle ne voit que les outils permis à cette personne.
     // Recalculé à CHAQUE tour → un changement de rôle s'applique au message
@@ -486,7 +491,9 @@ async function executerTourSse(opts: {
     if (resultat.plafond) {
       // Plafond dur atteint : rien n'est parti au modèle pour cette étape ;
       // message gabarit (0 token), les actions rapides restent servies.
-      const texte = messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());
+      // Deux plafonds, deux messages : celui de la plateforme n'a rien à voir avec
+      // les crédits du client (avant, il lisait « tes crédits sont épuisés »).
+      const texte = !plafondJour.autorise ? messagePausePlateforme(ctx.language) : messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());
       if (!ferme) emettreSse('text', { type: 'text', delta: texte });
       resultat.nouveauxMessages.push({ role: 'assistant', content: [{ type: 'text', text: texte }] });
       resultat.texte = resultat.texte ? `${resultat.texte}\n\n${texte}` : texte;
@@ -508,7 +515,7 @@ async function executerTourSse(opts: {
     // Un refus du modèle, une réponse coupée ou un tour inachevé ne sont PAS des
     // succès : avant, ils étaient tracés « ok » et la qualité mesurée mentait.
     const issue = resultat.proposition ? 'proposition' : erreurModele === 'refusal' ? 'refus' : erreurModele ? 'erreur' : 'ok';
-    void tracer(issue, resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
+    void tracer(issue, resultat.cost_cents, resultat.plafond ? (!plafondJour.autorise ? 'plafond_plateforme' : 'budget_epuise') : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
       stop_reason: resultat.stop_reason ?? null, appels_modele: resultat.appels_modele ?? 0, outils_charges: resultat.outils_charges ?? 0,
       premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}),
     });
