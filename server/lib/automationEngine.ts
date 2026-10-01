@@ -1991,7 +1991,10 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
     const fuseauTache = task.org_id
       ? await fuseauOrg(supabase, task.org_id)
       : FUSEAU_DEFAUT;
-    if (tacheAttendLaFenetre(String(taskType), task.action_config, reglagesRegle) && horsFenetre(reglagesRegle, new Date(), fuseauTache)) {
+    // (La reprise d'une action immédiate garde la fenêtre de l'action
+    // d'origine — `tacheAttendLaFenetre`.)
+    if (ACTIONS_MESSAGE.has(String(taskType)) && horsFenetre(reglagesRegle, new Date(), fuseauTache)
+      && tacheAttendLaFenetre(String(taskType), task.action_config, reglagesRegle)) {
       const prochaine = nextSendTime(new Date(), reglagesRegle, fuseauTache);
 
       /**
