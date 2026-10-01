@@ -94,6 +94,12 @@ const ARGENT_ET_DROITS = [
   'create_email_template', 'update_email_template', 'set_default_email_template',
   'create_automation_from_text', 'toggle_automation_rule', 'update_automation_message', 'update_automation_sms_body',
   'create_job_agreement',
+  // Lots du 2026-10-01. La paie et les commissions (argent d'un employé), le consentement (preuve
+  // légale), le statut d'un devis dit au nom du client, et tout ce qui fait partir ou repartir
+  // des messages d'automatisation plus tard.
+  'update_time_entry', 'mark_commission_paid', 'approve_commission',
+  'set_client_consent', 'set_quote_status', 'set_quote_discount_deposit',
+  'pause_all_automations', 'create_automation_from_template', 'delete_automation_rule',
 ];
 export const JAMAIS_D_OFFICE: ReadonlySet<string> = new Set([
   ...Object.entries(REGISTRE_ECRITURES).filter(([, a]) => a.vers_client || !a.reversible).map(([n]) => n),

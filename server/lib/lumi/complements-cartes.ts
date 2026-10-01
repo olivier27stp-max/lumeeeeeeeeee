@@ -12,6 +12,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { argentFr, argentEn, dateLocale, fuseauDe, type LigneApercu } from './apercu-action';
 import { computePayPeriod, DEFAULT_PAYROLL_SETTINGS, type PayrollSettings } from '../payroll';
+import { trouverModele } from '../automationTemplates';
 
 interface Ctx { client: SupabaseClient; orgId: string; userId: string }
 type Args = Record<string, unknown>;
@@ -318,6 +319,33 @@ const COMPLEMENTS: Record<string, Complement> = {
       valeur: `${actuel[0]} — ses permissions repartiront du modèle du nouveau rôle`,
       valeur_en: `${actuel[1]} — their permissions will restart from the new role’s preset`,
     }];
+  },
+
+  // Le modèle choisi par sa clé (« quote_followup_3d ») : son nom, ce qu'il fait, et qu'il naît éteint.
+  create_automation_from_template: async (args) => {
+    const modele = trouverModele(txt(args.template_key).toLowerCase());
+    if (!modele) return [{ libelle: L('Modèle', 'Template'), valeur: 'ce modèle n’existe pas dans la bibliothèque — la création sera refusée', valeur_en: 'this template is not in the library — the creation will be refused' }];
+    return [
+      { libelle: L('Modèle', 'Template'), valeur: `${modele.nom.fr} — ${modele.description.fr}`, valeur_en: `${modele.nom.en} — ${modele.description.en}` },
+      { libelle: L('État à la création', 'State when created'), valeur: 'brouillon, éteinte : rien ne part tant que tu ne l’actives pas', valeur_en: 'draft, turned off: nothing is sent until you turn it on' },
+    ];
+  },
+
+  // « Tout arrêter » touche toutes les automatisations actives ; la reprise fait repartir ce qui attendait.
+  pause_all_automations: async (args, ctx) => {
+    const { count } = await ctx.client.from('automation_rules').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('is_active', true).is('deleted_at', null);
+    const n = count ?? 0;
+    return args.paused === false
+      ? [{ libelle: L('Effet', 'Effect'), valeur: `les envois reprennent pour ${pluriel(n, 'automatisation active', 'automatisations actives')} ; les messages qui attendaient repartent`, valeur_en: `sending resumes for ${n} active ${n > 1 ? 'automations' : 'automation'}; messages that were waiting go out` }]
+      : [{ libelle: L('Effet', 'Effect'), valeur: `plus aucun message automatique ne part (${pluriel(n, 'automatisation active', 'automatisations actives')}) jusqu’à la reprise`, valeur_en: `no automatic message goes out (${n} active ${n > 1 ? 'automations' : 'automation'}) until you resume` }];
+  },
+
+  // Supprimer une automatisation annule ses envois déjà prévus.
+  delete_automation_rule: async (args, ctx) => {
+    if (!estUuid(args.rule_id)) return [];
+    const { count } = await ctx.client.from('automation_scheduled_tasks').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('automation_rule_id', args.rule_id).eq('status', 'pending');
+    const n = count ?? 0;
+    return [{ libelle: L('Envois prévus annulés', 'Scheduled sends cancelled'), valeur: n ? pluriel(n, 'envoi en attente', 'envois en attente') : 'aucun envoi en attente', valeur_en: n ? `${n} pending ${n > 1 ? 'sends' : 'send'}` : 'no pending send' }];
   },
 
   add_payroll_adjustment: periodeDePaie,
