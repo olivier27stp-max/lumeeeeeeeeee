@@ -10,8 +10,8 @@ Lumi lui-même tient. Il réussit 93,7 % des 221 demandes du jeu d'évaluation (
 
 Ce qui bloque le lancement :
 
-1. **La base de production est trop petite.** Huit conversations Lumi en même temps l'ont couchée pendant 65 minutes le 1er octobre (section « La panne » plus bas). Il faut une machine plus grosse et une alerte de disponibilité. C'est la condition qui pèse le plus.
-2. **Le plafond de la plateforme, 50 $ par jour pour tous les clients réunis**, met Lumi en pause pour tout le monde quand il est atteint. À relever.
+1. **La base de production est petite.** Huit conversations Lumi en même temps l'ont couchée pendant 65 minutes le 1er octobre (section « La panne » plus bas). Depuis, un garde-fou gratuit est en place : Lumi ne mène plus que quatre conversations à la fois, les suivantes attendent leur place. Il reste à passer la base au format au-dessus (2 Go au lieu de 1, environ 5 $ de plus par mois) et à poser une alerte de disponibilité. C'est la condition qui pèse le plus.
+2. **Le plafond de la plateforme, 50 $ par jour pour tous les clients réunis**, met Lumi en pause pour tout le monde quand il est atteint. Rien à payer tant qu'il n'est pas atteint ; à relever quand le nombre de clients actifs le justifie (il laisse environ 3 800 demandes par jour).
 3. **Une passe complète à rejouer d'un seul tenant**, une fois la base grossie. Celle d'aujourd'hui a été coupée en deux par la panne, quatre correctifs sont arrivés après elle, et les tests critiques ont tourné avec le modèle de repli. Une heure de mesure, à faire demain.
 
 Une quatrième décision est légale plutôt que technique : aucune purge des conversations n'existe (Loi 25).
@@ -155,12 +155,12 @@ De 20 h 36 à 21 h 41 UTC (16 h 36 à 17 h 41, heure de Montréal), la base de p
 - **Ce qui tournait** : ma passe de 221 demandes (cinq conversations Lumi en même temps), deux batteries du support, une conversation longue, et la passe au navigateur d'une session voisine. Premier ralentissement au lancement (20 h 23), effondrement après dix minutes de charge soutenue.
 - **Cause probable, non prouvée** : la base tourne sur la plus petite machine de Supabase (aucune option de puissance). Les journaux montrent des requêtes banales à 12–19 secondes juste avant la coupure.
 - **Ce que ça dit pour le lancement** : huit conversations Lumi en même temps ont suffi. Je ne sais pas combien de clients il faut pour y arriver en usage réel ; je sais que la marge est faible. Voir la décision 1.
-- **Ce que j'ai changé** : plus aucune batterie en parallèle contre la prod — un seul flux à la fois, la santé de la base relue avant chaque morceau, arrêt au-dessus de 1,5 seconde. La passe a été reprise comme ça.
+- **Ce que j'ai changé** : plus aucune batterie en parallèle contre la prod — un seul flux à la fois, la santé de la base relue avant chaque morceau, arrêt au-dessus de 1,5 seconde. La passe a été reprise comme ça. Et côté produit, Lumi ne mène plus que quatre tours d'agent en même temps (`LUMI_TOURS_SIMULTANES`) : au-delà, un tour attend sa place jusqu'à 20 secondes, puis la personne lit « je suis très sollicité, réessaie dans une minute ». Un pic de Lumi ralentit Lumi, plus tout le CRM.
 - **Deux fautes de ma part** : j'ai lancé cinq lots en parallèle sur une prod dont une session voisine avait signalé deux saturations plus tôt ; et, avant ta réponse, j'ai annoncé à une autre session que je redémarrerais la base de moi-même — je l'ai retiré avant d'agir. Ta réponse est arrivée dans deux sessions à la fois : deux appels de redémarrage sont partis à sept secondes d'écart.
 
 ## Risques restants
 
-- **La base de production** (décision 1) : tant qu'elle reste sur la plus petite machine, une pointe d'usage peut refaire la panne du 1er octobre.
+- **La base de production** (décision 1) : le garde-fou borne la charge de Lumi, pas celle du reste de l'app. Tant que la base reste à 1 Go, une pointe d'usage ailleurs (import, automatisations en rafale) peut encore la mettre à genoux.
 - **Quatre correctifs livrés après la dernière passe** : le plantage sur la recherche d'outil (`6a8b2ffa`), le plafond du tour à cache froid (`84505af8`), la réponse en anglais (`d41372ab`), le contenu des forfaits (`d950c130`, `413b3050`). Chacun est testé et rejoué en prod sur ses cas ; aucun n'a vu les 221 demandes.
 - **Les 30 outils livrés le soir du 1er octobre (#875) ne sont pas mesurés.** Un interrupteur les retire sans toucher au code (`LUMI_OUTILS_LOTS=0` sur Railway). Ils alourdissent aussi le démarrage à froid de cinq sujets (+0,2 à +0,8 ¢).
 - **Le plafond de coût d'un tour ne borne plus le premier appel à froid** : seule la taille du préfixe et de la conversation le fait. C'est le prix du correctif `84505af8` ; le coût réel reste débité en entier.
@@ -186,7 +186,7 @@ De 20 h 36 à 21 h 41 UTC (16 h 36 à 17 h 41, heure de Montréal), la base de p
 
 ## Décisions qui t'attendent
 
-1. **La machine de la base de production.** Elle est au plus petit format de Supabase. C'est, de loin, le premier risque du lancement : la panne du 1er octobre vient très probablement de là, comme celle du 28 septembre. À grossir avant le 26 octobre (Supabase → Compute), avec une alerte de disponibilité : aujourd'hui, personne n'est prévenu quand la base tombe.
+1. **La machine de la base de production.** Elle a 1 Go de mémoire, partagé avec l'API, l'authentification et le temps réel. La panne du 1er octobre vient très probablement de là, comme celle du 28 septembre. Le garde-fou de Lumi (quatre tours à la fois) réduit le risque sans rien coûter ; passer au format « Small » (2 Go) coûte environ 15 $ par mois au lieu de 10, avec deux minutes de coupure au changement. À faire avant le 26 octobre, avec une alerte de disponibilité : aujourd'hui, personne n'est prévenu quand la base tombe.
 2. **Conservation des conversations de Lumi (Loi 25).** Aucune purge n'existe : ni tâche planifiée, ni fonction. Il faut une durée (12 mois ?) ; supprimer des données demande ton accord. C'est le seul test critique encore en échec.
 3. **Plafond de la plateforme : 50 $ par jour pour tous les clients réunis** (≈ 3 800 tours). Au-delà, Lumi est en pause pour tout le monde jusqu'à minuit. À relever avant le lancement.
 4. **Plafond d'une conversation : 40 ¢.** Réglé le 16 septembre, quand une conversation coûtait au plus 11,7 ¢. Mesuré le 2026-10-01 : à caches froids, une conversation atteint 40,5 ¢ au 16e tour d'agent ; Lumi répond alors « ouvre une nouvelle conversation ». Je recommande 120 ¢ (variable Railway `LUMI_PLAFOND_CONVERSATION_CENTS`, aucun déploiement de code) : la garde quotidienne et les crédits restent les vrais plafonds.
