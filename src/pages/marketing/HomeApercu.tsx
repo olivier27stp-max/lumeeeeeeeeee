@@ -22,7 +22,7 @@ import { ArrowRight } from 'lucide-react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
 import { usePageMeta, HOME_META } from '../../hooks/usePageMeta';
-import { StopList, Roles, LumiSection, StatsBand, Flow, PlansTeaser, Security, Faq, SECTIONS_CSS } from './homeApercuSections';
+import { StopList, FeatureRows, Roles, LumiSection, StatsBand, Flow, PlansTeaser, Security, Faq, SECTIONS_CSS } from './homeApercuSections';
 
 type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
 
@@ -195,6 +195,7 @@ export default function HomeApercu() {
 
       {/* ── 3. Sous le pli ── */}
       <StopList fr={fr} />
+      <FeatureRows fr={fr} />
       <Roles fr={fr} goTo={goTo} />
       <LumiSection fr={fr} />
       <StatsBand fr={fr} />

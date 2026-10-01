@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { useRegion } from '../../hooks/useRegion';
 import { creditsParMois } from '../../lib/lumiCreditsFormat';
 import { INTEGRATION_LOGOS } from './integrationLogos';
+import { FONCTIONS } from './fonctionsData';
 
 type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
 type Bi = { fr: string; en: string };
@@ -96,6 +97,33 @@ function LogoMarquee({ fr }: { fr: boolean }) {
       <p className="hs-mlabel">{fr ? 'Se connecte à vos outils' : 'Connects to your tools'}</p>
       <div className="hs-mtrack">{row(false)}{row(true)}</div>
     </div>
+  );
+}
+
+/* ── Quatre fonctions, texte et capture en alternance. Le contenu vient de
+   fonctionsData (mêmes textes et captures que les pages « En savoir plus »),
+   dans l'ordre d'une job : demande → soumission → dispatch → facture. ── */
+const FEATURE_SLUGS = ['clients', 'soumissions', 'calendrier', 'finances'];
+
+export function FeatureRows({ fr }: { fr: boolean }) {
+  const rows = FEATURE_SLUGS.map((slug) => FONCTIONS.find((f) => f.slug === slug)).filter((f) => f !== undefined);
+  return (
+    <section className="hs-feat">
+      <p className="ha-kicker">{fr ? 'Les fonctions' : 'The features'}</p>
+      <h2>{fr ? 'De la demande au paiement, sans rien retaper.' : 'From request to payment, with nothing retyped.'}</h2>
+      {rows.map((f) => (
+        <div key={f.slug} className="hs-frow">
+          <div className="hs-ftxt">
+            <em>{pick(fr, f.job)}</em>
+            <h3>{pick(fr, f.title)}</h3>
+            <p>{pick(fr, f.lead)}</p>
+            <ul>{f.points.slice(0, 3).map((pt) => <li key={pt.t.en}>{pick(fr, pt.t)}</li>)}</ul>
+            <Link to={`/fonctions/${f.slug}`} className="hs-link">{fr ? 'En savoir plus →' : 'Learn more →'}</Link>
+          </div>
+          <img src={f.shot} alt={pick(fr, f.shotAlt)} loading="lazy" decoding="async" width={1800} height={f.slug === 'clients' ? 967 : 1125} />
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -283,7 +311,7 @@ export const SECTIONS_CSS = `
 .home-apercu h2 { font-size:28px; font-weight:800; letter-spacing:-.025em; line-height:1.12; color:#0a0a0a; margin:8px 0 0; max-width:26ch; }
 .home-apercu .hs-sub { margin:10px 0 0; font-size:15px; line-height:1.55; color:#333; max-width:70ch; }
 .home-apercu .hs-link { display:inline-block; margin-top:16px; font-weight:700; font-size:13.5px; color:var(--forest); background:none; border:0; padding:0; cursor:pointer; text-decoration:none; font-family:inherit; }
-.hs-stop, .hs-roles, .hs-lumi, .hs-flow, .hs-plans, .hs-secu { max-width:1180px; margin:0 auto; padding:52px 24px 8px; }
+.hs-stop, .hs-feat, .hs-roles, .hs-lumi, .hs-flow, .hs-plans, .hs-secu { max-width:1180px; margin:0 auto; padding:52px 24px 8px; }
 .hs-vs { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:repeat(8,auto); column-gap:16px; margin-top:22px; }
 .hs-vscard { grid-row:span 8; display:grid; grid-template-rows:subgrid; border-radius:18px; padding:22px; }
 .hs-vscard { --vs:#ef4444; --vs-line:rgba(239,68,68,.25); background:#fff; border:2px solid var(--vs); box-shadow:0 24px 40px -28px var(--vs-line); }
@@ -304,6 +332,14 @@ export const SECTIONS_CSS = `
 .hs-logos li { display:flex; align-items:center; gap:12px; padding:8px 0; font-size:22px; font-weight:700; letter-spacing:-.015em; color:#111; white-space:nowrap; }
 .hs-logos svg { width:34px; height:34px; flex:none; }
 @keyframes hs-marquee { to { transform:translateX(-50%); } }
+.hs-frow { display:grid; grid-template-columns:.85fr 1.15fr; gap:56px; align-items:center; margin-top:56px; }
+.hs-frow:nth-of-type(even) { grid-template-columns:1.15fr .85fr; } .hs-frow:nth-of-type(even) .hs-ftxt { order:2; }
+.hs-ftxt em { font-style:normal; font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:800; color:var(--forest); }
+.hs-ftxt h3 { margin:8px 0 0; font-size:clamp(24px,2.4vw,32px); font-weight:800; letter-spacing:-.025em; line-height:1.12; color:#111; }
+.hs-ftxt p { margin:12px 0 0; font-size:15.5px; line-height:1.55; color:#171717; max-width:48ch; }
+.hs-ftxt ul { list-style:none; margin:16px 0 0; padding:0; display:grid; gap:10px; }
+.hs-ftxt li { position:relative; padding-left:18px; font-size:14.5px; line-height:1.5; color:#171717; } .hs-ftxt li::before { content:""; position:absolute; left:0; top:8px; width:8px; height:8px; border-radius:50%; background:var(--mint); }
+.hs-frow img { width:100%; height:auto; border-radius:14px; border:1px solid rgba(11,92,173,.12); box-shadow:0 30px 60px -30px rgba(0,0,0,.35); }
 .hs-rtabs { display:flex; gap:4px; background:#f1f1ef; border-radius:999px; padding:4px; width:max-content; max-width:100%; margin-top:18px; overflow:auto; }
 .hs-rtabs button { border:0; background:transparent; font-size:13px; font-weight:600; color:#555; padding:8px 16px; border-radius:999px; cursor:pointer; white-space:nowrap; font-family:inherit; } .hs-rtabs button[aria-selected="true"] { background:#111; color:#fff; }
 .hs-rp { display:grid; grid-template-columns:.9fr 1.4fr; gap:36px; align-items:center; margin-top:24px; }
@@ -344,8 +380,9 @@ export const SECTIONS_CSS = `
   .hs-vs { grid-template-columns:1fr; grid-template-rows:none; row-gap:16px; }
   .hs-vscard, .hs-vscard ul { grid-row:auto; display:flex; flex-direction:column; }
   .hs-vsstats { align-self:stretch; }
-  .hs-rp, .hs-lgrid, .hs-band, .hs-steps, .hs-plgrid, .hs-sgrid { grid-template-columns:1fr; }
+  .hs-frow, .hs-rp, .hs-lgrid, .hs-band, .hs-steps, .hs-plgrid, .hs-sgrid { grid-template-columns:1fr; }
   .hs-steps::before { display:none; }
+  .hs-frow, .hs-frow:nth-of-type(even) { grid-template-columns:1fr; gap:20px; margin-top:40px; } .hs-frow:nth-of-type(even) .hs-ftxt { order:0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hs-mtrack { animation:none; width:auto; justify-content:center; } .hs-logos { flex-wrap:wrap; justify-content:center; } .hs-logos[aria-hidden] { display:none; }
