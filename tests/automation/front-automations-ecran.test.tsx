@@ -182,7 +182,8 @@ async function rendre() {
   return conteneur;
 }
 const texte = () => conteneur.textContent || '';
-const boutons = () => Array.from(conteneur.querySelectorAll('button'));
+// Dans la page entière : le menu « ⋮ » d'une ligne est rendu dans document.body.
+const boutons = () => Array.from(document.body.querySelectorAll('button'));
 const bouton = (motif: RegExp) => boutons().find((b) => motif.test((b.textContent || '').trim()) || motif.test(b.getAttribute('aria-label') || ''));
 const interrupteur = () => conteneur.querySelector('button[role="switch"]') as HTMLButtonElement;
 const roue = () => conteneur.querySelector('.section-card .animate-spin');
@@ -638,5 +639,97 @@ describe('T13.11 — langue des messages envoyés', () => {
     await rendre();
     await cliquer(bouton(/^FR$/));
     expect(api.setAutomationLanguage).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+describe('T13.12 — clavier : Échap ferme les menus de la liste (audit du 2026-10-01)', () => {
+  const echap = async () => {
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    await laisser();
+  };
+  const menuOuvert = () => document.body.querySelector('[role="menu"]');
+
+  it('le menu « ⋮ » d’une ligne se ferme à Échap, et le focus revient au bouton qui l’a ouvert', async () => {
+    await rendre();
+    const ouvreur = bouton(new RegExp(`^Actions pour ${NOM_FR}$`));
+    await cliquer(ouvreur);
+    expect(menuOuvert()).not.toBeNull();
+    await echap();
+    expect(menuOuvert()).toBeNull();
+    expect(document.activeElement).toBe(ouvreur);
+  });
+
+  it('le menu « Créer » se ferme à Échap, focus rendu au bouton « Créer »', async () => {
+    await rendre();
+    const creer = bouton(/^Créer$/);
+    await cliquer(creer);
+    expect(menuOuvert()).not.toBeNull();
+    await echap();
+    expect(menuOuvert()).toBeNull();
+    expect(document.activeElement).toBe(creer);
+  });
+
+  it('une autre touche ne ferme rien', async () => {
+    await rendre();
+    await cliquer(bouton(new RegExp(`^Actions pour ${NOM_FR}$`)));
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true })); });
+    expect(menuOuvert()).not.toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+describe('T13.13 — le menu « ⋮ » d’une ligne n’est plus rogné par le tableau (audit du 2026-10-01)', () => {
+  const ouvreur = () => bouton(new RegExp(`^Actions pour ${NOM_FR}$`)) as HTMLButtonElement;
+  const menu = () => document.body.querySelector('[role="menu"]') as HTMLElement | null;
+  /** Place le bouton « ⋮ » à cette hauteur dans une fenêtre de 900 px. */
+  function placerBouton(haut: number) {
+    Object.defineProperty(window, 'innerHeight', { value: 900, configurable: true });
+    Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
+    ouvreur().getBoundingClientRect = () => ({ top: haut, bottom: haut + 28, left: 1360, right: 1388, width: 28, height: 28, x: 1360, y: haut, toJSON: () => ({}) });
+  }
+
+  it('il est rendu HORS de la carte du tableau (elle est en overflow-hidden : elle le coupait)', async () => {
+    await rendre();
+    placerBouton(300);
+    await cliquer(ouvreur());
+    expect(menu()).not.toBeNull();
+    expect(conteneur.contains(menu())).toBe(false);
+    expect(menu()!.closest('table')).toBeNull();
+    expect(menu()!.className).toContain('fixed');
+  });
+
+  it('avec de la place en dessous, il s’ouvre sous le bouton, aligné à droite', async () => {
+    await rendre();
+    placerBouton(300);
+    await cliquer(ouvreur());
+    expect(menu()!.style.top).toBe('332px');     // 300 + 28 + 4
+    expect(menu()!.style.bottom).toBe('');
+    expect(menu()!.style.right).toBe('52px');    // 1440 − 1388
+  });
+
+  it('sur une ligne du bas, il s’ouvre VERS LE HAUT au lieu de sortir de l’écran', async () => {
+    await rendre();
+    placerBouton(820);
+    await cliquer(ouvreur());
+    expect(menu()!.style.top).toBe('');
+    expect(menu()!.style.bottom).toBe('84px');   // 900 − 820 + 4
+  });
+
+  it('ses items restent ceux du menu, cliquables', async () => {
+    await rendre();
+    placerBouton(820);
+    await cliquer(ouvreur());
+    const items = Array.from(menu()!.querySelectorAll('[role="menuitem"]')).map((b) => (b.textContent || '').trim());
+    expect(items).toEqual(expect.arrayContaining(['Modifier', 'Dupliquer']));
+  });
+
+  it('un défilement le ferme (il est ancré à la fenêtre, il ne suivrait pas)', async () => {
+    await rendre();
+    placerBouton(300);
+    await cliquer(ouvreur());
+    await act(async () => { window.dispatchEvent(new Event('scroll')); });
+    await laisser();
+    expect(menu()).toBeNull();
   });
 });

@@ -83,6 +83,56 @@ function getLimiter(preset: LimiterPreset): Ratelimit | null {
 interface RedisRateLimitOpts {
   preset: LimiterPreset;
   keyFn?: (req: Request) => string;
+  /**
+   * Sans Redis, appliquer QUAND MÊME la limite du préréglage, en mémoire du
+   * processus. Sans cette option, « pas de Redis » = aucune limite propre (seul
+   * reste le limiteur général, 1 500 demandes).
+   */
+  repliMemoire?: boolean;
+}
+
+function fenetreEnMs(fenetre: string): number {
+  const [n, unite] = fenetre.split(' ');
+  return Number(n) * (unite === 'h' ? 3_600_000 : unite === 'm' ? 60_000 : 1_000);
+}
+
+/**
+ * La même fenêtre glissante, tenue en mémoire. Mesuré en prod le 2026-10-01 :
+ * Upstash n'y est pas branché, donc la limite « 60 tours de Lumi par personne et
+ * par heure » n'existait pas — un compte de test a joué 173 tours en une heure
+ * sans un seul 429. La mémoire du processus suffit tant que l'API tourne sur une
+ * instance ; un redéploiement remet le compteur à zéro, ce qui reste infiniment
+ * mieux que pas de limite.
+ */
+export function limiteEnMemoire(opts: { preset: LimiterPreset; keyFn?: (req: Request) => string }) {
+  const { requests, window } = PRESETS[opts.preset];
+  const fenetre = fenetreEnMs(window);
+  const passages = new Map<string, number[]>();
+  const menage = setInterval(() => {
+    const limite = Date.now() - fenetre;
+    for (const [cle, instants] of passages) {
+      if (!instants.length || instants[instants.length - 1] < limite) passages.delete(cle);
+    }
+  }, 600_000);
+  menage.unref?.();
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    const cle = opts.keyFn ? opts.keyFn(req) : extractIP(req);
+    const maintenant = Date.now();
+    const recents = (passages.get(cle) ?? []).filter((t) => maintenant - t < fenetre);
+    if (recents.length >= requests) {
+      passages.set(cle, recents);
+      const retryAfter = Math.max(1, Math.ceil((recents[0] + fenetre - maintenant) / 1000));
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({ error: messageTropDeDemandes(retryAfter), retryAfter });
+    }
+    recents.push(maintenant);
+    passages.set(cle, recents);
+    res.set('X-RateLimit-Limit', String(requests));
+    res.set('X-RateLimit-Remaining', String(requests - recents.length));
+    res.set('X-RateLimit-Reset', String(recents[0] + fenetre));
+    next();
+  };
 }
 
 /**
@@ -91,6 +141,8 @@ interface RedisRateLimitOpts {
  */
 export function redisRateLimit(opts: RedisRateLimitOpts) {
   const limiter = getLimiter(opts.preset);
+
+  if (!limiter && opts.repliMemoire) return limiteEnMemoire(opts);
 
   if (!limiter) {
     // No Redis — pass through, rely on in-memory limiter

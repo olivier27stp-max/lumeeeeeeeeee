@@ -32,6 +32,7 @@ import { clientAnthropic, isLumiConfigured } from './llm';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AGENT_TOOLS, TOOLS_BY_NAME } from '../agent/tools';
 import { executerOutilGarde, PERMISSION_PAR_OUTIL, resoudreNumeros } from '../agent/garde';
+import { nettoyerTexteDicte } from '../agent/texte-dicte';
 import { masquerIds, demasquerIds } from '../agent/refs';
 import { CONSIGNES_COLLEGUE_LUMI } from '../agent/consignesCollegue';
 import type { Rapport } from '../agent/tools-rapports';
@@ -43,6 +44,8 @@ import { verifierChiffres } from './verifier-chiffres';
 import { outilsDuSousAgent } from './sous-agents';
 import type { IdTopic } from './topics';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
+import { ciblesIntrouvables } from './apercu-action';
+import { validerArgs, type SchemaSimple } from '../agent/validation-args';
 import { executerEcriture, type ReçuExecution } from './execution';
 import { signalerAppelLumi } from './cache-chaud';
 import { allegerSchema } from './alleger-outils';
@@ -103,6 +106,40 @@ export function avecCacheConversation(messages: Anthropic.Messages.MessageParam[
   if (cible.type === 'thinking' || cible.type === 'redacted_thinking') return messages;
   (cible as { cache_control?: Anthropic.Messages.CacheControlEphemeral }).cache_control = CACHE_5M;
   return [...messages.slice(0, -1), { role: dernier.role, content: blocs }];
+}
+
+/**
+ * Contexte du tour — l'heure qu'il est, les indices d'outils et le repérage,
+ * qui changent à CHAQUE message. Ajouté en dernier bloc du dernier message,
+ * donc APRÈS le point de cache glissant : il ne fait partie d'aucun préfixe
+ * mis en cache, et il n'est jamais sauvegardé dans l'historique.
+ *
+ * Avant (2026-10-01), ces trois éléments étaient dans le bloc système, qui
+ * précède les messages : dès que la minute changeait, le préfixe changeait et
+ * toute la conversation était RÉÉCRITE en cache (1,25 × le tarif d'entrée) au
+ * lieu d'être relue (0,1 ×). Mesuré en prod sur une conversation de 11 tours :
+ * 2 088 → 9 103 tokens écrits par tour.
+ */
+/**
+ * Glissée dans le contexte du tour à l'appel de conclusion : le modèle n'a plus
+ * d'outil, il doit le savoir — sinon il annonce « je vérifie » et s'arrête là.
+ */
+export function consigneDeConclusion(fr: boolean): string {
+  return fr
+    ? 'Dernière étape de ce tour : tu ne peux plus appeler d’outil. Réponds maintenant avec ce que tu as déjà lu. S’il reste une vérification ou une action à faire, dis précisément laquelle et propose de la faire au prochain message. N’affirme rien que tu n’as pas lu.'
+    : 'Last step of this turn: you can no longer call a tool. Answer now with what you have already read. If a check or an action is still needed, say exactly which one and offer to do it in the next message. Do not state anything you have not read.';
+}
+
+export function avecContexteDuTour(messages: Anthropic.Messages.MessageParam[], contexte: string | null | undefined): Anthropic.Messages.MessageParam[] {
+  const texte = contexte?.trim();
+  if (!texte || messages.length === 0) return messages;
+  const dernier = messages[messages.length - 1];
+  if (dernier.role !== 'user') return messages;
+  const blocs: Anthropic.Messages.ContentBlockParam[] = typeof dernier.content === 'string'
+    ? [{ type: 'text', text: dernier.content }]
+    : [...dernier.content];
+  blocs.push({ type: 'text', text: `<contexte_du_tour>\n${texte}\n</contexte_du_tour>` });
+  return [...messages.slice(0, -1), { role: 'user', content: blocs }];
 }
 
 /**
@@ -375,6 +412,11 @@ export async function tourLumi(opts: {
   outilsPermis?: ReadonlySet<string> | null;
   /** Langue des avis rendus par gabarit (réponse coupée, refus). Français par défaut. */
   langue?: 'fr' | 'en';
+  /**
+   * Ce qui change à chaque message (heure, indices d'outils, repérage) : ajouté
+   * après le point de cache du dernier message, jamais sauvegardé. Voir avecContexteDuTour.
+   */
+  contexteTour?: string | null;
 }): Promise<ResultatTour> {
   const model = opts.reglages?.model ?? modeleLumi();
   const effort = opts.reglages?.effort ?? reglesCout().effort_defaut;
@@ -406,7 +448,13 @@ export async function tourLumi(opts: {
   // dans ce contenu ne peut donc jamais agir sans qu'un humain voie la carte.
   let contenuExterneLu = aLuDuContenuExterne(opts.historique);
 
-  for (let etape = 0; etape < maxEtapes; etape++) {
+  // `<=` : après la dernière étape AVEC outils, un appel de CONCLUSION sans outils.
+  // Avant (passe de référence du 2026-10-01) : au palier restreint (2 étapes), une
+  // question qui demandait deux lectures finissait en erreur « trop d'étapes »,
+  // sans réponse, après avoir payé les deux appels — 6 cas sur 115. Le modèle
+  // conclut maintenant avec ce qu'il a lu, comme au plafond de coût du tour.
+  for (let etape = 0; etape <= maxEtapes; etape++) {
+    const conclusionFinale = etape === maxEtapes;
     // Un tour qui coûte cher ne doit PAS être coupé en plein milieu :
     // l'utilisateur verrait son assistant s'arrêter sans réponse, et c'est
     // perdre une fonction pour économiser des cents (2026-09-22).
@@ -418,6 +466,7 @@ export async function tourLumi(opts: {
     // au double du plafond, où il est acquis que le tour est parti en vrille.
     const plafondTour = reglesCout().plafond_cout_tour_cents;
     const doitConclure = coutHorsCacheFroid >= plafondTour;
+    const sansOutils = doitConclure || conclusionFinale;
     if (coutHorsCacheFroid >= plafondTour * 2) {
       opts.emettre({ type: 'error', message: 'plafond_tour' });
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, ...mesure() };
@@ -435,7 +484,7 @@ export async function tourLumi(opts: {
       max_tokens: MAX_TOKENS,
       system: opts.systeme,
       tools: outils,
-      messages: avecCacheConversation(messages),
+      messages: avecContexteDuTour(avecCacheConversation(messages), [opts.contexteTour, conclusionFinale ? consigneDeConclusion(fr) : null].filter(Boolean).join('\n') || null),
       // Haiku 4.5 n'accepte ni la réflexion adaptative ni l'effort (400
       // « adaptive thinking is not supported on this model ») : sans ce
       // garde, la pente économe à 60 % du plafond répondait « Lumi failed
@@ -444,7 +493,7 @@ export async function tourLumi(opts: {
       // Passé le plafond : plus d'outils, le modèle conclut avec ce qu'il a.
       // `tools` reste envoyé (il est en cache : le retirer changerait le
       // préfixe et coûterait une réécriture, exactement ce qu'on veut éviter).
-      ...(doitConclure ? { tool_choice: { type: 'none' as const } } : {}),
+      ...(sansOutils ? { tool_choice: { type: 'none' as const } } : {}),
     });
     stream.on('text', (delta) => {
       if (premierTokenMs === null) premierTokenMs = Date.now() - debutTour;
@@ -526,11 +575,12 @@ export async function tourLumi(opts: {
     if (appels.length === 0) continue;
     const resultats: Anthropic.Messages.ToolResultBlockParam[] = [];
     // Toutes les écritures proposées dans cette réponse : une carte, une confirmation.
-    const enAttente: Array<{ tool_use_id: string; tool: string; args: Record<string, any> }> = [];
+    const enAttente: Array<{ tool_use_id: string; tool: string; args: Record<string, any>; apercu: Apercu | null }> = [];
 
     for (const appel of appels) {
       const outil = TOOLS_BY_NAME[appel.name];
-      const args = demasquerIds(espaceRefs, (appel.input ?? {}) as Record<string, any>);
+      // Texte dicté entre guillemets : nettoyé ICI, avant la carte, pour que la carte montre ce qui partira.
+      const args = nettoyerTexteDicte(demasquerIds(espaceRefs, (appel.input ?? {}) as Record<string, any>));
 
       if (!outil) {
         resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: `Unknown tool: ${appel.name}` }), is_error: true });
@@ -556,8 +606,48 @@ export async function tourLumi(opts: {
         // texter le client) = une seule carte à confirmer, exécutées dans l'ordre.
         // Numéros affichés (« facture INV-000017 », « job 33 ») résolus AVANT la carte :
         // la carte et l'exécution visent le même identifiant (audit 2026-09-30).
+        //
+        // La carte montre CE QUI S'EXÉCUTERA (passe de référence du 2026-10-01). Elle
+        // était bâtie sur les arguments bruts ; à l'exécution, la garde retire les champs
+        // que l'outil ne déclare pas. « Crée un job à 240 $ » avec un champ inventé
+        // `total_cents` affichait « Total 240,00 $ » et aurait créé un job à 0 $. Même
+        // validation ici qu'à l'exécution : un champ inconnu ou invalide retourne au
+        // modèle, qui reformule avec les vrais paramètres — rien n'est proposé.
+        const schema = (outil as { declaration?: { parameters?: SchemaSimple } }).declaration?.parameters;
+        if (schema) {
+          const validation = validerArgs(schema, args);
+          const motif = !validation.ok
+            ? `Paramètres invalides — ${validation.erreur}.`
+            : validation.ignores.length
+              ? `Paramètres inconnus de ${appel.name} : ${validation.ignores.join(', ')}. Ils seraient ignorés à l'exécution, donc la carte montrerait autre chose que ce qui serait fait.`
+              : null;
+          if (motif) {
+            resultats.push({ type: 'tool_result', tool_use_id: appel.id, is_error: true, content: JSON.stringify({ error: `${motif} Rien n'a été proposé. Reprends avec les seuls paramètres déclarés de l'outil.` }) });
+            continue;
+          }
+        }
         const resolus = await resoudreNumeros(args, opts.orgId).catch(() => null);
-        enAttente.push({ tool_use_id: appel.id, tool: appel.name, args: resolus && 'args' in resolus ? resolus.args : args });
+        // ── Cible introuvable : PAS de carte (baseline du 2026-10-01) ──
+        // « Marque la facture 8888 payée » donnait une carte, et « Mets Kevin
+        // Bouchard sur la job » une carte avec un identifiant inventé : l'erreur
+        // du résolveur était ignorée et une cible absente n'arrêtait rien. Le
+        // modèle reçoit maintenant l'erreur et doit le DIRE (ou chercher la
+        // bonne fiche) — jamais proposer une action sur quelque chose qui n'existe pas.
+        if (resolus && 'erreur' in resolus) {
+          resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: resolus.erreur }), is_error: true });
+          continue;
+        }
+        const argsCarte = resolus && 'args' in resolus ? resolus.args : args;
+        const apercuCarte = await apercuProposition(appel.name, argsCarte, { client: opts.client, orgId: opts.orgId, userId: opts.userId });
+        const absentes = ciblesIntrouvables(apercuCarte);
+        if (absentes.length) {
+          resultats.push({
+            type: 'tool_result', tool_use_id: appel.id, is_error: true,
+            content: JSON.stringify({ error: `Introuvable dans cette entreprise : ${absentes.join(', ')}. Rien n'a été proposé. Cherche la bonne fiche avec un outil de lecture, ou dis à l'utilisateur que tu ne la trouves pas — n'invente jamais un identifiant.` }),
+          });
+          continue;
+        }
+        enAttente.push({ tool_use_id: appel.id, tool: appel.name, args: argsCarte, apercu: apercuCarte });
         continue;
       }
 
@@ -597,12 +687,11 @@ export async function tourLumi(opts: {
         const u: Anthropic.Messages.MessageParam = { role: 'user', content: resultats };
         messages.push(u); nouveaux.push(u);
       }
-      const ctxApercu = { client: opts.client, orgId: opts.orgId, userId: opts.userId };
-      const groupe = [];
-      for (const a of enAttente) groupe.push({ ...a, capacite: PERMISSION_PAR_OUTIL[a.tool]?.capacite ?? null, apercu: await apercuProposition(a.tool, a.args, ctxApercu) });
+      // L'aperçu de chaque écriture a déjà été calculé à la mise en attente (une seule lecture en base).
+      const groupe = enAttente.map((a) => ({ ...a, capacite: PERMISSION_PAR_OUTIL[a.tool]?.capacite ?? null }));
       const premiere = groupe[0];
       opts.emettre({ type: 'proposal', tool_use_id: premiere.tool_use_id, tool: premiere.tool, args: premiere.args, capacite: premiere.capacite, apercu: premiere.apercu, ...(groupe.length > 1 ? { groupe } : {}) });
-      const proposition: ResultatTour['proposition'] = { tool_use_id: premiere.tool_use_id, tool: premiere.tool, args: premiere.args, ...(enAttente.length > 1 ? { groupe: enAttente } : {}) };
+      const proposition: ResultatTour['proposition'] = { tool_use_id: premiere.tool_use_id, tool: premiere.tool, args: premiere.args, ...(enAttente.length > 1 ? { groupe: enAttente.map(({ tool_use_id, tool, args }) => ({ tool_use_id, tool, args })) } : {}) };
       return { nouveauxMessages: nouveaux, proposition, texte: texteTotal, cost_cents: coutTotal, ...mesure() };
     }
 

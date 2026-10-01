@@ -23,6 +23,7 @@
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../agent/garde';
+import { nettoyerTexteDicte } from '../agent/texte-dicte';
 import { masquerIds } from '../agent/refs';
 import { cleSouvenir } from '../agent/tools-etendus';
 import { executerEcriture, type ReçuExecution } from './execution';
@@ -50,6 +51,8 @@ export interface ContexteDirect {
   orgId: string;
   userId: string;
   accessToken?: string;
+  /** Outils que le rôle de la personne permet (null = indéterminé : la garde d'exécution reste la barrière). */
+  outilsPermis?: ReadonlySet<string> | null;
   language: 'fr' | 'en';
   fuseau: string;
   maintenant?: Date;
@@ -732,8 +735,15 @@ export async function repondreActionDirecte(a: ActionDirecte, ctx: ContexteDirec
       };
     }
     // Carte
-    const args = await resoudre(a, ctx);
-    if (!args) return null;
+    // Le rôle d'abord : une carte préparée par le code ne passait par aucun filtre
+    // de rôle. Un technicien qui disait « supprime le client Luc Bergeron » voyait
+    // une carte de suppression (l'exécution aurait été refusée, mais la carte ne
+    // doit pas exister). Sans le droit : null, et le modèle — qui n'a pas cet
+    // outil — explique ce que le rôle ne permet pas.
+    if (ctx.outilsPermis && !ctx.outilsPermis.has(a.tool)) return null;
+    const brut = await resoudre(a, ctx);
+    if (!brut) return null;
+    const args = nettoyerTexteDicte(brut); // même nettoyage que le modèle : la carte montre ce qui partira
     const toolUseId = `direct_${randomUUID()}`;
     const apercu = await apercuProposition(a.tool, args, { client: ctx.client, orgId: ctx.orgId, userId: ctx.userId });
     const masques = masquerIds(espace, args);

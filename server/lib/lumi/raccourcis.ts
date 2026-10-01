@@ -41,7 +41,8 @@ export interface Raccourci {
   /** Étage qui a reconnu l'énoncé : 1 = énoncé exact, 2 = motif. Absent = étage 0 (action nommée). */
   etage?: 1 | 2;
 }
-export interface ReponseRaccourci { texte: string; fiches: Fiche[] }
+/** `refus` : la garde a refusé l'outil (rôle) — le texte le dit, la route le trace comme un refus et ne le met pas en cache. */
+export interface ReponseRaccourci { texte: string; fiches: Fiche[]; refus?: boolean }
 
 export interface ContexteRaccourci {
   client: SupabaseClient;
@@ -381,7 +382,9 @@ export function rendreRaccourci(r: Raccourci, resultat: any, opts: { fr: boolean
         const jobs = Number(c.nombre_de_jobs || 0);
         return `${i + 1}. ${c.nom || '—'} · ${fmtDollars(Number(c.total_cents || 0), fr)} · ${jobs} job${jobs > 1 ? 's' : ''}`;
       });
-      return `${fr ? `Tes ${lignes.length} meilleurs clients :` : `Your top ${lignes.length} clients:`}\n${lignes.join('\n')}`;
+      // « Tes 1 meilleurs clients » (lu en prod le 2026-10-01) : un seul client se dit au singulier.
+      const titre = lignes.length === 1 ? (fr ? 'Ton meilleur client :' : 'Your top client:') : (fr ? `Tes ${lignes.length} meilleurs clients :` : `Your top ${lignes.length} clients:`);
+      return `${titre}\n${lignes.join('\n')}`;
     }
     case 'taches': {
       const rows: any[] = Array.isArray(resultat?.tasks) ? resultat.tasks : [];
@@ -479,6 +482,7 @@ export async function repondreRaccourci(r: Raccourci, ctx: ContexteRaccourci): P
           ? `Ton rôle dans Lume ne te donne pas accès à ${regle.capacite}. Si ça devrait changer, parles-en à un administrateur.`
           : 'Your role in Lume does not give you access to that. Talk to an administrator if that should change.',
         fiches: [],
+        refus: true,
       };
     }
     const resultat = res.result;
