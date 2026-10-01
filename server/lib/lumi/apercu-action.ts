@@ -148,9 +148,23 @@ const invitation: Resolveur = async (id, { client: db, orgId }) => {
   const { data: i } = await db.from('invitations').select('email, role, status').eq('org_id', orgId).eq('id', id).maybeSingle();
   return i ? { libelle: L('Invitation', 'Invitation'), valeur: [txt(i.email), txt(i.role), txt(i.status)].filter(Boolean).join(' · ') } : introuvable(L('Invitation', 'Invitation'));
 };
-// Les outils du pipeline écrivent dans pipeline_deals (la table `deals` n'a pas de
-// colonne statut : la requête échouait et toute carte de deal disait « introuvable »).
+// Le pipeline de ventes vit sur `deals` (étapes de l'entreprise, pipeline_stages) depuis que les
+// outils list_deals / update_deal_stage / delete_deal y ont été rebranchés (2026-10-01) : la carte
+// montre le client et l'étape ACTUELLE telle qu'elle s'appelle à l'écran. L'ancien tableau
+// (pipeline_deals) ne sert plus qu'au porte-à-porte : on y retombe si le deal n'est pas dans `deals`.
 const deal: Resolveur = async (id, ctx, fuseau) => {
+  const { data: n } = await ctx.client.from('deals').select('title, stage_id, client_id').eq('org_id', ctx.orgId).eq('id', id).is('deleted_at', null).maybeSingle();
+  if (n) {
+    const { data: e } = estUuid(n.stage_id)
+      ? await ctx.client.from('pipeline_stages').select('name_fr, name_en').eq('org_id', ctx.orgId).eq('id', n.stage_id).maybeSingle()
+      : { data: null };
+    const c = estUuid(n.client_id) ? await client(n.client_id, ctx, fuseau) : null;
+    return {
+      libelle: L('Deal', 'Deal'),
+      valeur: [txt(n.title), c?.valeur, e ? `étape actuelle : ${txt(e.name_fr)}` : ''].filter(Boolean).join(' · '),
+      valeur_en: [txt(n.title), c?.valeur, e ? `current stage: ${txt(e.name_en) || txt(e.name_fr)}` : ''].filter(Boolean).join(' · '),
+    };
+  }
   const { data: d } = await ctx.client.from('pipeline_deals').select('title, stage, client_id, lead_id').eq('org_id', ctx.orgId).eq('id', id).is('deleted_at', null).maybeSingle();
   if (!d) return introuvable(L('Carte du pipeline', 'Pipeline card'));
   const pid = estUuid(d.client_id) ? d.client_id : estUuid(d.lead_id) ? d.lead_id : null;

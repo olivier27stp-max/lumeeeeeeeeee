@@ -1447,8 +1447,8 @@ export const PERMISSIONS_LEADS: Record<string, { cle: PermissionKey; capacite: s
   add_client_tag:             { cle: 'clients.update', capacite: 'les étiquettes des clients' },
   remove_client_tag:          { cle: 'clients.update', capacite: 'les étiquettes des clients' },
   list_deals:                 { cle: 'leads.read',     capacite: 'la consultation du pipeline' },
-  update_deal_stage:          { cle: 'leads.update',   capacite: 'le déplacement des cartes du pipeline' },
-  delete_deal:                { cle: 'leads.delete',   capacite: 'la suppression des cartes du pipeline' },
+  update_deal_stage:          { cle: 'leads.update',   capacite: 'le déplacement des deals du pipeline' },
+  delete_deal:                { cle: 'leads.delete',   capacite: 'l’abandon des deals du pipeline' },
 };
 
 /** Chaque outil, exactement une fois — à fusionner dans TOPICS (topics.ts). */
