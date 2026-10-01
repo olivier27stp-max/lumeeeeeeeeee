@@ -349,5 +349,5 @@ M-15 (inchangé) : la carte Rentabilité, à 50 000 jobs, sature encore le pool 
 
 ### Encore ouvert
 
-- **M-15** : la carte Rentabilité sature le pool de connexions vers 50 000 jobs (toutes les tranches lues en même temps). Le correctif — 5 tranches à la fois — est dans la PR #822 (audit des outils de Lumi) ; rien à refaire ici. Aucun effet aux volumes actuels (≤ 896 jobs).
+- ~~M-15~~ : corrigé le 2026-10-01 — `charger.ts` lit 5 tranches de jobs à la fois au lieu de toutes en même temps (même changement que la PR #822, repris tel quel pour ne pas créer de conflit). Mesuré sur le tenant de 50 000 jobs : 9 794 jobs analysés en 13 s, contre un échec après 28 s (« Timed out acquiring connection »). Aux volumes réels (≤ 896 jobs, 6 tranches), rien ne change. Pour aller plus vite à très gros volume, il faudrait lire les tables liées avec le client service une fois les jobs filtrés par la RLS — non fait (aucun besoin aujourd'hui).
 - Perf RLS (§5.1).
