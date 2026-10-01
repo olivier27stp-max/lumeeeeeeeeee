@@ -181,10 +181,22 @@ export function montantsDits(texte: string): number[] {
 const INCLUSION = /(d[èe]s|[àa] partir d[eu]|inclus|incluse|compris|comprise|disponible|offert|offerte|accessible|included|available|starting (from|with|at)|from the)/i;
 const NEGATION = /(?<![\p{L}])(pas|non|ni|aucun|aucune|sauf|sans|seulement|uniquement|exclusif|exclusive|exclusivement|only|not|except)(?![\p{L}])|n['’]\p{L}/iu;
 
-/** Les forfaits qu'une réponse présente comme incluant la fonction (une proposition qui nomme le forfait, dit « inclus / à partir de », sans négation). */
-export function forfaitsPresentesInclus(texte: string, forfaits: string[]): string[] {
-  const propositions = String(texte ?? '').split(/[.;!?\n]+|,\s+(?:mais|et|tandis|alors)\s+/i);
-  return forfaits.filter((f) => propositions.some((p) => new RegExp(`(?<![\\p{L}])${f}(?![\\p{L}])`, 'iu').test(p) && INCLUSION.test(p) && !NEGATION.test(p)));
+/**
+ * Les forfaits qu'une réponse présente comme incluant la fonction (une proposition qui nomme le forfait, dit
+ * « inclus / à partir de », sans négation).
+ *
+ * `fonction` = les mots qui nomment la fonction demandée. Quand la réponse la NOMME, seules les propositions qui
+ * la nomment comptent : une réponse qui énumère chaque forfait (« Scale ajoute les textos…, avec 10 utilisateurs
+ * inclus. Autopilot ajoute le porte-à-porte… ») ne dit pas que Scale a le porte-à-porte — le juge le lisait ainsi
+ * (batterie du 2026-10-01, tarifs.porte-a-porte, réponse juste notée FAIL). Quand elle ne la nomme nulle part,
+ * toute la réponse parle de la fonction : l'ancienne règle s'applique.
+ */
+export function forfaitsPresentesInclus(texte: string, forfaits: string[], fonction: string[] = []): string[] {
+  // Les parenthèses sont des apartés : « Le porte-à-porte (carte, pipeline, etc.) est inclus dans Scale » reste UNE proposition.
+  const propositions = String(texte ?? '').replace(/[(][^)]*[)]/g, ' ').split(/[.;!?\n]+|,\s+(?:mais|et|tandis|alors)\s+/i);
+  const nomme = (p: string): boolean => fonction.some((mot) => p.toLowerCase().includes(mot.toLowerCase()));
+  const retenues = fonction.length && propositions.some(nomme) ? propositions.filter(nomme) : propositions;
+  return forfaits.filter((f) => retenues.some((p) => new RegExp(`(?<![\\p{L}])${f}(?![\\p{L}])`, 'iu').test(p) && INCLUSION.test(p) && !NEGATION.test(p)));
 }
 
 export interface AttenteTarif {
@@ -198,6 +210,8 @@ export interface AttenteTarif {
   forfait_requis?: string;
   /** Les forfaits que la réponse ne doit pas présenter comme incluant la fonction. */
   forfaits_exclus?: string[];
+  /** Les mots qui nomment la fonction demandée (voir forfaitsPresentesInclus). */
+  fonction?: string[];
   /** Un compte attaché à un nom (« 2 bureaux ») : la valeur attendue, et celles que la page donne par ailleurs. */
   compte?: { noms: string[]; valeur: number; permis: number[] };
   /** Aucun montant du tout (les crédits Lumi n'ont pas d'équivalence en dollars). */
@@ -225,7 +239,7 @@ export function jugerTarif(o: Observation, permis: ReadonlySet<number>, a: Atten
   for (const p of a.pourcents_requis ?? []) if (!pcs.includes(p)) manques.push(`rabais attendu absent de la réponse : ${p} %`);
   if (a.pourcents_permis) for (const p of pcs) if (!a.pourcents_permis.includes(p)) faux.push(`pourcentage absent de la page Tarifs : ${p} %`);
   if (a.forfait_requis && !new RegExp(`(?<![\\p{L}])${a.forfait_requis}(?![\\p{L}])`, 'iu').test(o.reponse)) manques.push(`forfait attendu absent de la réponse : ${a.forfait_requis}`);
-  for (const f of forfaitsPresentesInclus(o.reponse, a.forfaits_exclus ?? [])) faux.push(`présente la fonction comme incluse dans ${f}, ce que la page Tarifs ne dit pas`);
+  for (const f of forfaitsPresentesInclus(o.reponse, a.forfaits_exclus ?? [], a.fonction ?? [])) faux.push(`présente la fonction comme incluse dans ${f}, ce que la page Tarifs ne dit pas`);
   if (a.compte) {
     const comptes = comptesDits(o.reponse, a.compte.noms);
     for (const c of comptes) if (c !== a.compte.valeur && !a.compte.permis.includes(c)) faux.push(`nombre de ${a.compte.noms[0]}x absent de la page Tarifs : ${c}`);
