@@ -17,6 +17,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { AUTOMATION_PRESETS, type AutomationPresetDef } from './automationPresets.data';
 import { PACK_PARCOURS, PACK_ACTIF } from './automationPack.data';
+import { estPrereglageRetire } from '../../src/lib/automationCatalogue';
 
 /**
  * Presets de SOLLICITATION commerciale — jamais activés d'office (F7, audit
@@ -155,7 +156,8 @@ export async function ensureAutomationPresets(
   const have = new Set((existing || []).map((r: { preset_key: string }) => r.preset_key));
   const catalogue: Array<AutomationPresetDef & { steps?: unknown[]; settings?: Record<string, unknown> | null }> = [...AUTOMATION_PRESETS, ...PACK_PARCOURS];
   const packCles = new Set(PACK_PARCOURS.map((p) => p.preset_key));
-  const missing = catalogue.filter((p) => !have.has(p.preset_key));
+  // Un préréglage retiré (déclencheur mort) n'est plus semé par ce filet.
+  const missing = catalogue.filter((p) => !have.has(p.preset_key) && !estPrereglageRetire(p));
 
   if (missing.length > 0) {
     const { error: insErr } = await admin.from('automation_rules').insert(

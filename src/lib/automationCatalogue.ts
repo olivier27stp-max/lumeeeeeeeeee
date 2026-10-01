@@ -100,6 +100,28 @@ export function declencheurOffert(d: DeclencheurCatalogue, drapeauxActifs: Reado
 }
 
 /**
+ * Préréglages RETIRÉS : clé → le déclencheur mort sur lequel ils ont été semés.
+ *
+ * `estimate_followup` attend `estimate.sent`, que plus aucun chemin de
+ * l'application n'émet (le devis part par `quote.sent`, que couvrent
+ * `quote_followup_1d` et le parcours « Relance de devis »). Le trigger SQL de
+ * création d'entreprise le sème encore, et 9 entreprises l'affichaient
+ * « publié » en prod le 2026-10-01 : une relance annoncée qui ne part jamais.
+ *
+ * Retiré de l'AFFICHAGE (liste, éditeur, Lumi) et du semis — sans toucher aux
+ * lignes en base : inertes, elles ne coûtent rien, et une règle qu'une
+ * entreprise aurait rebranchée sur un vrai déclencheur reste visible.
+ */
+export const PREREGLAGES_RETIRES: Readonly<Record<string, string>> = { estimate_followup: 'estimate.sent' };
+
+/** Cette règle est-elle un préréglage retiré, encore sur son déclencheur mort ? */
+export function estPrereglageRetire(regle: { preset_key?: string | null; trigger_event?: string | null }): boolean {
+  const cle = regle.preset_key;
+  if (!cle || !Object.prototype.hasOwnProperty.call(PREREGLAGES_RETIRES, cle)) return false;
+  return regle.trigger_event === PREREGLAGES_RETIRES[cle];
+}
+
+/**
  * La case « Arrêter si… » de la sortie automatique du parcours
  * (drapeau `auto_sortie_parcours`, `settings.arreter_si_resolu`).
  *

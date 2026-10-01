@@ -55,6 +55,7 @@ import {
   trouverDeclencheur,
   conditionsApresChangement,
   declencheurOffert,
+  estPrereglageRetire,
   DELAI_NEGATIF_MAX_SECONDES,
 } from '../../src/lib/automationCatalogue';
 
@@ -149,7 +150,8 @@ router.get('/automations/rules', async (req, res) => {
   }
 
   return res.json({
-    rules: data ?? [],
+    // Un préréglage retiré s'afficherait « publié » sans jamais partir.
+    rules: ((data ?? []) as unknown as Array<{ preset_key: string | null; trigger_event: string | null }>).filter((r) => !estPrereglageRetire(r)),
     catalogue: await catalogueOffert(auth.client, auth.orgId),
   });
 });
@@ -192,7 +194,7 @@ router.get('/automations/editeur', async (req, res) => {
       : Promise.resolve({ data: null, error: null }),
     auth.client
       .from('automation_rules')
-      .select('id, name')
+      .select('id, name, preset_key, trigger_event')
       .eq('org_id', auth.orgId)
       .eq('is_active', true)
       .is('deleted_at', null)
@@ -206,7 +208,10 @@ router.get('/automations/editeur', async (req, res) => {
     rule: regle.data ?? null,
     catalogue: await catalogueOffert(auth.client, auth.orgId),
     // Jamais la règle ouverte elle-même : une automatisation qui se démarre boucle.
-    autres: ((autres.data ?? []) as Array<{ id: string; name: string }>).filter((r) => r.id !== ruleId),
+    // Ni un préréglage retiré : « Démarrer » une automatisation qui ne part jamais.
+    autres: ((autres.data ?? []) as Array<{ id: string; name: string; preset_key: string | null; trigger_event: string | null }>)
+      .filter((r) => r.id !== ruleId && !estPrereglageRetire(r))
+      .map((r) => ({ id: r.id, name: r.name })),
   });
 });
 

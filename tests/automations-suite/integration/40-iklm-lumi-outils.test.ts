@@ -197,4 +197,18 @@ describe('I — list_automations', () => {
     const noms = (r.automations as Array<{ name: string }>).map((a) => a.name).filter((n) => n.startsWith(m));
     expect(noms).toEqual([`${m} vivante`]);
   });
+
+  it('[K-004] le préréglage retiré (estimate_followup, déclencheur que plus rien n’émet) existe en base mais n’est pas listé', async () => {
+    // Le trigger SQL de création d'entreprise l'a semé : il est bien là.
+    const { data: enBase } = await b.admin.from('automation_rules').select('id, trigger_event')
+      .eq('org_id', b.orgA).eq('preset_key', 'estimate_followup').is('deleted_at', null);
+    expect(enBase?.map((r) => r.trigger_event)).toEqual(['estimate.sent']);
+    const r = await outil('list_automations', {});
+    const listees = r.automations as Array<{ id: string; trigger_event: string; preset_key?: string }>;
+    expect(listees.length).toBeGreaterThan(0);
+    expect(listees.filter((a) => a.id === enBase![0].id || a.trigger_event === 'estimate.sent')).toEqual([]);
+    expect(r.count).toBe(listees.length);
+    // La clé interne ne sort pas de l'outil.
+    expect(listees.every((a) => !('preset_key' in a))).toBe(true);
+  });
 });
