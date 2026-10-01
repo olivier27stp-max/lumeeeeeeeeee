@@ -312,6 +312,65 @@ describe('liste-03 — la sous-navigation est faite de liens, et annonce la sect
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('liste-04 — ce que la couleur disait seule est exposé aux lecteurs d’écran', () => {
+  const groupeLangue = () => conteneur.querySelector('[role="group"][aria-label="Langue des messages"]') as HTMLElement | null;
+  const presse = (motif: RegExp) => bouton(motif)?.getAttribute('aria-pressed');
+
+  it('« FR » et « EN » sont regroupés sous « Langue des messages », la langue active est `aria-pressed`', async () => {
+    await rendre();
+    expect(groupeLangue(), 'un groupe nommé').not.toBeNull();
+    expect(Array.from(groupeLangue()!.querySelectorAll('button')).map((b) => (b.textContent || '').trim())).toEqual(['FR', 'EN']);
+    expect(presse(/^FR$/)).toBe('true');
+    expect(presse(/^EN$/)).toBe('false');
+    await cliquer(bouton(/^EN$/));
+    expect(presse(/^FR$/)).toBe('false');
+    expect(presse(/^EN$/)).toBe('true');
+  });
+
+  it('langue inconnue : aucune des deux n’est annoncée comme active', async () => {
+    vi.mocked(api.getAutomationLanguage).mockRejectedValue(new Error('500'));
+    await rendre();
+    expect(presse(/^FR$/)).toBe('false');
+    expect(presse(/^EN$/)).toBe('false');
+  });
+
+  it('en anglais, le groupe s’appelle « Message language »', async () => {
+    await rendre('en');
+    expect(conteneur.querySelector('[role="group"][aria-label="Message language"]')).not.toBeNull();
+  });
+
+  it('chaque en-tête de colonne a un nom — le dernier (actions) aussi, caché à l’œil', async () => {
+    await rendre();
+    const entetes = Array.from(conteneur.querySelectorAll('thead th'));
+    const noms = entetes.map((th) => (th.textContent || '').trim() || th.querySelector('input')?.getAttribute('aria-label') || '');
+    expect(noms.filter((n) => !n), `en-têtes sans nom : ${JSON.stringify(noms)}`).toHaveLength(0);
+    const dernier = entetes[entetes.length - 1];
+    expect((dernier.textContent || '').trim()).toBe('Actions');
+    expect(dernier.querySelector('.sr-only'), 'visuellement caché : la colonne reste sans titre à l’écran').not.toBeNull();
+  });
+
+  it('les onglets sont reliés à leur panneau, qui porte le nom de l’onglet actif', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Alpha' })]);
+    await rendre();
+    const actif = () => conteneur.querySelector('[role="tab"][aria-selected="true"]') as HTMLElement;
+    const panneau = () => conteneur.querySelector('[role="tabpanel"]') as HTMLElement | null;
+    expect(panneau(), 'aucun panneau d’onglet').not.toBeNull();
+    expect(panneau()!.querySelector('table'), 'le tableau est DANS le panneau').not.toBeNull();
+    for (const onglet of Array.from(conteneur.querySelectorAll('[role="tab"]'))) {
+      expect(onglet.id, 'chaque onglet a un id').toBeTruthy();
+      expect(onglet.getAttribute('aria-controls')).toBe(panneau()!.id);
+    }
+    // Un id de `useId()` contient « : » : getElementById, pas un sélecteur CSS.
+    expect(document.getElementById(panneau()!.getAttribute('aria-labelledby') || '')).toBe(actif());
+    expect((actif().textContent || '').trim()).toBe('Toutes');
+
+    await cliquer(bouton(/^Corbeille \(0\)$/));
+    expect((actif().textContent || '').trim()).toBe('Corbeille (0)');
+    expect(document.getElementById(panneau()!.getAttribute('aria-labelledby') || '')).toBe(actif());
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('liste-05 — langue du bureau illisible : l’écran ne prétend pas la connaître', () => {
   const surligne = (b: HTMLElement | undefined) => /\bbg-text-primary\b/.test(b?.className ?? '');
   const AVEU = 'Langue actuelle inconnue';

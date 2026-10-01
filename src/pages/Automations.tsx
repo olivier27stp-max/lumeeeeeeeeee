@@ -10,7 +10,7 @@
    Payments, Follow-up, Reviews, Client
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -454,6 +454,8 @@ export default function Automations() {
     const demande = parametres.get('onglet');
     return demande === 'verifier' || demande === 'corbeille' || demande === 'modeles' ? demande : 'toutes';
   });
+  /** Relie les onglets à leur panneau (`aria-controls` / `aria-labelledby`). */
+  const idOnglets = useId();
   /** Menu « Créer » : les cinq départs de GHL. */
   const [menuCreer, setMenuCreer] = useState(false);
   const [bibliotheque, setBibliotheque] = useState(false);
@@ -1368,13 +1370,20 @@ export default function Automations() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="mr-1 flex items-center gap-2">
               <span className="text-[11px] text-text-tertiary">{fr ? 'Messages en' : 'Messages in'}</span>
-              <div className="inline-flex overflow-hidden rounded-lg border border-outline/50 text-[12px]">
+              {/* La langue active ne se devinait qu'à la couleur : un groupe
+                  nommé, et l'état de chaque bouton exposé (`aria-pressed`). */}
+              <div
+                role="group"
+                aria-label={fr ? 'Langue des messages' : 'Message language'}
+                className="inline-flex overflow-hidden rounded-lg border border-outline/50 text-[12px]"
+              >
                 {(['fr', 'en'] as const).map((l) => (
                   <button
                     key={l}
                     type="button"
                     onClick={() => changerLangue(l)}
                     disabled={savingLang}
+                    aria-pressed={orgLang === l}
                     className={`px-2.5 py-1 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary'}`}
                   >
                     {l === 'fr' ? 'FR' : 'EN'}
@@ -1499,6 +1508,8 @@ export default function Automations() {
                 key={o.cle}
                 type="button"
                 role="tab"
+                id={`${idOnglets}-${o.cle}`}
+                aria-controls={`${idOnglets}-panneau`}
                 aria-selected={onglet === o.cle}
                 onClick={() => setOnglet(o.cle)}
                 className={cn(
@@ -1753,7 +1764,8 @@ export default function Automations() {
           </div>
         )}
 
-        {/* ══ 6. Le tableau ══ */}
+        {/* ══ 6. Le tableau ══ — le panneau des onglets du haut. */}
+        <div role="tabpanel" id={`${idOnglets}-panneau`} aria-labelledby={`${idOnglets}-${onglet}`}>
         {loading ? (
           <div className="section-card flex items-center justify-center py-16">
             <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" aria-hidden="true" />
@@ -1815,7 +1827,9 @@ export default function Automations() {
                       );
                     })}
                     <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Stats' : 'Stats'}</th>
-                    <th scope="col" className="w-24 px-3 py-3" />
+                    <th scope="col" className="w-24 px-3 py-3">
+                      <span className="sr-only">{fr ? 'Actions' : 'Actions'}</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2317,6 +2331,7 @@ export default function Automations() {
             </div>
           </div>
         )}
+        </div>
       </div>
       {copieVers && (
         <CopierVersBureauxModal
