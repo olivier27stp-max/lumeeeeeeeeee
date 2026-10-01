@@ -39,7 +39,41 @@ export function assainirPourApi(messages: Msg[]): Msg[] {
     propres.push(blocs.length === m.content.length ? m : { ...m, content: blocs });
   }
   if (propres.length && propres[0].role === 'assistant') propres.unshift({ role: 'user', content: AMORCE_BRIEFING });
-  return propres;
+  return fusionnerAssistantsConsecutifs(propres);
+}
+
+const enBlocs = (m: Msg): Anthropic.Messages.ContentBlockParam[] => (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content);
+
+/** La suite d'un tour de l'assistant, ajoutée au MÊME message (voir fusionnerAssistantsConsecutifs). */
+export function suiteDuMemeTour(precedent: Msg, suite: Msg): Msg {
+  return { role: 'assistant', content: [...enBlocs(precedent), ...enBlocs(suite)] };
+}
+
+/**
+ * Deux messages `assistant` de suite n'en font qu'un.
+ *
+ * Quand le modèle cherche un outil (recherche côté API), l'API peut rendre la
+ * main en plein tour (`pause_turn`) : la réponse finit sur la demande de
+ * recherche, et son RÉSULTAT arrive au début de la réponse suivante. L'API exige
+ * que la demande et son résultat soient dans le même message ; rangés dans deux
+ * messages, l'appel d'après est refusé — « tool_search_tool_regex tool use …
+ * was found without a corresponding tool_search_tool_result block » — et la
+ * personne lit « Lumi n'a pas pu répondre » (passes du 2026-10-01 : 4 puis 7
+ * tours sur 221, tous des demandes qui sortent du sujet chargé).
+ *
+ * L'orchestrateur fusionne maintenant au fil du tour ; ceci répare aussi une
+ * conversation enregistrée avant le correctif, qui sinon resterait refusée à
+ * chaque message. Pure : ne modifie pas l'entrée.
+ */
+export function fusionnerAssistantsConsecutifs(messages: Msg[]): Msg[] {
+  if (!messages.some((m, i) => i > 0 && m.role === 'assistant' && messages[i - 1].role === 'assistant')) return messages;
+  const out: Msg[] = [];
+  for (const m of messages) {
+    const precedent = out[out.length - 1];
+    if (m.role === 'assistant' && precedent?.role === 'assistant') out[out.length - 1] = suiteDuMemeTour(precedent, m);
+    else out.push(m);
+  }
+  return out;
 }
 
 /** Ce qu'on garde d'un message ancien de la personne, et du rappel entier (≈ 1 500 tokens au plus). */
