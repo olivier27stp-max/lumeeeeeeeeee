@@ -21,6 +21,7 @@
  * Tests : tests/lumi-hors-scope.test.ts
  */
 import { normaliser } from './normaliser';
+import { chercherAide } from '../agent/tools-aide';
 
 /**
  * Indices que la question porte sur LUME (produit, forfait, compte) plutôt
@@ -94,6 +95,28 @@ export function reponseHorsScope(langue: 'fr' | 'en'): string {
 }
 
 /**
+ * Score de la recherche d'aide à partir duquel le sujet est CONNU du centre
+ * d'aide — donc pas hors-sujet, quoi qu'en dise le routeur. Mesuré le
+ * 2026-10-01 : les questions sur le produit sortent à 9 et plus (« où je change
+ * mon logo » 9, « comment je mets le formulaire de demande sur mon site web »
+ * 18), le vrai hors-sujet à 6 et moins (« peux-tu me bâtir un site web » 6,
+ * poème 4, météo 3, omelette 0).
+ */
+export const SCORE_AIDE_CONNAIT = 8;
+
+/**
+ * Le centre d'aide connaît-il le sujet ? Passe d'évaluation du 2026-10-01 :
+ * « comment je mets le formulaire de demande sur mon site web » — une vraie
+ * fonction de Lume, documentée — a été classée hors-sujet par le routeur à
+ * haute confiance et a reçu « ça sort de ce que je peux voir ». Aucun mot des
+ * listes ci-dessus n'y figure. Les listes ne peuvent pas suivre le produit ;
+ * la recherche d'aide, si : c'est la doc elle-même.
+ */
+export function aideConnaitLeSujet(message: string): boolean {
+  return (chercherAide(message, 1)[0]?.score ?? 0) >= SCORE_AIDE_CONNAIT;
+}
+
+/**
  * Faut-il répondre soi-même plutôt que d'appeler le gros modèle ?
  * Toutes les conditions doivent tenir — au moindre doute, le modèle répond.
  */
@@ -111,5 +134,7 @@ export function peutRepondreHorsScope(opts: {
   if (!opts.premierMessage) return false;
   // Une question sur Lume n'est pas du hors-sujet : la FAQ ou le modèle répond.
   if (mentionneLume(opts.message)) return false;
+  // Ni un sujet que le centre d'aide documente : le modèle ira lire la doc.
+  if (aideConnaitLeSujet(opts.message)) return false;
   return true;
 }
