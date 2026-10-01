@@ -1632,6 +1632,15 @@ export default function AutomationBuilderPage() {
               <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />{fr ? 'Enregistrement…' : 'Saving…'}</>
             ) : etatSauvegarde === 'modifie' ? (
               <><Cloud className="h-3.5 w-3.5" aria-hidden="true" />{fr ? 'Modifié' : 'Edited'}</>
+            ) : regle && !regle.id ? (
+              /*
+                Une automatisation NEUVE n'existe pas encore en base : elle
+                est créée à la première modification (voir `ecrire`).
+                Afficher « Enregistré » ici était faux (vu sur lumecrm.net le
+                2026-10-01 : 0 ligne en base) — on quittait la page en
+                croyant avoir un brouillon, il n'y en avait pas.
+              */
+              <><Cloud className="h-3.5 w-3.5" aria-hidden="true" />{fr ? 'Pas encore enregistrée' : 'Not saved yet'}</>
             ) : (
               <><Check className="h-3.5 w-3.5" aria-hidden="true" />{fr ? 'Enregistré' : 'Saved'}</>
             )}
@@ -1787,7 +1796,15 @@ export default function AutomationBuilderPage() {
                     « Publier » : découvrir à la fin qu'une action ne va pas
                     avec son déclencheur, c'est le découvrir trop tard.
                     Cliquer un problème ouvre l'étape fautive. ── */}
-                {bloquantsVivants.length > 0 && (
+                {/*
+                  PAS sur un canevas vide et non publié : une automatisation
+                  qu'on vient d'ouvrir accueillait son auteur par une alerte
+                  rouge « 1 chose(s) à corriger — ajoutez au moins une étape »,
+                  avant qu'il ait touché à quoi que ce soit (vu sur lumecrm.net
+                  le 2026-10-01). Le canevas le dit déjà (« Ajouter une
+                  première étape »), et « Publier » le rappelle si on essaie.
+                */}
+                {bloquantsVivants.length > 0 && (regle.is_active || etapesAffichees.length > 0) && (
                   <div className="mx-auto mb-4 max-w-xl px-4">
                     <div className="rounded-xl border border-danger/40 bg-danger/5 p-3">
                       <p className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-danger">
@@ -1796,11 +1813,11 @@ export default function AutomationBuilderPage() {
                             A-03) : « avant de publier » mentait — elle l'est. */}
                         {regle.is_active
                           ? (fr
-                            ? `Publiée mais cassée : ${bloquantsVivants.length} chose(s) à corriger — rien ne part correctement`
-                            : `Published but broken: ${bloquantsVivants.length} thing(s) to fix — nothing goes out correctly`)
+                            ? `Publiée mais cassée : ${bloquantsVivants.length} ${bloquantsVivants.length > 1 ? 'choses' : 'chose'} à corriger — rien ne part correctement`
+                            : `Published but broken: ${bloquantsVivants.length} ${bloquantsVivants.length > 1 ? 'things' : 'thing'} to fix — nothing goes out correctly`)
                           : (fr
-                            ? `${bloquantsVivants.length} chose(s) à corriger avant de publier`
-                            : `${bloquantsVivants.length} thing(s) to fix before publishing`)}
+                            ? `${bloquantsVivants.length} ${bloquantsVivants.length > 1 ? 'choses' : 'chose'} à corriger avant de publier`
+                            : `${bloquantsVivants.length} ${bloquantsVivants.length > 1 ? 'things' : 'thing'} to fix before publishing`)}
                       </p>
                       <ul className="space-y-1">
                         {bloquantsVivants.slice(0, 4).map((p, i) => (
@@ -1834,8 +1851,8 @@ export default function AutomationBuilderPage() {
                       </p>
                       <p className="mt-1.5 text-[12px] text-text-secondary">
                         {fr
-                          ? 'Décris ton automatisation en une phrase et Lumi la monte pour toi. En attendant, bâtis-la avec « Choisir le déclencheur » et le « + ».'
-                          : 'Describe your automation in one sentence and Lumi builds it. Meanwhile, build it with “Choose the trigger” and “+”.'}
+                          ? 'Décris ton automatisation en une phrase et Lumi la monte pour toi. En attendant, bâtis-la avec la carte « Quand » et le « + ».'
+                          : 'Describe your automation in one sentence and Lumi builds it. Meanwhile, build it with the “When” card and “+”.'}
                       </p>
                       <button
                         type="button"
@@ -1940,10 +1957,19 @@ export default function AutomationBuilderPage() {
                       onClick={() => setTiroirDeclencheur(true)}
                       className="w-full max-w-[300px] rounded-xl border-2 border-dashed border-accent/50 bg-accent/5 px-4 py-4 text-sm font-medium text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
-                      <Plus className="mx-auto mb-1 h-5 w-5" aria-hidden="true" />
-                      {fr ? 'Choisir le déclencheur' : 'Pick the trigger'}
+                      {/*
+                        Le déclencheur EN PLACE est dit en clair, puis l'invitation
+                        à en changer. « Choisir le déclencheur » avec « Devis
+                        envoyé » en petit dessous laissait croire qu'aucun n'était
+                        choisi (signalé par deux testeurs le 2026-10-01) — or la
+                        règle part bel et bien sur celui-là.
+                      */}
+                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-accent/80">
+                        {fr ? 'Quand' : 'When'}
+                      </span>
+                      <span className="block text-sm font-semibold text-text-primary">{declencheurLabel}</span>
                       <span className="mt-1 block text-[11px] font-normal text-text-secondary">
-                        {declencheurLabel}
+                        {fr ? 'Cliquer pour choisir un autre déclencheur' : 'Click to pick another trigger'}
                       </span>
                     </button>
 
