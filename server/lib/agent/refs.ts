@@ -50,20 +50,23 @@ interface Espace {
   uuidParRef: Map<string, string>;
   compteur: number;
   vu: number;
+  /** Numéros tirés de l'identifiant lui-même (voir `refPour`). */
+  stable: boolean;
 }
 
 const espaces = new Map<string, Espace>();
 const TTL_MS = 30 * 60_000; // 30 min : large devant l'aller-retour d'un appel
 
-function espacePour(cle: string): Espace {
+function espacePour(cle: string, stable = false): Espace {
   // Purge paresseuse des espaces trop vieux, pour ne pas fuir en mémoire.
   const maintenant = Date.now();
   for (const [k, e] of espaces) if (maintenant - e.vu > TTL_MS) espaces.delete(k);
   let e = espaces.get(cle);
   if (!e) {
-    e = { refParUuid: new Map(), uuidParRef: new Map(), compteur: 0, vu: maintenant };
+    e = { refParUuid: new Map(), uuidParRef: new Map(), compteur: 0, vu: maintenant, stable };
     espaces.set(cle, e);
   }
+  if (stable) e.stable = true;
   e.vu = maintenant;
   return e;
 }
@@ -71,7 +74,21 @@ function espacePour(cle: string): Espace {
 function refPour(e: Espace, uuid: string): string {
   const existante = e.refParUuid.get(uuid);
   if (existante) return existante; // même UUID → toujours la même réf
-  const ref = `ref${++e.compteur}`;
+  // Espace SANS mémoire de conversation (le MCP : c'est l'agent externe qui garde
+  // les réfs, dans son propre fil) : un compteur repartirait à 1 après chaque
+  // redéploiement, et le « ref5 » que l'agent tient depuis ce matin — le client
+  // X — désignerait la 5e fiche lue depuis le redémarrage. Le numéro est donc
+  // tiré de l'identifiant lui-même : la même fiche reçoit toujours la même
+  // réf, et une réf d'avant le redémarrage, tant que sa fiche n'a pas été
+  // relue, reste INCONNUE (« introuvable ») au lieu de viser une autre fiche.
+  let ref: string;
+  if (e.stable) {
+    let n = parseInt(uuid.replace(/-/g, '').slice(0, 8), 16);
+    while (e.uuidParRef.has(`ref${n}`)) n += 1; // deux identifiants au même début (une chance sur 4 milliards)
+    ref = `ref${n}`;
+  } else {
+    ref = `ref${++e.compteur}`;
+  }
   e.refParUuid.set(uuid, ref);
   e.uuidParRef.set(ref, uuid);
   return ref;
@@ -82,8 +99,8 @@ function refPour(e: Espace, uuid: string): string {
  * courte. Le nom du champ oriente le préfixe (client_id → c1). Les chaînes qui
  * CONTIENNENT un UUID au milieu d'autre texte (rare) sont aussi nettoyées.
  */
-export function masquerIds(cleEspace: string, valeur: any): any {
-  const e = espacePour(cleEspace);
+export function masquerIds(cleEspace: string, valeur: any, options?: { stable?: boolean }): any {
+  const e = espacePour(cleEspace, options?.stable === true);
   const parcourir = (v: any): any => {
     if (v == null) return v;
     if (typeof v === 'string') {
