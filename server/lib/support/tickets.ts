@@ -12,6 +12,7 @@ import { resolvePublicBaseUrl } from '../helpers';
 import { isSlackConfigured, canalSupport, envoyerMessageSlack, echapperSlack } from '../slack';
 import { liensPieces, pieceJointeSlack, LIEN_EQUIPE_S, type Piece } from './captures';
 import { logger } from '../logger';
+import { verdictBacASable } from '../bac-a-sable';
 import { rendreCourrielLume, echapper, type LigneDetail } from '../courriels/gabarit';
 
 // Forfaits prioritaires (« Support prioritaire » sur la page des prix).
@@ -303,7 +304,14 @@ export async function escaladerTicket(admin: SupabaseClient, ticket: Ticket, ctx
   const messages = await messagesDuTicket(admin, ticket.id);
   const maj: Partial<Ticket> = { status: 'open', escalated_at: new Date().toISOString(), escalation_reason: motif.slice(0, 300) };
 
-  if (isSlackConfigured()) {
+  // Un bureau de TEST (inscrit au bac à sable des envois) ne réveille pas l'équipe :
+  // pas de canal Slack créé, pas de fil dans #support. L'escalade suit le repli par
+  // courriel, que le bac à sable intercepte et consigne (envois_simules) — le ticket,
+  // lui, est bien créé et marqué escaladé, donc le parcours reste éprouvable de bout
+  // en bout. Sans cela, évaluer le support en production écrivait à de vraies personnes.
+  const bureauDeTest = (await verdictBacASable(ticket.org_id, [])).simule;
+
+  if (isSlackConfigured() && !bureauDeTest) {
     try {
       // Un canal par entreprise (canaux-slack.ts). S'il ne peut pas être créé
       // (scope channels:manage manquant…), le fil va dans #support comme avant.
