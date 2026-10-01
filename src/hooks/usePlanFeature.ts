@@ -141,6 +141,16 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
           ? (sub.plans ?? plansData.find((p) => p.id === sub.plan_id) ?? null)
           : null;
 
+        // Un abonnement dont on ne retrouve pas le forfait (jointure absente
+        // ET liste des forfaits en panne) n'est pas un abonnement sans droits :
+        // on ne sait pas. Meme traitement que l'appel echoue — sans quoi un
+        // client Autopilot voyait « Passer a Scale » a la place de son ecran,
+        // et l'etat restait en cache (audit du 2026-10-01).
+        if (sub && !plan) {
+          setBillingUnavailable(true);
+          return;
+        }
+
         const overrides = billing.feature_overrides ?? {};
         cache.plans = plansData;
         cache.subscription = sub;

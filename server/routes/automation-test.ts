@@ -259,13 +259,19 @@ router.get('/automations/test', async (req, res) => {
       details: `Key format: ruleId:entityId:actionIndex:date → "${dedupKey}"`,
     });
 
+    /*
+     * 9 et 10 : « configuré » ou non, RIEN d'autre. Ces réglages sont ceux de
+     * la plateforme, pas du bureau : la réponse montrait le début du SID
+     * Twilio, le numéro et l'identifiant SMTP de Lume à l'admin de n'importe
+     * quelle entreprise cliente (audit du 2026-10-01).
+     */
     // ── 9. Verify Twilio config ──
     const hasTwilio = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
     results.push({
       name: 'Twilio SMS configured',
       passed: hasTwilio,
       details: hasTwilio
-        ? `SID=${process.env.TWILIO_ACCOUNT_SID?.slice(0, 8)}..., Phone=${process.env.TWILIO_PHONE_NUMBER}`
+        ? 'Configured'
         : 'Twilio not configured — SMS actions will fail gracefully',
     });
 
@@ -275,7 +281,7 @@ router.get('/automations/test', async (req, res) => {
       name: 'SMTP email configured',
       passed: hasSmtp,
       details: hasSmtp
-        ? `SMTP user: ${process.env.SMTP_USER}`
+        ? 'Configured'
         : 'SMTP not configured — email actions will fail gracefully',
     });
 
