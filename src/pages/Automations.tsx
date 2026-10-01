@@ -518,7 +518,7 @@ export default function Automations() {
   const [page, setPage] = useState(1);
   /**
    * Tri par colonne (audit V2, A-17) : les en-têtes n'étaient pas
-   * cliquables. `null` = l'ordre du serveur (par nom), ou celui choisi dans
+   * cliquables. `null` = l'ordre des noms affichés, ou celui choisi dans
    * « Trier » des filtres avancés ; un clic sur un en-tête l'emporte.
    * Recliquer inverse.
    */
@@ -1000,15 +1000,28 @@ export default function Automations() {
     if (dossierActif && dossierActif !== 'racine' && r.folder_id !== dossierActif) return false;
     return true;
   });
+  /*
+   * L'ordre alphabétique se lit sur le nom AFFICHÉ (audit du 2026-10-01).
+   * Le serveur trie sur le nom stocké — en anglais pour les préréglages — et
+   * l'écran le traduit ensuite : en français la liste paraissait mélangée
+   * (« Confirmation… », « Anniversaire… », « Contrat… », « Vente croisée… »).
+   * Comparaison dans la langue de l'interface : « É » se range avec « E »,
+   * et « 3 jours » passe avant « 14 jours ».
+   */
+  const langueTri = fr ? 'fr-CA' : 'en-CA';
+  const parNomAffiche = (a: AutomationRule, b: AutomationRule) => localizeAutomationName(a.name, language)
+    .localeCompare(localizeAutomationName(b.name, language), langueTri, { sensitivity: 'base', numeric: true });
   if (triDate !== 'defaut') {
     const sens = triDate === 'recent' ? -1 : 1;
     filtrees.sort((a, b) => sens * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+  } else {
+    filtrees.sort(parNomAffiche);
   }
 
   /** La valeur comparée pour une colonne (nombres, dates en ms, texte). */
   const valeurTri = (r: AutomationRule, cle: CleTri): number | string => {
     switch (cle) {
-      case 'nom': return localizeAutomationName(r.name, language).toLocaleLowerCase(fr ? 'fr-CA' : 'en-CA');
+      case 'nom': return localizeAutomationName(r.name, language).toLocaleLowerCase(langueTri);
       case 'statut': return r.deleted_at ? 0 : r.is_active ? 2 : 1;
       case 'declenches': return stats?.[r.id]?.declenches ?? 0;
       case 'en_cours': return stats?.[r.id]?.en_cours ?? 0;
@@ -1022,10 +1035,9 @@ export default function Automations() {
       const vb = valeurTri(b, tri.cle);
       const ecart = typeof va === 'number' && typeof vb === 'number'
         ? va - vb
-        : String(va).localeCompare(String(vb), fr ? 'fr-CA' : 'en-CA');
+        : String(va).localeCompare(String(vb), langueTri, { sensitivity: 'base', numeric: true });
       // À égalité, le nom départage : un ordre stable d'un clic à l'autre.
-      return (tri.sens === 'asc' ? ecart : -ecart)
-        || localizeAutomationName(a.name, language).localeCompare(localizeAutomationName(b.name, language));
+      return (tri.sens === 'asc' ? ecart : -ecart) || parNomAffiche(a, b);
     })
     : filtrees;
 
