@@ -107,6 +107,15 @@ export function dejaEnvoye(historique: Array<{ text?: string }>, jour: string): 
   return historique.some((m) => (m.text ?? '').includes(entete));
 }
 
+/**
+ * Les conversations des bureaux de TEST (inscrits au bac à sable des envois) ne
+ * vont pas dans le résumé de l'équipe : avant, une batterie d'évaluation jouée
+ * la veille y déposait quarante lignes de faux clients. Pur, testé.
+ */
+export function sansBureauxDeTest<T extends { org_id?: string | null }>(tickets: T[], bureauxDeTest: ReadonlySet<string>): T[] {
+  return tickets.filter((t) => !t.org_id || !bureauxDeTest.has(t.org_id));
+}
+
 export async function envoyerResumeQuotidien(admin: SupabaseClient, maintenant = new Date()): Promise<'envoye' | 'rien' | 'deja' | 'sans-slack' | 'erreur'> {
   if (!isSlackConfigured()) return 'sans-slack';
   const canal = process.env.SLACK_SUPPORT_CHANNEL_ID!;
@@ -114,13 +123,16 @@ export async function envoyerResumeQuotidien(admin: SupabaseClient, maintenant =
   try {
     const depuis = String((Date.now() - 36 * 3_600_000) / 1000);
     if (dejaEnvoye(await lireHistoriqueSlack(canal, depuis, 200), jour)) return 'deja';
-    const { data: tickets, error } = await admin
+    const { data: tousLesTickets, error } = await admin
       .from('support_tickets')
-      .select('id, company_name, user_name, subject, status, created_at, last_message_at, escalated_at, closed_at, slack_channel_id, slack_thread_ts')
+      .select('id, org_id, company_name, user_name, subject, status, created_at, last_message_at, escalated_at, closed_at, slack_channel_id, slack_thread_ts')
       .gte('last_message_at', debut).lt('last_message_at', fin)
       .order('last_message_at', { ascending: false }).limit(200);
     if (error) throw error;
-    if (!tickets?.length) return 'rien';
+    const { data: bac, error: eBac } = await admin.from('orgs_envois_simules').select('org_id');
+    if (eBac) throw eBac;
+    const tickets = sansBureauxDeTest(tousLesTickets ?? [], new Set((bac ?? []).map((l: { org_id: string }) => l.org_id)));
+    if (!tickets.length) return 'rien';
     const { data: messages, error: e2 } = await admin
       .from('support_messages')
       .select('ticket_id, author, body, created_at, avis')
