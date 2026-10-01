@@ -10,6 +10,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { motifSansAccent, contientSansAccent } from './sans-accent';
 import type { FunctionDeclaration } from './gemini';
 import {
   OUTILS_LECTURE_ETENDUS, OUTILS_ECRITURE_ETENDUS, ETIQUETTES_DERIVED,
@@ -188,14 +189,37 @@ const searchClients: AgentTool = {
         );
       }
     }
-    const { data, error, count } = await q;
+    const { data, error, count: compteExact } = await q;
     if (error) return toolError('db', error);
     // La sélection dépend du filtre d'étiquette : le typage de supabase-js ne
     // suit pas une sélection conditionnelle, d'où la forme écrite ici.
-    const lignes = (data ?? []) as unknown as Array<{
+    type LigneClient = {
       id: string; first_name: string | null; last_name: string | null; company: string | null;
       email: string | null; phone: string | null; address: string | null; city: string | null; status: string | null;
-    }>;
+    };
+    let lignes = (data ?? []) as unknown as LigneClient[];
+    let count = compteExact;
+    // Rien trouvé : le nom est peut-être écrit sans ses accents (« Nathalie Coté » pour « Côté »).
+    // Second passage, sans accent, sur le nom et l'entreprise seulement (sans-accent.ts).
+    if (term && !lignes.length) {
+      const mots = motsDeRecherche(term);
+      if (mots.length) {
+        let large = ctx.client.from('clients')
+          .select(etiquette
+            ? 'id, first_name, last_name, company, email, phone, address, city, status, client_tags!inner(tag)'
+            : 'id, first_name, last_name, company, email, phone, address, city, status')
+          .eq('org_id', ctx.orgId).is('deleted_at', null).limit(200);
+        if (etiquette) large = large.ilike('client_tags.tag', etiquette.replace(/[\\%_]/g, (c) => `\\${c}`));
+        for (const mot of mots) {
+          const motif = motifSansAccent(mot);
+          large = large.or(`first_name.ilike.%${motif}%,last_name.ilike.%${motif}%,company.ilike.%${motif}%`);
+        }
+        const { data: candidats } = await large;
+        const retenus = ((candidats ?? []) as unknown as LigneClient[])
+          .filter((c) => mots.every((mot) => contientSansAccent([c.first_name, c.last_name, c.company], mot)));
+        if (retenus.length) { lignes = retenus.slice(0, limit); count = retenus.length; }
+      }
+    }
     return {
       ...enTeteListe(count, lignes),
       // Audit 2026-09-30 : 0 résultat ne veut pas dire « n'existe pas » — la recherche
@@ -381,7 +405,14 @@ export function motsDeRecherche(terme: string): string[] {
 async function idsClientsParMot(ctx: ToolContext, mot: string): Promise<string[]> {
   const { data } = await ctx.client.from('clients').select('id').eq('org_id', ctx.orgId).is('deleted_at', null)
     .or(`first_name.ilike.%${mot}%,last_name.ilike.%${mot}%,company.ilike.%${mot}%`).limit(40);
-  return ((data ?? []) as Array<{ id: string }>).map((c) => c.id);
+  const ids = ((data ?? []) as Array<{ id: string }>).map((c) => c.id);
+  if (ids.length) return ids;
+  // Aucun client : le nom est peut-être écrit sans ses accents (sans-accent.ts).
+  const motif = motifSansAccent(mot);
+  const { data: candidats } = await ctx.client.from('clients').select('id, first_name, last_name, company').eq('org_id', ctx.orgId).is('deleted_at', null)
+    .or(`first_name.ilike.%${motif}%,last_name.ilike.%${motif}%,company.ilike.%${motif}%`).limit(200);
+  return ((candidats ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null; company: string | null }>)
+    .filter((c) => contientSansAccent([c.first_name, c.last_name, c.company], mot)).slice(0, 40).map((c) => c.id);
 }
 
 /** Un filtre `or` par mot (PostgREST les combine en ET) : colonnes de la fiche OU client de la fiche. */

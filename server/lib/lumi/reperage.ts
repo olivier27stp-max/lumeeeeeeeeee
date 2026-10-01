@@ -26,6 +26,7 @@
  *  · `LUMI_REPERAGE=0` coupe tout, sans redéploiement de code.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { motifSansAccent, egalSansAccent } from '../agent/sans-accent';
 import { masquerIds } from '../agent/refs';
 
 export type GenreNumero = 'devis' | 'facture' | 'job';
@@ -138,8 +139,11 @@ export async function repererFiches(message: string, o: OptionsReperage): Promis
       Promise.all(numeros.map((c) => fichesParNumero(o, c).catch(() => []))),
       veutClients
         ? o.client.from('clients').select('id, first_name, last_name, city, status, created_at, email, phone').eq('org_id', o.orgId).is('deleted_at', null)
-          .or(paires.map(([a, b]) => `and(first_name.ilike."${a}",last_name.ilike."${b}")`).join(',')).limit(12)
-          .then((r) => (r.data ?? []) as Array<Record<string, any>>, () => [])
+          // Motif large en base (lettres accentuables = « _ »), égalité aux accents près ensuite : « nathalie coté »
+          // trouve « Nathalie Côté » sans ramener « Nathalia Cuta » (sans-accent.ts).
+          .or(paires.map(([a, b]) => `and(first_name.ilike."${motifSansAccent(a)}",last_name.ilike."${motifSansAccent(b)}")`).join(',')).limit(40)
+          .then((r) => ((r.data ?? []) as Array<Record<string, any>>)
+            .filter((c) => paires.some(([a, b]) => egalSansAccent(c.first_name, a) && egalSansAccent(c.last_name, b))).slice(0, 12), () => [])
         : Promise.resolve([] as Array<Record<string, any>>),
       veutMembres
         ? o.client.from('team_members').select('id, user_id, first_name, last_name, role, status').eq('org_id', o.orgId).limit(200)
