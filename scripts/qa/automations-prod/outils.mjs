@@ -15,7 +15,7 @@
  */
 import { chromium, firefox, webkit } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -40,7 +40,9 @@ const cle = process.env.SUPABASE_SERVICE_ROLE_KEY_PROD;
 if (!url || !cle) throw new Error('SUPABASE_URL_PROD / SUPABASE_SERVICE_ROLE_KEY_PROD manquants (.env.local).');
 export const admin = createClient(url, cle, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const { data: org } = await admin.from('orgs').select('name').eq('id', ORG).single();
+const { data: org, error: lectureOrg } = await admin.from('orgs').select('name').eq('id', ORG).single();
+// Une lecture RATÉE n'est pas « mauvais bureau » : pendant la panne du 2026-10-01, ce refus disait le contraire de la vérité.
+if (lectureOrg) throw new Error(`ARRÊT : la base de prod ne répond pas (${lectureOrg.message}) — aucune vérification ne tourne.`);
 if (org?.name !== NOM_ORG) throw new Error('REFUS : ce n’est pas le bureau de test.');
 
 let anon = null;
@@ -59,13 +61,49 @@ export async function enBacASable() {
   return !!data;
 }
 
-/** Une session neuve par lien magique (aucun mot de passe, aucun courriel envoyé). */
+/**
+ * La prod répond-elle NORMALEMENT ? À lire avant chaque script et avant chaque ouverture d'onglet.
+ *
+ * Le 2026-10-01, cette passe a tourné pendant que la base de prod s'effondrait (compute par défaut,
+ * plusieurs batteries de tests en même temps) : elle a continué à charger des pages sur une base
+ * déjà à genoux. Désormais elle s'arrête d'elle-même : pas de réponse, ou base à plus de 1 500 ms.
+ */
+export async function santeProd() {
+  try {
+    const t = Date.now();
+    const r = await fetch(`${SITE}/api/health`, { signal: AbortSignal.timeout(10_000) });
+    const j = await r.json().catch(() => null);
+    return { ok: r.ok && Number(j?.db_ms ?? 0) <= 1500, statut: r.status, db_ms: Number(j?.db_ms ?? -1), total_ms: Date.now() - t };
+  } catch (e) {
+    return { ok: false, statut: 0, db_ms: -1, total_ms: -1, erreur: String(e).slice(0, 80) };
+  }
+}
+export async function exigerProdSaine() {
+  const s = await santeProd();
+  if (!s.ok) throw new Error(`ARRÊT : la prod ne répond pas normalement (statut ${s.statut}, base ${s.db_ms} ms) — aucune vérification ne tourne.`);
+  return s;
+}
+
+const SESSIONS = join(SORTIES, 'sessions');
+mkdirSync(SESSIONS, { recursive: true });
+
+/**
+ * Une session par lien magique (aucun mot de passe, aucun courriel envoyé), RÉUTILISÉE d'un script à
+ * l'autre tant qu'il lui reste vingt minutes : la passe ouvrait une session par script (une vingtaine en
+ * six minutes, depuis une seule adresse IP) et se faisait limiter par l'authentification (429).
+ */
 export async function session(email) {
+  const fichier = join(SESSIONS, `${email.replace(/[^a-z0-9]+/gi, '_')}.json`);
+  try {
+    const gardee = JSON.parse(readFileSync(fichier, 'utf8'));
+    if (gardee?.access_token && Number(gardee.expires_at) * 1000 - Date.now() > 20 * 60_000) return gardee;
+  } catch { /* pas de session gardée : on en ouvre une */ }
   const { data: lien, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
   if (error) throw new Error(`lien magique : ${error.message}`);
   const pub = createClient(url, await cleAnon(), { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: s, error: e2 } = await pub.auth.verifyOtp({ token_hash: lien.properties.hashed_token, type: 'magiclink' });
   if (e2 || !s.session) throw new Error(`session ${email} : ${e2?.message}`);
+  try { writeFileSync(fichier, JSON.stringify(s.session)); } catch { /* sans cache : une session par script, rien de plus */ }
   return s.session;
 }
 
@@ -100,6 +138,7 @@ export function moniteur(page, base) {
 
 /** Ouvre un onglet connecté au bureau de test. o : { email, navigateur, viewport, langue, tactile, userAgent, delai } */
 export async function ouvrir(o = {}) {
+  await exigerProdSaine();
   if (!(await enBacASable())) throw new Error('ARRÊT : le bureau de test n’est pas en bac à sable — rien ne tourne.');
   const s = await session(o.email ?? COMPTES.proprietaire);
   const type = o.navigateur ?? 'chromium';
