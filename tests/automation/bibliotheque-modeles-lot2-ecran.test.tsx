@@ -250,7 +250,8 @@ describe('modeles-10 — en anglais, l’aperçu ne montre plus de français', (
       for (const t of titres) expect(t, m.id).not.toMatch(francais);
       cliquer(bouton(/^Back$/));
     }
-  });
+    // Les 43 modèles sont ouverts un à un : 7 s sur un poste libre, davantage en CI.
+  }, 60_000);
 });
 
 describe('modeles-07 — autant d’étapes annoncées que de cartes dans l’éditeur', () => {
@@ -283,7 +284,8 @@ describe('modeles-07 — autant d’étapes annoncées que de cartes dans l’é
       expect(etapesAffichees().length, m.id).toBe(annonce);
       cliquer(bouton(/^Retour$/));
     }
-  });
+    // Les 43 modèles sont ouverts un à un : 9 s sur un poste libre, davantage en CI.
+  }, 60_000);
 });
 
 describe('modeles-08 — la carte et l’aperçu montrent toutes les branches', () => {
