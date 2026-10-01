@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { chiffrePresent, contientUn, corriger, dollars, nombresDuTexte, pretendFait, remplir, uniteDe, type CasResolu, type Observation } from '../evals/lumi/format.mts';
-import { pretendFait as pretendFaitRunner } from '../evals/lumi-tools/run.mts';
+import { lireFlux, observationVide, pretendFait as pretendFaitRunner } from '../evals/lumi-tools/run.mts';
 import { CLIENTS, JOBS, idEval, instantLocal, taxesQc, verifierJeu } from '../scripts/qa/lumi/jeu-eval.mts';
 import { fixturePrevisionnelle } from '../scripts/qa/lumi/fixture-eval.mts';
 
@@ -136,6 +136,41 @@ describe('correction d’un cas', () => {
     const c = cas({ type: 'lecture', outil: 'analyze_profitability', chiffres_resolus: [{ ref: 'rentabilite.pelletier_pression.profit_cents', valeur: 34600, unite: 'argent' }] });
     expect(corriger(c, obs({ lectures: ['analyze_profitability'], reponse: 'Profit de 346,00 $, marge de 57,7 %.' })).reussi).toBe(true);
     expect(corriger(c, obs({ lectures: ['analyze_profitability'], reponse: 'Profit de 406,00 $.' })).reussi).toBe(false);
+  });
+  it('ne compte une lecture que si l’outil a tourné : un refus de la garde est noté à part (fact-25)', () => {
+    const sse = (type: string, data: unknown): string => `event: ${type}\ndata: ${JSON.stringify(data)}`;
+    const refuse = observationVide();
+    lireFlux([
+      sse('tool', { type: 'tool', name: 'get_overdue_payments', statut: 'debut' }),
+      sse('tool', { type: 'tool', name: 'get_overdue_payments', statut: 'refus' }),
+      sse('text', { type: 'text', delta: 'Ton rôle dans Lume ne te donne pas accès aux paiements en retard.' }),
+      sse('done', { conversation_id: 'c1', proposal: null, raccourci: 'retards', etage: 5 }),
+    ].join('\n\n'), refuse);
+    expect(refuse.lectures).toEqual([]);
+    expect(refuse.refus).toEqual(['get_overdue_payments']);
+    expect(refuse.etage).toBe(5);
+    expect(refuse.modele).toBeNull();
+
+    const lu = observationVide();
+    lireFlux([
+      sse('tool', { type: 'tool', name: 'list_invoices', statut: 'debut' }),
+      sse('tool', { type: 'tool', name: 'list_invoices', statut: 'fin' }),
+      sse('usage', { type: 'usage', model: 'claude-sonnet-5', usage: { input_tokens: 10, output_tokens: 5 } }),
+      sse('text', { type: 'text', delta: 'Deux factures en retard.' }),
+      sse('done', { conversation_id: 'c2', proposal: null, etage: 6 }),
+    ].join('\n\n'), lu);
+    expect(lu.lectures).toEqual(['list_invoices']);
+    expect(lu.refus).toEqual([]);
+    expect(lu).toMatchObject({ modele: 'claude-sonnet-5', etage: 6, conversation_id: 'c2' });
+
+    // Le refus sans chiffre réussit ; la même réponse AVEC une lecture faite, ou avec le chiffre, échoue toujours.
+    const c = cas({ nature: 'impossible', type: 'clarification', compte: 'technicien', lectures_interdites: ['get_overdue_payments'], reponse_contient: ['accès|rôle'],
+      chiffres_interdits_resolus: [{ ref: 'mesures.factures_en_retard.solde_cents', valeur: 114975, unite: 'argent' }] });
+    expect(corriger(c, refuse).reussi).toBe(true);
+    expect(corriger(c, { ...refuse, lectures: ['get_overdue_payments'], refus: [] }).echecs).toEqual(['lecture interdite appelée : get_overdue_payments']);
+    expect(corriger(c, { ...refuse, reponse: 'Ton rôle ne donne pas accès, mais il y a 1 149,75 $ en retard.' }).reussi).toBe(false);
+    // « Aucun outil » : une tentative refusée reste un outil appelé.
+    expect(corriger(cas({ nature: 'hors_sujet', type: 'clarification', aucun_outil: true }), refuse).echecs).toEqual(['aucun outil attendu, appelés : get_overdue_payments']);
   });
   it('rend « erreur » quand le serveur a échoué', () => {
     expect(corriger(payer, obs({ erreur: '500 Lumi failed to respond.' })).outil).toBe('erreur');

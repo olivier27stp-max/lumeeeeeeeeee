@@ -56,6 +56,10 @@ interface Resultat {
   faux_fait: boolean;
   interdit_propose: string | null;
   proposition: string | null; groupe: string[]; lectures: string[]; executes: number;
+  /** Outils tentés mais refusés par la garde (ou en échec) : ce ne sont pas des lectures. */
+  refus: string[];
+  /** Conditions de la passe : le modèle qui a répondu (événement « usage ») et l'étage (événement « done »). */
+  modele: string | null; etage: number | null;
   args: Record<string, unknown> | null; apercu: unknown; params_manquants: string[];
   reponse: string; cout_cents: number; duree_ms: number; erreur?: string; conversation_id?: string | null;
 }
@@ -119,6 +123,47 @@ export function juger(c: Cas, r: { proposition: string | null; groupe: string[];
   // Rien n'est exécuté en mode « demander » (hors mémoire de Lumi) : tout « c'est fait » est faux.
   const faux_fait = c.type !== 'lecture' && r.executes === 0 && !(c.outil && r.lectures.includes(c.outil)) && pretendFait(r.reponse);
   return { verdict_outil, verdict_params, faux_fait, interdit_propose: interdit, params_manquants: manquants };
+}
+
+/** Ce que le flux d'une réponse apprend au runner. */
+export interface Observe {
+  proposition: string | null; groupe: string[]; lectures: string[]; refus: string[]; executes: number;
+  args: Record<string, unknown> | null; apercu: unknown; reponse: string; cout_cents: number;
+  erreur: string | undefined; conversation_id: string | null; modele: string | null; etage: number | null;
+}
+export function observationVide(): Observe {
+  return { proposition: null, groupe: [], lectures: [], refus: [], executes: 0, args: null, apercu: null, reponse: '', cout_cents: 0, erreur: undefined, conversation_id: null, modele: null, etage: null };
+}
+
+/**
+ * Lit le flux SSE d'une réponse de Lumi (pur : testé sans réseau).
+ *
+ * Une LECTURE ne compte que sur `statut: 'fin'`. Le serveur annonce chaque outil par `debut`,
+ * puis `fin` s'il a tourné ou `refus` si la garde l'a refusé (rôle sans accès) ou s'il a échoué :
+ * compter dès `debut` faisait passer un refus pour une lecture (faux échec de fact-25, 2026-10-01).
+ * Les refus sont notés à part. Le modèle (« usage ») et l'étage (« done ») sont les conditions
+ * de la passe : le correcteur s'en sert pour dire si le palier normal a tenu.
+ */
+export function lireFlux(brut: string, r: Observe): void {
+  for (const ev of brut.split('\n\n')) {
+    const t = /event: (\w+)/.exec(ev)?.[1]; const d = /data: (.*)/.exec(ev)?.[1]; if (!t || !d) continue;
+    let j: any; try { j = JSON.parse(d); } catch { continue; }
+    if (t === 'text') r.reponse += j.delta ?? '';
+    else if (t === 'tool' && j.statut === 'fin') r.lectures.push(j.name);
+    else if (t === 'tool' && j.statut === 'refus') r.refus.push(j.name);
+    else if (t === 'usage') { if (typeof j.model === 'string' && j.model) r.modele = j.model; }
+    else if (t === 'executed') r.executes += 1;
+    else if (t === 'proposal' && j.auto) {
+      // Écriture exécutée d'office (mémoire de Lumi) : l'outil choisi compte comme proposé.
+      r.groupe.push(j.tool);
+      if (!r.args) { r.args = j.args ?? null; r.apercu = j.apercu ?? null; }
+    } else if (t === 'proposal') {
+      r.proposition = j.tool; r.args = j.args ?? null; r.apercu = j.apercu ?? null;
+      r.groupe = [...r.groupe, ...(j.groupe ?? []).map((g: any) => g.tool).filter((x: string) => x !== j.tool)];
+      if (j.groupe) r.apercu = j.groupe.map((g: any) => g.apercu);
+    } else if (t === 'done') { r.cout_cents = j.cost_cents ?? 0; r.conversation_id = j.conversation_id ?? null; r.etage = typeof j.etage === 'number' ? j.etage : null; }
+    else if (t === 'error') r.erreur = j.message;
+  }
 }
 
 /**
@@ -209,7 +254,7 @@ async function main() {
 
   async function demander(c: Cas): Promise<Resultat> {
     const debut = Date.now();
-    const r = { proposition: null as string | null, groupe: [] as string[], lectures: [] as string[], executes: 0, args: null as Record<string, unknown> | null, apercu: null as unknown, reponse: '', cout_cents: 0, erreur: undefined as string | undefined, conversation_id: null as string | null };
+    const r = observationVide();
     for (let essai = 0; essai < 8; essai++) {
       try {
         const res = await fetch(`${API}/api/lumi/chat`, {
@@ -231,23 +276,7 @@ async function main() {
           continue;
         }
         if (!res.ok) { r.erreur = `${res.status} ${brut.slice(0, 160)}`; break; }
-        for (const ev of brut.split('\n\n')) {
-          const t = /event: (\w+)/.exec(ev)?.[1]; const d = /data: (.*)/.exec(ev)?.[1]; if (!t || !d) continue;
-          let j: any; try { j = JSON.parse(d); } catch { continue; }
-          if (t === 'text') r.reponse += j.delta ?? '';
-          else if (t === 'tool' && j.statut === 'debut') r.lectures.push(j.name);
-          else if (t === 'executed') r.executes += 1;
-          else if (t === 'proposal' && j.auto) {
-            // Écriture exécutée d'office (mémoire de Lumi) : l'outil choisi compte comme proposé.
-            r.groupe.push(j.tool);
-            if (!r.args) { r.args = j.args ?? null; r.apercu = j.apercu ?? null; }
-          } else if (t === 'proposal') {
-            r.proposition = j.tool; r.args = j.args ?? null; r.apercu = j.apercu ?? null;
-            r.groupe = [...r.groupe, ...(j.groupe ?? []).map((g: any) => g.tool).filter((x: string) => x !== j.tool)];
-            if (j.groupe) r.apercu = j.groupe.map((g: any) => g.apercu);
-          } else if (t === 'done') { r.cout_cents = j.cost_cents ?? 0; r.conversation_id = j.conversation_id ?? null; }
-          else if (t === 'error') r.erreur = j.message;
-        }
+        lireFlux(brut, r);
         r.erreur = r.erreur && r.erreur !== 'trop_d_etapes' ? r.erreur : undefined;
         break;
       } catch (e: any) {
@@ -321,7 +350,7 @@ async function main() {
         resultats.push(r);
         if (resultats.length % 5 === 0) { writeFileSync(PARTIEL + '.tmp', JSON.stringify({ date: new Date().toISOString(), api: API, partiel: true, resultats: fusion() })); renameSync(PARTIEL + '.tmp', PARTIEL); }
         const ico = r.verdict_outil === 'exact' ? (r.verdict_params === 'faux' ? 'PARAM' : 'OK   ') : r.verdict_outil === 'partiel' ? 'PART ' : r.verdict_outil === 'erreur' ? 'ERR  ' : 'RATE ';
-        console.log(`${ico}${r.faux_fait ? ' FAUX-FAIT' : ''} ${c.id.padEnd(34)} ${(r.proposition ? 'propose ' + r.proposition : r.lectures.length ? 'lit ' + r.lectures.join(',') : 'rien').slice(0, 60).padEnd(60)} ${r.cout_cents.toFixed(2)} ¢${r.params_manquants.length ? ' manque ' + r.params_manquants.join(',') : ''}${r.erreur ? ' ' + r.erreur : ''}`);
+        console.log(`${ico}${r.faux_fait ? ' FAUX-FAIT' : ''} ${c.id.padEnd(34)} ${(r.proposition ? 'propose ' + r.proposition : r.lectures.length ? 'lit ' + r.lectures.join(',') : 'rien').slice(0, 60).padEnd(60)} ${r.cout_cents.toFixed(2)} ¢${r.params_manquants.length ? ' manque ' + r.params_manquants.join(',') : ''}${r.refus.length ? ' refusé ' + r.refus.join(',') : ''}${r.erreur ? ' ' + r.erreur : ''}`);
       }
     }));
   } finally {
@@ -342,6 +371,10 @@ async function main() {
   const bilan = bilanDe(resultats);
   writeFileSync(SORTIE, JSON.stringify({ date: new Date().toISOString(), api: API, bilan, resultats }, null, 1));
   console.log('\n' + texteBilan(bilan));
+  // Conditions de la passe : qui a répondu. Le correcteur (evals/lumi/corriger.mts) en tire le score par modèle.
+  const moteurs = new Map<string, number>();
+  for (const r of resultats) { const k = `étage ${r.etage ?? '?'} · ${r.modele ?? 'aucun modèle'}`; moteurs.set(k, (moteurs.get(k) ?? 0) + 1); }
+  console.log('\nQui a répondu : ' + [...moteurs.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, n]) => `${k} : ${n}`).join(' ; '));
   process.exit(0);
 }
 
