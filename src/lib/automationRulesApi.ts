@@ -301,11 +301,15 @@ export async function getCompanyBranding(): Promise<ApercuEntreprise> {
 export async function getAutomationLanguage(): Promise<'fr' | 'en'> {
   const orgId = await getCurrentOrgId();
   if (!orgId) return 'fr';
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('company_settings')
     .select('default_language')
     .eq('org_id', orgId)
     .maybeSingle();
+  // Une lecture RATÉE n'est pas « français » : l'erreur était ignorée, et un
+  // bureau anglophone voyait « FR » surligné pendant une panne (audit du
+  // 2026-10-01). Les écrans attrapent l'erreur et disent qu'ils ne savent pas.
+  if (error) throw new Error(error.message);
   return data?.default_language === 'en' ? 'en' : 'fr';
 }
 

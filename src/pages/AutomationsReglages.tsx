@@ -51,13 +51,14 @@ export default function AutomationsReglages() {
   const fr = language === 'fr';
   const navigate = useNavigate();
 
-  const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
+  /** `null` = on n'a pas pu la lire : on le dit, on n'affiche pas « Français » d'office. */
+  const [orgLang, setOrgLang] = useState<'fr' | 'en' | null>(null);
   const [chargement, setChargement] = useState(true);
 
   useEffect(() => {
     getAutomationLanguage()
       .then(setOrgLang)
-      .catch(() => {})
+      .catch((e: unknown) => { console.error('[automations/reglages] langue des messages illisible', e); })
       .finally(() => setChargement(false));
   }, []);
 
@@ -93,9 +94,15 @@ export default function AutomationsReglages() {
                   réponses différentes. On montre ce qui est en vigueur, et
                   on emmène au bon endroit pour le changer. */}
               <div className="flex flex-wrap items-center gap-3">
-                <span className="rounded-lg border border-outline/50 px-3 py-1.5 text-[13px] font-medium text-text-primary">
-                  {orgLang === 'fr' ? 'Français' : 'English'}
-                </span>
+                {orgLang ? (
+                  <span data-testid="langue-des-messages" className="rounded-lg border border-outline/50 px-3 py-1.5 text-[13px] font-medium text-text-primary">
+                    {orgLang === 'fr' ? 'Français' : 'English'}
+                  </span>
+                ) : (
+                  <span role="status" className="text-[13px] text-text-secondary">
+                    {fr ? 'Impossible de lire la langue pour le moment.' : 'The language cannot be read right now.'}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => navigate('/settings/company')}
