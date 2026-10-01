@@ -591,6 +591,21 @@ export async function tourLumi(opts: {
         resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: `Unknown tool: ${appel.name}` }), is_error: true });
         continue;
       }
+      // ── Le rôle, ICI aussi (passe de référence du 2026-10-01, cas terrain-13) ──
+      // Le modèle ne reçoit que les outils permis à la personne — mais il peut
+      // appeler quand même un outil qu'on ne lui a pas donné (il en connaît le
+      // nom). Un technicien a ainsi obtenu une carte « supprimer le client » :
+      // l'exécution aurait été refusée, mais la carte ne doit pas exister. Seul
+      // le fait que l'outil EXISTE était vérifié ; on vérifie qu'il est PERMIS.
+      if (opts.outilsPermis && !opts.outilsPermis.has(appel.name)) {
+        opts.emettre({ type: 'tool', name: appel.name, statut: 'refus' });
+        const capacite = PERMISSION_PAR_OUTIL[appel.name]?.capacite;
+        resultats.push({
+          type: 'tool_result', tool_use_id: appel.id, is_error: true,
+          content: JSON.stringify({ error: `Le rôle de cette personne dans Lume ne permet pas ${capacite ?? 'cette action'}. Rien n'a été fait ni proposé. Dis-le simplement, sans proposer de contournement ; un administrateur peut changer ses accès.` }),
+        });
+        continue;
+      }
       // Plafond d'écritures atteint : plus rien ne part d'office, tout repasse par la carte.
       const dOffice = !contenuExterneLu && !JAMAIS_D_OFFICE.has(appel.name) && (ECRITURES_ANODINES.has(appel.name) || opts.autorisations?.has(appel.name));
       const sousLePlafond = opts.ecrituresRestantes === undefined || opts.ecrituresRestantes > 0;
