@@ -397,6 +397,8 @@ describe('T13.4 — bascule Brouillon / Publiée', () => {
         Object.assign(chaine, {
           select: () => chaine,
           eq: () => chaine,
+          // La lecture écarte une règle purgée (`.is('purged_at', null)`) : celle-ci ne l'est pas.
+          is: () => chaine,
           update: () => chaine,
           maybeSingle: async () => ({ data: { id: RULE_ID, name: 'R', trigger_event: 'quote.sent', conditions: {}, steps: null, actions: [], is_preset: false, is_active: true, deleted_at: null }, error: null }),
           then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: lignes, error: null }).then(ok),

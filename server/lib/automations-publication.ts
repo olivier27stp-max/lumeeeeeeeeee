@@ -57,6 +57,9 @@ export async function changerPublication(
     .select('id, name, trigger_event, conditions, steps, actions, is_preset, is_active, deleted_at')
     .eq('id', id)
     .eq('org_id', orgId)
+    // Supprimée définitivement : elle n'existe plus (404) — ni « restaurez-la »,
+    // ni dépublication qui écrirait dessus.
+    .is('purged_at', null)
     .maybeSingle();
 
   if (lectureErr) {
