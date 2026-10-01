@@ -41,6 +41,7 @@ Ce qui manque pour dire « prêt » :
 | `40-roles-api` | technicien et vendeur refusés sur les 32 routes de l’API (403 avec une phrase lisible), y compris barre finale, majuscules et double barre ; sans session : 401 ; propriétaire et admin lisent | — | 9/9 |
 | `50-comportements-navigateur` | éditeur : rechargement, retour arrière et avancer, lien direct vers une règle inexistante (« introuvable ») ou à la corbeille, modification hors ligne (l’écran dit « Modifié », rien n’est écrit, puis ça s’enregistre au retour du réseau), règle supprimée dans un autre onglet (« n’existe plus ») | — | 6/6 |
 | `60-anglais` | interface en anglais : liste, vue d’ensemble, réglages globaux, éditeur — aucun texte d’interface resté en français | — | 4/4 |
+| `70-journaux-causes` | onglet Journaux : deux causes écrites en anglais par le moteur sont lues en français | 0/1 | à rejouer après #881 |
 
 Ces scripts sont maintenant dans le dépôt (`scripts/qa/automations-prod/`) et se lancent d’une commande : **`npm run test:automations:e2e`** — 64 vérifications sur 64 réussies le 2026-10-01 à 19 h 50 UTC, sortie en JSON et en markdown. C’est une passe **après déploiement** : elle juge ce qui est en ligne. Ce qui bloque un merge avant déploiement reste la CI.
 
@@ -74,6 +75,7 @@ Incident à signaler : le 1er octobre, six agents en parallèle sur staging ont 
 | #866 (lot 1b) | diagnostic sans identifiants de la plateforme, pas de mur de vente sur forfait illisible, fausse alerte « variable inexistante » | oui, 18:03 UTC |
 | #870 (lot 2) | 45 constats : liste, éditeur, bibliothèque de modèles, routes, refus lisibles, anglais | oui, 19:01 UTC |
 | #876 (lot 3) | tablette : liste, barre du haut, cibles tactiles | oui, 19:21 UTC |
+| #881 (lot 4) | aucune cause d’échec en anglais brut dans la liste ni dans l’onglet Journaux (14 messages du moteur + 10 causes relevées dans les journaux de prod) | après ce rapport |
 
 Fonctions de base ajoutées (elles manquaient) : menu des étapes pour « Déplacer l'opportunité », recherche dans la palette de variables, Ctrl+Z / Ctrl+Y, Échap sur les menus et le tiroir, écran « à la corbeille » avec « Restaurer », écran « n'existe plus », « Réessayer » quand l'état de la pause est illisible, sous-navigation en liens.
 
@@ -85,6 +87,14 @@ Fonctions de base ajoutées (elles manquaient) : menu des étapes pour « Dépla
 4. **Confirmation à la publication quand une étape porte encore le texte d'exemple** de l'éditeur (P-008) : proposée, non bâtie.
 5. **Table des gardes de l'API** : elle ne reconnaît comme paramètre qu'un uuid, un nombre ou un segment de plus de 10 caractères ; un identifiant court passe hors table. Sans conséquence aujourd'hui (les routes concernées ont leur propre contrôle), à durcir.
 6. **Texte anglais « New lead… »** des notifications déjà semées dans les bureaux existants : corrigé pour les nouveaux bureaux, les anciens demandent une migration de données.
+
+## 6 bis. Ce que disent les journaux de tes vrais bureaux (lecture seule, 2026-10-01)
+
+- **Aucun texto ne part en prod** : aucun numéro texto n’est configuré pour les bureaux (Twilio). Le rappel de rendez-vous de Coquin lavage du 1er octobre à 12 h 09 a été *sauté* pour cette raison ; l’écran le dit (« Les étapes texto sont sautées tant qu’aucun numéro n’est configuré »). Les courriels, eux, partent. Ce n’est pas un défaut du code : tant que le numéro n’est pas en place, toute étape texto de toute automatisation est sautée.
+- Le moteur ne prend aucun retard : 0 tâche en attente dépassée, tous bureaux confondus.
+- Vision Lavage, 25–28 septembre : 6 échecs sur 8 exécutions — client sans adresse courriel, demandes d’avis désactivées, numéro inconnu du carnet. Depuis, le moteur traite ces cas comme « sautés » et non comme des échecs (#842) ; les anciennes lignes restent dans les journaux.
+- Tes trois dernières conversations avec Lumi dans l’éditeur : celle du 30 septembre (« trop long », « tu l’as même pas changé le message ») date d’avant #851 — Lumi changeait bien le texto mais ne le montrait pas. Celle de 18 h 29 le 1er octobre (« Relance facture en retard ») a reçu la réponse voulue : le nouveau texte cité mot pour mot.
+- Vu une fois sur une quarantaine de chargements pilotés : l’app est restée plus de 60 s sur « Chargement de l’espace… » (ouverture de session). Non reproduit au chargement suivant ; cause non établie — à rapprocher de l’exception du verrou de session (P-001).
 
 ## 7. Non testé
 
