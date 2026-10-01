@@ -109,7 +109,8 @@ describe('rendu', () => {
     const taxes = rendreActionDirecte(d('mes taxes')!, { taxes: [{ name: 'TPS', rate: 5 }, { name: 'TVQ', rate: 9.975, is_default: true }] }, o)!;
     expect(taxes).toContain('• TVQ · 9.975 % · par défaut');
     const rel = rendreActionDirecte(d('mes relances automatiques')!, { enabled: true, schedule: [{ jours_apres_echeance: 7, canal: 'email' }] }, o)!;
-    expect(rel).toContain('7 jour(s) après l’échéance · email');
+    // Le canal se dit comme à l'écran (« courriel »), jamais la valeur rangée en base (« email ») — LUMI_GLOSSARY.md.
+    expect(rel).toContain('7 jour(s) après l’échéance · courriel');
   });
 });
 
