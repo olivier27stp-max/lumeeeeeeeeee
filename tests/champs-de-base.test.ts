@@ -15,7 +15,7 @@ import { TYPES_CHAMP } from '../src/lib/champs/types';
 const MIG = readFileSync(resolve(__dirname, '../supabase/migrations/20261003520000_champs_de_base.sql'), 'utf8');
 const MENAGE = readFileSync(resolve(__dirname, '../supabase/migrations/20261005400000_menage_champs_de_base.sql'), 'utf8');
 // Le catalogue COURANT : celui du ménage + noreview (avis clients, 2026-09-30).
-const NOREVIEW = readFileSync(resolve(__dirname, '../supabase/migrations/20261005500000_champ_noreview.sql'), 'utf8');
+const NOREVIEW = readFileSync(resolve(__dirname, '../supabase/migrations/20261005500100_champ_noreview.sql'), 'utf8');
 const sqlTexte = (s: string) => s.replace(/''/g, "'");
 
 // Une ligne du VALUES : ('objet', 'dossier', 'cle', 'fr', 'en', 'type', 'config', options|null, position)
