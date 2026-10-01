@@ -23,6 +23,14 @@ import { toast } from 'sonner';
 import { confirmerSansDoubleClic } from './confirmerSansDoubleClic';
 import { lireEtatPause, basculerPause } from '../../lib/automationWebhooksApi';
 
+/**
+ * Espace insécable (U+00A0) devant « : » et « ? » dans le dialogue : avec une
+ * espace ordinaire, la ligne se coupait juste avant et le signe partait seul
+ * au début de la suivante (audit du 2026-10-01). Écrite par son code : le
+ * caractère lui-même est invisible dans un éditeur.
+ */
+const INSECABLE = String.fromCharCode(0xa0);
+
 export default function BandeauPause({
   fr,
   onChange,
@@ -72,14 +80,14 @@ export default function BandeauPause({
          * clignotait et rien ne se passait, sur le bouton d'urgence.
          */
         ok = await confirmerSansDoubleClic({
-          title: fr ? 'Arrêter toutes vos automatisations ?' : 'Pause all your automations?',
+          title: fr ? `Arrêter toutes vos automatisations${INSECABLE}?` : 'Pause all your automations?',
           /*
            * On dit ce qui s'arrête ET ce qui est préservé. Sans la seconde
            * phrase, personne n'ose cliquer en urgence — et un interrupteur
            * qu'on n'ose pas utiliser ne sert à rien.
            */
           message: fr
-            ? 'Plus aucun courriel ni texto ne partira automatiquement, et aucune tâche ne sera créée. Ce qui est déjà prévu est CONSERVÉ : en reprenant, tout repart où c’en était.'
+            ? `Plus aucun courriel ni texto ne partira automatiquement, et aucune tâche ne sera créée. Ce qui est déjà prévu est CONSERVÉ${INSECABLE}: en reprenant, tout repart où c’en était.`
             : 'No automatic email or text will go out, and no task will be created. What is already scheduled is KEPT: when you resume, everything picks up where it left off.',
           confirmLabel: fr ? 'Tout arrêter' : 'Pause everything',
           danger: true,

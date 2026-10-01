@@ -69,6 +69,26 @@ afterEach(async () => {
   vi.mocked(console.error).mockRestore?.();
 });
 
+describe('liste-15 — typographie du dialogue « Arrêter toutes vos automatisations ? »', () => {
+  /** U+00A0, écrit par son code : le caractère lui-même est invisible dans un éditeur. */
+  const INSECABLE = String.fromCharCode(0xa0);
+
+  it('le deux-points ne peut plus être rejeté seul en début de ligne : espace insécable devant', async () => {
+    await rendre();
+    await cliquer(boutonDuBandeau());
+    const message = dialogue()!.querySelector('p')!.textContent || '';
+    expect(message).toContain(`CONSERVÉ${INSECABLE}: en reprenant`);
+    expect(message, 'une espace ordinaire devant « : » laisse la ligne se couper là').not.toMatch(/ :/);
+  });
+
+  it('le point d’interrogation du titre non plus', async () => {
+    await rendre();
+    await cliquer(boutonDuBandeau());
+    const titre = dialogue()!.querySelector('h3')!.textContent || '';
+    expect(titre).toBe(`Arrêter toutes vos automatisations${INSECABLE}?`);
+  });
+});
+
 describe('liste-08 — double clic sur « Tout arrêter »', () => {
   it('le second clic, tombé sur le fond du dialogue, ne l’annule pas : la confirmation reste à l’écran', async () => {
     await rendre();
