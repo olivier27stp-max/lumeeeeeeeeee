@@ -176,3 +176,16 @@ describe('mesure du tour', () => {
     expect(r.tronque).toBeUndefined();
   });
 });
+
+describe('trace du tour (route)', () => {
+  it('un refus est tracé « refus », un tour coupé ou inachevé « erreur », et la mesure part dans params', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const route = readFileSync(resolve(__dirname, '../server/routes/lumi.ts'), 'utf8');
+    expect(route).toContain("erreurModele === 'refusal' ? 'refus' : erreurModele ? 'erreur' : 'ok'");
+    expect(route).toMatch(/mesure: \{ \.\.\.mesure, \.\.\.\(erreurModele \? \{ erreur_modele: erreurModele \} : \{\}\) \}/);
+    for (const champ of ['stop_reason', 'appels_modele', 'outils_charges', 'premier_token_ms']) expect(route).toContain(`${champ}: resultat.${champ}`);
+    // La langue de la conversation part à l'agent : les avis par gabarit suivent l'utilisateur.
+    expect(route).toContain("langue: ctx.language === 'en' ? 'en' : 'fr'");
+  });
+});

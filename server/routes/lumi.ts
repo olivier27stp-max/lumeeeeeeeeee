@@ -375,7 +375,8 @@ async function executerTourSse(opts: {
   // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
   // entre dans la trace pour être comparé à ce que le modèle a fait.
   const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce, contexteRouteur(opts.historique)) : null);
-  const tracer = async (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null, chiffresSuspects?: string[]) => {
+  type MesureTour = { stop_reason?: string | null; appels_modele?: number; outils_charges?: number; premier_token_ms?: number | null; tronque?: boolean };
+  const tracer = async (resultat: 'ok' | 'proposition' | 'erreur' | 'refus', cost_cents: number, action?: string | null, chiffresSuspects?: string[], mesure?: MesureTour) => {
     const routeur = observation ? await observation : null;
     // Règle stricte : le routeur en OBSERVATION coûte aussi (Haiku) — journalisé
     // dans ai_usage comme en mode actif, jamais un coût hors budget.
@@ -397,6 +398,10 @@ async function executerTourSse(opts: {
         // Première métrique de QUALITÉ en base : un montant cité sans source.
         // Requêtable comme le reste — `qa:depense` et n'importe quel SQL le voient.
         ...(chiffresSuspects?.length ? { chiffres_suspects: chiffresSuspects } : {}),
+        // Mesure du tour (mission fiabilité, 2026-10-01) : pourquoi le modèle s'est
+        // arrêté, combien d'appels, combien d'outils chargés, délai du premier
+        // texte. Sans elle, un tour coupé ou refusé ressemblait à un succès.
+        ...(mesure ? { mesure: { ...mesure, ...(erreurModele ? { erreur_modele: erreurModele } : {}) } } : {}),
       },
       outils, resultat, model, promptVersion: VERSION_PROMPT, usage, costCents: cost_cents, dureeMs: Date.now() - debut,
     });
@@ -450,6 +455,7 @@ async function executerTourSse(opts: {
       })(),
       sousAgent: opts.sousAgent ?? null,
       outilsPermis,
+      langue: ctx.language === 'en' ? 'en' : 'fr',
       reglages,
       budget: {
         reserver: (cents) => reserverBudget(ctx.admin, ctx.auth.orgId, cents),
@@ -493,7 +499,13 @@ async function executerTourSse(opts: {
         orgId: ctx.auth.orgId, conversationId, montants: resultat.chiffresSuspects,
       });
     }
-    void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null, resultat.chiffresSuspects);
+    // Un refus du modèle, une réponse coupée ou un tour inachevé ne sont PAS des
+    // succès : avant, ils étaient tracés « ok » et la qualité mesurée mentait.
+    const issue = resultat.proposition ? 'proposition' : erreurModele === 'refusal' ? 'refus' : erreurModele ? 'erreur' : 'ok';
+    void tracer(issue, resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
+      stop_reason: resultat.stop_reason ?? null, appels_modele: resultat.appels_modele ?? 0, outils_charges: resultat.outils_charges ?? 0,
+      premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}),
+    });
     // Étages 3-4 : une réponse de lecture au premier message se mémorise (exacte + sémantique).
     if (opts.cache && opts.enonce && !erreurModele && !resultat.plafond && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee, enonce: opts.enonce })) {
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: opts.enonce };
