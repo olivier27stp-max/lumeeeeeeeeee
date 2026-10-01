@@ -82,8 +82,8 @@ describe('la FAQ à la voix de Lumi', () => {
 
   it('la route de Lumi demande la voix « tu » aux trois étages d’aide', () => {
     const r = readFileSync(resolve(__dirname, '..', 'server', 'routes', 'lumi.ts'), 'utf8');
-    expect(r).toContain("reponseFaqPour(message, ctx.language, 'tu')");
-    expect(r).toContain("reponseAideDirecte(message, ctx.language, { premierMessage: true, voix: 'tu' })");
-    expect(r).toContain("reponseAideMulti(message, ctx.language, 'tu')");
+    expect(r).toContain("reponseFaqPour(message, langueTour, 'tu')");
+    expect(r).toContain("reponseAideDirecte(message, langueTour, { premierMessage: true, voix: 'tu' })");
+    expect(r).toContain("reponseAideMulti(message, langueTour, 'tu')");
   });
 });
