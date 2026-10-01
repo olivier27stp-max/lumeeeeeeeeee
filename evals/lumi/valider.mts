@@ -30,6 +30,12 @@ const { TOOLS_BY_NAME } = (await import('../../server/lib/agent/tools')) as { TO
 
 const CHAMPS = new Set(['id', 'section', 'categorie', 'registre', 'langue', 'nature', 'type', 'q', 'outil', 'outils', 'equivalents', 'params', 'cible', 'interdits', 'voisins',
   'lectures_interdites', 'aucun_outil', 'reponse_contient', 'reponse_interdit', 'chiffres', 'chiffres_interdits', 'sensible', 'verification', 'critere_juge', 'compte', 'suite', 'regression', 'ecrit', 'note']);
+/**
+ * Lectures ANNONCÉES : elles arrivent en production mais ne sont pas encore dans le registre de cette branche.
+ * Acceptées seulement comme `equivalents` (une alternative légitime, jamais l'outil attendu d'un cas).
+ * Dès que le registre les connaît, le validateur demande de les retirer d'ici : elles sont alors vérifiées comme les autres.
+ */
+const LECTURES_ANNONCEES = new Set(['get_invoice', 'get_quote']);
 /** Les quatre défauts connus que le jeu doit surveiller (consigne de la mission). */
 const REGRESSIONS_EXIGEES = ['faq-a-la-place-du-paiement', 'set_default_email_template', 'duplicate_email_template', 'resend_payment_request'];
 
@@ -68,6 +74,9 @@ for (const f of fichiers) {
 
 const ids = new Set<string>();
 const outilsCites = new Set<string>();
+/** Lectures annoncées réellement citées par un cas, et encore absentes du registre. */
+const annoncees = new Set<string>();
+for (const o of LECTURES_ANNONCEES) if (TOOLS_BY_NAME[o]) erreurs.push(`« ${o} » est maintenant dans le registre : le retirer de LECTURES_ANNONCEES (valider.mts)`);
 for (const c of cas) {
   const ou = c.id || '(sans id)';
   const faute = (m: string): void => { erreurs.push(`${ou} : ${m}`); };
@@ -107,13 +116,13 @@ for (const c of cas) {
   if (NATURES_SANS_ECRITURE.includes(c.nature) && c.type === 'action') faute(`nature « ${c.nature} » : aucune écriture ne peut être attendue`);
   if ((c.nature === 'simple' || c.nature === 'multi') && c.type === 'clarification') faute(`nature « ${c.nature} » : un outil est attendu`);
   for (const o of c.outils ?? []) existe(o, 'outils');
-  for (const o of c.equivalents ?? []) existe(o, 'equivalents');
+  for (const o of c.equivalents ?? []) { if (!TOOLS_BY_NAME[o] && LECTURES_ANNONCEES.has(o)) annoncees.add(o); else existe(o, 'equivalents'); }
   for (const o of c.voisins ?? []) existe(o, 'voisins');
   for (const o of c.interdits ?? []) existe(o, 'interdits', 'write');
   for (const o of c.lectures_interdites ?? []) existe(o, 'lectures_interdites', 'read');
   if ((c.outils?.length || c.equivalents?.length || c.params) && !c.outil) faute('outils, equivalents et params demandent un outil principal');
   if (c.aucun_outil && (c.outil || c.voisins?.length || c.equivalents?.length)) faute('aucun_outil ne se combine pas avec un outil attendu ou voisin');
-  for (const o of [c.outil, ...(c.outils ?? []), ...(c.equivalents ?? [])]) if (o) outilsCites.add(o);
+  for (const o of [c.outil, ...(c.outils ?? []), ...(c.equivalents ?? [])]) if (o && TOOLS_BY_NAME[o]) outilsCites.add(o);
   const attendus = new Set([c.outil, ...(c.outils ?? []), ...(c.equivalents ?? [])].filter(Boolean));
   for (const o of [...(c.interdits ?? []), ...(c.lectures_interdites ?? [])]) if (attendus.has(o)) faute(`« ${o} » est à la fois attendu et interdit`);
 
@@ -183,6 +192,8 @@ console.log(ligne('types', compter((c) => c.type), ['lecture', 'action', 'clarif
 console.log(ligne('correction', compter((c) => c.verification), ['code', 'juge']));
 console.log(ligne('comptes', compter((c) => c.compte ?? 'proprietaire'), ['proprietaire', 'technicien']));
 console.log(`outils attendus distincts : ${outilsCites.size} sur ${Object.keys(TOOLS_BY_NAME).length} · cas qui écrivent pour vrai (écartés par défaut) : ${cas.filter((c) => c.ecrit).length} · cas sensibles : ${cas.filter((c) => c.sensible).length}`);
+
+if (annoncees.size) console.log(`lectures annoncées, absentes du registre de cette branche (acceptées en équivalent) : ${[...annoncees].sort().join(', ')}`);
 
 if (TABLEAU) {
   console.log('\n| Catégorie | Cas | ' + NATURES.join(' | ') + ' |');
