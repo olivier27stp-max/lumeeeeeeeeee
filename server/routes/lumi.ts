@@ -603,7 +603,13 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // DONNÉES du compte, jamais en cours de conversation, jamais sur un repli.
     // Une demande d'ACTION (« configure mes taxes », « remets ses permissions »)
     // va au modèle, qui a les outils — jamais une réponse d'aide (audit 2026-09-30).
-    if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message)) {
+    //
+    // Ni pour une question qu'un RACCOURCI sait lire dans la base : « combien de
+    // clients ai-je au total » a un raccourci (le vrai compte), et l'aide, placée
+    // avant lui, répondait « aucune limite, dans tous les forfaits » (passe de
+    // référence du 2026-10-01). Une lecture reconnue passe avant un article.
+    const raccourciReconnu = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
+    if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message) && !raccourciReconnu) {
       const aide = reponseFaqPour(message, ctx.language) ?? null;
       const article = aide ? null : reponseAideDirecte(message, ctx.language, { premierMessage: true });
       // Plusieurs questions collées d'un coup : chacune a sa réponse écrite,
@@ -637,7 +643,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // Un raccourci est une LECTURE toute faite (fiche du job 24, mes jobs demain) :
     // jamais pour un ordre (« supprime la liste de la job 24 » affichait la fiche
     // et s'arrêtait — éval des outils, 2026-09-30).
-    const raccourci = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
+    const raccourci = raccourciReconnu;
     if (raccourci) {
       const debut = Date.now();
       const reponse = await repondreRaccourci(raccourci, ctxRaccourci);
