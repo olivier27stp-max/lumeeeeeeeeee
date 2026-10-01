@@ -408,6 +408,33 @@ describe('EDITEUR-04 — un seul panneau à droite à la fois', () => {
   });
 });
 
+// ─── declencheurs-06 ────────────────────────────────────────────
+
+describe('declencheurs-06 — un déclencheur que le bureau n’a pas (drapeau éteint) garde son NOM sur la carte', () => {
+  it('« Paiement échoué », jamais la clé technique « payment.failed »', async () => {
+    // Le serveur n'offre pas ce déclencheur (drapeau auto_paiement_echoue coupé),
+    // mais la règle, elle, est posée dessus : drapeau coupé après coup, modèle, Lumi.
+    etat.regles = [regle({ trigger_event: 'payment.failed' })];
+    await ouvrir(`/automations/${ID}`);
+    expect(carteQuand()?.textContent).toContain('Paiement échoué');
+    expect(container.textContent).not.toContain('payment.failed');
+  });
+
+  it('en anglais, sur « Client inactif » : « Inactive client »', async () => {
+    localStorage.setItem('lume-language', 'en');
+    etat.regles = [regle({ trigger_event: 'client.inactive' })];
+    await ouvrir(`/automations/${ID}`);
+    expect(carteQuand()?.textContent).toContain('Inactive client');
+    expect(container.textContent).not.toContain('client.inactive');
+  });
+
+  it('un déclencheur inconnu de tout catalogue (ancienne règle) : sa clé reste affichée, faute de mieux', async () => {
+    etat.regles = [regle({ trigger_event: 'lead.archived' })];
+    await ouvrir(`/automations/${ID}`);
+    expect(carteQuand()?.textContent).toContain('lead.archived');
+  });
+});
+
 // ─── EDITEUR-05 ─────────────────────────────────────────────────
 
 describe('EDITEUR-05 — pendant le chargement, l’écran DIT qu’il charge', () => {

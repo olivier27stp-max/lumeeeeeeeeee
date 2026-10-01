@@ -87,6 +87,7 @@ import {
   configParDefaut,
   declencheurOffert,
   trouverAction,
+  trouverDeclencheur,
 } from '../lib/automationCatalogue';
 import { problemesPublication } from '../lib/publicationAutomatisation';
 import { useModuleAccess } from '../hooks/useModuleAccess';
@@ -1550,7 +1551,14 @@ export default function AutomationBuilderPage() {
 
   const declencheurLabel = useMemo(() => {
     if (!catalogue || !regle) return fr ? '— à choisir —' : '— to pick —';
-    const d = catalogue.declencheurs.find((x) => x.cle === regle.trigger_event);
+    /*
+     * Le catalogue du SERVEUR est filtré par drapeau : une règle posée sur un
+     * déclencheur que le bureau n'a pas (drapeau coupé après coup, modèle,
+     * Lumi) n'y est pas, et la carte affichait sa clé technique —
+     * « QUAND payment.failed » (audit du 2026-10-01). Le NOM se lit alors dans
+     * le catalogue complet, comme le fait la liste des automatisations.
+     */
+    const d = catalogue.declencheurs.find((x) => x.cle === regle.trigger_event) ?? trouverDeclencheur(regle.trigger_event);
     return d ? (fr ? d.fr : d.en) : regle.trigger_event;
   }, [catalogue, regle, fr]);
 
