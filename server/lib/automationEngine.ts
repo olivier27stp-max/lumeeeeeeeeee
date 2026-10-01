@@ -704,6 +704,59 @@ export async function rafaleDeTextos(supabase: SupabaseClient, orgId: string): P
 }
 
 /**
+ * Prévient l'entreprise qu'une RAFALE de textos est en cours.
+ *
+ * L'étalement ci-dessus laisse à un humain « le temps de voir et d'arrêter » —
+ * mais rien ne le lui DISAIT. Une étiquette posée en lot sur 5 000 clients
+ * envoyait 5 000 textos en ≈ 2 h 47 sans que personne ne soit averti avant la
+ * facture. Tout part toujours (la décision du 2026-09-23 tient) ; le
+ * propriétaire reçoit maintenant une notification dès le premier report, avec
+ * le nom de l'automatisation et le geste pour l'arrêter.
+ *
+ * Une par entreprise et par fenêtre : la mémoire du processus évite une
+ * lecture à chaque texto reporté, la base tranche entre deux processus.
+ * Ne lève jamais — une notification perdue ne retient pas un envoi.
+ */
+export const SIGNALEMENT_RAFALE_MS = 6 * 3600_000;
+const rafalesSignalees = new Map<string, number>();
+
+/** Pour les tests. */
+export function oublierRafalesSignalees(): void { rafalesSignalees.clear(); }
+
+export async function prevenirRafale(
+  supabase: SupabaseClient,
+  orgId: string,
+  regle: { id?: string | null; name?: string | null } | null | undefined,
+): Promise<void> {
+  const maintenant = Date.now();
+  if (maintenant - (rafalesSignalees.get(orgId) ?? 0) < SIGNALEMENT_RAFALE_MS) return;
+  rafalesSignalees.set(orgId, maintenant);
+  try {
+    const { count, error: lectureErr } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('type', 'automation_burst')
+      .gte('created_at', new Date(maintenant - SIGNALEMENT_RAFALE_MS).toISOString());
+    if (lectureErr) throw new Error(lectureErr.message);
+    if ((count ?? 0) > 0) return;
+    const { error } = await supabase.from('notifications').insert({
+      org_id: orgId,
+      type: 'automation_burst',
+      title: `Rafale de textos — ${regle?.name || 'Automatisation'}`,
+      body: `Plus de ${DEBIT_SMS_PAR_MINUTE} textos automatiques sont partis en une minute. Les suivants partent au rythme de ${DEBIT_SMS_PAR_MINUTE} par minute. Si ce n'est pas voulu, ouvrez Automatisations et cliquez « Tout arrêter ».`,
+      reference_id: regle?.id || null,
+      link: '/automations',
+    });
+    if (error) throw new Error(error.message);
+  } catch (e: any) {
+    // À refaire au prochain report plutôt que de se taire six heures.
+    rafalesSignalees.delete(orgId);
+    console.error(`[automationEngine] notification de rafale non créée (org ${orgId}) :`, e?.message || e);
+  }
+}
+
+/**
  * Une facture = au plus UNE relance par jour, toutes automatisations
  * confondues (audit V2, D-16).
  *
@@ -994,6 +1047,7 @@ async function executeRuleActions(
       } else {
         logger.info(`[automationEngine] texto reporté d'une minute (rafale > ${DEBIT_SMS_PAR_MINUTE}/min) — règle "${rule.name}"`);
       }
+      await prevenirRafale(config.supabase, event.orgId, rule);
       continue;
     }
 
@@ -2292,6 +2346,7 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         await supabase.from('automation_scheduled_tasks')
           .update({ status: 'pending', execute_at: new Date(Date.now() + 60_000).toISOString(), attempts: Number(task.attempts || 0), last_error: `Rafale de textos (> ${DEBIT_SMS_PAR_MINUTE}/min) : reporté d'une minute` })
           .eq('id', task.id);
+        await prevenirRafale(supabase, task.org_id, { id: task.automation_rule_id, name: task.automation_rules?.name });
         continue;
       }
 
