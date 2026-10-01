@@ -123,7 +123,7 @@ Légende : ✅ corrigé dans le code (branche) · 🟡 corrigé par une migratio
 | M-13 | Sur écran étroit (≤ 640 px), les **noms** disparaissaient des légendes des deux beignets (seuls les montants restaient). | ✅ beignet et légende empilés. |
 | M-14 | « 1 jobs » (pluriel fixe) dans les classements et la carte des villes ; mois de la valeur moyenne écrits « Sep / Déc » au lieu de « sept. / déc. » comme le graphique Revenu. | ✅ |
 | M-15 | **Rentabilité (#781) sur gros volume** : sur 50 000 jobs, `analyserRentabilite` échoue (« Timed out acquiring connection from connection pool ») — `charger.ts` lançait toutes les tranches d'ids en même temps ; et `toutLire` pagine par OFFSET (coût quadratique avec la RLS). Aucun impact aux volumes actuels (≤ 896 jobs). | ✅ concurrence limitée à 5 lots — **corrigé sur `feat/audit-outils-lumi`** (a17dbab0, session de #781) · ⬜ pagination par curseur de `toutLire` : ouverte. |
-| M-11 | `rpc_insights_budget_vs_actual` : **fonction cassée** (table `budget_targets` inexistante, en prod aussi). Code mort. | ⬜ à supprimer (après grep, règle 4). |
+| M-11 | `rpc_insights_budget_vs_actual` : **fonction cassée** (table `budget_targets` inexistante, en prod aussi). Code mort. | ✅ supprimée le 2026-10-01 (§8). |
 
 ### Bas
 
@@ -284,7 +284,7 @@ Appliquées par `db:apply` sur staging, puis contrôlées : `check:broken-object
 Non écrites, à décider ensemble :
 - ~~E-9~~ : fait au §8.
 - Perf RLS (§5.1) : réécriture des politiques de `jobs`, `invoices`, etc.
-- M-11 : suppression de `rpc_insights_budget_vs_actual` (fonction morte).
+- ~~M-11~~ : fait au §8.
 
 ---
 
@@ -342,9 +342,12 @@ Deux défauts trouvés par cette mesure, et corrigés dans la migration C avant 
 
 M-15 (inchangé) : la carte Rentabilité, à 50 000 jobs, sature encore le pool de connexions (`toutLire` pagine par OFFSET) ; aucun effet aux volumes actuels.
 
+### Restes traités le 2026-10-01 (migration `20261005600000_stats_restes_paie_et_fonction_morte.sql`, staging puis prod)
+
+- **M-11** : `rpc_insights_budget_vs_actual` (fonction morte, table inexistante) supprimée.
+- **Paie sur `memberships`** : un membre pouvait modifier `hourly_rate_cents`, `labour_cost_hourly` et `compensation_mode` de SA propre ligne (colonnes que la copie vers un nouveau bureau reprend). Un déclencheur les réserve désormais à qui a `team.update` ; le serveur n'est pas concerné. Vérifié sur staging : technicien refusé (42501) sur son taux et son mode de paie, accepté sur sa langue ; propriétaire accepté.
+
 ### Encore ouvert
 
-- M-11 : suppression de `rpc_insights_budget_vs_actual` (fonction morte).
+- **M-15** : la carte Rentabilité sature le pool de connexions vers 50 000 jobs (toutes les tranches lues en même temps). Le correctif — 5 tranches à la fois — est dans la PR #822 (audit des outils de Lumi) ; rien à refaire ici. Aucun effet aux volumes actuels (≤ 896 jobs).
 - Perf RLS (§5.1).
-- Hors page : la politique d'UPDATE de `memberships` laisse un membre modifier SA propre ligne, y compris `memberships.hourly_rate_cents` (colonne que la paie ne lit pas — elle lit `team_members` — mais que la copie vers un nouveau bureau reprend, `office-access.ts`). À verrouiller avec l'équipe multi-bureaux.
-
