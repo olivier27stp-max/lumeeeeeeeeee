@@ -32,6 +32,7 @@ import { normaliser } from './normaliser';
 import { fmtDollars, jourLocal, minuitLocal } from './raccourcis';
 import { REFUS_PERMISSION } from '../rentabilite';
 import { resumer } from '../rentabilite/resume';
+import { localizeAutomationName } from '../../../src/lib/automationNames';
 
 export type GenreDirect = 'lecture' | 'directe' | 'carte' | 'fixe';
 
@@ -53,6 +54,8 @@ export interface ContexteDirect {
   accessToken?: string;
   /** Outils que le rôle de la personne permet (null = indéterminé : la garde d'exécution reste la barrière). */
   outilsPermis?: ReadonlySet<string> | null;
+  /** Espace des réfs courtes de la conversation (voir espaceRefsDe). Défaut : (entreprise, personne). */
+  espaceRefs?: string;
   language: 'fr' | 'en';
   fuseau: string;
   maintenant?: Date;
@@ -463,6 +466,20 @@ function secondaire(x: any, fr: boolean): string {
   if (typeof x?.is_active === 'boolean') parts.push(x.is_active ? (fr ? 'active' : 'active') : (fr ? 'en pause' : 'paused'));
   return parts.join(' · ');
 }
+/**
+ * Le canal d'une relance tel que l'écran le dit (LUMI_GLOSSARY.md) : la base
+ * range « email », « sms » ou « both » ; l'utilisateur lisait ces mots bruts
+ * (« 14 jour(s) après l’échéance · both »). Un canal inconnu reste tel quel.
+ */
+const CANAL_RELANCE: Record<string, { fr: string; en: string }> = {
+  email: { fr: 'courriel', en: 'email' },
+  sms: { fr: 'texto', en: 'text' },
+  both: { fr: 'courriel et texto', en: 'email and text' },
+};
+const canalRelance = (canal: unknown, fr: boolean): string => {
+  const c = CANAL_RELANCE[String(canal ?? '').toLowerCase()];
+  return c ? (fr ? c.fr : c.en) : String(canal ?? '—');
+};
 /** « 2 modèles de devis », « 2 quote templates » : le pluriel porte sur le premier mot en français, le dernier en anglais. */
 const pluriel = (n: number, nom: string, fr: boolean) => {
   if (fr) { const [tete, ...reste] = nom.split(' '); const t = n > 1 && !tete.endsWith('s') && !tete.endsWith('x') ? `${tete}s` : tete; return `${n} ${[t, ...reste].join(' ')}`; }
@@ -509,7 +526,7 @@ export function rendreActionDirecte(a: ActionDirecte, resultat: any, opts: { fr:
     const r = resultat ?? {};
     const etapes: any[] = Array.isArray(r.schedule) ? r.schedule : [];
     const etat = r.enabled === false ? (fr ? 'désactivées' : 'off') : (fr ? 'actives' : 'on');
-    const lignes = etapes.map((e) => `• ${fr ? `${e.jours_apres_echeance ?? e.days_after_due} jour(s) après l’échéance` : `${e.jours_apres_echeance ?? e.days_after_due} day(s) after due`} · ${e.canal ?? e.channel}`);
+    const lignes = etapes.map((e) => `• ${fr ? `${e.jours_apres_echeance ?? e.days_after_due} jour(s) après l’échéance` : `${e.jours_apres_echeance ?? e.days_after_due} day(s) after due`} · ${canalRelance(e.canal ?? e.channel, fr)}`);
     return `${fr ? `Relances automatiques ${etat}` : `Automatic reminders ${etat}`}${lignes.length ? ` :\n${lignes.join('\n')}` : '.'}`;
   }
   if (a.id === 'client-jobs') {
@@ -553,7 +570,10 @@ export function rendreActionDirecte(a: ActionDirecte, resultat: any, opts: { fr:
   const nom = fr ? l.nom.fr : l.nom.en;
   if (!rows.length) return fr ? `Aucun${/^[aeéiou]/i.test(nom) ? 'e' : ''} ${nom} pour l’instant.` : `No ${nom} yet.`;
   const total = Number(resultat?.total_matching ?? resultat?.count ?? rows.length);
-  const lignes = rows.slice(0, 15).map((x) => { const s = secondaire(x, fr); return `• ${libelle(x)}${s ? ` · ${s}` : ''}`; });
+  // Une automatisation préréglée est rangée sous son nom ANGLAIS (« Job Reminder — 1 Day Before ») ;
+  // la page Automatisations l'affiche traduit. Même table ici : Lumi dit le nom que l'écran montre.
+  const nomAffiche = (x: any) => (l.id === 'automatisations' ? localizeAutomationName(libelle(x), fr ? 'fr' : 'en') : libelle(x));
+  const lignes = rows.slice(0, 15).map((x) => { const s = secondaire(x, fr); return `• ${nomAffiche(x)}${s ? ` · ${s}` : ''}`; });
   const reste = total - Math.min(15, rows.length);
   return `${pluriel(total, nom, fr)} :\n${lignes.join('\n')}${reste > 0 ? (fr ? `\n… et ${reste} autre${reste > 1 ? 's' : ''}.` : `\n… and ${reste} more.`) : ''}`;
 }
@@ -679,7 +699,7 @@ async function resoudre(a: ActionDirecte, ctx: ContexteDirect): Promise<Record<s
 /** Répond à l'action : lecture rendue, écriture directe exécutée, ou carte préparée. null = le modèle prend le relais. */
 export async function repondreActionDirecte(a: ActionDirecte, ctx: ContexteDirect): Promise<ReponseDirecte | null> {
   const fr = ctx.language !== 'en';
-  const espace = `${ctx.orgId}:${ctx.userId}`;
+  const espace = ctx.espaceRefs ?? `${ctx.orgId}:${ctx.userId}`;
   try {
     if (a.genre === 'fixe') {
       const texte = fr ? a.fixe!.fr : a.fixe!.en;

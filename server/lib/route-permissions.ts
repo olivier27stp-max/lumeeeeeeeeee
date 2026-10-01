@@ -92,6 +92,9 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/lumi/autorisations': 'external_agent.use',
   'PUT /api/lumi/autorisations': 'external_agent.use',
   'GET /api/lumi/quota': 'external_agent.use',
+  // La dictée EST Lumi (son micro) : même droit. Sans entrée, un membre à qui on
+  // a retiré Lumi pouvait encore faire transcrire de l'audio aux frais de Lume.
+  'POST /api/agent/transcribe': 'external_agent.use',
   'GET /api/lumi/conversations': 'external_agent.use',
   'GET /api/lumi/conversations/:id': 'external_agent.use',
   'DELETE /api/lumi/conversations/:id': 'external_agent.use',

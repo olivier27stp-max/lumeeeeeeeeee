@@ -410,6 +410,8 @@ export async function tourLumi(opts: {
    * vraie barrière dans tous les cas.
    */
   outilsPermis?: ReadonlySet<string> | null;
+  /** Espace des réfs courtes (refN → identifiant) : celui de la CONVERSATION (voir espaceRefsDe). Défaut : (entreprise, personne). */
+  espaceRefs?: string;
   /** Langue des avis rendus par gabarit (réponse coupée, refus). Français par défaut. */
   langue?: 'fr' | 'en';
   /**
@@ -423,7 +425,7 @@ export async function tourLumi(opts: {
   const outils = outilsClaude(opts.sousAgent ?? null, opts.outilsPermis ?? null);
   const messages: Anthropic.Messages.MessageParam[] = [...opts.historique];
   const nouveaux: Anthropic.Messages.MessageParam[] = [];
-  const espaceRefs = `${opts.orgId}:${opts.userId}`;
+  const espaceRefs = opts.espaceRefs ?? `${opts.orgId}:${opts.userId}`;
   let texteTotal = '';
   let coutTotal = 0;
   let coutHorsCacheFroid = 0;
@@ -525,8 +527,13 @@ export async function tourLumi(opts: {
     // et une écriture tronquée pouvait réapparaître comme carte à confirmer.
     // On ne garde donc QUE le texte complet, on n'exécute et ne propose rien,
     // et on le DIT : jamais un faux « c'est fait », jamais un silence.
-    if (reponse.stop_reason === 'max_tokens' || reponse.stop_reason === 'refusal' || reponse.content.length === 0) {
-      const coupee = reponse.stop_reason === 'max_tokens';
+    // `model_context_window_exceeded` : la fenêtre de contexte est pleine, la
+    // génération s'arrête au milieu — même traitement qu'une coupe par max_tokens
+    // (avant, elle passait pour une fin normale : texte tronqué, sans un mot).
+    const stop = reponse.stop_reason as string | null;
+    const contexteDepasse = stop === 'model_context_window_exceeded';
+    if (reponse.stop_reason === 'max_tokens' || contexteDepasse || reponse.stop_reason === 'refusal' || reponse.content.length === 0) {
+      const coupee = reponse.stop_reason === 'max_tokens' || contexteDepasse;
       const refusee = reponse.stop_reason === 'refusal';
       const textes = reponse.content.filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text' && b.text.trim().length > 0);
       const actionCoupee = reponse.content.some((b) => b.type === 'tool_use');
@@ -584,6 +591,21 @@ export async function tourLumi(opts: {
 
       if (!outil) {
         resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: `Unknown tool: ${appel.name}` }), is_error: true });
+        continue;
+      }
+      // ── Le rôle, ICI aussi (passe de référence du 2026-10-01, cas terrain-13) ──
+      // Le modèle ne reçoit que les outils permis à la personne — mais il peut
+      // appeler quand même un outil qu'on ne lui a pas donné (il en connaît le
+      // nom). Un technicien a ainsi obtenu une carte « supprimer le client » :
+      // l'exécution aurait été refusée, mais la carte ne doit pas exister. Seul
+      // le fait que l'outil EXISTE était vérifié ; on vérifie qu'il est PERMIS.
+      if (opts.outilsPermis && !opts.outilsPermis.has(appel.name)) {
+        opts.emettre({ type: 'tool', name: appel.name, statut: 'refus' });
+        const capacite = PERMISSION_PAR_OUTIL[appel.name]?.capacite;
+        resultats.push({
+          type: 'tool_result', tool_use_id: appel.id, is_error: true,
+          content: JSON.stringify({ error: `Le rôle de cette personne dans Lume ne permet pas ${capacite ?? 'cette action'}. Rien n'a été fait ni proposé. Dis-le simplement, sans proposer de contournement ; un administrateur peut changer ses accès.` }),
+        });
         continue;
       }
       // Plafond d'écritures atteint : plus rien ne part d'office, tout repasse par la carte.

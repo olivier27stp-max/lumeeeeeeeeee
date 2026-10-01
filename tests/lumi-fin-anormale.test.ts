@@ -102,6 +102,23 @@ describe('réponse coupée par max_tokens', () => {
     expect(r.texte).toContain('coupée');
   });
 
+  // Phase 4 de la mission (« toutes les valeurs de stop_reason gérées ») : la fenêtre
+  // de contexte pleine coupe la génération comme max_tokens, et passait pour une fin normale.
+  it('fenêtre de contexte pleine (model_context_window_exceeded) : traitée comme une coupe, jamais comme une fin normale', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'text', text: 'Voici le début du rapp' }, { type: 'tool_use', id: 'tu_c', name: 'create_job', input: { title: 'Lav' } }], stop_reason: 'model_context_window_exceeded', usage });
+    const emis: any[] = [];
+    const r = await tourLumi(tour(emis));
+    expect(r.tronque).toBe(true);
+    expect(r.proposition).toBeNull();
+    expect(emis.some((e) => e.type === 'proposal')).toBe(false);
+    expect(outilsExecutes).toEqual([]);
+    expect(r.texte).toContain('rien n’a été fait');
+    expect(emis.some((e) => e.type === 'error' && e.message === 'reponse_coupee')).toBe(true);
+    expect(historiqueValide(r.nouveauxMessages)).toBe(true);
+    expect(r.stop_reason).toBe('model_context_window_exceeded');
+  });
+
   it('coupée dans le TEXTE : le texte reçu est gardé, avec l’avis « continue »', async () => {
     const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
     reponses.push({ content: [{ type: 'text', text: 'Voici tes 40 factures : 1) INV-001…' }], stop_reason: 'max_tokens', usage });

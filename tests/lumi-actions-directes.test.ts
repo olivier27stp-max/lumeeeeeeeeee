@@ -109,7 +109,18 @@ describe('rendu', () => {
     const taxes = rendreActionDirecte(d('mes taxes')!, { taxes: [{ name: 'TPS', rate: 5 }, { name: 'TVQ', rate: 9.975, is_default: true }] }, o)!;
     expect(taxes).toContain('• TVQ · 9.975 % · par défaut');
     const rel = rendreActionDirecte(d('mes relances automatiques')!, { enabled: true, schedule: [{ jours_apres_echeance: 7, canal: 'email' }] }, o)!;
-    expect(rel).toContain('7 jour(s) après l’échéance · email');
+    // Le canal se dit comme à l'écran (« courriel »), jamais la valeur rangée en base (« email ») — LUMI_GLOSSARY.md.
+    expect(rel).toContain('7 jour(s) après l’échéance · courriel');
+  });
+  it('automatisations : le nom affiché est celui de la page Automatisations, pas le nom anglais rangé en base', () => {
+    // list_automations renvoie le nom tel que semé (anglais pour un préréglage) ; un nom donné par l'entreprise reste tel quel.
+    const resultat = { count: 2, automations: [{ id: '1', name: 'Job Reminder — 1 Day Before', is_active: true }, { id: '2', name: 'Relance maison', is_active: false }] };
+    const fr = rendreActionDirecte(d('mes automatisations')!, resultat, o)!;
+    expect(fr).toContain('• Rappel de rendez-vous — 1 jour avant · active');
+    expect(fr).toContain('• Relance maison · en pause');
+    expect(fr).not.toContain('Job Reminder');
+    const en = rendreActionDirecte(d('mes automatisations')!, resultat, { ...o, fr: false })!;
+    expect(en).toContain('• Job Reminder — 1 Day Before · active');
   });
 });
 

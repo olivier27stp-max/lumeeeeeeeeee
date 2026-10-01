@@ -22,7 +22,7 @@ import { avertirSiSeuilCredits } from '../lib/lumi/avis-credits';
 import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { etatBudget, etatCredits, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause } from '../lib/lumi/budget';
+import { etatBudget, etatCredits, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause, messagePausePlateforme } from '../lib/lumi/budget';
 import { verifierPlafond, ajouterDepense, compterRefus, etatPlafonds } from '../lib/lumi/plafond-journalier';
 import { modeleLumi, coutEnCents } from '../lib/lumi/tarifs';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
@@ -38,6 +38,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 // a deux assistants (2026-09-22). Mêmes réponses, mêmes garde-fous, 0 token.
 import { reponseFaqPour } from '../lib/support/faq';
 import { estDemandeDAction } from '../lib/lumi/demande-action';
+import { langueDuMessage } from '../lib/lumi/langue-message';
 import { repererFiches } from '../lib/lumi/reperage';
 import { sujetParRegle } from '../lib/lumi/sujet-par-regle';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
@@ -61,7 +62,7 @@ import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
 import { jourPourLumi, heurePourLumi } from '../lib/lumi/temps';
 import type { Rapport } from '../lib/agent/tools-rapports';
-import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
+import { demasquerIds, instantaneRefs, restaurerRefs, espaceRefsDe } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
 import { assainirPourApi } from '../lib/lumi/historique';
 
@@ -247,12 +248,12 @@ async function servirOptimisation(
   o: { conversationId: string; nouveaux: Msg[]; date: string; teamId: string | null; origine: OrigineTrace; enonce: string | null; etage: number; action: string; params?: Record<string, unknown> },
 ): Promise<void> {
   const debut = Date.now();
-  const rep = await repondreOptimisation({ client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken, language: ctx.language, fuseau: ctx.fuseau }, o.date, o.teamId);
+  const rep = await repondreOptimisation({ client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken, language: ctx.language, fuseau: ctx.fuseau, espaceRefs: espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, o.conversationId) }, o.date, o.teamId);
   if ('refus' in rep) {
     res.status(422).json({ error: rep.refus, code: 'action_indisponible' });
     return;
   }
-  await sauverMessages(o.conversationId, ctx.auth.orgId, [...o.nouveaux, ...(rep.messages as Msg[])], `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+  await sauverMessages(o.conversationId, ctx.auth.orgId, [...o.nouveaux, ...(rep.messages as Msg[])], espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, o.conversationId));
   const emettreSse = ouvrirSse(res);
   emettreSse('tool', { type: 'tool', name: 'propose_day_optimization', statut: 'debut' });
   emettreSse('tool', { type: 'tool', name: 'propose_day_optimization', statut: 'fin' });
@@ -422,7 +423,7 @@ async function executerTourSse(opts: {
 
   try {
     for (const recu of opts.execute ?? []) if (!ferme) emettreSse('executed', recu);
-    const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+    const cleRefs = espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId);
     if (opts.nouveauxAvant.length) await sauverMessages(conversationId, ctx.auth.orgId, opts.nouveauxAvant, cleRefs);
     const reglages = reglagesPourPalier(ctx.budget.palier, modeleLumi());
     // Qualité : les sujets qui raisonnent (rapports, analyse financière) gardent une réflexion medium, hors palier dégradé.
@@ -432,7 +433,12 @@ async function executerTourSse(opts: {
     // batterie d'évaluation partie en boucle sur un environnement de test, là
     // où le budget mensuel par org l'autorisait à dépenser 45 $.
     const plafondJour = verifierPlafond('lumi');
-    if (!plafondJour.autorise) { compterRefus('lumi'); reglages.modele_autorise = false; }
+    if (!plafondJour.autorise) {
+      compterRefus('lumi');
+      reglages.modele_autorise = false;
+      // Chaque refus se voit : c'est TOUS les clients qui sont arrêtés, pas un seul.
+      logger.error('[lumi] tour refusé par le plafond journalier de la plateforme', { orgId: ctx.auth.orgId, depense_cents: plafondJour.depense_cents, plafond_cents: plafondJour.plafond_cents });
+    }
     // Palier épuisé : aucun appel au modèle, même si la RPC de réservation manque.
     // RBAC : le modèle ne voit que les outils permis à cette personne.
     // Recalculé à CHAQUE tour → un changement de rôle s'applique au message
@@ -448,6 +454,7 @@ async function executerTourSse(opts: {
       orgId: ctx.auth.orgId,
       userId: ctx.auth.user.id,
       accessToken: ctx.accessToken,
+      espaceRefs: cleRefs,
       // Bloc système variable : ce qui est STABLE pendant une conversation (entreprise,
       // jour, souvenirs, rôle, sujet du sous-agent). Rien qui change à chaque message.
       systeme: opts.sousAgent ? promptSystemeLumi({ ...ctx.promptCtx, focus: focusDuSousAgent(opts.sousAgent, ctx.language) }) : ctx.systeme,
@@ -485,7 +492,9 @@ async function executerTourSse(opts: {
     if (resultat.plafond) {
       // Plafond dur atteint : rien n'est parti au modèle pour cette étape ;
       // message gabarit (0 token), les actions rapides restent servies.
-      const texte = messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());
+      // Deux plafonds, deux messages : celui de la plateforme n'a rien à voir avec
+      // les crédits du client (avant, il lisait « tes crédits sont épuisés »).
+      const texte = !plafondJour.autorise ? messagePausePlateforme(ctx.language) : messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());
       if (!ferme) emettreSse('text', { type: 'text', delta: texte });
       resultat.nouveauxMessages.push({ role: 'assistant', content: [{ type: 'text', text: texte }] });
       resultat.texte = resultat.texte ? `${resultat.texte}\n\n${texte}` : texte;
@@ -507,7 +516,7 @@ async function executerTourSse(opts: {
     // Un refus du modèle, une réponse coupée ou un tour inachevé ne sont PAS des
     // succès : avant, ils étaient tracés « ok » et la qualité mesurée mentait.
     const issue = resultat.proposition ? 'proposition' : erreurModele === 'refusal' ? 'refus' : erreurModele ? 'erreur' : 'ok';
-    void tracer(issue, resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
+    void tracer(issue, resultat.cost_cents, resultat.plafond ? (!plafondJour.autorise ? 'plafond_plateforme' : 'budget_epuise') : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
       stop_reason: resultat.stop_reason ?? null, appels_modele: resultat.appels_modele ?? 0, outils_charges: resultat.outils_charges ?? 0,
       premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}),
     });
@@ -545,11 +554,38 @@ const limiteHoraireLumi = process.env.LUMI_TOURS_PAR_HEURE === '0'
   // `repliMemoire` : sans Redis (le cas de la prod au 2026-10-01), la limite tient en mémoire au lieu de ne pas exister.
   : redisRateLimit({ preset: 'lumi', keyFn: (req) => `lumi:${userKey(req)}`, repliMemoire: true });
 
+/**
+ * Un seul tour OU une seule décision à la fois par conversation.
+ *
+ * Tests critiques du 2026-10-01 : deux « Confirmer » partis en même temps lisaient
+ * tous deux la carte « en attente » ; l'action ne s'exécutait qu'une fois
+ * (idempotence d'agent_actions), mais la conversation gardait DEUX résultats pour
+ * la même carte — un historique que l'API du modèle refuse au tour suivant.
+ * Même danger entre un message et un « Confirmer » simultanés (web + téléphone,
+ * double envoi) : le message annule la carte pendant que la décision l'exécute.
+ * Le second arrivé reçoit un 409 avec un message clair ; rien n'est perdu, il
+ * suffit de renvoyer. En mémoire du processus : l'API tourne sur une instance.
+ */
+const conversationsOccupees = new Set<string>();
+
 router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, res) => {
+  let verrou: string | null = null;
   try {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;
     const { conversation_id, message, origine = 'texte' } = req.body as z.infer<typeof chatSchema>;
+    // La clé porte la personne : nul ne peut occuper la conversation d'un autre.
+    const cleVerrou = conversation_id ? `${ctx.auth.user.id}:${conversation_id}` : null;
+    if (cleVerrou) {
+      if (conversationsOccupees.has(cleVerrou)) {
+        return res.status(409).json({
+          error: ctx.language === 'fr' ? 'Lumi répond déjà dans cette conversation. Attends la fin de sa réponse, puis renvoie ton message.' : 'Lumi is already replying in this conversation. Wait for the reply to finish, then send your message again.',
+          code: 'conversation_occupee',
+        });
+      }
+      conversationsOccupees.add(cleVerrou);
+      verrou = cleVerrou;
+    }
 
     let conversationId = conversation_id ?? null;
     let historique: Msg[] = [];
@@ -557,7 +593,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversationId).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
       if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
       // Fenêtre d'historique selon le palier de budget (60 messages ; 6 en économe/restreint).
-      historique = await chargerHistorique(conversationId, `${ctx.auth.orgId}:${ctx.auth.user.id}`, reglagesPourPalier(ctx.budget.palier, modeleLumi()).historique_messages);
+      historique = await chargerHistorique(conversationId, espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId), reglagesPourPalier(ctx.budget.palier, modeleLumi()).historique_messages);
     } else {
       const { data: conv, error } = await ctx.admin.from('lumi_conversations')
         .insert({ org_id: ctx.auth.orgId, user_id: ctx.auth.user.id, title: message.slice(0, 80) })
@@ -585,9 +621,14 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     const repli = origine === 'repli' || estUnRepli(message);
     const enoncePrecedent = repli ? dernierEnonceUtilisateur(historique) : null;
     // Jamais un courriel en guise de prénom (« Bonjour will@… »).
+    // Les étages sans modèle répondent dans la langue du MESSAGE, comme le modèle :
+    // « How many invoices are overdue? » sur un compte en français recevait un
+    // article en français (passe de référence du 2026-10-01). Dans le doute, la
+    // langue du compte (langue-message.ts).
+    const langueTour = langueDuMessage(message, ctx.language);
     const ctxRaccourci = {
       client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
-      language: ctx.language, fuseau: ctx.fuseau,
+      language: langueTour, fuseau: ctx.fuseau,
       prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
     };
     // Étage « aide » : une question SUR LE PRODUIT (« comment je change de
@@ -611,16 +652,16 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // référence du 2026-10-01). Une lecture reconnue passe avant un article.
     const raccourciReconnu = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
     if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message) && !raccourciReconnu) {
-      const aide = reponseFaqPour(message, ctx.language) ?? null;
-      const article = aide ? null : reponseAideDirecte(message, ctx.language, { premierMessage: true });
+      const aide = reponseFaqPour(message, langueTour, 'tu') ?? null;
+      const article = aide ? null : reponseAideDirecte(message, langueTour, { premierMessage: true, voix: 'tu' });
       // Plusieurs questions collées d'un coup : chacune a sa réponse écrite,
       // mais le bloc entier ne ressemble à rien de connu et partait au modèle
       // (2,65 ¢ mesuré en prod le 2026-09-22). Tout ou rien — voir aide-multi.
-      const multi = aide || article ? null : reponseAideMulti(message, ctx.language);
+      const multi = aide || article ? null : reponseAideMulti(message, langueTour, 'tu');
       const texteAide = aide?.reponse ?? article?.texte ?? multi?.texte ?? null;
       if (texteAide) {
         const debut = Date.now();
-        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        const cleRefs = espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId);
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texteAide }] }], cleRefs);
         const emettreSse = ouvrirSse(res);
         emettreSse('text', { type: 'text', delta: texteAide });
@@ -649,7 +690,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       const debut = Date.now();
       const reponse = await repondreRaccourci(raccourci, ctxRaccourci);
       if (reponse) {
-        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        const cleRefs = espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId);
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
         const emettreSse = ouvrirSse(res);
         emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'debut' });
@@ -683,9 +724,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (directe) {
       const debut = Date.now();
       // Le rôle est lu ici (2 lectures en base) seulement quand une action directe est reconnue.
-      const rep = await repondreActionDirecte(directe, { ...ctxRaccourci, maintenant: new Date(), outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId) });
+      const rep = await repondreActionDirecte(directe, { ...ctxRaccourci, maintenant: new Date(), outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId), espaceRefs: espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId) });
       if (rep) {
-        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        const cleRefs = espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId);
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, ...(rep.messages as Msg[])], cleRefs);
         const emettreSse = ouvrirSse(res);
         if (rep.genre === 'texte') {
@@ -733,7 +774,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         if (g) { hit = g.entree; etage = ETAGE.cacheSemantique; }
       }
       if (hit) {
-        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        const cleRefs = espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId);
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: hit.texte }] }], cleRefs);
         const emettreSse = ouvrirSse(res);
         for (const o of hit.outils) { emettreSse('tool', { type: 'tool', name: o, statut: 'debut' }); emettreSse('tool', { type: 'tool', name: o, statut: 'fin' }); }
@@ -758,7 +799,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       if (depense >= reglesCout().plafond_cout_conversation_cents) {
         const debut = Date.now();
         const texte = messagePlafondConversation(ctx.language);
-        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texte }] }], `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texte }] }], espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId));
         const emettreSse = ouvrirSse(res);
         emettreSse('text', { type: 'text', delta: texte });
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage: ETAGE.interface });
@@ -805,7 +846,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       // exclues — la FAQ y répond, et un refus servi à tort serait pire.
       if (peutRepondreHorsScope({ decision: routeur.decision, confiance: routeur.verdict?.confidence, seuil: SEUIL_CONFIANCE, message, premierMessage })) {
         const texte = reponseHorsScope(ctx.language);
-        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        const cleRefs = espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId);
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texte }] }], cleRefs);
         const emettreSse = ouvrirSse(res);
         emettreSse('text', { type: 'text', delta: texte });
@@ -835,7 +876,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       const r = routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) && raccourciStrict === routeur.verdict.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
       const reponse = r ? await repondreRaccourci(r, ctxRaccourci) : null;
       if (r && reponse) {
-        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        const cleRefs = espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId);
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
         const emettreSse = ouvrirSse(res);
         emettreSse('tool', { type: 'tool', name: r.tool, statut: 'debut' });
@@ -870,9 +911,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (routeur?.verdict?.extraction && routeur.decision === 'modele' && routeur.verdict.confidence >= SEUIL_CONFIANCE) {
       const debut = Date.now();
       const a = actionDepuisExtraction(routeur.verdict.extraction, message);
-      const rep = a ? await repondreActionDirecte(a, { ...ctxRaccourci, maintenant: new Date(), outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId) }) : null;
+      const rep = a ? await repondreActionDirecte(a, { ...ctxRaccourci, maintenant: new Date(), outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId), espaceRefs: espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId) }) : null;
       if (a && rep && rep.genre === 'carte') {
-        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        const cleRefs = espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId);
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, ...(rep.messages as Msg[])], cleRefs);
         const emettreSse = ouvrirSse(res);
         emettreSse('proposal', { type: 'proposal', tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args, capacite: rep.capacite, apercu: rep.apercu });
@@ -894,6 +935,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');
+  } finally {
+    if (verrou) conversationsOccupees.delete(verrou);
   }
 });
 
@@ -913,7 +956,7 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
     if (conversationId) {
       const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversationId).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
       if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
-      historique = await chargerHistorique(conversationId, `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+      historique = await chargerHistorique(conversationId, espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId));
     } else {
       const { data: conv, error } = await ctx.admin.from('lumi_conversations')
         .insert({ org_id: ctx.auth.orgId, user_id: ctx.auth.user.id, title: label.slice(0, 80) })
@@ -945,7 +988,7 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
     // Refus de rôle ou outil en échec : on ne devine rien, le client renvoie le texte au modèle s'il le veut.
     if (!reponse) return res.status(422).json({ error: 'Action unavailable for this user.', code: 'action_indisponible' });
 
-    const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+    const cleRefs = espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId);
     await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
     const emettreSse = ouvrirSse(res);
     emettreSse('tool', { type: 'tool', name: raccourci!.tool, statut: 'debut' });
@@ -966,14 +1009,24 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
 
 // ── POST /lumi/execute — confirmer ou annuler une écriture proposée ──
 router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
+  let verrou: string | null = null;
   try {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;
     const { conversation_id, tool_use_id, decision } = req.body as z.infer<typeof executeSchema>;
+    const cleVerrou = `${ctx.auth.user.id}:${conversation_id}`;
+    if (conversationsOccupees.has(cleVerrou)) {
+      return res.status(409).json({
+        error: ctx.language === 'fr' ? 'Cette action est déjà en cours de traitement.' : 'This action is already being processed.',
+        code: 'decision_en_cours',
+      });
+    }
+    conversationsOccupees.add(cleVerrou);
+    verrou = cleVerrou;
 
     const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversation_id).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
-    const historique = await chargerHistorique(conversation_id, `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+    const historique = await chargerHistorique(conversation_id, espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversation_id));
     // La décision porte sur le GROUPE : toutes les écritures en attente du
     // dernier message (une carte), identifiées par la première.
     const enAttente = propositionsEnAttente(historique);
@@ -1010,7 +1063,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     if (decision === 'dry_run') {
       const simulations = [];
       for (const a of enAttente) {
-        const args = demasquerIds(`${ctx.auth.orgId}:${ctx.auth.user.id}`, a.args);
+        const args = demasquerIds(espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversation_id), a.args);
         const r = await executerEcriture({ tool: a.tool, toolUseId: a.tool_use_id, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken, dryRun: true });
         simulations.push({ tool_use_id: a.tool_use_id, tool: a.tool, ...JSON.parse(r.contenu) });
       }
@@ -1027,7 +1080,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
       }
       // Exécution RÉELLE, dans l'ordre, à l'identité de l'utilisateur, avec les
       // gardes du MCP — même chemin que l'exécution d'office d'un outil autorisé.
-      const args = demasquerIds(`${ctx.auth.orgId}:${ctx.auth.user.id}`, a.args);
+      const args = demasquerIds(espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversation_id), a.args);
       const r = await executerEcriture({ tool: a.tool, toolUseId: a.tool_use_id, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken });
       blocs.push({ type: 'tool_result', tool_use_id: a.tool_use_id, content: r.contenu });
       execute.push(r.recu);
@@ -1051,7 +1104,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
       return { recu: execute[i] ?? { tool_use_id: a.tool_use_id, ok: false, fiche: null }, erreur, outil: a.tool, resultat };
     });
     const texte = texteRecus(lignes, decision, ctx.language === 'fr');
-    const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+    const cleRefs = espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversation_id);
     await sauverMessages(conversation_id, ctx.auth.orgId, [resultat, { role: 'assistant', content: [{ type: 'text', text: texte }] }], cleRefs);
     const emettreSse = ouvrirSse(res);
     for (const recu of execute) emettreSse('executed', recu);
@@ -1067,6 +1120,8 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to execute the action.', '[lumi/execute]');
+  } finally {
+    if (verrou) conversationsOccupees.delete(verrou);
   }
 });
 

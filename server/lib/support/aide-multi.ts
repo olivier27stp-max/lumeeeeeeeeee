@@ -27,6 +27,7 @@
  */
 import { reponseFaqPour } from './faq';
 import { reponseAideDirecte } from './articles-dabord';
+import type { Voix } from './faq-tutoiement';
 
 /** Au-delà, ce n'est plus une liste de questions mais un copier-coller. */
 export const MAX_LIGNES = 6;
@@ -52,7 +53,7 @@ export interface ReponseMulti {
  * qu'une seule ligne n'a pas de réponse toute faite (tout ou rien), ou si le
  * message n'en contient qu'une (c'est alors au chemin normal de répondre).
  */
-export function reponseAideMulti(message: string, langue: 'fr' | 'en'): ReponseMulti | null {
+export function reponseAideMulti(message: string, langue: 'fr' | 'en', voix: Voix = 'vous'): ReponseMulti | null {
   const lignes = decouperEnQuestions(message);
   if (lignes.length < 2 || lignes.length > MAX_LIGNES) return null;
 
@@ -69,9 +70,9 @@ export function reponseAideMulti(message: string, langue: 'fr' | 'en'): ReponseM
   const morceaux: string[] = [];
   const ids: string[] = [];
   for (const ligne of uniques) {
-    const faq = reponseFaqPour(ligne, langue);
+    const faq = reponseFaqPour(ligne, langue, voix);
     if (faq) { morceaux.push(`**${ligne}**\n${faq.reponse}`); ids.push(`faq:${faq.id}`); continue; }
-    const article = reponseAideDirecte(ligne, langue, { premierMessage: true });
+    const article = reponseAideDirecte(ligne, langue, { premierMessage: true, voix });
     if (article) { morceaux.push(`**${ligne}**\n${article.texte}`); ids.push('aide-directe'); continue; }
     // Tout ou rien : une seule ligne sans réponse et le message part au modèle.
     return null;

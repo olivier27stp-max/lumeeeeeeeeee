@@ -281,6 +281,38 @@ describe('orchestrateur', () => {
     expect(instantanes[2].system).toEqual(instantanes[1].system);
   });
 
+  // Passe de référence du 2026-10-01, cas terrain-13 : un technicien a obtenu une carte
+  // « supprimer le client ». Le modèle avait appelé un outil qu'on ne lui avait pas donné.
+  it('LE RÔLE : un outil hors des outils permis ne donne ni carte ni exécution — le modèle reçoit le refus', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [
+      { type: 'tool_use', id: 'w_interdit', name: 'create_job', input: { title: 'Lavage' } },
+      { type: 'tool_use', id: 'r_interdit', name: 'get_payroll_summary', input: {} },
+    ], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Ton rôle ne permet pas ça.' }], stop_reason: 'end_turn', usage });
+    const emis: any[] = [];
+    const r = await tourLumi({ ...baseTour(emis, []), outilsPermis: new Set(['list_invoices']) });
+    expect(r.proposition).toBeNull();
+    expect(emis.some((e) => e.type === 'proposal')).toBe(false);
+    expect(outilsExecutes).toEqual([]); // la lecture interdite n'atteint même pas la garde
+    expect(emis.filter((e) => e.type === 'tool' && e.statut === 'refus').map((e) => e.name)).toEqual(['create_job', 'get_payroll_summary']);
+    const retour = instantanes[1].messages[instantanes[1].messages.length - 1].content.filter((b: any) => b.type === 'tool_result');
+    expect(retour).toHaveLength(2);
+    expect(retour.every((b: any) => b.is_error)).toBe(true);
+    expect(retour[0].content).toContain('ne permet pas la création de jobs');
+    expect(retour[0].content).toContain('Rien n\'a été fait ni proposé');
+    expect(r.texte).toBe('Ton rôle ne permet pas ça.');
+  });
+
+  it('LE RÔLE : un outil permis passe comme avant (aucun faux refus)', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'w_ok', name: 'create_job', input: { title: 'Lavage' } }], stop_reason: 'tool_use', usage });
+    const emis: any[] = [];
+    const r = await tourLumi({ ...baseTour(emis, []), outilsPermis: new Set(['list_invoices', 'create_job']) });
+    expect(r.proposition).toMatchObject({ tool: 'create_job' });
+    expect(emis.some((e) => e.type === 'tool' && e.statut === 'refus')).toBe(false);
+  });
+
   it('limite d’étapes : une ÉCRITURE à la dernière étape reste une carte (aucun appel de plus)', async () => {
     const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
     reponses.push({ content: [{ type: 'tool_use', id: 'l1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage });
