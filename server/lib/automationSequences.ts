@@ -33,6 +33,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './logger';
+import { fuseauOrg, corrigerChangementDHeure } from './automations-fuseau-org';
 
 // ── Forme des étapes ────────────────────────────────────────
 
@@ -298,6 +299,22 @@ export async function debutRendezVous(
   return { debut: d ? Date.parse(d) : null, annule: false };
 }
 
+/**
+ * Le moment d'un rappel « N avant le rendez-vous », à la même HEURE LOCALE.
+ *
+ * `début − N secondes` en absolu glissait d'une heure quand un changement
+ * d'heure tombe entre les deux : rendez-vous le mardi 3 novembre à 10 h,
+ * rappel « 7 jours avant » le 27 octobre à 11 h. La règle simple corrige
+ * déjà ce cas (`resolveExecuteAt`) ; le parcours ne le faisait pas.
+ */
+async function momentAvantDate(
+  supabase: SupabaseClient, orgId: string, debut: number | null, secondesAvant: number | undefined,
+): Promise<number | null> {
+  if (debut === null) return null;
+  const brut = debut - Math.max(0, secondesAvant ?? 0) * 1000;
+  return corrigerChangementDHeure(debut, brut, await fuseauOrg(supabase, orgId));
+}
+
 export interface ContextePlanification {
   supabase: SupabaseClient;
   orgId: string;
@@ -377,7 +394,7 @@ export async function planifierEtape(
       rdv = { debut: null, annule: false };
     }
     if (rdv.annule) return null;
-    const cible = rdv.debut === null ? null : rdv.debut - Math.max(0, courante.secondes_avant ?? 0) * 1000;
+    const cible = await momentAvantDate(ctx.supabase, ctx.orgId, rdv.debut, courante.secondes_avant);
     if (cible === null || cible < Math.max(executeAtMs, Date.now()) - RETARD_TOLERE_AVANT_DATE_MS) {
       return planifierEtape(ctx, steps, courante.si_depasse ?? null);
     }
@@ -517,7 +534,7 @@ export async function echeanceAvantDate(
   };
 
   const rdv = await debutRendezVous(supabase, task.org_id, task.entity_type, task.entity_id);
-  const cible = rdv.debut === null ? null : rdv.debut - Math.max(0, etape.secondes_avant ?? 0) * 1000;
+  const cible = await momentAvantDate(supabase, task.org_id, rdv.debut, etape.secondes_avant);
 
   if (rdv.annule) {
     await terminer('Rendez-vous annulé ou supprimé : le parcours s’arrête.');

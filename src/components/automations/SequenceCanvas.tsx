@@ -152,7 +152,7 @@ function Connecteur({
   onAjouter, fr, libelle, lectureSeule,
 }: { onAjouter: () => void; fr: boolean; libelle?: string; lectureSeule?: boolean }) {
   return (
-    <div className="flex flex-col items-center py-1" aria-hidden={!libelle}>
+    <div className="flex flex-col items-center py-1">
       {libelle && (
         <span className="mb-1 rounded-full bg-surface-tertiary px-2 py-0.5 text-[10px] font-medium text-text-secondary">
           {libelle}

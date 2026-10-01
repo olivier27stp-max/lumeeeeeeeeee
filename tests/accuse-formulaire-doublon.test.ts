@@ -44,7 +44,9 @@ describe('le désabonnement ne figure que sur un message commercial', () => {
        `ctx.commercial` fait déjà cette distinction pour le plafond de
        fréquence et la base légale. */
     const src = lire('server/lib/actions/index.ts');
-    expect(src).toMatch(/const unsubUrl = ctx\.commercial \? await getUnsubscribeUrl/);
+    // Commercial = différé commercial OU marketing (`estCommercialLcap`) ; un
+    // transactionnel n'a ni l'un ni l'autre (prouvé en intégration, G-003).
+    expect(src).toMatch(/const unsubUrl = ctx\.commercial \|\| estCommercialLcap\(ctx\) \? await getUnsubscribeUrl/);
     // Les en-têtes suivent la même variable : ils disparaissent avec elle.
     const entetes = src.slice(src.indexOf("'List-Unsubscribe'") - 200, src.indexOf("'List-Unsubscribe'"));
     expect(entetes).toContain('unsubUrl');

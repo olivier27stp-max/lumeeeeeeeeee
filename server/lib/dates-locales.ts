@@ -6,10 +6,12 @@
 
 /** « 2026-09-12 » dans le fuseau donné, décalé de n jours. */
 export function jourLocal(fuseau: string, maintenant: Date, decalageJours = 0): string {
-  const d = new Date(maintenant.getTime() + decalageJours * 86_400_000);
-  const p = new Intl.DateTimeFormat('en-CA', { timeZone: fuseau, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
-  const v = (t: string) => p.find((x) => x.type === t)?.value ?? '';
-  return `${v('year')}-${v('month')}-${v('day')}`;
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: fuseau, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(maintenant);
+  const v = (t: string) => Number(p.find((x) => x.type === t)?.value ?? 0);
+  /* Le décalage se compte en JOURS CIVILS, pas en tranches de 24 h : le jour
+     du retour à l'heure normale dure 25 h, et « minuit + 24 h » retombait le
+     même jour (la semaine de Lumi montrait le 1er novembre deux fois). */
+  return new Date(Date.UTC(v('year'), v('month') - 1, v('day') + decalageJours)).toISOString().slice(0, 10);
 }
 
 /** Minuit local d'un jour « YYYY-MM-DD » dans le fuseau, en ISO UTC. */

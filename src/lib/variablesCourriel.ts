@@ -119,5 +119,7 @@ export function remplacerParExemples(texte: string, type: string | undefined, fr
   /* Une clé commence par une LETTRE, comme côté serveur : sans cette règle,
      `[50]` dans « Rabais [50] % » était traité comme une variable. */
   const remplacer = (tout: string, cle: string) => table.get(cle) ?? tout;
-  return texte.replace(/\{([A-Za-z]\w*)\}/g, remplacer).replace(/\[([A-Za-z]\w*)\]/g, remplacer);
+  // `{{cle}}` d'abord, comme le serveur : sinon l'aperçu montrait « {Marie} ».
+  return texte.replace(/\{\{\s*([A-Za-z]\w*)\s*\}\}/g, remplacer)
+    .replace(/\{([A-Za-z]\w*)\}/g, remplacer).replace(/\[([A-Za-z]\w*)\]/g, remplacer);
 }

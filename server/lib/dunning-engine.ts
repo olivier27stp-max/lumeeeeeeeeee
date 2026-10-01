@@ -46,14 +46,17 @@ export interface ResultatDunning {
  * Ne lève pas sur un échec isolé : un client dont le courriel part mal ne doit
  * pas empêcher les suivants d'être traités.
  */
-export async function runDunningScan(admin: SupabaseClient): Promise<ResultatDunning> {
+export async function runDunningScan(admin: SupabaseClient, options: { orgId?: string } = {}): Promise<ResultatDunning> {
   const resultat: ResultatDunning = { examines: 0, relances: 0, suspendus: 0 };
 
-  const { data: subs, error } = await admin
+  let lecture = admin
     .from('subscriptions')
     .select('id, org_id, past_due_since, plan_id')
     .eq('status', 'past_due')
     .not('past_due_since', 'is', null);
+  // Une seule entreprise (suite d'intégration, bureau de test).
+  if (options.orgId) lecture = lecture.eq('org_id', options.orgId);
+  const { data: subs, error } = await lecture;
 
   // supabase-js ne lève jamais : sans ce test, une erreur de lecture passerait
   // pour « aucun impayé » et le cron se tairait pour toujours.

@@ -96,3 +96,34 @@ export async function fuseauOrg(
   cache.set(orgId, { fuseau, expire: maintenant + DUREE_CACHE_MS });
   return fuseau;
 }
+
+/** Décalage UTC (en minutes) du fuseau local à cet instant — +/- selon l'heure avancée. */
+export function decalageLocalMin(t: number, tz: string = FUSEAU_DEFAUT): number {
+  const d = new Date(t);
+  // Une date formatée dans le fuseau cible, relue comme si elle était UTC :
+  // l'écart avec l'instant d'origine EST le décalage.
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(d).reduce<Record<string, string>>((a, x) => (a[x.type] = x.value, a), {});
+  const commeUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+  return Math.round((commeUtc - d.getTime()) / 60000);
+}
+
+/**
+ * Cale un rappel sur l'HEURE LOCALE voulue, même à cheval sur un changement
+ * d'heure.
+ *
+ * Un « rappel 7 jours avant » se calcule en 604 800 secondes absolues. Si le
+ * retour à l'heure normale tombe entre les deux, l'heure locale glisse d'une
+ * heure : un rendez-vous à 10 h donnait un rappel à 11 h. Mesuré sur le cas
+ * réel du 1er novembre 2026.
+ *
+ * On compare le décalage UTC aux deux instants et on rattrape la différence.
+ * Rien à faire le reste de l'année : les deux décalages sont égaux, la
+ * correction vaut zéro.
+ */
+export function corrigerChangementDHeure(reference: number, cible: number, tz: string = FUSEAU_DEFAUT): number {
+  const ecart = decalageLocalMin(reference, tz) - decalageLocalMin(cible, tz);
+  return ecart === 0 ? cible : cible + ecart * 60000;
+}

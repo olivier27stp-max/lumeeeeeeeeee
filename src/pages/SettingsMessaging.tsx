@@ -33,9 +33,13 @@ import {
   getAutomationRules,
   toggleAutomationRule,
   updateRuleSmsBody,
+  texteDuMessage,
+  avecTexteDuMessage,
   type AutomationRule,
 } from '../lib/automationRulesApi';
 import { ChevronDown, Pencil } from 'lucide-react';
+import { toast } from 'sonner';
+import { captureClientException } from '../lib/sentry';
 
 export default function SettingsMessaging() {
   const { language } = useTranslation();
@@ -472,8 +476,8 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
       .finally(() => setRulesLoading(false));
   }, []);
 
-  const smsBody = (r: AutomationRule) =>
-    (r.actions || []).find((a) => a.type === 'send_sms')?.config?.body || '';
+  // Le texte qui PART : celui des étapes quand la règle en a (le moteur ne lit alors plus `actions`).
+  const smsBody = (r: AutomationRule) => texteDuMessage(r, 'send_sms');
 
   async function handleToggle(rule: AutomationRule) {
     const next = !rule.is_active;
@@ -489,10 +493,13 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
     setSavingBody(true);
     try {
       await updateRuleSmsBody(rule.id, draftBody.trim());
-      setRules((prev) => prev.map((r) => (r.id === rule.id
-        ? { ...r, actions: r.actions.map((a) => (a.type === 'send_sms' ? { ...a, config: { ...a.config, body: draftBody.trim() } } : a)) }
-        : r)));
+      setRules((prev) => prev.map((r) => (r.id === rule.id ? avecTexteDuMessage(r, 'send_sms', draftBody.trim()) : r)));
       setOpenId(null);
+    } catch (e: unknown) {
+      // L'échec était muet (aucun catch) : le texte semblait enregistré.
+      console.error('[SettingsMessaging] texte du SMS non enregistré', e);
+      captureClientException(e, { where: 'SettingsMessaging.handleSaveBody' });
+      toast.error(e instanceof Error ? e.message : String(e));
     } finally {
       setSavingBody(false);
     }

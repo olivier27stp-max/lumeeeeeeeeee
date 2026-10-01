@@ -54,16 +54,21 @@ interface EvenementPipeline {
  * ne doit pas empêcher le reste du tick (factures en retard, devis expirés)
  * de tourner.
  *
+ * `options.orgId` : ne traite que la file de CETTE entreprise (suite
+ * d'intégration des automatisations, bureau de test) — sans lui, toute la file.
+ *
  * @returns le nombre d'événements traités avec succès.
  */
-export async function traiterEvenementsPipeline(supabase: SupabaseClient): Promise<number> {
+export async function traiterEvenementsPipeline(supabase: SupabaseClient, options: { orgId?: string } = {}): Promise<number> {
   let traites = 0;
 
-  const { data, error } = await supabase
+  let file = supabase
     .from('pipeline_events')
     .select('id, org_id, deal_id, type, payload, attempts')
     .is('processed_at', null)
-    .lt('attempts', MAX_TENTATIVES)
+    .lt('attempts', MAX_TENTATIVES);
+  if (options.orgId) file = file.eq('org_id', options.orgId);
+  const { data, error } = await file
     .order('created_at')
     .limit(TAILLE_LOT);
 

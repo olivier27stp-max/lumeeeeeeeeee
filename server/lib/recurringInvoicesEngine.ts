@@ -246,17 +246,20 @@ async function envoyerParCourriel(
 }
 
 /** Find all schedules due to run today (or earlier) and run them. */
-export async function runDueSchedules(svc: SupabaseClient): Promise<{
+export async function runDueSchedules(svc: SupabaseClient, options: { orgId?: string } = {}): Promise<{
   processed: number;
   errors: number;
   results: Array<{ schedule_id: string; ok: boolean; error?: string; invoice_id?: string }>;
 }> {
   const today = formatISO(new Date(), { representation: 'date' });
-  const { data: rows, error } = await svc
+  let lecture = svc
     .from('recurring_invoice_schedules')
     .select('*')
     .eq('is_active', true)
     .lte('next_run_date', today);
+  // Une seule entreprise (suite d'intégration, bureau de test).
+  if (options.orgId) lecture = lecture.eq('org_id', options.orgId);
+  const { data: rows, error } = await lecture;
   if (error) throw error;
 
   const due = (rows || []).filter(

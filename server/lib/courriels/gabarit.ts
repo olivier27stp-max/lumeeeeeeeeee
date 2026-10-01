@@ -172,7 +172,11 @@ export function preheaderDepuis(html: string | null | undefined): string {
   const texte = String(html ?? '')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#39;|&rsquo;/g, '’')
+    // Toutes les entités qu'`echapperHtml` produit : l'aperçu est ré-échappé
+    // à l'insertion, et « &quot; » laissé tel quel s'affichait « &amp;quot; »
+    // dans Gmail. `&amp;` en DERNIER, pour ne rien décoder deux fois.
+    .replace(/&nbsp;/g, ' ').replace(/&#39;|&rsquo;/g, '’')
+    .replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ')
     .trim();
   if (!texte) return '';

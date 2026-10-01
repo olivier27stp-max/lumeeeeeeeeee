@@ -153,13 +153,21 @@ export async function sendScheduledReport(reportId: string, opts: { immediat?: b
     to: report.recipient_email,
     subject: `Ton rapport ${libelleFrequence(report.frequency)} — ${data.orgName}`,
     html,
+    // L'entreprise du rapport : journal des envois (email_deliveries) et bac à sable.
+    suivi: { orgId: report.org_id, entityType: 'scheduled_report', entityId: report.id },
     // Envoi de fond (cron) : last_sent_at est posé juste après, un échec
     // transitoire ne doit donc pas perdre le rapport — il part dans la file de reprise.
     // … sauf l'envoi immédiat (bouton, Lumi) : un échec y est dit, pas remis à plus tard.
     ...(opts.immediat ? { reessayer: false } : { reessayer: true }),
   });
-  if (opts.immediat && envoi && envoi.sent === false) {
-    throw new Error(`Report email not sent: ${envoi.error || 'unknown error'}`);
+  // Le résultat était ignoré : un envoi refusé marquait quand même le rapport
+  // « envoyé » (last_sent_at), et il ne repartait pas au passage suivant.
+  // Parti en file de reprise = il partira : on le compte comme envoyé.
+  // (L'envoi immédiat — bouton, Lumi — n'a pas de file : son échec est dit.)
+  if (!envoi.sent && !envoi.enFile) {
+    throw new Error(opts.immediat
+      ? `Report email not sent: ${envoi.error || 'unknown error'}`
+      : `rapport non envoyé : ${envoi.error ?? 'refus du fournisseur'}`);
   }
 
   // Update last_sent_at
@@ -175,15 +183,18 @@ export async function sendScheduledReport(reportId: string, opts: { immediat?: b
   logger.info(`[scheduled-reports] Sent ${report.frequency} report`, { email: report.recipient_email, orgId: report.org_id });
 }
 
-export async function processScheduledReports(): Promise<number> {
+export async function processScheduledReports(options: { orgId?: string } = {}): Promise<number> {
   const admin = getServiceClient();
   const now = new Date();
   const dayOfWeek = now.getDay();
   const dayOfMonth = now.getDate();
 
-  const { data: reports } = await admin.from('scheduled_reports')
+  let lecture = admin.from('scheduled_reports')
     .select('*')
     .eq('enabled', true);
+  // Une seule entreprise (suite d'intégration, bureau de test).
+  if (options.orgId) lecture = lecture.eq('org_id', options.orgId);
+  const { data: reports } = await lecture;
 
   if (!reports?.length) return 0;
 

@@ -429,26 +429,55 @@ const createAutomationFromText: AgentTool = {
 
       const { genererParcours } = await import('../lumi/generer-parcours');
       const { sequenceEtapes } = await import('../validation');
+      const { trouverDeclencheur } = await import('../../../src/lib/automationCatalogue');
+      const { refAutomatisationInventee } = await import('../automations-publication');
       const admin = getServiceClient();
+
+      // Les messages partent aux clients dans la langue des automatisations
+      // de l'entreprise (celle que règle set_automation_language). Elle était
+      // forcée à 'fr' : une entreprise anglophone recevait des textes français.
+      const { data: reglages } = await ctx.client
+        .from('company_settings').select('default_language').eq('org_id', ctx.orgId).maybeSingle();
+      const langue: 'fr' | 'en' = reglages?.default_language === 'en' ? 'en' : 'fr';
 
       const resultat = await genererParcours({
         admin,
         orgId: ctx.orgId,
         userId: ctx.userId ?? null,
         demande: demande.trim(),
-        langue: 'fr',
+        langue,
       });
       if (!resultat.parcours) {
         throw new Error(resultat.erreur ?? 'Je n\'ai pas réussi à construire ce parcours. Reformule-le.');
       }
 
-      // Le même garde-fou que la route : ce qui ne passerait pas le moteur
-      // n'est jamais enregistré. Sans lui, une règle invalide dormirait en
-      // base jusqu'à son premier déclenchement.
+      // Les MÊMES garde-fous que la route « Construire avec Lumi »
+      // (POST /automations/rules/generer) : ce qui ne passerait pas le moteur
+      // n'est jamais enregistré. Sans eux, un déclencheur inventé (aucun CHECK
+      // en base) ou une étape « démarrer » vers une règle inexistante
+      // dormaient en base sans jamais pouvoir partir.
       const verdict = sequenceEtapes.safeParse(resultat.parcours.steps);
+      // Comme la route : le motif exact du refus reste dans les journaux (1 fois
+      // sur ~40 sur la batterie I, invisible sans cette trace).
       if (!verdict.success) {
+        console.error('[create_automation_from_text] parcours invalide', ctx.orgId, JSON.stringify(verdict.error.issues.slice(0, 3)));
         throw new Error('Le parcours proposé ne pourrait pas tourner. Reformule ta demande, ou construis-le avec le « + » dans Automatisations.');
       }
+      if (!trouverDeclencheur(resultat.parcours.trigger_event)) {
+        throw new Error('Lumi a choisi un déclencheur qui n’existe pas. Reformule ta demande.');
+      }
+      if (await refAutomatisationInventee(ctx.client, ctx.orgId, verdict.data)) {
+        throw new Error('Lumi a voulu relier une automatisation qui n’existe pas. Redemande-le autrement.');
+      }
+      // La 2e automatisation (autre déclencheur, ex. « quand le client
+      // répond ») passe les mêmes gardes ; invalide, elle est laissée de côté
+      // sans faire perdre la première — comme dans l'éditeur.
+      const a = resultat.parcours.autre;
+      const verdictAutre = a ? sequenceEtapes.safeParse(a.steps) : null;
+      const autre = a && verdictAutre?.success && trouverDeclencheur(a.trigger_event)
+        && !(await refAutomatisationInventee(ctx.client, ctx.orgId, verdictAutre.data))
+        ? { ...a, steps: verdictAutre.data }
+        : null;
 
       const { data, error } = await ctx.client
         .from('automation_rules')
@@ -469,27 +498,41 @@ const createAutomationFromText: AgentTool = {
       const row = ligneTouchee(data, 'L\'automatisation');
 
       // La DEUXIÈME automatisation (autre déclencheur, ex. « quand le client
-      // répond ») était jetée en silence (audit 2026-09-30) : on la crée aussi,
-      // en pause, ou on dit ce qui manque pour l'écrire.
+      // répond »), en pause elle aussi, avec sa limite « une fois par client
+      // tous les N jours » (sans elle, une réponse automatique sur « le client
+      // répond » repartirait à chaque texto). Elle était jetée en silence :
+      // Lumi annonçait la réaction, rien ne la portait. Elle a passé les mêmes
+      // gardes que la première (`autre`, plus haut) ; sinon on DIT ce qui manque.
       let seconde: Record<string, unknown> | null = null;
-      const autre = resultat.parcours.autre;
-      if (autre) {
-        const v2 = sequenceEtapes.safeParse(autre.steps);
-        if (autre.manque) {
-          seconde = { creee: false, name: autre.nom, manque: autre.manque };
-        } else if (!v2.success) {
-          seconde = { creee: false, name: autre.nom, manque: 'un parcours valide (à construire dans Automatisations)' };
+      if (a) {
+        if (typeof a.manque === 'string' && a.manque.trim()) {
+          seconde = { creee: false, name: a.nom, manque: a.manque };
+        } else if (!autre) {
+          seconde = { creee: false, name: a.nom, manque: 'un parcours valide (à construire dans Automatisations)' };
         } else {
           const { data: d2, error: e2 } = await ctx.client
             .from('automation_rules')
             .insert({
-              org_id: ctx.orgId, name: autre.nom, description: autre.resume, trigger_event: autre.trigger_event,
-              conditions: {}, delay_seconds: 0, actions: [], steps: v2.data, is_active: false,
+              org_id: ctx.orgId,
+              name: autre.nom,
+              description: autre.resume,
+              trigger_event: autre.trigger_event,
+              conditions: {},
+              delay_seconds: 0,
+              actions: [],
+              steps: autre.steps,
+              settings: autre.une_fois_par_client_jours ? { delai_entre_passages_jours: autre.une_fois_par_client_jours } : null,
+              is_active: false,
             })
             .select('id, name, trigger_event');
-          seconde = e2 || !d2?.length
-            ? { creee: false, name: autre.nom, manque: 'l’enregistrement a échoué — à créer dans Automatisations' }
-            : { creee: true, rule_id: d2[0].id, name: d2[0].name, trigger_event: d2[0].trigger_event };
+          // La 1re est déjà en base : on le dit plutôt que de lever (l'empreinte
+          // d'idempotence resterait libérée et une retentative la doublerait).
+          if (e2 || !d2?.length) {
+            console.error('[create_automation_from_text] 2e automatisation non créée', ctx.orgId, e2?.message ?? 'aucune ligne');
+            seconde = { creee: false, name: autre.nom, manque: 'l’enregistrement a échoué — à créer dans Automatisations' };
+          } else {
+            seconde = { creee: true, rule_id: d2[0].id, name: d2[0].name, trigger_event: d2[0].trigger_event };
+          }
         }
       }
 

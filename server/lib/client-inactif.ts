@@ -91,14 +91,25 @@ export async function balayerEntreprise(admin: SupabaseClient, orgId: string, ma
 
   // Une émission par SEUIL : deux règles à 6 mois partent sur le même
   // événement ; une règle à 12 mois a le sien.
-  const seuils = new Map<number, number>();
+  //
+  // Le moteur compare CHAQUE clé des conditions de la règle aux métadonnées :
+  // l'événement porte donc la liste des valeurs écrites par les règles de ce
+  // seuil (une métadonnée liste est vraie si UN élément correspond). Avec une
+  // seule valeur (le plafond le plus bas, le seuil borné), une règle à 50 par
+  // heure à côté d'une règle à 25 ne partait jamais.
+  const seuils = new Map<number, { maxParHeure: number; moisEcrits: Set<unknown>; plafondsEcrits: Set<unknown> }>();
   for (const r of regles as Array<{ conditions: Record<string, unknown> | null }>) {
     const { mois, maxParHeure } = reglagesInactivite(r.conditions);
-    seuils.set(mois, Math.min(seuils.get(mois) ?? Infinity, maxParHeure));
+    const s = seuils.get(mois) ?? { maxParHeure, moisEcrits: new Set<unknown>([mois]), plafondsEcrits: new Set<unknown>([maxParHeure]) };
+    s.maxParHeure = Math.min(s.maxParHeure, maxParHeure);
+    if (r.conditions?.mois !== undefined && r.conditions?.mois !== null) s.moisEcrits.add(r.conditions.mois);
+    if (r.conditions?.max_par_heure !== undefined && r.conditions?.max_par_heure !== null) s.plafondsEcrits.add(r.conditions.max_par_heure);
+    s.plafondsEcrits.add(maxParHeure);
+    seuils.set(mois, s);
   }
 
   let emis = 0;
-  for (const [mois, maxParHeure] of seuils) {
+  for (const [mois, { maxParHeure, moisEcrits, plafondsEcrits }] of seuils) {
     // Le plafond vaut pour L'ENTREPRISE : on compte tout ce qui est parti
     // dans la dernière heure, tous seuils confondus.
     const depuis = new Date(maintenant.getTime() - 3600_000).toISOString();
@@ -131,8 +142,8 @@ export async function balayerEntreprise(admin: SupabaseClient, orgId: string, ma
           client_id: c.client_id,
           // Les réglages de la règle voyagent avec l'événement : le moteur
           // compare chaque clé de `conditions` aux métadonnées.
-          mois,
-          max_par_heure: maxParHeure,
+          mois: [...moisEcrits],
+          max_par_heure: [...plafondsEcrits],
           periode: c.periode,
           dernier_job_termine_at: c.dernier_job_at,
         },

@@ -14,6 +14,29 @@ import {
 import { logger } from './logger';
 
 const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+/** File planifiée : au plus 20 lots (1 000 tâches) et 3 min par tick. */
+export const LOTS_MAX_PAR_TICK = 20;
+export const BUDGET_FILE_MS = 3 * 60 * 1000;
+
+/**
+ * Dépile la file planifiée lot après lot, tant qu'un lot revient plein, dans
+ * les bornes ci-dessus. Renvoie le nombre de lots passés. `filtre` : la suite
+ * de tests limite le passage à ses bureaux (le serveur n'en passe jamais).
+ */
+export async function viderFile(
+  supabase: SupabaseClient,
+  filtre: { orgId?: string; orgIds?: string[] } = {},
+): Promise<number> {
+  const { processScheduledTasks, TACHES_PAR_LOT } = await import('./automationEngine');
+  const debut = Date.now();
+  let lot = 0;
+  while (lot < LOTS_MAX_PAR_TICK) {
+    lot++;
+    const lues = await processScheduledTasks(supabase, filtre);
+    if (lues < TACHES_PAR_LOT || Date.now() - debut > BUDGET_FILE_MS) break;
+  }
+  return lot;
+}
 
 type TriggerType =
   | 'days_after_quote_sent'
@@ -590,7 +613,7 @@ function jourDans(fuseau: string, d: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: fuseau, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 
-export async function detectOverdueInvoices(supabase: SupabaseClient) {
+export async function detectOverdueInvoices(supabase: SupabaseClient, options: { orgId?: string } = {}) {
   /*
    * Launch 2026-09-28.
    *   · PAGINÉ : PostgREST plafonne une réponse (souvent 1 000 lignes) SANS
@@ -605,9 +628,11 @@ export async function detectOverdueInvoices(supabase: SupabaseClient) {
   const invoices: any[] = [];
   const PAGE = 1000;
   for (let de = 0; ; de += PAGE) {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('id, org_id, invoice_number, due_date, client_id')
+    // `options.orgId` : une seule entreprise (suite d'intégration, bureau de test).
+    const base = options.orgId
+      ? supabase.from('invoices').select('id, org_id, invoice_number, due_date, client_id').eq('org_id', options.orgId)
+      : supabase.from('invoices').select('id, org_id, invoice_number, due_date, client_id');
+    const { data, error } = await base
       // Liste POSITIVE, comme le cron des relances : un brouillon n'a jamais
       // été reçu par le client — « votre facture est en retard » serait faux
       // (audit V2, D-05 ; 4 brouillons échus en prod au 2026-09-30).
@@ -747,9 +772,14 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
     await handleRecurringInvoices(supabase);
 
     // Process event-driven scheduled tasks (automation engine)
+    //
+    // Par LOTS, tant qu'un lot revient plein : un seul lot de 50 par tick de
+    // 5 min plafonnait la plateforme à 600 tâches/heure pour TOUTES les
+    // entreprises (mesure de charge M-004) — une campagne d'une seule
+    // entreprise retardait les rappels de toutes les autres. Bornes : 3 min
+    // (le tick fait d'autres choses, et le verrou dure 10 min) et 20 lots.
     try {
-      const { processScheduledTasks } = await import('./automationEngine');
-      await processScheduledTasks(supabase);
+      await viderFile(supabase);
     } catch (err: any) {
       console.error('[scheduler] scheduled tasks processing failed:', err.message);
     }

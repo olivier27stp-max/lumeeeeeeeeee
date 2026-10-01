@@ -175,7 +175,9 @@ export function remplacerVariables(s: string): string {
   // Les deux syntaxes : les automatisations écrivent [cle], les modèles de
   // courriel {cle}. `applyTemplate` côté serveur accepte déjà les deux ; un
   // aperçu qui n'en montre qu'une laisse croire que l'autre est cassée.
+  // `{{cle}}` d'abord : le serveur le rend comme `{cle}` ; l'aperçu montrait « {Marie} ».
   return s
+    .replace(/\{\{\s*(\w+)\s*\}\}/g, (tout, cle) => EXEMPLES[cle] ?? tout)
     .replace(/\[(\w+)\]/g, (tout, cle) => EXEMPLES[cle] ?? tout)
     .replace(/\{(\w+)\}/g, (tout, cle) => EXEMPLES[cle] ?? tout);
 }

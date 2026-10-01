@@ -46,7 +46,7 @@ import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie
 import { logger } from '../lib/logger';
 import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
-import { problemesBloquants, messageRefus, messagePublieeCassee } from '../lib/automations-publication';
+import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee } from '../lib/automations-publication';
 import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
 import {
   DECLENCHEURS,
@@ -70,7 +70,7 @@ const CHAMPS_CONTENU = ['name', 'description', 'trigger_event', 'conditions', 'd
  * Les gardes qui ont besoin du catalogue, donc impossibles à exprimer en Zod
  * seul. Retourne un message en clair, ou null si tout va bien.
  */
-function verifierCoherence(corps: {
+export function verifierCoherence(corps: {
   trigger_event?: string;
   delay_seconds?: number;
   actions?: Array<{ type: string }>;
@@ -493,28 +493,6 @@ router.post('/automations/rules/generer', async (req, res) => {
     autre,
   });
 });
-
-/**
- * Renvoie l'identifiant d'une automatisation citée par une étape
- * (démarrer / arrêter) qui n'existe pas dans ce bureau, ou `null`.
- * Lu avec le client de l'utilisateur : la RLS borne au bureau.
- */
-async function refAutomatisationInventee(
-  client: SupabaseClient,
-  orgId: string,
-  etapes: unknown[],
-): Promise<string | null> {
-  const cibles = etapes
-    .map((e) => (e as { action?: { type?: string; config?: { rule_id?: unknown } } }).action)
-    .filter((act) => act?.type === 'demarrer_automatisation' || act?.type === 'arreter_automatisation')
-    .map((act) => String(act?.config?.rule_id ?? ''));
-  for (const id of cibles) {
-    if (!/^[0-9a-f-]{36}$/i.test(id)) return id || '(vide)';
-    const { data } = await client.from('automation_rules').select('id').eq('id', id).eq('org_id', orgId).is('deleted_at', null).maybeSingle();
-    if (!data) return id;
-  }
-  return null;
-}
 
 // ── Modifier ────────────────────────────────────────────────
 

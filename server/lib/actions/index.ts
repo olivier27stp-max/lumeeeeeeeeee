@@ -562,26 +562,48 @@ export function echapperHtml(v: string): string {
  *   envoyé au client. Les variables qui PORTENT du HTML par conception (nom
  *   en `_html`, ex. [contract_html]) ne sont pas échappées.
  */
+/**
+ * Les SEULES variables qui portent du HTML construit par Lume (jamais une
+ * saisie). L'exemption se faisait sur le NOM (« finit par _html ») : un
+ * champ personnalisé « Notes HTML » (clé notes_html → {{client.notes_html}})
+ * injectait sa valeur brute dans le courriel du client.
+ */
+const VARIABLES_HTML_DE_LUME: ReadonlySet<string> = new Set(['contract_html']);
+
 export function resolveTemplate(
   template: string,
   vars: Record<string, string | null | undefined>,
   options: { html?: boolean } = {},
 ): string {
+  // Seules les clés PROPRES de `vars` : `[constructor]` ou `{toString}`
+  // remontaient à Object.prototype — le client recevait « function Object()
+  // { [native code] } », et le corps HTML levait (echapperHtml sur une fonction).
+  const lire = (cle: string): string | undefined => {
+    if (!Object.prototype.hasOwnProperty.call(vars, cle)) return undefined;
+    const v: unknown = vars[cle];
+    return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : undefined;
+  };
   const valeur = (cle: string, v: string | null | undefined): string =>
-    options.html && v && !cle.endsWith('_html') ? echapperHtml(v) : (v ?? '');
+    options.html && v && !VARIABLES_HTML_DE_LUME.has(cle) ? echapperHtml(v) : (v ?? '');
   // Support both {var} and [var] syntax for backward compatibility, normalize to {var}
   // Champs personnalisés : {{client.cle}} (format GoHighLevel) = {client_cf_cle}.
   // UNE seule passe : une valeur insérée n'est jamais relue. En trois passes, un
   // client « [QA] Équipe » ou une note « voir [annexe] » perdait son texte entre
   // crochets, pris pour une ancienne variable [annexe] (constaté le 2026-09-28).
   return template.replace(
-    /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}|\{(\w+)\}|\[(\w+)\]/g,
-    (_, objet: string | undefined, cle: string | undefined, accolade: string | undefined, crochet: string | undefined) => {
+    // Une clé commence par une LETTRE (comme `applyTemplate`) : « Rabais [50] % »
+    // ou « Étape {0} » perdaient leur nombre, effacé comme une variable inconnue.
+    // `{{cle}}` (sans point) = `{cle}` : le format des modèles que Lumi annonce
+    // (« {{client_name}} ») et de la plupart des outils. Lu comme `{` + `{cle}` +
+    // `}`, il partait « {Marie} » chez le client.
+    /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}|\{\{\s*([A-Za-z]\w*)\s*\}\}|\{([A-Za-z]\w*)\}|\[([A-Za-z]\w*)\]/g,
+    (_, objet: string | undefined, cle: string | undefined, double: string | undefined, simple: string | undefined, crochet: string | undefined) => {
+      const accolade = double ?? simple;
       // Variables intégrées pointées ({{client.nom}}, {{soumission.total}}…)
       // AVANT les champs personnalisés : un champ perso nommé « nom » ne doit
       // pas masquer le nom du client.
-      if (objet) return valeur(`${objet}.${cle}`, vars[`${objet}.${cle}`] ?? vars[`${objet}_cf_${cle}`]);
-      return valeur((accolade ?? crochet) as string, vars[(accolade ?? crochet) as string]);
+      if (objet) return valeur(`${objet}.${cle}`, lire(`${objet}.${cle}`) ?? lire(`${objet}_cf_${cle}`));
+      return valeur((accolade ?? crochet) as string, lire((accolade ?? crochet) as string));
     },
   );
 }
@@ -796,6 +818,10 @@ export async function resolveEntityVariables(
         etape:pipeline_stages!deals_stage_same_org(name_fr, name_en, kind)
       `)
       .eq('id', entityId)
+      // Client service_role (pas de RLS) : sans ce filtre, un événement de ce
+      // bureau portant l'identifiant d'un deal d'un AUTRE bureau lisait le
+      // courriel et le téléphone de son client — et les envoyait.
+      .eq('org_id', orgId)
       .maybeSingle() as any;
     if (deal) {
       if (deal.client) setClientVars(deal.client);
@@ -1041,8 +1067,10 @@ export async function resolveEntityVariables(
          * Le repli ne sert que si la ligne de réglages n'existe pas encore.
          */
         const fuseau = (company?.timezone as string | undefined) || FUSEAU_CLIENT;
-        vars.appointment_date = d.toLocaleDateString('fr-CA', { timeZone: fuseau });
-        vars.appointment_time = d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', timeZone: fuseau });
+        // Dans la LANGUE de l'entreprise : « 14 h 00 » dans un texto anglais
+        // était un défaut visible. `fr-CA` reste pour une entreprise française.
+        vars.appointment_date = d.toLocaleDateString(locale, { timeZone: fuseau });
+        vars.appointment_time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: fuseau });
       }
       vars.appointment_title = evt.job?.title || '';
       // `jobs.property_address` a pour DEFAULT '-' : sans ce filtre, le client
@@ -1282,7 +1310,11 @@ export async function executeSendEmail(
        diffusion, et s'il clique il cesse aussi de recevoir ses factures.
        `ctx.commercial` fait déjà cette distinction pour le plafond de
        fréquence et la base légale — le pied de page la suit. */
-    const unsubUrl = ctx.commercial ? await getUnsubscribeUrl(ctx.supabase, ctx.orgId, to) : null;
+    // Un courriel MARKETING immédiat (drapeau par canal éteint) n'a pas
+    // `ctx.commercial` : il partait sans lien ni List-Unsubscribe, alors que
+    // la LCAP exige un mécanisme de retrait dans tout message commercial —
+    // même critère que l'identification exigée plus haut (`estCommercialLcap`).
+    const unsubUrl = ctx.commercial || estCommercialLcap(ctx) ? await getUnsubscribeUrl(ctx.supabase, ctx.orgId, to) : null;
 
     /* Le bouton vers la page publique de l'entité concernée.
        Les 26 relances automatiques partaient sans aucun bouton : toutes
@@ -1943,6 +1975,11 @@ export async function executeRequestReview(
     clientId = inv?.client_id || null;
     jobId = inv?.job_id || null;
   }
+  // Le catalogue offre « Demander un avis » après TOUT déclencheur (client,
+  // prospect, devis, deal, rendez-vous…). Sans client résolu, la demande
+  // n'était rattachée à personne et l'anti-doublon de 7 jours, qui cherche
+  // par client, ne voyait rien : chaque note ou étiquette renvoyait un avis.
+  if (!clientId) clientId = await clientDeLEntite(ctx);
 
   // 2b. Client exclu des avis (champ personnalisé « noreview » coché) : un
   // saut voulu, pas un échec — le parcours continue.
@@ -1960,9 +1997,10 @@ export async function executeRequestReview(
   }
 
   // 4. Resolve client name: first_name > full name > "Bonjour"
+  const en = ctx.langue === 'en';
   const clientGreeting = vars.client_first_name
     || vars.client_name
-    || 'Bonjour';
+    || (en ? 'there' : 'Bonjour');
 
   // 5. Anti-duplicate: check if review already sent to this client in last 7 days
   if (clientId) {
@@ -2009,8 +2047,8 @@ export async function executeRequestReview(
     ...vars,
     client_first_name: clientGreeting,
     client_name: vars.client_name || clientGreeting,
-    company_name: vars.company_name || 'notre équipe',
-    job_name: vars.job_name || 'votre projet',
+    company_name: vars.company_name || (en ? 'our team' : 'notre équipe'),
+    job_name: vars.job_name || (en ? 'your project' : 'votre projet'),
     survey_url: surveyUrl,
     review_link: surveyUrl,
   };
@@ -2056,7 +2094,7 @@ export async function executeRequestReview(
     ? { success: false, error: 'Client has no phone number.' }
     : await depassePlafondFrequence(ctxPlafond, 'sms', vars.client_phone)
       ? auPlafond('sms', vars.client_phone)
-      : await executeSendSms({ body: reviewSmsBody(cs, messageVars), sollicitation: true }, vars, ctx);
+      : await executeSendSms({ body: reviewSmsBody(cs, messageVars, en ? 'en' : 'fr'), sollicitation: true }, vars, ctx);
 
   // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
   const sent = estEnvoye(emailResult) || estEnvoye(smsResult);
@@ -2335,6 +2373,34 @@ export async function executeMoveDealStage(
   if (error) return { success: false, error: error.message };
   if (!data || data.length === 0) {
     return { success: false, error: "Aucun deal touché — l'écriture a été refusée." };
+  }
+
+  /*
+   * Anti-boucle. Le déplacement produit ses événements `deal.stage_*` par
+   * TRIGGER (pipeline_events), sans la chaîne des règles qui l'ont causé :
+   * « A : S1→S2 » et « B : S2→S1 » se relançaient à chaque tick, sans fin
+   * (test D-042 : 6 déplacements en 6 ticks). On pose la chaîne sur les
+   * événements encore en attente de ce deal, comme le font les étiquettes ;
+   * le moteur saute alors toute règle déjà dans la chaîne.
+   */
+  const chaine = chaineSuivante(ctx);
+  if (chaine.length) {
+    const { data: enAttente, error: eLecture } = await ctx.supabase
+      .from('pipeline_events')
+      .select('id, payload')
+      .eq('org_id', ctx.orgId)
+      .eq('deal_id', deal.id)
+      .is('processed_at', null);
+    if (eLecture) console.error('[actions/move_deal_stage] chaîne anti-boucle non posée (lecture)', eLecture.message);
+    for (const ev of (enAttente ?? []) as Array<{ id: number; payload: Record<string, unknown> | null }>) {
+      const dejaLa = Array.isArray(ev.payload?.chaine) ? (ev.payload!.chaine as string[]) : [];
+      const { error: eChaine } = await ctx.supabase
+        .from('pipeline_events')
+        .update({ payload: { ...(ev.payload ?? {}), chaine: [...new Set([...dejaLa, ...chaine])] } })
+        .eq('id', ev.id)
+        .is('processed_at', null);
+      if (eChaine) console.error('[actions/move_deal_stage] chaîne anti-boucle non posée', eChaine.message);
+    }
   }
 
   // L'historique dit QUI et POURQUOI : sans ça, le déplacement apparaît
