@@ -45,6 +45,18 @@ if (projets.includes('ui')) {
   }
 }
 
+// Le CANARI d'abord, seul : s'il est rouge, un envoi réel serait possible —
+// on n'exécute rien d'autre (ni intégration, ni interface).
+if (projets.includes('integration') || projets.includes('ui')) {
+  const c = spawnSync(npx, ['vitest', 'run', '--config', 'vitest.automations.config.ts', '--project', 'integration', 'tests/automations-suite/integration/00-canari.test.ts'], {
+    stdio: 'inherit', shell: process.platform === 'win32',
+  });
+  if (c.status !== 0) {
+    console.error('✗ CANARI ROUGE : un envoi réel serait possible. Suite arrêtée : rien d’autre n’a tourné.');
+    process.exit(c.status || 1);
+  }
+}
+
 const v = spawnSync(npx, ['vitest', 'run', '--config', 'vitest.automations.config.ts', ...projets.flatMap((p) => ['--project', p])], {
   stdio: 'inherit', shell: process.platform === 'win32',
 });

@@ -14,6 +14,7 @@
  * Matrice : tests/automations-suite/matrice/B.md (B-001 à B-099).
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { NUMERO_A } from '../harnais/bureau-test';
 import { marque, attendre } from '../harnais/moteur';
 import {
   preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux,
@@ -27,7 +28,8 @@ process.env.TWILIO_AUTH_TOKEN = 'qa_jeton_twilio_test_automatisations';
 process.env.TWILIO_WEBHOOK_BASE_URL = 'https://twilio.lume-qa.test';
 
 /** Numéro texto propre au bureau A de CE fichier : le SMS entrant doit trouver UNE seule entreprise. */
-const NUMERO_BUREAU = '+15555550199';
+// Numéro fictif PROPRE à ce jeu de bureaux (routage des textos entrants).
+const NUMERO_BUREAU = NUMERO_A;
 
 let b: Bureau & { fuseau: string };
 let api: Api;

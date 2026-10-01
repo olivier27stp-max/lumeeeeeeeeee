@@ -8,9 +8,11 @@ import { defineConfig } from 'vitest/config';
  *  · integration : le VRAI moteur contre STAGING, bureau de test en bac à
  *                  sable (tests/automations-suite/harnais). Séquentiel : les
  *                  tests partagent le bureau et la file planifiée.
- *                  Le canari (00-canari) passe en premier ; `bail: 1` arrête
- *                  tout au premier échec d'intégration — un canari rouge veut
- *                  dire qu'un envoi réel serait possible.
+ *                  Le canari (00-canari) tourne SEUL d'abord
+ *                  (scripts/qa/test-automatisations.mjs) : rouge = un envoi
+ *                  réel serait possible, rien d'autre ne tourne. Ensuite,
+ *                  aucun arrêt au premier échec : un `bail` cachait tous les
+ *                  fichiers suivants (369 cellules « non couvertes » à tort).
  *
  * Sortie : console + JSON (rapports/automatisations/resultats.json), converti
  * en Markdown par scripts/qa/rapport-automatisations.mjs.
@@ -57,7 +59,6 @@ export default defineConfig({
           sequence: { concurrent: false },
           testTimeout: 90_000,
           hookTimeout: 120_000,
-          bail: 1,
         },
       },
       {
