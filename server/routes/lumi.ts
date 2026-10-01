@@ -55,11 +55,11 @@ import type { IdTopic } from '../lib/lumi/topics';
 import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
-import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
+import { journaliserTrace, normaliserEnonce, enoncePourTrace, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL, outilsPermis, membreVoitLesMontants, restrictionsDe } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
-import { maintenantPourLumi } from '../lib/lumi/temps';
+import { jourPourLumi, heurePourLumi } from '../lib/lumi/temps';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
@@ -327,7 +327,7 @@ async function contexteTour(req: Request, res: Response) {
     restrictions = restrictionsDe(ctxRole, await membreVoitLesMontants(auth.user.id, auth.orgId), language);
   } catch { /* non-fatal : sans ce texte, Lumi refuse quand même, juste moins bien */ }
   // Jour ET heure dans le fuseau de l'entreprise, avec le décalage à écrire dans les dates d'outils (audit 2026-09-30).
-  const promptCtx = { companyName, userName, language, todayIso: maintenantPourLumi(fuseau, language), souvenirs, restrictions };
+  const promptCtx = { companyName, userName, language, todayIso: jourPourLumi(fuseau, language), souvenirs, restrictions };
   const systeme = promptSystemeLumi(promptCtx);
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
   // Ce que le client voit : des crédits (jamais de $) — calculé une fois par requête.
@@ -394,7 +394,7 @@ async function executerTourSse(opts: {
     }
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
-      enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: opts.action ?? action ?? null,
+      enonce: opts.enonce, etage: ETAGE.agent, action: opts.action ?? action ?? null,
       params: {
         ...(opts.params ?? {}),
         ...(opts.sousAgent ? { sous_agent: opts.sousAgent } : {}),
@@ -448,15 +448,16 @@ async function executerTourSse(opts: {
       orgId: ctx.auth.orgId,
       userId: ctx.auth.user.id,
       accessToken: ctx.accessToken,
-      // Bloc variable du tour : sujet du sous-agent + indices d'outils différés (code, 0 token d'API).
-      systeme: (() => {
-        const focus = [
-          opts.sousAgent ? focusDuSousAgent(opts.sousAgent, ctx.language) : null,
-          opts.enonce ? indiceOutils(opts.enonce, ctx.language, new Set(opts.sousAgent ? outilsDuSousAgent(opts.sousAgent) : OUTILS_DE_BASE)) : null,
-          reperage,
-        ].filter((x): x is string => !!x).join('\n\n');
-        return focus ? promptSystemeLumi({ ...ctx.promptCtx, focus }) : ctx.systeme;
-      })(),
+      // Bloc système variable : ce qui est STABLE pendant une conversation (entreprise,
+      // jour, souvenirs, rôle, sujet du sous-agent). Rien qui change à chaque message.
+      systeme: opts.sousAgent ? promptSystemeLumi({ ...ctx.promptCtx, focus: focusDuSousAgent(opts.sousAgent, ctx.language) }) : ctx.systeme,
+      // Ce qui change à chaque message — heure, indices d'outils différés, repérage —
+      // part APRÈS le point de cache : la conversation est relue, plus réécrite.
+      contexteTour: [
+        heurePourLumi(ctx.fuseau, ctx.language),
+        opts.enonce ? indiceOutils(opts.enonce, ctx.language, new Set(opts.sousAgent ? outilsDuSousAgent(opts.sousAgent) : OUTILS_DE_BASE)) : null,
+        reperage,
+      ].filter((x): x is string => !!x).join('\n\n'),
       sousAgent: opts.sousAgent ?? null,
       outilsPermis,
       langue: ctx.language === 'en' ? 'en' : 'fr',
@@ -541,7 +542,8 @@ async function executerTourSse(opts: {
 const limiteHoraireLumi = process.env.LUMI_TOURS_PAR_HEURE === '0'
   // Batterie d'évaluation (80 demandes d'un coup, même compte) : la limite est levée par LUMI_TOURS_PAR_HEURE=0, jamais en prod.
   ? ((_req: Request, _res: Response, next: () => void) => next())
-  : redisRateLimit({ preset: 'lumi', keyFn: (req) => `lumi:${userKey(req)}` });
+  // `repliMemoire` : sans Redis (le cas de la prod au 2026-10-01), la limite tient en mémoire au lieu de ne pas exister.
+  : redisRateLimit({ preset: 'lumi', keyFn: (req) => `lumi:${userKey(req)}`, repliMemoire: true });
 
 router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, res) => {
   try {
@@ -602,7 +604,13 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // DONNÉES du compte, jamais en cours de conversation, jamais sur un repli.
     // Une demande d'ACTION (« configure mes taxes », « remets ses permissions »)
     // va au modèle, qui a les outils — jamais une réponse d'aide (audit 2026-09-30).
-    if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message)) {
+    //
+    // Ni pour une question qu'un RACCOURCI sait lire dans la base : « combien de
+    // clients ai-je au total » a un raccourci (le vrai compte), et l'aide, placée
+    // avant lui, répondait « aucune limite, dans tous les forfaits » (passe de
+    // référence du 2026-10-01). Une lecture reconnue passe avant un article.
+    const raccourciReconnu = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
+    if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message) && !raccourciReconnu) {
       const aide = reponseFaqPour(message, ctx.language) ?? null;
       const article = aide ? null : reponseAideDirecte(message, ctx.language, { premierMessage: true });
       // Plusieurs questions collées d'un coup : chacune a sa réponse écrite,
@@ -619,7 +627,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage: aide ? ETAGE.enonceExact : ETAGE.raccourci });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: aide ? ETAGE.enonceExact : ETAGE.raccourci,
+          enonce: message, etage: aide ? ETAGE.enonceExact : ETAGE.raccourci,
           action: aide ? `faq:${aide.id}` : multi ? `aide-multi:${multi.ids.length}` : 'aide-directe',
           outils: article?.pages ?? multi?.ids ?? [],
           resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
@@ -636,7 +644,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // Un raccourci est une LECTURE toute faite (fiche du job 24, mes jobs demain) :
     // jamais pour un ordre (« supprime la liste de la job 24 » affichait la fiche
     // et s'arrêtait — éval des outils, 2026-09-30).
-    const raccourci = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
+    const raccourci = raccourciReconnu;
     if (raccourci) {
       const debut = Date.now();
       const reponse = await repondreRaccourci(raccourci, ctxRaccourci);
@@ -645,15 +653,15 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
         const emettreSse = ouvrirSse(res);
         emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'debut' });
-        emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'fin' });
+        emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: reponse.refus ? 'refus' : 'fin' });
         emettreSse('text', { type: 'text', delta: reponse.texte });
         if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, raccourci: raccourci.id, etage: raccourci.etage ?? ETAGE.raccourci });
         // Étage 2 : répondu sans modèle. C'est cette ligne qui mesure la part de trafic absorbée.
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: raccourci.etage ?? ETAGE.raccourci, action: raccourci.id, params: raccourci.periode ? { periode: raccourci.periode } : raccourci.numero ? { numero: raccourci.numero } : null,
-          outils: [raccourci.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+          enonce: message, etage: raccourci.etage ?? ETAGE.raccourci, action: raccourci.id, params: raccourci.periode ? { periode: raccourci.periode } : raccourci.numero ? { numero: raccourci.numero } : null,
+          outils: [raccourci.tool], resultat: reponse.refus ? 'refus' : 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         return res.end();
       }
@@ -668,13 +676,14 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (optimisation) {
       return servirOptimisation(ctx, res, {
         conversationId: conversationId!, nouveaux, date: dateVisee(optimisation.quand, ctx.fuseau), teamId: null,
-        origine, enonce: normaliserEnonce(message), etage: ETAGE.raccourci, action: 'optimiser-journee', params: { quand: optimisation.quand },
+        origine, enonce: message, etage: ETAGE.raccourci, action: 'optimiser-journee', params: { quand: optimisation.quand },
       });
     }
     const directe = enAttente.length || repli ? null : detecterActionDirecte(message);
     if (directe) {
       const debut = Date.now();
-      const rep = await repondreActionDirecte(directe, { ...ctxRaccourci, maintenant: new Date() });
+      // Le rôle est lu ici (2 lectures en base) seulement quand une action directe est reconnue.
+      const rep = await repondreActionDirecte(directe, { ...ctxRaccourci, maintenant: new Date(), outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId) });
       if (rep) {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, ...(rep.messages as Msg[])], cleRefs);
@@ -691,7 +700,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         }
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.raccourci, action: directe.id, params: directe.cible ? { cible: directe.cible } : undefined,
+          enonce: message, etage: ETAGE.raccourci, action: directe.id, params: directe.cible ? { cible: directe.cible } : undefined,
           outils: directe.tool ? [directe.tool] : [], resultat: rep.genre === 'carte' ? 'proposition' : 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         return res.end();
@@ -755,7 +764,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage: ETAGE.interface });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.interface, action: 'plafond_conversation', params: { depense_cents: Math.round(depense * 100) / 100 },
+          enonce: message, etage: ETAGE.interface, action: 'plafond_conversation', params: { depense_cents: Math.round(depense * 100) / 100 },
           outils: [], resultat: 'refus', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         return res.end();
@@ -803,7 +812,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage: ETAGE.routeur });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: 'hors-scope', topic: 'hors_scope',
+          enonce: message, etage: ETAGE.routeur, action: 'hors-scope', topic: 'hors_scope',
           params: { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } },
           outils: [], resultat: 'ok', model: MODELE_ROUTEUR,
           usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(),
@@ -815,20 +824,28 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       // La fiche d'un job (job-numero) seulement si la question porte sur LE JOB lui-même
       // (même motif strict que le raccourci) : « la liste de vérification de la job 24 »,
       // « le contrat du job 30 » recevaient la fiche, qui ne montre ni l'une ni l'autre.
-      const ficheJobHorsSujet = routeur.verdict?.action === 'job-numero' && detecterRaccourci(message)?.id !== 'job-numero';
-      const r = routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) && !ficheJobHorsSujet ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
+      //
+      // TOUT raccourci choisi par le routeur doit être reconnu AUSSI par le détecteur
+      // strict (passe de référence du 2026-10-01). Le routeur est un modèle : sur
+      // « combien j'ai encaissé en septembre », il a rendu l'action `revenu-mois`, et le
+      // raccourci — dont la période est figée au mois courant — a répondu 0,00 $ au lieu
+      // de 989,85 $. Un chiffre faux, gratuit, donné avec assurance. Sans l'accord du
+      // détecteur strict, le modèle prend la demande, avec le sujet trouvé par le routeur.
+      const raccourciStrict = detecterRaccourci(message)?.id ?? null;
+      const r = routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) && raccourciStrict === routeur.verdict.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
       const reponse = r ? await repondreRaccourci(r, ctxRaccourci) : null;
       if (r && reponse) {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
         const emettreSse = ouvrirSse(res);
         emettreSse('tool', { type: 'tool', name: r.tool, statut: 'debut' });
-        emettreSse('tool', { type: 'tool', name: r.tool, statut: 'fin' });
+        emettreSse('tool', { type: 'tool', name: r.tool, statut: reponse.refus ? 'refus' : 'fin' });
         emettreSse('text', { type: 'text', delta: reponse.texte });
         if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, raccourci: r.id, etage: ETAGE.routeur });
         // La même question, redemandée : servie par les caches (étages 3-4), sans même le routeur. Premier message seulement.
-        if (premierMessage) {
+        // Jamais pour un refus de rôle : le rôle peut changer, la réponse en cache resterait « non ».
+        if (premierMessage && !reponse.refus) {
           const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: message };
           void ecrireReponse(p, { texte: reponse.texte, fiches: reponse.fiches, outils: [r.tool] });
           void (async () => {
@@ -838,9 +855,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         }
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: r.id,
+          enonce: message, etage: ETAGE.routeur, action: r.id,
           params: { ...(r.periode ? { periode: r.periode } : {}), ...(r.numero ? { numero: r.numero } : {}), routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } },
-          outils: [r.tool], resultat: 'ok', model: MODELE_ROUTEUR, usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(), costCents: coutRouteur, dureeMs: Date.now() - debut,
+          outils: [r.tool], resultat: reponse.refus ? 'refus' : 'ok', model: MODELE_ROUTEUR, usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(), costCents: coutRouteur, dureeMs: Date.now() - debut,
         });
         return res.end();
       }
@@ -853,7 +870,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (routeur?.verdict?.extraction && routeur.decision === 'modele' && routeur.verdict.confidence >= SEUIL_CONFIANCE) {
       const debut = Date.now();
       const a = actionDepuisExtraction(routeur.verdict.extraction, message);
-      const rep = a ? await repondreActionDirecte(a, { ...ctxRaccourci, maintenant: new Date() }) : null;
+      const rep = a ? await repondreActionDirecte(a, { ...ctxRaccourci, maintenant: new Date(), outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId) }) : null;
       if (a && rep && rep.genre === 'carte') {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, ...(rep.messages as Msg[])], cleRefs);
@@ -863,7 +880,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: { tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args }, raccourci: `extraction:${a.id}`, etage: ETAGE.routeur });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: `extraction:${a.id}`, params: { extraction: routeur.verdict.extraction, routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms } },
+          enonce: message, etage: ETAGE.routeur, action: `extraction:${a.id}`, params: { extraction: routeur.verdict.extraction, routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms } },
           outils: [a.tool], resultat: 'proposition', model: MODELE_ROUTEUR, usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(), costCents: coutRouteur, dureeMs: Date.now() - debut,
         });
         return res.end();
@@ -873,7 +890,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // B7 : un topic sûr sans action déterministe → le modèle part avec les outils de ce sous-agent seulement.
     // Arrivé ici, aucun raccourci n'a répondu : une action du routeur a donc été écartée, son sujet reste bon.
     const sousAgent = sousAgentDepuisVerdict(routeur, { actionEcartee: true });
-    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, sousAgent, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
+    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, sousAgent, ...(repli ? { action: 'repli', params: { candidat_retrait: enoncePourTrace(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');
@@ -932,13 +949,13 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
     await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
     const emettreSse = ouvrirSse(res);
     emettreSse('tool', { type: 'tool', name: raccourci!.tool, statut: 'debut' });
-    emettreSse('tool', { type: 'tool', name: raccourci!.tool, statut: 'fin' });
+    emettreSse('tool', { type: 'tool', name: raccourci!.tool, statut: reponse.refus ? 'refus' : 'fin' });
     emettreSse('text', { type: 'text', delta: reponse.texte });
     if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
     emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, raccourci: raccourci!.id, etage: ETAGE.interface });
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-      enonce: label, etage: ETAGE.interface, action, params, outils: [raccourci!.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+      enonce: label, etage: ETAGE.interface, action, params, outils: [raccourci!.tool], resultat: reponse.refus ? 'refus' : 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
     });
     return res.end();
   } catch (error: any) {

@@ -44,6 +44,7 @@ import {
   apercuAutomatisation,
   changerPublication,
   chargerStatistiques,
+  restaurerAutomatisation,
   type StatsEtape,
   type BrouillonAutomatisation,
   type CatalogueAutomatisations,
@@ -78,6 +79,7 @@ import {
   ACTIONS,
   CASE_SORTIE,
   DECLENCHEURS,
+  conditionsApresChangement,
   FAMILLES_ACTIONS,
   FAMILLES_DECLENCHEURS,
   actionCompatible,
@@ -235,6 +237,8 @@ export default function AutomationBuilderPage() {
   const [echangesLumi, setEchangesLumi] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   /** Le panneau de Lumi, replié par l'utilisateur (le fil est gardé). */
   const [lumiReduit, setLumiReduit] = useState(false);
+  /** « Restaurer » en cours, depuis l'écran d'une automatisation à la corbeille. */
+  const [restauration, setRestauration] = useState(false);
   /**
    * La 2e automatisation déjà créée dans cette conversation : quand Lumi la
    * corrige (« voici mon lien Calendly »), on la MET À JOUR au lieu d'en
@@ -486,12 +490,12 @@ export default function AutomationBuilderPage() {
     setTiroirDeclencheur(false);
     if (cle === regle.trigger_event) return;
     try {
-      // Réglages posés d'office par ce déclencheur (ex. « première ouverture
-      // seulement ») — sans écraser ce que la règle portait déjà.
-      const defaut = DECLENCHEURS.find((d) => d.cle === cle)?.conditions_defaut;
-      const maj = await ecrire(defaut
-        ? { trigger_event: cle, conditions: { ...defaut, ...((regle.conditions ?? {}) as Record<string, unknown>) } }
-        : { trigger_event: cle });
+      // Les réglages de l'ANCIEN déclencheur partent avec lui ; ceux du
+      // nouveau sont posés d'office (voir `conditionsApresChangement`).
+      const maj = await ecrire({
+        trigger_event: cle,
+        conditions: conditionsApresChangement(regle.trigger_event, cle, (regle.conditions ?? {}) as Record<string, unknown>),
+      });
       setRegle(maj);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -560,7 +564,12 @@ export default function AutomationBuilderPage() {
          * l'écran montrait le déclencheur de Lumi, la base gardait l'ancien.
          * On le dit, et l'écran revient à ce que la base contient.
          */
-        ecrire({ trigger_event: propose.trigger_event }).catch((e: unknown) => {
+        // Un déclencheur CHANGÉ par Lumi emporte les réglages de l'ancien, comme au tiroir.
+        const conditionsLumi = propose.trigger_event !== declencheurEnBase
+          ? conditionsApresChangement(declencheurEnBase, propose.trigger_event, (regle.conditions ?? {}) as Record<string, unknown>)
+          : null;
+        if (conditionsLumi) setRegle((r) => (r ? { ...r, conditions: conditionsLumi } : r));
+        ecrire({ trigger_event: propose.trigger_event, ...(conditionsLumi ? { conditions: conditionsLumi } : {}) }).catch((e: unknown) => {
           console.error('[builder] déclencheur proposé par Lumi non enregistré', e);
           captureClientException(e, { where: 'AutomationBuilderPage.construireAvecLumi' });
           setRegle((r) => (r ? { ...r, trigger_event: declencheurEnBase } : r));
@@ -1405,7 +1414,12 @@ export default function AutomationBuilderPage() {
   }, [besoinServices]);
 
   /** Le déclencheur demande-t-il une étape de pipeline ? */
-  const besoinEtapes = !!declencheurCourant?.champs?.some((c) => c.type === 'etape_pipeline');
+  // … et dès qu'un panneau d'étape est ouvert : « Déplacer l'opportunité » y
+  // offre le menu des étapes, y compris quand on vient de changer d'action
+  // dans le panneau (le parcours enregistré ne le sait pas encore).
+  const besoinEtapes = !!declencheurCourant?.champs?.some((c) => c.type === 'etape_pipeline')
+    || etapeChoisie !== null
+    || steps.some((e) => e.type === 'action' && e.action?.type === 'move_deal_stage');
   useEffect(() => {
     if (!besoinEtapes) return;
     let vivant = true;
@@ -1554,6 +1568,51 @@ export default function AutomationBuilderPage() {
     );
   }
 
+  /*
+   * À LA CORBEILLE : ni canevas ni panneaux. L'éditeur s'ouvrait par son
+   * adresse (lien gardé, onglet resté ouvert) sur une automatisation
+   * supprimée comme sur une autre, sans le dire, et la laissait modifier
+   * (audit du 2026-10-01). On dit où elle est, et on offre de la restaurer.
+   */
+  if (regle.deleted_at) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-surface px-6 text-center">
+        <p className="text-base font-semibold text-text-primary">{nom || regle.name}</p>
+        <p className="max-w-md text-sm text-text-secondary">
+          {fr
+            ? 'Cette automatisation est à la corbeille : elle ne se déclenche plus et ne se modifie pas. Restaurez-la pour la retravailler — elle reviendra en brouillon.'
+            : 'This automation is in the bin: it no longer runs and cannot be edited. Restore it to work on it — it comes back as a draft.'}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={restauration}
+            onClick={() => {
+              setRestauration(true);
+              restaurerAutomatisation(regle.id)
+                .then((maj) => {
+                  setRegle((r) => (r ? { ...r, deleted_at: null, is_active: maj.is_active } : maj));
+                  toast.success(fr ? 'Automatisation restaurée, en brouillon.' : 'Automation restored, as a draft.');
+                })
+                .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)))
+                .finally(() => setRestauration(false));
+            }}
+            className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {restauration ? (fr ? 'Restauration…' : 'Restoring…') : (fr ? 'Restaurer' : 'Restore')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void quitterEditeur()}
+            className="rounded-lg border border-outline px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Mes automatisations' : 'My automations'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const ONGLETS: Array<{ cle: Onglet; fr: string; en: string }> = [
     { cle: 'parcours', fr: 'Parcours', en: 'Builder' },
     { cle: 'reglages', fr: 'Réglages', en: 'Settings' },
@@ -1632,6 +1691,15 @@ export default function AutomationBuilderPage() {
               <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />{fr ? 'Enregistrement…' : 'Saving…'}</>
             ) : etatSauvegarde === 'modifie' ? (
               <><Cloud className="h-3.5 w-3.5" aria-hidden="true" />{fr ? 'Modifié' : 'Edited'}</>
+            ) : regle && !regle.id ? (
+              /*
+                Une automatisation NEUVE n'existe pas encore en base : elle
+                est créée à la première modification (voir `ecrire`).
+                Afficher « Enregistré » ici était faux (vu sur lumecrm.net le
+                2026-10-01 : 0 ligne en base) — on quittait la page en
+                croyant avoir un brouillon, il n'y en avait pas.
+              */
+              <><Cloud className="h-3.5 w-3.5" aria-hidden="true" />{fr ? 'Pas encore enregistrée' : 'Not saved yet'}</>
             ) : (
               <><Check className="h-3.5 w-3.5" aria-hidden="true" />{fr ? 'Enregistré' : 'Saved'}</>
             )}
@@ -1787,7 +1855,15 @@ export default function AutomationBuilderPage() {
                     « Publier » : découvrir à la fin qu'une action ne va pas
                     avec son déclencheur, c'est le découvrir trop tard.
                     Cliquer un problème ouvre l'étape fautive. ── */}
-                {bloquantsVivants.length > 0 && (
+                {/*
+                  PAS sur un canevas vide et non publié : une automatisation
+                  qu'on vient d'ouvrir accueillait son auteur par une alerte
+                  rouge « 1 chose(s) à corriger — ajoutez au moins une étape »,
+                  avant qu'il ait touché à quoi que ce soit (vu sur lumecrm.net
+                  le 2026-10-01). Le canevas le dit déjà (« Ajouter une
+                  première étape »), et « Publier » le rappelle si on essaie.
+                */}
+                {bloquantsVivants.length > 0 && (regle.is_active || etapesAffichees.length > 0) && (
                   <div className="mx-auto mb-4 max-w-xl px-4">
                     <div className="rounded-xl border border-danger/40 bg-danger/5 p-3">
                       <p className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-danger">
@@ -1796,11 +1872,11 @@ export default function AutomationBuilderPage() {
                             A-03) : « avant de publier » mentait — elle l'est. */}
                         {regle.is_active
                           ? (fr
-                            ? `Publiée mais cassée : ${bloquantsVivants.length} chose(s) à corriger — rien ne part correctement`
-                            : `Published but broken: ${bloquantsVivants.length} thing(s) to fix — nothing goes out correctly`)
+                            ? `Publiée mais cassée : ${bloquantsVivants.length} ${bloquantsVivants.length > 1 ? 'choses' : 'chose'} à corriger — rien ne part correctement`
+                            : `Published but broken: ${bloquantsVivants.length} ${bloquantsVivants.length > 1 ? 'things' : 'thing'} to fix — nothing goes out correctly`)
                           : (fr
-                            ? `${bloquantsVivants.length} chose(s) à corriger avant de publier`
-                            : `${bloquantsVivants.length} thing(s) to fix before publishing`)}
+                            ? `${bloquantsVivants.length} ${bloquantsVivants.length > 1 ? 'choses' : 'chose'} à corriger avant de publier`
+                            : `${bloquantsVivants.length} ${bloquantsVivants.length > 1 ? 'things' : 'thing'} to fix before publishing`)}
                       </p>
                       <ul className="space-y-1">
                         {bloquantsVivants.slice(0, 4).map((p, i) => (
@@ -1834,8 +1910,8 @@ export default function AutomationBuilderPage() {
                       </p>
                       <p className="mt-1.5 text-[12px] text-text-secondary">
                         {fr
-                          ? 'Décris ton automatisation en une phrase et Lumi la monte pour toi. En attendant, bâtis-la avec « Choisir le déclencheur » et le « + ».'
-                          : 'Describe your automation in one sentence and Lumi builds it. Meanwhile, build it with “Choose the trigger” and “+”.'}
+                          ? 'Décris ton automatisation en une phrase et Lumi la monte pour toi. En attendant, bâtis-la avec la carte « Quand » et le « + ».'
+                          : 'Describe your automation in one sentence and Lumi builds it. Meanwhile, build it with the “When” card and “+”.'}
                       </p>
                       <button
                         type="button"
@@ -1940,10 +2016,19 @@ export default function AutomationBuilderPage() {
                       onClick={() => setTiroirDeclencheur(true)}
                       className="w-full max-w-[300px] rounded-xl border-2 border-dashed border-accent/50 bg-accent/5 px-4 py-4 text-sm font-medium text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
-                      <Plus className="mx-auto mb-1 h-5 w-5" aria-hidden="true" />
-                      {fr ? 'Choisir le déclencheur' : 'Pick the trigger'}
+                      {/*
+                        Le déclencheur EN PLACE est dit en clair, puis l'invitation
+                        à en changer. « Choisir le déclencheur » avec « Devis
+                        envoyé » en petit dessous laissait croire qu'aucun n'était
+                        choisi (signalé par deux testeurs le 2026-10-01) — or la
+                        règle part bel et bien sur celui-là.
+                      */}
+                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-accent/80">
+                        {fr ? 'Quand' : 'When'}
+                      </span>
+                      <span className="block text-sm font-semibold text-text-primary">{declencheurLabel}</span>
                       <span className="mt-1 block text-[11px] font-normal text-text-secondary">
-                        {declencheurLabel}
+                        {fr ? 'Cliquer pour choisir un autre déclencheur' : 'Click to pick another trigger'}
                       </span>
                     </button>
 
@@ -2332,6 +2417,7 @@ export default function AutomationBuilderPage() {
           membres={membres}
           etiquettes={etiquettes}
           automatisations={autresAutomatisations}
+          etapesPipeline={etapesPipeline}
           champsPerso={champsPerso}
           objetChamps={objetRegle}
           stats={statsEtapes?.[etapeOuverte.id] ?? null}

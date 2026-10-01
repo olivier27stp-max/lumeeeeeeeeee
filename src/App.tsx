@@ -547,10 +547,20 @@ function AppInner() {
       try {
         // 1. Ensure user has at least one membership (auto-provision org if missing)
         // Simple test d'existence : aucun bureau n'est choisi ici (le sélecteur s'en charge).
-        const { count: nbMemberships } = await supabase
+        const { count: nbMemberships, error: lectureAdhesions } = await supabase
           .from('memberships')
           .select('org_id', { count: 'exact', head: true })
           .eq('user_id', user.id);
+        /*
+         * Une lecture RATÉE n'est pas « aucun bureau ». L'erreur était
+         * ignorée : sur une panne passagère (500, délai dépassé), `count`
+         * valait null, l'app concluait à un compte neuf et tentait de CRÉER
+         * un bureau pour un propriétaire qui en avait déjà un (vu trois fois
+         * pendant l'audit du 2026-10-01, sur un staging saturé). Avec une
+         * session valide, l'insertion pouvait passer : un bureau vide de
+         * plus, et l'utilisateur ne retrouvait plus ses données.
+         */
+        if (lectureAdhesions) throw lectureAdhesions;
         const mem = (nbMemberships ?? 0) > 0;
 
         if (!mem) {
@@ -619,10 +629,14 @@ function AppInner() {
           return;
         }
         // Simple test d'existence : aucun bureau n'est choisi ici (le sélecteur s'en charge).
-        const { count: nbMemberships } = await supabase
+        const { count: nbMemberships, error: lectureAdhesionsAcces } = await supabase
           .from('memberships')
           .select('org_id', { count: 'exact', head: true })
           .eq('user_id', user.id);
+        // Lecture ratée ≠ « aucun bureau » : on sort vers le `catch`, qui laisse
+        // l'accès ouvert (panne passagère), au lieu de fermer l'app sur
+        // « no_membership » à quelqu'un qui a bel et bien un bureau.
+        if (lectureAdhesionsAcces) throw lectureAdhesionsAcces;
         const mem = (nbMemberships ?? 0) > 0;
         if (!mem) {
           setHasSubscription(false);

@@ -67,6 +67,17 @@ const PAGES: Record<string, {
 };
 
 /**
+ * Le libellé du bouton que porterait un courriel d'automatisation sur ce type
+ * d'entité, ou `null` s'il n'en porterait aucun (prospect, rendez-vous, job…).
+ * Sans lecture en base : c'est ce que l'APERÇU montre, pour ne pas inventer un
+ * bouton de paiement sur un courriel qui n'en aura pas.
+ */
+export function texteBoutonParDefaut(entityType: string | null | undefined, langue: LangueBouton = 'fr'): string | null {
+  const page = entityType ? PAGES[entityType] : undefined;
+  return page ? page.texte[langue] : null;
+}
+
+/**
  * L'adresse publique de l'app.
  *
  * `resolvePublicBaseUrl` LÈVE quand rien n'est configuré — c'est voulu pour

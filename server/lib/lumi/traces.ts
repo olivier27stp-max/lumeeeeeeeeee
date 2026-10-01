@@ -40,7 +40,7 @@ export interface Trace {
   conversationId?: string | null;
   canal: CanalTrace;
   origine: OrigineTrace;
-  /** Texte de l'utilisateur, normalisé ici (jamais stocké brut : lumi_messages s'en charge). */
+  /** Texte BRUT de l'utilisateur : masqué puis normalisé ici (jamais stocké brut : lumi_messages s'en charge). */
   enonce?: string | null;
   etage?: number | null;
   topic?: string | null;
@@ -106,6 +106,32 @@ export function normaliserEnonce(texte: string | null | undefined): string | nul
   return n || null;
 }
 
+const COURRIEL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+const TELEPHONE = /(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
+
+/**
+ * Retire d'un énoncé les coordonnées d'une personne (courriel, téléphone) avant
+ * qu'il n'entre au journal. Tests critiques du 2026-10-01 (Loi 25) : « cherche le
+ * client dont le courriel est a.b@c.test » laissait « a b c test » dans
+ * lumi_traces, et un numéro dicté y restait tel quel. Le journal sert à mesurer
+ * (quel étage, quel coût, quelles questions reviennent) : il n'a besoin ni de
+ * l'adresse ni du numéro. La conversation elle-même (lumi_messages) reste à
+ * l'utilisateur, intacte.
+ */
+export function masquerCoordonnees(texte: string): string {
+  return texte.replace(COURRIEL, 'courriel masqué').replace(TELEPHONE, 'téléphone masqué');
+}
+
+/**
+ * L'énoncé tel qu'il entre au journal : coordonnées masquées PUIS normalisé.
+ * À appeler sur le texte BRUT : une fois normalisé, un courriel n'a plus son
+ * « @ » et ne se reconnaît plus. Jamais pour une clé de cache — deux questions
+ * sur deux adresses différentes y deviendraient la même.
+ */
+export function enoncePourTrace(texte: string | null | undefined): string | null {
+  return texte ? normaliserEnonce(masquerCoordonnees(texte)) : null;
+}
+
 let tableAbsenteSignalee = false;
 
 /** Écrit la trace. Ne lève jamais : un tour ne dépend pas de sa mesure. */
@@ -118,7 +144,8 @@ export async function journaliserTrace(admin: SupabaseClient, t: Trace): Promise
     canal: t.canal,
     origine: t.origine,
     // Normalisé ICI quoi que fasse l'appelant : jamais de texte brut dans cette table (lumi_messages s'en charge).
-    enonce_normalise: normaliserEnonce(t.enonce),
+    // Et sans courriel ni téléphone : l'appelant passe donc le texte BRUT (voir enoncePourTrace).
+    enonce_normalise: enoncePourTrace(t.enonce),
     etage: t.etage ?? null,
     topic: t.topic ?? null,
     action: t.action ?? null,

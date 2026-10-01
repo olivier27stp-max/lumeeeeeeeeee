@@ -31,10 +31,18 @@ function fauxClient() {
     from: () => {
       let filtreId: string | null = null;
       let patch: Ligne | null = null;
+      const colonnesNulles: string[] = [];
       const chaine: Record<string, unknown> = {
         select: () => chaine,
         eq: (col: string, v: string) => { if (col === 'id') filtreId = v; return chaine; },
-        maybeSingle: async () => ({ data: filtreId ? lignes[filtreId] ?? null : null, error: null }),
+        // `.is('purged_at', null)` : la route ne lit plus une règle retirée
+        // définitivement. Le faux client applique le filtre pour vrai.
+        is: (col: string, v: unknown) => { if (v === null) colonnesNulles.push(col); return chaine; },
+        maybeSingle: async () => {
+          const ligne = filtreId ? lignes[filtreId] ?? null : null;
+          const ecartee = ligne && colonnesNulles.some((c) => ligne[c] !== undefined && ligne[c] !== null);
+          return { data: ecartee ? null : ligne, error: null };
+        },
         single: async () => {
           if (patch && filtreId && lignes[filtreId]) {
             ecritures.push({ id: filtreId, patch });
