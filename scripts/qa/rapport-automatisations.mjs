@@ -14,11 +14,15 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 
 const DOSSIER = 'rapports/automatisations';
-const brut = existsSync(`${DOSSIER}/resultats.json`) ? JSON.parse(readFileSync(`${DOSSIER}/resultats.json`, 'utf8')) : null;
-if (!brut) {
-  console.error(`Aucun ${DOSSIER}/resultats.json : la suite n'a pas tourné.`);
+// Un JSON par projet (resultats-unitaires.json, …), fusionnés ici.
+const fichiersResultats = existsSync(DOSSIER)
+  ? readdirSync(DOSSIER).filter((f) => /^resultats.*\.json$/.test(f)).sort()
+  : [];
+if (fichiersResultats.length === 0) {
+  console.error(`Aucun ${DOSSIER}/resultats-*.json : la suite n'a pas tourné.`);
   process.exit(1);
 }
+const brut = { testResults: fichiersResultats.flatMap((f) => JSON.parse(readFileSync(`${DOSSIER}/${f}`, 'utf8')).testResults ?? []) };
 
 const tests = [];
 for (const fichier of brut.testResults ?? []) {

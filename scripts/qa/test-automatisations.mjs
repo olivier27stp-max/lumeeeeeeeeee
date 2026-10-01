@@ -14,7 +14,7 @@
  *                    puis les arrête — tests/automations-suite/harnais/serveurs-ui.ts)
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 const projets = args.includes('--unitaires') ? ['unitaires']
@@ -48,7 +48,7 @@ if (projets.includes('ui')) {
 // Le CANARI d'abord, seul : s'il est rouge, un envoi réel serait possible —
 // on n'exécute rien d'autre (ni intégration, ni interface).
 if (projets.includes('integration') || projets.includes('ui')) {
-  const c = spawnSync(npx, ['vitest', 'run', '--config', 'vitest.automations.config.ts', '--project', 'integration', 'tests/automations-suite/integration/00-canari.test.ts'], {
+  const c = spawnSync(npx, ['vitest', 'run', '--config', 'vitest.automations.config.ts', '--project', 'integration', '--outputFile.json=rapports/automatisations/canari.json', 'tests/automations-suite/integration/00-canari.test.ts'], {
     stdio: 'inherit', shell: process.platform === 'win32',
   });
   if (c.status !== 0) {
@@ -57,9 +57,21 @@ if (projets.includes('integration') || projets.includes('ui')) {
   }
 }
 
-const v = spawnSync(npx, ['vitest', 'run', '--config', 'vitest.automations.config.ts', ...projets.flatMap((p) => ['--project', p])], {
-  stdio: 'inherit', shell: process.platform === 'win32',
-});
+// Un projet À LA FOIS, dans cet ordre : les lancer ensemble (défaut de vitest)
+// faisait courir l'intégration et l'interface en même temps contre la même
+// base — sur un staging partagé, des requêtes simples dépassaient le délai
+// (statement timeout) et la CI s'arrêtait à sa limite. Chaque projet écrit son
+// JSON ; le rapport les fusionne.
+for (const f of readdirSync('rapports/automatisations')) {
+  if (/^resultats.*\.json$/.test(f)) rmSync(`rapports/automatisations/${f}`);
+}
+let code = 0;
+for (const p of projets) {
+  const v = spawnSync(npx, ['vitest', 'run', '--config', 'vitest.automations.config.ts', '--project', p, `--outputFile.json=rapports/automatisations/resultats-${p}.json`], {
+    stdio: 'inherit', shell: process.platform === 'win32',
+  });
+  if ((v.status ?? 1) !== 0) code = v.status ?? 1;
+}
 const r = spawnSync(process.execPath, ['scripts/qa/rapport-automatisations.mjs'], { stdio: 'inherit' });
 if (r.status !== 0) console.error('✗ Rapport non généré.');
-process.exit(v.status ?? 1);
+process.exit(code);

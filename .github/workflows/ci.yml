@@ -114,7 +114,9 @@ jobs:
   automatisations:
     name: Automatisations (npm run test:automations)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 90 min : la suite tourne contre un staging PARTAGÉ ; quand d'autres
+    # sessions le chargent, elle met le double de son temps normal (~30 min).
+    timeout-minutes: 90
     concurrency:
       group: automatisations-staging
       cancel-in-progress: false
