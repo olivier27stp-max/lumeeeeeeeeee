@@ -68,7 +68,7 @@ Avec 1 000 crédits (30 $ de coût réel) par mois :
 |---|---:|---:|
 | Demandes isolées, caches froids (la production d'aujourd'hui) | 3,6 ¢ | ≈ 830 |
 | Usage soutenu, caches chauds (mesuré sur la passe) | 1,1 ¢ | ≈ 2 700 |
-| Conversation de travail de 10 tours, une demande par minute | à mesurer (batterie de robustesse) | — |
+| Conversation de 50 tours dont 17 par le modèle, caches froids (mesurée en prod le 2026-10-01) | 2,2 ¢ par tour d'agent (37,7 ¢ en tout) | le plafond d'une conversation (40 ¢) est atteint au 50e tour |
 
 - Consommation réelle observée : 65 ¢ en 30 jours pour la seule entreprise active, soit 2 % de son allocation.
 - Garde-fous de dépense en place : palier « économe » à 70 % du mois, « restreint » à 90 % ou dès 15 % du mois brûlés en un jour (modèle de repli, deux étapes), arrêt à 100 % ; plafond par tour ; plafond par conversation (40 ¢) ; plafond de la plateforme (50 $ par jour et par source, tous clients réunis).
@@ -115,3 +115,11 @@ Avec 1 000 crédits (30 $ de coût réel) par mois :
 - `ai_usage` et `lumi_traces`, production, lecture seule, 2026-10-01.
 - Passes d'évaluation : `evals/lumi/resultats/baseline-A/` et `apres-lot5-eval2/` (branche `mission/lumi-evals`).
 - Mesures de la session voisine (prompt, outils, routeur) : `docs/audits/outils-lumi/rapport-prod-2026-10-01.md`.
+
+## Ajouts du soir du 2026-10-01
+
+- **Troisième passe des 221 demandes** (reprise en un seul flux après la panne de la base) : 93,7 % de réussite, environ 1,2 ¢ par demande (274,5 ¢ relus dans le grand livre pour 228 demandes, caches moins chauds qu'à cinq flux).
+- **Le plafond de coût d'un tour comptait le démarrage à froid** (`84505af8`). Il devait l'écarter, mais seule l'écriture de cache d'une heure l'était, et le cache est en 5 minutes depuis #810. Un démarrage de sujet (4 à 6 ¢) atteignait donc le plafond de 6 ¢ à lui seul : Lumi perdait ses outils à la deuxième étape. Corrigé : au premier appel du tour, l'écriture de cache ne compte plus contre le plafond. Le coût réel reste débité en entier. Contrepartie : le plafond du tour ne borne plus ce premier appel ; seule la taille du préfixe et de la conversation le fait.
+- **Support** : 1,0 ¢ par question servie par le modèle sur les tarifs et les refus (30 questions), 1,5 ¢ sur la base de connaissances (45 questions, deux appels par question en moyenne). 13 questions sur 91 servies sans modèle.
+- **Les 30 outils de #875** alourdissent cinq préfixes de 584 à 2 135 tokens : +0,2 à +0,8 ¢ par démarrage à froid selon le sujet (chiffres de la session qui les a livrés). Leur effet sur la qualité n'est pas mesuré.
+- **Toujours à trancher avec du vrai trafic** : cache de 5 minutes ou d'une heure pour le préfixe. Sur une conversation isolée, l'heure coûte plus cher ; avec plusieurs clients actifs sur les mêmes sujets, elle coûte moins.
