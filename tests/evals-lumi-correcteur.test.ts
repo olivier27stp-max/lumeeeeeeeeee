@@ -3,7 +3,7 @@
  * données doivent être justes AVANT de mesurer Lumi. Tests purs (ni base, ni modèle).
  */
 import { describe, expect, it } from 'vitest';
-import { chiffrePresent, ciblesEnAlerte, contientUn, corriger, dollars, nombresDuTexte, pretendFait, remplir, uniteDe, type CasResolu, type Observation } from '../evals/lumi/format.mts';
+import { chiffrePresent, ciblesEnAlerte, conditionsDeLaPasse, contientUn, corriger, dollars, moteurDe, nombresDuTexte, pretendFait, remplir, uniteDe, type CasResolu, type Observation } from '../evals/lumi/format.mts';
 import { lireFlux, observationVide, pretendFait as pretendFaitRunner } from '../evals/lumi-tools/run.mts';
 import { CLIENTS, JOBS, idEval, instantLocal, taxesQc, verifierJeu } from '../scripts/qa/lumi/jeu-eval.mts';
 import { fixturePrevisionnelle } from '../scripts/qa/lumi/fixture-eval.mts';
@@ -195,6 +195,37 @@ describe('correction d’un cas', () => {
   });
   it('rend « erreur » quand le serveur a échoué', () => {
     expect(corriger(payer, obs({ erreur: '500 Lumi failed to respond.' })).outil).toBe('erreur');
+  });
+});
+
+describe('conditions de la passe', () => {
+  const sonnet = { etage: 6, modele: 'claude-sonnet-5' };
+  const haiku = { etage: 6, modele: 'claude-haiku-4-5' };
+  it('range chaque réponse sous son moteur', () => {
+    expect(moteurDe(sonnet)).toBe('claude-sonnet-5');
+    expect(moteurDe({ etage: 5, modele: 'claude-haiku-4-5' })).toBe('routeur seul (étage 5)');
+    expect(moteurDe({ etage: 2, modele: null })).toBe('aucun modèle (étages 0 à 4)');
+    expect(moteurDe({})).toBe('inconnu (conditions non notées)');
+    expect(moteurDe({ etage: 6, modele: null })).toBe('étage 6, modèle non noté');
+  });
+  it('dit la passe concluante quand tout l’étage 6 vient du modèle attendu', () => {
+    // Le routeur (Haiku, étage 5) et les réponses sans modèle ne sont pas un changement de palier.
+    const p = conditionsDeLaPasse([sonnet, sonnet, { etage: 5, modele: 'claude-haiku-4-5' }, { etage: 1, modele: null }, { etage: 6, modele: 'claude-sonnet-5-20260901' }]);
+    expect(p).toMatchObject({ etat: 'concluante', hors_palier: 0, sans_conditions: 0 });
+    expect(p.phrase).toMatch(/^Passe concluante/);
+  });
+  it('dit « passe non concluante » dès qu’un autre modèle a répondu à l’étage 6 (passe du 2026-10-01)', () => {
+    const p = conditionsDeLaPasse([sonnet, haiku, haiku, { etage: 2, modele: null }]);
+    expect(p).toMatchObject({ etat: 'non_concluante', hors_palier: 2, etage_6_par_modele: { 'claude-sonnet-5': 1, 'claude-haiku-4-5': 2 } });
+    expect(p.phrase).toMatch(/^PASSE NON CONCLUANTE — 2 demande\(s\) sur 4 .*claude-haiku-4-5 \(2\)/);
+  });
+  it('ne conclut pas sans preuve : conditions non notées, ou étage 6 sans modèle', () => {
+    expect(conditionsDeLaPasse([sonnet, {}]).etat).toBe('conditions_inconnues');
+    expect(conditionsDeLaPasse([sonnet, { etage: 6, modele: null }]).etat).toBe('conditions_inconnues');
+    // Un cas en erreur n'a pas de réponse : il ne compte pas.
+    expect(conditionsDeLaPasse([sonnet, { erreur: '500' }]).etat).toBe('concluante');
+    // Un changement de palier l'emporte sur l'inconnu.
+    expect(conditionsDeLaPasse([haiku, {}]).etat).toBe('non_concluante');
   });
 });
 

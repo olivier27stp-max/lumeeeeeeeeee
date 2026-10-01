@@ -4,8 +4,15 @@
  *
  *   npx tsx evals/lumi/corriger.mts --resultats evals/lumi/resultats/proprietaire.json[,evals/lumi/resultats/technicien.json]
  *        [--cas evals/lumi/cas-resolus] [--sortie evals/lumi/resultats/bilan.json]
+ *        [--modele-attendu claude-sonnet-5] [--conditions evals/lumi/resultats/<passe>/conditions.json]
  *
- * Sort : le taux de réussite global et par catégorie, nature, registre, compte ;
+ * En TÊTE du bilan : les conditions de la passe. Le runner note le modèle et l'étage de
+ * chaque cas ; si une partie de l'étage 6 a été servie par un autre modèle que l'attendu
+ * (palier économe ou restreint), la passe est dite « non concluante » et le score se lit
+ * par moteur, pas en un chiffre global. --conditions fournit modèle et étage pour une passe
+ * d'un runner qui ne les notait pas ({ "cas": { "<id>": { "modele": …, "etage": … } } }).
+ *
+ * Sort : le taux de réussite global et par moteur, étage, catégorie, nature, registre, compte ;
  * le coût (somme et par demande) ; chaque échec avec sa raison ; et la liste des
  * cas « à juger » (ton, clarté) avec leur critère et la réponse de Lumi, pour un
  * juge humain ou LLM — le correcteur ne note pas le ton.
@@ -13,7 +20,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { corriger, type CasResolu, type Observation, type Verdict } from './format.mts';
+import { MODELE_ATTENDU, conditionsDeLaPasse, corriger, moteurDe, type CasResolu, type ConditionsCas, type Observation, type Verdict } from './format.mts';
 
 const ICI = dirname(fileURLToPath(import.meta.url));
 const arg = (k: string, d: string): string => { const i = process.argv.indexOf(k); const v = i > -1 ? process.argv[i + 1] : undefined; return v && !v.startsWith('--') ? v : d; };
@@ -21,6 +28,10 @@ const arg = (k: string, d: string): string => { const i = process.argv.indexOf(k
 const RESULTATS = arg('--resultats', '').split(',').map((x) => x.trim()).filter(Boolean);
 const DOSSIER_CAS = arg('--cas', join(ICI, 'cas-resolus'));
 const SORTIE = arg('--sortie', '');
+const MODELE = arg('--modele-attendu', MODELE_ATTENDU);
+const FICHIER_CONDITIONS = arg('--conditions', '');
+/** Modèle et étage par cas, pour une passe dont le runner ne les notait pas (relus dans lumi_traces, par exemple). */
+const conditionsFournies: Record<string, ConditionsCas> = FICHIER_CONDITIONS ? (JSON.parse(readFileSync(FICHIER_CONDITIONS, 'utf8')) as { cas: Record<string, ConditionsCas> }).cas : {};
 if (!RESULTATS.length) { console.error('--resultats <fichier.json>[,<fichier.json>] requis (sortie de evals/lumi-tools/run.mts).'); process.exit(1); }
 
 /** Ce que le runner écrit pour chaque cas (on n'en lit que ce qui sert). */
@@ -34,7 +45,7 @@ for (const compte of ['proprietaire', 'technicien']) {
 }
 if (!cas.size) { console.error(`Aucun cas résolu dans ${DOSSIER_CAS} : lancer preparer.mts d'abord.`); process.exit(1); }
 
-interface Ligne { cas: CasResolu; verdict: Verdict; cout_cents: number; duree_ms: number; reponse: string; outils: string[] }
+interface Ligne { cas: CasResolu; verdict: Verdict; cout_cents: number; duree_ms: number; reponse: string; outils: string[]; conditions: ConditionsCas & { erreur?: string } }
 const lignes: Ligne[] = [];
 const inconnus: string[] = [];
 for (const fichier of RESULTATS) {
@@ -42,9 +53,12 @@ for (const fichier of RESULTATS) {
   for (const r of lus.resultats) {
     const c = cas.get(r.id);
     if (!c) { inconnus.push(r.id); continue; }
+    // Ce que le runner a noté passe avant le fichier --conditions (qui ne sert qu'aux passes d'un runner antérieur).
+    const fournies = conditionsFournies[r.id];
     lignes.push({
       cas: c, verdict: corriger(c, r), cout_cents: Number(r.cout_cents) || 0, duree_ms: Number(r.duree_ms) || 0, reponse: r.reponse ?? '',
       outils: [r.proposition, ...(r.groupe ?? []), ...(r.lectures ?? [])].filter((x): x is string => Boolean(x)),
+      conditions: { etage: r.etage ?? fournies?.etage ?? null, modele: r.modele ?? fournies?.modele ?? null, ...(r.erreur ? { erreur: r.erreur } : {}) },
     });
   }
 }
@@ -71,9 +85,14 @@ const par = (cle: (l: Ligne) => string): Record<string, ReturnType<typeof bilan>
   return Object.fromEntries([...groupes.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, bilan(v)]));
 };
 
+const conditions = conditionsDeLaPasse(lignes.map((l) => l.conditions), MODELE);
 const rapport = {
   date: new Date().toISOString(),
   resultats: RESULTATS,
+  // En tête : une passe qui a quitté le palier normal ne se résume pas à un score global.
+  conditions: { ...conditions, ...(FICHIER_CONDITIONS ? { source: FICHIER_CONDITIONS } : {}) },
+  par_moteur: par((l) => moteurDe(l.conditions)),
+  par_etage: par((l) => (l.conditions.etage == null ? 'inconnu' : `étage ${l.conditions.etage}`)),
   global: bilan(lignes),
   par_categorie: par((l) => l.cas.categorie),
   par_nature: par((l) => l.cas.nature),
@@ -88,11 +107,15 @@ const rapport = {
   resultats_sans_cas: inconnus,
 };
 
-const ligne = (nom: string, b: ReturnType<typeof bilan>): string =>
-  `${nom.padEnd(16)} ${String(b.cas).padStart(4)} cas · réussite ${String(b.reussite_pct).padStart(5)} % · bon outil ${String(b.outil_exact_pct).padStart(5)} % · erreurs ${b.erreurs} · ${(b.cout_cents / 100).toFixed(2)} $ (${b.cout_par_demande_cents} ¢/demande) · médiane ${b.duree_mediane_ms} ms`;
-console.log(ligne('GLOBAL', rapport.global));
+const ligne = (nom: string, b: ReturnType<typeof bilan>, largeur = 16): string =>
+  `${nom.padEnd(largeur)} ${String(b.cas).padStart(4)} cas · réussite ${String(b.reussite_pct).padStart(5)} % · bon outil ${String(b.outil_exact_pct).padStart(5)} % · erreurs ${b.erreurs} · ${(b.cout_cents / 100).toFixed(2)} $ (${b.cout_par_demande_cents} ¢/demande) · médiane ${b.duree_mediane_ms} ms`;
+console.log(`${conditions.phrase}\n`);
+console.log('Par moteur (qui a répondu)');
+for (const [k, b] of Object.entries(rapport.par_moteur)) console.log(ligne(k, b, 32));
+console.log('');
+console.log(ligne(conditions.etat === 'concluante' ? 'GLOBAL' : 'GLOBAL (tous moteurs confondus)', rapport.global, 32));
 console.log(ligne('sensibles', rapport.sensibles));
-for (const [titre, groupe] of [['Par catégorie', rapport.par_categorie], ['Par nature', rapport.par_nature], ['Par registre', rapport.par_registre], ['Par compte', rapport.par_compte]] as const) {
+for (const [titre, groupe] of [['Par étage', rapport.par_etage], ['Par catégorie', rapport.par_categorie], ['Par nature', rapport.par_nature], ['Par registre', rapport.par_registre], ['Par compte', rapport.par_compte]] as const) {
   console.log(`\n${titre}`);
   for (const [k, b] of Object.entries(groupe)) console.log(ligne(k, b));
 }
