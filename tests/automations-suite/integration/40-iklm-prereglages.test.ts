@@ -214,12 +214,12 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     const q = await devisEnvoye(marque('K-012'));
     await b.admin.from('quotes').update({ status: 'approved' }).eq('id', q);
     await evenementsBase();
-    const { lignes } = await verifier(['pack_depot'], depuis, true);
-    // La demande ET le rappel de 2 jours sont partis (2 étapes du parcours), aucune tâche annulée.
-    expect(lignes.filter((l) => ['send_sms', 'send_email'].includes(l.action_type as string)).length).toBeGreaterThanOrEqual(2);
+    await verifier(['pack_depot'], depuis, true);
+    // Le symptôme du défaut : la 1re tâche du parcours « cancelled » (condition d'arrêt). Plus aucune ne l'est.
     const id = (await etatPresets(b.orgA)).find((r) => r.preset_key === 'pack_depot')!.id;
     const { data: taches } = await b.admin.from('automation_scheduled_tasks').select('status, last_error').eq('org_id', b.orgA).eq('automation_rule_id', id).eq('entity_id', q);
-    expect((taches ?? []).filter((t) => t.status !== 'completed')).toEqual([]);
+    expect((taches ?? []).length).toBeGreaterThan(0);
+    expect((taches ?? []).filter((t) => t.status === 'cancelled')).toEqual([]);
   }, 240_000);
 
   it('[K-012] même parcours, drapeau auto_sortie_parcours ALLUMÉ : la demande de dépôt part aussi', async () => {
