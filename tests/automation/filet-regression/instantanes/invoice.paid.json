@@ -153,6 +153,71 @@
    },
    {
     "moment": "differe:send_email",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "email-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_email",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
+    }
+   },
+   {
+    "moment": "differe:send_email",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "event_type": "email_sent",
+     "metadata": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Un message de Plomberie Tremblay inc.",
+      "source": "automation"
+     }
+    }
+   },
+   {
+    "moment": "differe:send_email",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-send_email-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "send_email",
+     "action_config": {
+      "subject": "Un message de [company_name]",
+      "body": "Bonjour [client_name],\n\nMerci de faire affaire avec [company_name].\n\nAu plaisir,\n[company_name]"
+     },
+     "result_success": true,
+     "result_data": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Un message de Plomberie Tremblay inc."
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:send_email",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -163,16 +228,23 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
-  "envois": [],
-  "annulees": [
-   "send_email@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "envois": [
+   {
+    "moment": "differe:send_email",
+    "canal": "courriel",
+    "to": "marie.tremblay@example.test",
+    "subject": "Un message de Plomberie Tremblay inc.",
+    "texte": "Plomberie Tremblay inc. Merci de faire affaire avec Plomberie Tremblay inc. Au plaisir, Plomberie Tremblay inc. Voir le reçu Le…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc. Au plaisir, Plomberie Tremblay inc. Voir le reçu Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "60c7e8462706fd6e"
+   }
+  ],
+  "annulees": []
  },
  "send_sms@0": {
   "planifie": [],
@@ -323,6 +395,59 @@
    },
    {
     "moment": "differe:send_sms",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-send_sms-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "send_sms",
+     "action_config": {
+      "body": "Bonjour [client_name], c’est [company_name]. Merci !"
+     },
+     "result_success": true,
+     "result_data": {
+      "to": "+15145550142",
+      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -333,16 +458,21 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
-  "envois": [],
-  "annulees": [
-   "send_sms@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "envois": [
+   {
+    "moment": "differe:send_sms",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+   }
+  ],
+  "annulees": []
  },
  "create_notification@0": {
   "planifie": [],
@@ -485,6 +615,44 @@
    },
    {
     "moment": "differe:create_notification",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation",
+     "title": "Suivi a faire pour Marie Tremblay",
+     "body": "",
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "link": null
+    }
+   },
+   {
+    "moment": "differe:create_notification",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-create_notification-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "create_notification",
+     "action_config": {
+      "title": "Suivi a faire pour [client_name]"
+     },
+     "result_success": true,
+     "result_data": {
+      "title": "Suivi a faire pour Marie Tremblay",
+      "destinataires": "equipe",
+      "courriels": 0
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:create_notification",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -495,16 +663,14 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
   "envois": [],
-  "annulees": [
-   "create_notification@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "request_review@0": {
   "planifie": [],
@@ -731,6 +897,143 @@
    },
    {
     "moment": "differe:request_review",
+    "table": "satisfaction_surveys",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
+     "token": "<jeton>"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "email-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "event_type": "email_sent",
+     "metadata": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Votre avis compte pour nous",
+      "source": "automation"
+     }
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Un avis Google ou Facebook nous aiderait énormément : https://app.lume.test/survey/<jeton>\nRépondez STOP pour ne plus recevoir.",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "review_requests",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
+     "survey_id": "sondage-1",
+     "subject_sent": "Votre avis compte pour nous",
+     "status": "sent",
+     "sent_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "related_entity_type": "client",
+     "related_entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "event_type": "review_requested",
+     "metadata": {
+      "client_name": "Marie",
+      "survey_token": "<jeton>",
+      "email_sent": true,
+      "sms_sent": true
+     }
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-request_review-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "request_review",
+     "action_config": {},
+     "result_success": true,
+     "result_data": {
+      "token": "<jeton>",
+      "surveyUrl": "https://app.lume.test/survey/<jeton>",
+      "emailSent": true,
+      "smsSent": true
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:request_review",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -741,16 +1044,29 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
-  "envois": [],
-  "annulees": [
-   "request_review@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "envois": [
+   {
+    "moment": "differe:request_review",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Un avis Google ou Facebook nous aiderait énormément : https://app.lume.test/survey/<jeton>\nRépondez STOP pour ne plus recevoir."
+   },
+   {
+    "moment": "differe:request_review",
+    "canal": "courriel",
+    "to": "marie.tremblay@example.test",
+    "subject": "Votre avis compte pour nous",
+    "texte": "Plomberie Tremblay inc. Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Prendriez-vous 30…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Prendriez-vous 30 secondes pour nous laisser un avis sur Google ou Facebook ? Laisser un avis Le bouton ne fonctionne pas ? Ouvrir le lien Merci d'avoir choisi Plomberie Tremblay inc. ! Voir le reçu Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "bc21c6d190128678"
+   }
+  ],
+  "annulees": []
  },
  "envoyer_slack@0": {
   "planifie": [],
@@ -876,6 +1192,27 @@
    },
    {
     "moment": "differe:envoyer_slack",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-envoyer_slack-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "envoyer_slack",
+     "action_config": {
+      "body": "[client_name] — suivi a faire"
+     },
+     "result_success": false,
+     "result_data": null,
+     "result_error": "Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié.",
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:envoyer_slack",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -886,16 +1223,26 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "failed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": "Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié."
+    }
+   },
+   {
+    "moment": "differe:envoyer_slack",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation_failed",
+     "title": "Échec d'envoi — regle-invoice.paid-envoyer_slack-86400",
+     "body": "Le message n'est pas parti et ne partira pas : Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié.",
+     "reference_id": "tache-1"
     }
    }
   ],
   "envois": [],
-  "annulees": [
-   "envoyer_slack@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "ajouter_etiquette@0": {
   "planifie": [],
@@ -1033,6 +1380,39 @@
    },
    {
     "moment": "differe:ajouter_etiquette",
+    "table": "client_tags",
+    "op": "insert",
+    "valeur": {
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "tag": "vip"
+    }
+   },
+   {
+    "moment": "differe:ajouter_etiquette",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-ajouter_etiquette-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "ajouter_etiquette",
+     "action_config": {
+      "etiquette": "vip"
+     },
+     "result_success": true,
+     "result_data": {
+      "etiquette": "vip",
+      "deja_posee": true
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:ajouter_etiquette",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -1043,16 +1423,14 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
   "envois": [],
-  "annulees": [
-   "ajouter_etiquette@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "retirer_etiquette@0": {
   "planifie": [],
@@ -1197,6 +1575,46 @@
    },
    {
     "moment": "differe:retirer_etiquette",
+    "table": "client_tags",
+    "op": "delete",
+    "filtres": [
+     [
+      "eq",
+      "client_id",
+      "aaaaaaaa-0000-4000-8000-000000000001"
+     ],
+     [
+      "eq",
+      "tag",
+      "vip"
+     ]
+    ]
+   },
+   {
+    "moment": "differe:retirer_etiquette",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-retirer_etiquette-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "retirer_etiquette",
+     "action_config": {
+      "etiquette": "vip"
+     },
+     "result_success": true,
+     "result_data": {
+      "etiquette": "vip"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:retirer_etiquette",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -1207,16 +1625,14 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
   "envois": [],
-  "annulees": [
-   "retirer_etiquette@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "modifier_client@0": {
   "planifie": [],
@@ -1368,6 +1784,52 @@
    },
    {
     "moment": "differe:modifier_client",
+    "table": "clients",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "aaaaaaaa-0000-4000-8000-000000000001"
+     ],
+     [
+      "eq",
+      "org_id",
+      "11111111-1111-4111-8111-111111111111"
+     ]
+    ],
+    "valeur": {
+     "status": "active",
+     "source": "salon"
+    }
+   },
+   {
+    "moment": "differe:modifier_client",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-modifier_client-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "modifier_client",
+     "action_config": {
+      "statut": "active",
+      "source": "salon"
+     },
+     "result_success": true,
+     "result_data": {
+      "status": "active",
+      "source": "salon"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:modifier_client",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -1378,16 +1840,14 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
   "envois": [],
-  "annulees": [
-   "modifier_client@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "assigner_responsable@0": {
   "planifie": [],
@@ -1535,6 +1995,49 @@
    },
    {
     "moment": "differe:assigner_responsable",
+    "table": "clients",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "aaaaaaaa-0000-4000-8000-000000000001"
+     ],
+     [
+      "eq",
+      "org_id",
+      "11111111-1111-4111-8111-111111111111"
+     ]
+    ],
+    "valeur": {
+     "assigned_to": "aaaaaaaa-0000-4000-8000-000000000006"
+    }
+   },
+   {
+    "moment": "differe:assigner_responsable",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-assigner_responsable-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "assigner_responsable",
+     "action_config": {
+      "membre_id": "aaaaaaaa-0000-4000-8000-000000000006"
+     },
+     "result_success": true,
+     "result_data": {
+      "membre_id": "aaaaaaaa-0000-4000-8000-000000000006"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:assigner_responsable",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -1545,16 +2048,14 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
   "envois": [],
-  "annulees": [
-   "assigner_responsable@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "ajouter_note@0": {
   "planifie": [],
@@ -1693,6 +2194,40 @@
    },
    {
     "moment": "differe:ajouter_note",
+    "table": "notes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "content": "Note automatique pour Marie Tremblay.",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005"
+    }
+   },
+   {
+    "moment": "differe:ajouter_note",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-ajouter_note-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "ajouter_note",
+     "action_config": {
+      "body": "Note automatique pour [client_name]."
+     },
+     "result_success": true,
+     "result_data": {
+      "longueur": 37
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:ajouter_note",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -1703,16 +2238,14 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
   "envois": [],
-  "annulees": [
-   "ajouter_note@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "create_task@0": {
   "planifie": [],
@@ -1857,6 +2390,46 @@
    },
    {
     "moment": "differe:create_task",
+    "table": "tasks",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "title": "Rappeler Marie Tremblay",
+     "description": null,
+     "status": "open",
+     "priority": "medium",
+     "assignee_user_id": null,
+     "linked_entity_type": "invoice",
+     "linked_entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "created_by": "aaaaaaaa-0000-4000-8000-000000000006",
+     "due_date": null
+    }
+   },
+   {
+    "moment": "differe:create_task",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-create_task-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "create_task",
+     "action_config": {
+      "title": "Rappeler [client_name]"
+     },
+     "result_success": true,
+     "result_data": {
+      "title": "Rappeler Marie Tremblay"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:create_task",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -1867,16 +2440,14 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
   "envois": [],
-  "annulees": [
-   "create_task@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "envoyer_facture@0": {
   "planifie": [],
@@ -2046,6 +2617,88 @@
    },
    {
     "moment": "differe:envoyer_facture",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "email-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:envoyer_facture",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
+    }
+   },
+   {
+    "moment": "differe:envoyer_facture",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "event_type": "email_sent",
+     "metadata": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Facture INV-000042",
+      "source": "automation"
+     }
+    }
+   },
+   {
+    "moment": "differe:envoyer_facture",
+    "table": "invoices",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "aaaaaaaa-0000-4000-8000-000000000005"
+     ],
+     [
+      "eq",
+      "org_id",
+      "11111111-1111-4111-8111-111111111111"
+     ]
+    ],
+    "valeur": {
+     "sent_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:envoyer_facture",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-envoyer_facture-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "envoyer_facture",
+     "action_config": {},
+     "result_success": true,
+     "result_data": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Facture INV-000042"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:envoyer_facture",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -2056,16 +2709,23 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
-  "envois": [],
-  "annulees": [
-   "envoyer_facture@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "envois": [
+   {
+    "moment": "differe:envoyer_facture",
+    "canal": "courriel",
+    "to": "marie.tremblay@example.test",
+    "subject": "Facture INV-000042",
+    "texte": "Plomberie Tremblay inc. Voici votre facture INV-000042. Vous pouvez la consulter et la payer en ligne avec le bouton ci-dessous.…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Voici votre facture INV-000042. Vous pouvez la consulter et la payer en ligne avec le bouton ci-dessous. Voir le reçu Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "dbd36260d8e831f3"
+   }
+  ],
+  "annulees": []
  },
  "webhook@0": {
   "planifie": [],
@@ -2200,6 +2860,29 @@
    },
    {
     "moment": "differe:webhook",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-webhook-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "webhook",
+     "action_config": {
+      "url": "https://hooks.example.test/lume"
+     },
+     "result_success": true,
+     "result_data": {
+      "status": 200
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:webhook",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -2210,16 +2893,21 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
-  "envois": [],
-  "annulees": [
-   "webhook@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "envois": [
+   {
+    "moment": "differe:webhook",
+    "canal": "webhook",
+    "to": "https://hooks.example.test/lume",
+    "texte": "{\"org_id\":\"11111111-1111-4111-8111-111111111111\",\"entity_type\":\"invoice\",\"entity_id\":\"aaaaaaaa-0000-4000-8000-000000000005\",\"data\":{\"company_name\":\"Plomberie Tremblay inc.\",\"company_phone\":\"+14505550199\",\"google_review_url\":\"https://g.page/r/plomberie-tremblay/review\",\"facebook_review_url\":\"\",\"review_page_url\":\"https://g.page/r/plomberie-tremblay/review\",\"invoice_number\":\"INV-000042\",\"invoice_due_date\":\"2026-09-01\",\"invoice_total\":\"1 626,90 $\",\"invoice_link\":\"https://app.lume.test/invoice/bbbbbbbb-0000-4000-8000-000000000002\",\"client_first_name\":\"Marie\",\"client_last_name\":\"Tremblay\",\"client_name\":\"Marie Tremblay\",\"client_email\":\"marie.tremblay@example.test\",\"client_phone\":\"+15145550142\",\"job_name\":\"Nettoyage de gouttières\",\"invoice_cf_client\":\"Marie Tremblay\",\"invoice_cf_subject\":\"\",\"invoice_cf_invoice_date\":\"12 septembre 2026\",\"invoice_cf_due_date\":\"1 septembre 2026\",\"invoice_cf_salesperson\":\"\",\"invoice_cf_line_items\":\"\",\"invoice_cf_subtotal\":\"\",\"invoice_cf_discount\":\"\",\"invoice_cf_tax\":\"\",\"invoice_cf_total\":\"1 626,90 $\",\"invoice_cf_notes\":\"\",\"invoice_cf_internal_notes\":\"\",\"client_cf_first_name\":\"Marie\",\"client_cf_last_name\":\"Tremblay\",\"client_cf_client_number\":\"\",\"client_cf_company\":\"\",\"client_cf_display_as_company\":\"\",\"client_cf_phone\":\"+15145550142\",\"client_cf_phone_label\":\"\",\"client_cf_email\":\"marie.tremblay@example.test\",\"client_cf_email_label\":\"\",\"client_cf_lead_source\":\"\",\"client_cf_other_phones\":\"\",\"client_cf_address\":\"\",\"client_cf_street\":\"\",\"client_cf_city\":\"\",\"client_cf_province\":\"\",\"client_cf_postal_code\":\"\",\"client_cf_country\":\"\",\"client_cf_taxes\":\"\",\"client_cf_billing_same_as_service\":\"\",\"client_cf_billing_address\":\"\",\"job_cf_title\":\"Nettoyage de gouttières\",\"job_cf_job_number\":\"\",\"job_cf_salesperson\":\"\",\"job_cf_sale_date\":\"\",\"job_cf_show_on_leaderboard\":\"\",\"job_cf_ask_for_review\":\"\",\"job_cf_client\":\"Marie Tremblay\",\"job_cf_property\":\"412 rue des Érables, Longueuil\",\"job_cf_job_type\":\"Service ponctuel\",\"job_cf_visits\":\"25 septembre 2026\",\"job_cf_visit_start_time\":\"09 h 00\",\"job_cf_visit_end_time\":\"10 h 00\",\"job_cf_team\":\"\",\"job_cf_requires_invoicing\":\"\",\"job_cf_billing_split\":\"\",\"job_cf_deposit_required\":\"\",\"job_cf_deposit_type\":\"\",\"job_cf_deposit_value\":\"\",\"job_cf_require_payment_method\":\"\",\"job_cf_line_items\":\"\",\"job_cf_taxes\":\"\",\"job_cf_subtotal\":\"\",\"job_cf_total\":\"\",\"job_cf_agreement\":\"Non\",\"job_cf_notes\":\"\",\"client.nom\":\"Marie Tremblay\"},\"sent_at\":\"2026-09-14T15:00:00.000Z\"}"
+   }
+  ],
+  "annulees": []
  },
  "demarrer_automatisation@0": {
   "planifie": [],
@@ -2407,6 +3095,89 @@
    },
    {
     "moment": "differe:demarrer_automatisation",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "aaaaaaaa-0000-4000-8000-00000000000e",
+     "trigger_event": "task.completed",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "create_task",
+     "action_config": {
+      "title": "Rappeler le client",
+      "body": "Suivi"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "aaaaaaaa-0000-4000-8000-00000000000e:aaaaaaaa-0000-4000-8000-000000000005:0@14911650"
+    }
+   },
+   {
+    "moment": "differe:demarrer_automatisation",
+    "table": "tasks",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "title": "Rappeler le client",
+     "description": "Suivi",
+     "status": "open",
+     "priority": "medium",
+     "assignee_user_id": null,
+     "linked_entity_type": "invoice",
+     "linked_entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "created_by": "aaaaaaaa-0000-4000-8000-000000000006",
+     "due_date": null
+    }
+   },
+   {
+    "moment": "differe:demarrer_automatisation",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "aaaaaaaa-0000-4000-8000-00000000000e",
+     "trigger_event": "task.completed",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "create_task",
+     "action_config": {
+      "title": "Rappeler le client",
+      "body": "Suivi"
+     },
+     "result_success": true,
+     "result_data": {
+      "title": "Rappeler le client"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:demarrer_automatisation",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-demarrer_automatisation-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "demarrer_automatisation",
+     "action_config": {
+      "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
+     },
+     "result_success": true,
+     "result_data": {
+      "demarree": "Suivi équipe"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:demarrer_automatisation",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -2417,16 +3188,14 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
   "envois": [],
-  "annulees": [
-   "demarrer_automatisation@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "arreter_automatisation@0": {
   "planifie": [],
@@ -2589,20 +3358,73 @@
     "filtres": [
      [
       "eq",
+      "org_id",
+      "11111111-1111-4111-8111-111111111111"
+     ],
+     [
+      "eq",
+      "entity_id",
+      "aaaaaaaa-0000-4000-8000-000000000005"
+     ],
+     [
+      "eq",
+      "status",
+      "pending"
+     ],
+     [
+      "eq",
+      "automation_rule_id",
+      "regle-invoice.paid-arreter_automatisation-86400"
+     ]
+    ],
+    "valeur": {
+     "status": "cancelled"
+    }
+   },
+   {
+    "moment": "differe:arreter_automatisation",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-arreter_automatisation-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "arreter_automatisation",
+     "action_config": {
+      "portee": "courante"
+     },
+     "result_success": true,
+     "result_data": {
+      "annulees": 1
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:arreter_automatisation",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
       "id",
       "tache-1"
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
   "envois": [],
   "annulees": [
-   "arreter_automatisation@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
+   "arreter_automatisation@2026-09-14T15:00:00.000Z: "
   ]
  },
  "update_custom_field@0": {
@@ -2731,6 +3553,28 @@
    },
    {
     "moment": "differe:update_custom_field",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-update_custom_field-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.paid",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "update_custom_field",
+     "action_config": {
+      "field_id": "aaaaaaaa-0000-4000-8000-00000000000c",
+      "value": "2027-01-01"
+     },
+     "result_success": false,
+     "result_data": null,
+     "result_error": "Ce champ n’appartient pas à l’objet de l’événement (ou il est archivé).",
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:update_custom_field",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -2741,16 +3585,14 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
-     "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "status": "pending",
+     "execute_at": "2026-09-14T15:05:00.000Z",
+     "last_error": "Ce champ n’appartient pas à l’objet de l’événement (ou il est archivé). — reprise 1/4 dans 5 min"
     }
    }
   ],
   "envois": [],
-  "annulees": [
-   "update_custom_field@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "sequence:notification>attendre>sms": {
   "planifie": [
@@ -2758,6 +3600,11 @@
     "action": "create_notification",
     "execute_at": "2026-09-13T15:00:00.000Z",
     "step_id": "e1"
+   },
+   {
+    "action": "send_sms",
+    "execute_at": "2026-09-14T15:00:00.000Z",
+    "step_id": "e3"
    }
   ],
   "ecritures": [
@@ -2838,6 +3685,45 @@
    },
    {
     "moment": "differe:create_notification#e1",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation",
+     "title": "Suivi a faire pour Marie Tremblay",
+     "body": "Suivi du parcours",
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "link": null
+    }
+   },
+   {
+    "moment": "differe:create_notification#e1",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-sequence",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "scheduled",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "create_notification",
+     "action_config": {
+      "title": "Suivi a faire pour [client_name]",
+      "body": "Suivi du parcours"
+     },
+     "result_success": true,
+     "result_data": {
+      "title": "Suivi a faire pour Marie Tremblay",
+      "destinataires": "equipe",
+      "courriels": 0
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:create_notification#e1",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -2848,15 +3734,166 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-13T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
+    }
+   },
+   {
+    "moment": "differe:create_notification#e1",
+    "table": "automation_scheduled_tasks",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-sequence",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "step_id": "e3",
+     "action_config": {
+      "type": "send_sms",
+      "config": "#a1e2d6f73412",
+      "event_metadata": {
+       "invoice_number": "INV-000042",
+       "amount_cents": 162690,
+       "payment_type": "full",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "franchies": 1
+      }
+     },
+     "sequence_context": {
+      "invoice_number": "INV-000042",
+      "amount_cents": 162690,
+      "payment_type": "full",
+      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "franchies": 2
+     },
+     "execute_at": "2026-09-14T15:00:00.000Z",
+     "status": "pending",
+     "execution_key": "regle-invoice.paid-sequence:aaaaaaaa-0000-4000-8000-000000000005:step:e3"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "status",
+      "running"
+     ],
+     [
+      "lt",
+      "execute_at",
+      "2026-09-14T14:45:00.000Z"
+     ]
+    ],
+    "valeur": {
+     "status": "pending",
+     "execute_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "tache-2"
+     ],
+     [
+      "eq",
+      "status",
+      "pending"
+     ]
+    ],
+    "valeur": {
+     "status": "running",
+     "attempts": 1,
+     "execute_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.paid-sequence",
+     "scheduled_task_id": "tache-2",
+     "trigger_event": "scheduled",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "send_sms",
+     "action_config": {
+      "body": "Bonjour [client_name], c’est [company_name]. Merci !"
+     },
+     "result_success": true,
+     "result_data": {
+      "to": "+15145550142",
+      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "tache-2"
+     ]
+    ],
+    "valeur": {
+     "status": "completed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": null
     }
    }
   ],
-  "envois": [],
-  "annulees": [
-   "create_notification@2026-09-13T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "envois": [
+   {
+    "moment": "differe:send_sms#e3",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+   }
+  ],
+  "annulees": []
  }
 }

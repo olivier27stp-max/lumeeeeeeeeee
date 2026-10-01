@@ -204,18 +204,38 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     await verifier(['quote_approved_move_deal'], depuis, false);
   }, 240_000);
 
-  it.fails('[K-012] ROUGE ATTENDU — décision requise : « Dépôt — demande et rappel » (pack_depot, publié d’office) s’annule lui-même quand le drapeau auto_sortie_parcours est éteint — la demande de dépôt ne part jamais', async () => {
-    // checkStopConditions (moteur, drapeau éteint = défaut) arrête toute tâche
-    // d'un devis au statut « approved » — y compris celles d'une règle
-    // déclenchée PAR l'acceptation. sortie-parcours.ts (drapeau allumé) a
-    // l'exception ; tests/automation/sortie-parcours.test.ts fige « drapeau
-    // OFF → annulée comme avant ». Correctif prêt (même exception que le lead
-    // perdu), non appliqué : il change un comportement volontairement lié au drapeau.
+  it('[K-012] soumission ACCEPTÉE → « Dépôt — demande et rappel » (pack_depot, publié d’office) demande le dépôt, drapeau auto_sortie_parcours éteint', async () => {
+    // Avant : checkStopConditions (drapeau éteint = défaut) annulait toute
+    // tâche d'un devis « approved » — y compris celles d'une règle déclenchée
+    // PAR l'acceptation. La demande de dépôt ne partait jamais.
+    await b.admin.from('org_features').upsert({ org_id: b.orgA, feature: 'auto_sortie_parcours', enabled: false }, { onConflict: 'org_id,feature' });
+    (await import('../../../server/lib/automations-drapeaux')).oublierDrapeaux(b.orgA);
     const depuis = new Date().toISOString();
     const q = await devisEnvoye(marque('K-012'));
     await b.admin.from('quotes').update({ status: 'approved' }).eq('id', q);
     await evenementsBase();
-    await verifier(['pack_depot'], depuis, true);
+    const { lignes } = await verifier(['pack_depot'], depuis, true);
+    // La demande ET le rappel de 2 jours sont partis (2 étapes du parcours), aucune tâche annulée.
+    expect(lignes.filter((l) => ['send_sms', 'send_email'].includes(l.action_type as string)).length).toBeGreaterThanOrEqual(2);
+    const id = (await etatPresets(b.orgA)).find((r) => r.preset_key === 'pack_depot')!.id;
+    const { data: taches } = await b.admin.from('automation_scheduled_tasks').select('status, last_error').eq('org_id', b.orgA).eq('automation_rule_id', id).eq('entity_id', q);
+    expect((taches ?? []).filter((t) => t.status !== 'completed')).toEqual([]);
+  }, 240_000);
+
+  it('[K-012] même parcours, drapeau auto_sortie_parcours ALLUMÉ : la demande de dépôt part aussi', async () => {
+    await b.admin.from('org_features').upsert({ org_id: b.orgA, feature: 'auto_sortie_parcours', enabled: true }, { onConflict: 'org_id,feature' });
+    const { oublierDrapeaux } = await import('../../../server/lib/automations-drapeaux');
+    oublierDrapeaux(b.orgA);
+    try {
+      const depuis = new Date().toISOString();
+      const q = await devisEnvoye(marque('K-012on'));
+      await b.admin.from('quotes').update({ status: 'approved' }).eq('id', q);
+      await evenementsBase();
+      await verifier(['pack_depot'], depuis, true);
+    } finally {
+      await b.admin.from('org_features').upsert({ org_id: b.orgA, feature: 'auto_sortie_parcours', enabled: false }, { onConflict: 'org_id,feature' });
+      oublierDrapeaux(b.orgA);
+    }
   }, 240_000);
 
   it('[K-013][K-016][K-017] facture envoyée (transition en base) → pack_relance_facture ; payée → payment_confirmation seulement ; dépôt → deposit_received seulement', async () => {

@@ -1436,6 +1436,60 @@
    },
    {
     "moment": "differe:send_sms",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Rappel : votre dépôt pour Plomberie Tremblay inc. est en attente. Répondez à ce message si vous avez besoin d'aide.",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-deposit_followup_2d",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "quote.approved",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "send_sms",
+     "action_config": {
+      "body": "Rappel : votre dépôt pour [company_name] est en attente. Répondez à ce message si vous avez besoin d'aide.",
+      "body_en": "Reminder: your deposit for [company_name] is still pending. Reply to this message if you need any help."
+     },
+     "result_success": true,
+     "result_data": {
+      "to": "+15145550142",
+      "body": "Rappel : votre dépôt pour Plomberie Tremblay inc. est en attente. Répondez à ce message si vous avez besoin d'aide."
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -1446,9 +1500,9 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-15T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    },
    {
@@ -1496,6 +1550,45 @@
    },
    {
     "moment": "differe:create_notification",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation",
+     "title": "Dépôt en attente — Marie Tremblay",
+     "body": "La soumission est acceptée depuis 2 jours, mais le dépôt n'a pas été reçu.",
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "link": null
+    }
+   },
+   {
+    "moment": "differe:create_notification",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-deposit_followup_2d",
+     "scheduled_task_id": "tache-2",
+     "trigger_event": "quote.approved",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "create_notification",
+     "action_config": {
+      "body": "La soumission est acceptée depuis 2 jours, mais le dépôt n'a pas été reçu.",
+      "title": "Dépôt en attente — [client_name]"
+     },
+     "result_success": true,
+     "result_data": {
+      "title": "Dépôt en attente — Marie Tremblay",
+      "destinataires": "equipe",
+      "courriels": 0
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:create_notification",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -1506,9 +1599,9 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-15T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    },
    {
@@ -1556,6 +1649,39 @@
    },
    {
     "moment": "differe:log_activity",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "event_type": "deposit_followup_sent",
+     "metadata": {}
+    }
+   },
+   {
+    "moment": "differe:log_activity",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-deposit_followup_2d",
+     "scheduled_task_id": "tache-3",
+     "trigger_event": "quote.approved",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "log_activity",
+     "action_config": {
+      "event_type": "deposit_followup_sent"
+     },
+     "result_success": true,
+     "result_data": null,
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:log_activity",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -1566,18 +1692,21 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-15T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
-  "envois": [],
-  "annulees": [
-   "send_sms@2026-09-15T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie.",
-   "create_notification@2026-09-15T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie.",
-   "log_activity@2026-09-15T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "envois": [
+   {
+    "moment": "differe:send_sms",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Rappel : votre dépôt pour Plomberie Tremblay inc. est en attente. Répondez à ce message si vous avez besoin d'aide."
+   }
+  ],
+  "annulees": []
  },
  "deposit_received": {
   "planifie": [],
@@ -1971,6 +2100,73 @@
    },
    {
     "moment": "differe:send_email",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "email-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_email",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
+    }
+   },
+   {
+    "moment": "differe:send_email",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "event_type": "email_sent",
+     "metadata": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Dépôt requis pour réserver votre place",
+      "source": "automation"
+     }
+    }
+   },
+   {
+    "moment": "differe:send_email",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-deposit_reminder",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "quote.approved",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "send_email",
+     "action_config": {
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Merci d'avoir accepté notre soumission!</p><p>Pour réserver votre place à l'horaire, un dépôt est requis. Répondez à ce courriel si vous avez des questions sur le paiement.</p><p>Merci,<br/>[company_name]</p></div>",
+      "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Thank you for accepting our quote!</p><p>To reserve your spot on the schedule, a deposit is required. Reply to this email if you have any questions about payment.</p><p>Thank you,<br/>[company_name]</p></div>",
+      "subject": "Dépôt requis pour réserver votre place",
+      "subject_en": "Deposit required to reserve your spot"
+     },
+     "result_success": true,
+     "result_data": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Dépôt requis pour réserver votre place"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:send_email",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -1981,9 +2177,9 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-13T16:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    },
    {
@@ -2031,6 +2227,60 @@
    },
    {
     "moment": "differe:send_sms",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Merci d'avoir accepté la soumission de Plomberie Tremblay inc.! Un dépôt est requis pour réserver votre place à l'horaire.",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-deposit_reminder",
+     "scheduled_task_id": "tache-2",
+     "trigger_event": "quote.approved",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "send_sms",
+     "action_config": {
+      "body": "Merci d'avoir accepté la soumission de [company_name]! Un dépôt est requis pour réserver votre place à l'horaire.",
+      "body_en": "Thanks for accepting [company_name]'s quote! A deposit is required to reserve your spot on the schedule."
+     },
+     "result_success": true,
+     "result_data": {
+      "to": "+15145550142",
+      "body": "Merci d'avoir accepté la soumission de Plomberie Tremblay inc.! Un dépôt est requis pour réserver votre place à l'horaire."
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -2041,9 +2291,9 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-13T16:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    },
    {
@@ -2091,6 +2341,39 @@
    },
    {
     "moment": "differe:log_activity",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "event_type": "deposit_reminder_sent",
+     "metadata": {}
+    }
+   },
+   {
+    "moment": "differe:log_activity",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-deposit_reminder",
+     "scheduled_task_id": "tache-3",
+     "trigger_event": "quote.approved",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "log_activity",
+     "action_config": {
+      "event_type": "deposit_reminder_sent"
+     },
+     "result_success": true,
+     "result_data": null,
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:log_activity",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -2101,18 +2384,29 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-13T16:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
-  "envois": [],
-  "annulees": [
-   "send_email@2026-09-13T16:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie.",
-   "send_sms@2026-09-13T16:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie.",
-   "log_activity@2026-09-13T16:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "envois": [
+   {
+    "moment": "differe:send_email",
+    "canal": "courriel",
+    "to": "marie.tremblay@example.test",
+    "subject": "Dépôt requis pour réserver votre place",
+    "texte": "Plomberie Tremblay inc. Merci d&#39;avoir accepté notre soumission! Pour réserver votre place à l&#39;horaire, un dépôt est requis.…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Merci d'avoir accepté notre soumission! Pour réserver votre place à l'horaire, un dépôt est requis. Répondez à ce courriel si vous avez des questions sur le paiement. Merci, Plomberie Tremblay inc. Voir la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "381bedbb14a84ed9"
+   },
+   {
+    "moment": "differe:send_sms",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Merci d'avoir accepté la soumission de Plomberie Tremblay inc.! Un dépôt est requis pour réserver votre place à l'horaire."
+   }
+  ],
+  "annulees": []
  },
  "estimate_followup": "déclencheur sans événement de test : estimate.sent",
  "google_review": {
@@ -7640,6 +7934,60 @@
    },
    {
     "moment": "differe:send_sms",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Bonjour Marie, on a manqué notre rendez-vous. Répondez à ce message pour reprendre un moment qui vous convient. — Plomberie Tremblay inc.",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-no_show_followup",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "appointment.cancelled",
+     "entity_type": "schedule_event",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
+     "action_type": "send_sms",
+     "action_config": {
+      "body": "Bonjour [client_first_name], on a manqué notre rendez-vous. Répondez à ce message pour reprendre un moment qui vous convient. — [company_name]",
+      "body_en": "Hi [client_first_name], we missed our appointment. Reply to this message to set up a time that works for you. — [company_name]"
+     },
+     "result_success": true,
+     "result_data": {
+      "to": "+15145550142",
+      "body": "Bonjour Marie, on a manqué notre rendez-vous. Répondez à ce message pour reprendre un moment qui vous convient. — Plomberie Tremblay inc."
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -7650,9 +7998,9 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-13T16:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    },
    {
@@ -7700,6 +8048,45 @@
    },
    {
     "moment": "differe:create_notification",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation",
+     "title": "Rendez-vous annulé",
+     "body": "Le rendez-vous de Marie Tremblay a été annulé.",
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000003",
+     "link": null
+    }
+   },
+   {
+    "moment": "differe:create_notification",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-no_show_followup",
+     "scheduled_task_id": "tache-2",
+     "trigger_event": "appointment.cancelled",
+     "entity_type": "schedule_event",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
+     "action_type": "create_notification",
+     "action_config": {
+      "body": "Le rendez-vous de [client_name] a été annulé.",
+      "title": "Rendez-vous annulé"
+     },
+     "result_success": true,
+     "result_data": {
+      "title": "Rendez-vous annulé",
+      "destinataires": "equipe",
+      "courriels": 0
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:create_notification",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -7710,9 +8097,9 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-13T16:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    },
    {
@@ -7760,6 +8147,39 @@
    },
    {
     "moment": "differe:log_activity",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "schedule_event",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
+     "event_type": "no_show_followup",
+     "metadata": {}
+    }
+   },
+   {
+    "moment": "differe:log_activity",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-no_show_followup",
+     "scheduled_task_id": "tache-3",
+     "trigger_event": "appointment.cancelled",
+     "entity_type": "schedule_event",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
+     "action_type": "log_activity",
+     "action_config": {
+      "event_type": "no_show_followup"
+     },
+     "result_success": true,
+     "result_data": null,
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:log_activity",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -7770,18 +8190,21 @@
      ]
     ],
     "valeur": {
-     "status": "cancelled",
+     "status": "completed",
      "completed_at": "2026-09-13T16:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": null
     }
    }
   ],
-  "envois": [],
-  "annulees": [
-   "send_sms@2026-09-13T16:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie.",
-   "create_notification@2026-09-13T16:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie.",
-   "log_activity@2026-09-13T16:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "envois": [
+   {
+    "moment": "differe:send_sms",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Bonjour Marie, on a manqué notre rendez-vous. Répondez à ce message pour reprendre un moment qui vous convient. — Plomberie Tremblay inc."
+   }
+  ],
+  "annulees": []
  },
  "payment_confirmation": {
   "planifie": [],

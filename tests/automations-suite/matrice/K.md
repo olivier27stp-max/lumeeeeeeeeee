@@ -9,7 +9,7 @@ Fichiers : `40-iklm-prereglages.test.ts`, `40-iklm-adjacents.test.ts`. Bureau A 
 | K-003 | estimate_followup | — | mort : seul émetteur /emails/send-quote, jamais appelé par l'UI | brouillon |
 | K-010 | lead.created | — | pack_suivi_prospect complet, aucun échec, envois simulés | |
 | K-011 | quote.sent | — | pack_relance_devis + quote_sent_move_deal | temps compressé : plafond 3 messages/24 h ignoré (artefact) |
-| K-012 | quote.approved (transition en base) | drapeau auto_sortie_parcours éteint | pack_depot doit demander le dépôt | ROUGE ATTENDU — décision : la tâche s'annule elle-même (condition d'arrêt « devis approuvé ») ; test existant fige « drapeau OFF → annulée » ; correctif prêt (exception comme lead perdu) |
+| K-012 | quote.approved (transition en base) | drapeau auto_sortie_parcours éteint, puis allumé | pack_depot demande le dépôt (et le rappelle 2 jours après) dans les deux cas | CORRIGÉ — `checkStopConditions` n'arrête plus une règle déclenchée PAR la résolution (même table que `sortie-parcours.ts` : quote.approved/declined/changes_requested, invoice.paid, appointment.cancelled ; « converted » vaut « approved ») et reçoit le déclencheur de la RÈGLE pour une étape de parcours ; `40-iklm-prereglages.test.ts` (2 tests) + `tests/automation/sortie-parcours.test.ts` |
 | K-012a | quote.approved | — | quote_approved_move_deal | |
 | K-013 | invoice.sent (transition en base) | — | pack_relance_facture | |
 | K-014 | visite insérée (base) / job terminé / contrat signé | — | confirmation immédiate + rappel J-7 replanifié au bon moment ; thank_you_after_job ; agreement_signed | forcer l'échéance ne fait pas partir un rappel en avance (correct) |

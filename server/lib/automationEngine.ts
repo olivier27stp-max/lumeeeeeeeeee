@@ -33,7 +33,7 @@ import { fuseauOrg, FUSEAU_DEFAUT, corrigerChangementDHeure } from './automation
 import { noterRegleTraitee } from './outbox';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
 import { typeEnvoi } from './desabonnement';
-import { verdictSortie } from './sortie-parcours';
+import { verdictSortie, DECLENCHE_PAR_RESOLUTION } from './sortie-parcours';
 import { normaliserJoursAvant } from './rappels-dates';
 
 interface AutomationRule {
@@ -1982,7 +1982,11 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         // L'org de la TÂCHE, jamais celle de l'entité lue : c'est ce qui
         // empêche une tâche d'une org de conclure sur les données d'une autre.
         task.org_id,
-        actionConfig.trigger_event,
+        // Une étape de parcours ne porte pas `trigger_event` dans sa tâche :
+        // sans le déclencheur de la RÈGLE, les exceptions ci-dessous (règle
+        // déclenchée par la résolution, relance de prospect perdu) ne
+        // s'appliquaient à aucun parcours.
+        declencheurTache,
         actionConfig.event_metadata,
       );
 
@@ -2698,6 +2702,20 @@ async function checkStopConditions(
     return false; // ne PAS annuler
   };
 
+  /*
+   * Une règle déclenchée PAR la résolution elle-même trouve, par construction,
+   * son entité dans l'état résolu : « Soumission acceptée » + 1 h → demande de
+   * dépôt, « Facture payée » + délai → remerciement, « Rendez-vous annulé » +
+   * délai. L'arrêter sur cet état, c'est l'annuler au moment où elle devait
+   * servir : le pack « Dépôt — demande et rappel », publié d'office, n'a
+   * jamais envoyé une seule demande (K-012). L'exception existait drapeau
+   * `auto_sortie_parcours` ALLUMÉ (sortie-parcours.ts) ; la voici aussi
+   * drapeau éteint, avec la même table. Les AUTRES états résolus arrêtent
+   * toujours (soumission acceptée puis refusée, facture payée puis annulée),
+   * comme la suppression.
+   */
+  const etatsDuDeclencheur = (triggerEvent && DECLENCHE_PAR_RESOLUTION[triggerEvent]) || [];
+
   // Invoice reminders: stop if paid, cancelled, disputed, or client archived
   if (entityType === 'invoice') {
     const { data: inv, error } = await supabase
@@ -2709,7 +2727,7 @@ async function checkStopConditions(
 
     if (error) return illisible('invoices', error.message);
     if (!inv) return true; // Invoice deleted
-    if (['paid', 'cancelled', 'void'].includes(inv.status)) return true;
+    if (['paid', 'cancelled', 'void'].includes(inv.status) && !etatsDuDeclencheur.includes(inv.status)) return true;
     // Check if client is archived/deleted
     if (inv.client_id) {
       const { data: cl, error: clErr } = await supabase
@@ -2745,7 +2763,7 @@ async function checkStopConditions(
     if (error) return illisible('schedule_events', error.message);
     if (!evt) return true;
     if (evt.deleted_at) return true;
-    if (evt.status === 'cancelled') return true;
+    if (evt.status === 'cancelled' && !etatsDuDeclencheur.includes('cancelled')) return true;
   }
 
   // Quote follow-ups: stop once the client responded (approved, declined,
@@ -2761,7 +2779,8 @@ async function checkStopConditions(
     if (error) return illisible('quotes', error.message);
     if (!quote) return true; // Quote deleted
     if (quote.deleted_at) return true;
-    if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)) return true;
+    if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)
+      && !etatsDuDeclencheur.includes(quote.status)) return true;
   }
 
   // Lead: stop if archived or deleted (a lead is a client with status='lead')
