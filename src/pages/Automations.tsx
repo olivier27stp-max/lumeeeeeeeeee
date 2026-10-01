@@ -432,7 +432,16 @@ export default function Automations() {
   /** Le bureau a-t-il un numéro texto ? `false` = bandeau ; `null` = inconnu, rien. */
   const [textoConfigure, setTextoConfigure] = useState<boolean | null>(null);
   const [occupeId, setOccupeId] = useState<string | null>(null);
-  const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
+  /**
+   * La langue des messages du bureau — `null` tant qu'on ne la CONNAÎT pas.
+   *
+   * Elle valait « fr » d'office : lecture en panne sur un bureau réglé en
+   * anglais, l'écran surlignait « FR » et affirmait que les messages partaient
+   * en français (audit du 2026-10-01). Inconnue, on ne surligne rien.
+   */
+  const [orgLang, setOrgLang] = useState<'fr' | 'en' | null>(null);
+  /** La lecture a échoué : on le dit à côté de la bascule. */
+  const [langueIllisible, setLangueIllisible] = useState(false);
   const [savingLang, setSavingLang] = useState(false);
 
   /**
@@ -528,7 +537,14 @@ export default function Automations() {
     ? { cle, sens: t.sens === 'asc' ? 'desc' : 'asc' }
     : { cle, sens: 'asc' }));
 
-  useEffect(() => { getAutomationLanguage().then(setOrgLang).catch(() => {}); }, []);
+  useEffect(() => {
+    getAutomationLanguage()
+      .then(setOrgLang)
+      .catch((e: unknown) => {
+        console.error('[automations] langue des messages illisible', e);
+        setLangueIllisible(true);
+      });
+  }, []);
 
   const changerLangue = async (lang: 'fr' | 'en') => {
     if (lang === orgLang || savingLang) return;
@@ -537,6 +553,8 @@ export default function Automations() {
     setOrgLang(lang);
     try {
       await setAutomationLanguage(lang);
+      // Enregistrée : elle est maintenant connue, même si la lecture avait échoué.
+      setLangueIllisible(false);
       toast.success(fr
         ? (lang === 'en' ? 'Messages en anglais' : 'Messages en français')
         : (lang === 'en' ? 'Messages set to English' : 'Messages set to French'));
@@ -1359,6 +1377,11 @@ export default function Automations() {
                   </button>
                 ))}
               </div>
+              {langueIllisible && orgLang === null && (
+                <span role="status" className="text-[11px] text-text-tertiary">
+                  {fr ? 'Langue actuelle inconnue' : 'Current language unknown'}
+                </span>
+              )}
             </div>
 
             {saisieDossier ? (

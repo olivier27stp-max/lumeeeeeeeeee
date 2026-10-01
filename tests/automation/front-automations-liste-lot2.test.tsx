@@ -270,3 +270,50 @@ describe('liste-07 — un seul menu ouvert à la fois (« Créer » et « ⋮ »
     expect(document.activeElement).toBe(bouton(/^Créer$/));
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+describe('liste-05 — langue du bureau illisible : l’écran ne prétend pas la connaître', () => {
+  const surligne = (b: HTMLElement | undefined) => /\bbg-text-primary\b/.test(b?.className ?? '');
+  const AVEU = 'Langue actuelle inconnue';
+
+  it('lecture en échec : ni « FR » ni « EN » n’est surligné, et l’écran le dit', async () => {
+    vi.mocked(api.getAutomationLanguage).mockRejectedValue(new Error('500'));
+    await rendre();
+    expect(surligne(bouton(/^FR$/)), '« FR » est affirmé alors qu’on ne sait pas').toBe(false);
+    expect(surligne(bouton(/^EN$/))).toBe(false);
+    expect(texte()).toContain(AVEU);
+  });
+
+  it('pendant la lecture : rien n’est surligné, et rien n’est encore dit', async () => {
+    let livrer!: (l: 'fr' | 'en') => void;
+    vi.mocked(api.getAutomationLanguage).mockReturnValue(new Promise((r) => { livrer = r; }));
+    await rendre();
+    expect(surligne(bouton(/^FR$/))).toBe(false);
+    expect(surligne(bouton(/^EN$/))).toBe(false);
+    expect(texte()).not.toContain(AVEU);
+    await act(async () => { livrer('en'); });
+    await laisser();
+    expect(surligne(bouton(/^EN$/)), 'la langue lue est surlignée').toBe(true);
+    expect(surligne(bouton(/^FR$/))).toBe(false);
+    expect(texte()).not.toContain(AVEU);
+  });
+
+  it('après un échec, choisir une langue l’enregistre : elle est alors connue, l’aveu disparaît', async () => {
+    vi.mocked(api.getAutomationLanguage).mockRejectedValue(new Error('500'));
+    await rendre();
+    await cliquer(bouton(/^FR$/));
+    expect(api.setAutomationLanguage).toHaveBeenCalledWith('fr');
+    expect(surligne(bouton(/^FR$/))).toBe(true);
+    expect(texte()).not.toContain(AVEU);
+  });
+
+  it('après un échec, un enregistrement refusé ramène à « inconnue », pas à « FR »', async () => {
+    vi.mocked(api.getAutomationLanguage).mockRejectedValue(new Error('500'));
+    vi.mocked(api.setAutomationLanguage).mockRejectedValue(new Error('Seul un administrateur peut changer la langue des messages.'));
+    await rendre();
+    await cliquer(bouton(/^EN$/));
+    expect(surligne(bouton(/^FR$/))).toBe(false);
+    expect(surligne(bouton(/^EN$/))).toBe(false);
+    expect(texte()).toContain(AVEU);
+  });
+});
