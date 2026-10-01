@@ -54,7 +54,8 @@ describe('H — segments et encodage des textos', () => {
 
   it('[H-014] l’éditeur de texto affiche le VRAI nombre de segments (accents compris), pas longueur / 160', () => {
     const source = readFileSync(join(process.cwd(), 'src/components/automations/MessageEditor.tsx'), 'utf8');
-    expect(source, 'le compteur doit utiliser le calcul d’encodage').toMatch(/segmentsSms\(/);
+    // `libelleSegments` (src/lib/smsSegments.ts, #840) s'appuie sur `segmentsSms` : l'un ou l'autre.
+    expect(source, 'le compteur doit utiliser le calcul d’encodage').toMatch(/(segmentsSms|libelleSegments)\(/);
     expect(source, 'longueur / 160 ignore l’UCS-2 (accents ê, ç, ’) et le 153 des textos longs').not.toMatch(/\.length \/ 160/);
   });
 });
