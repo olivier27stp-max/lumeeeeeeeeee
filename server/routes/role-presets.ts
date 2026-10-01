@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, companyOrgIds } from '../lib/supabase';
+import { refusEscalade, permissionsDuRole } from '../lib/garde-droits';
 
 const router = Router();
 
@@ -156,6 +157,12 @@ router.post('/roles/update-preset', validate(updatePresetSchema), async (req, re
       }
     }
 
+    // Escalade (audit 2026-09-30) : rôle Admin et permissions que l'appelant n'a pas → propriétaire seulement.
+    const refus = await refusEscalade(admin, auth.user.id, auth.orgId, {
+      presetRole: role, permissionsNouvelles: sanitized, permissionsActuelles: await permissionsDuRole(admin, auth.orgId, role),
+    });
+    if (refus) return res.status(403).json({ error: refus, code: 'escalade_refusee' });
+
     const resultat = await appliquerPreset(admin, auth.orgId, role, sanitized);
     if ('erreur' in resultat) return res.status(500).json({ error: resultat.erreur });
 
@@ -249,6 +256,11 @@ router.post('/roles/member-permissions', validate(memberPermissionsSchema), asyn
       }
     }
 
+    const refus = await refusEscalade(admin, auth.user.id, auth.orgId, {
+      cibleUserId: user_id, cibleRoleActuel: target.role, permissionsNouvelles: sanitized, permissionsActuelles: target.permissions,
+    });
+    if (refus) return res.status(403).json({ error: refus, code: 'escalade_refusee' });
+
     let upd = await admin
       .from('memberships')
       .update({ permissions: sanitized, permissions_custom: true })
@@ -295,6 +307,11 @@ router.post('/roles/member-permissions/reset', validate(z.object({ user_id: z.st
       .eq('org_id', auth.orgId)
       .eq('slug', target.role)
       .maybeSingle();
+
+    const refus = await refusEscalade(admin, auth.user.id, auth.orgId, {
+      cibleUserId: user_id, cibleRoleActuel: target.role, permissionsNouvelles: tmpl?.permissions ?? null, permissionsActuelles: target.permissions,
+    });
+    if (refus) return res.status(403).json({ error: refus, code: 'escalade_refusee' });
 
     const payload: Record<string, any> = { permissions_custom: false };
     // Reapply the role preset when the org has one; otherwise just unflag —

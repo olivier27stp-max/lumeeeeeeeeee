@@ -78,7 +78,7 @@ describe('repli', () => {
   it('« pas ça » ou Réessayer court-circuitent les étages 0-2 et tracent le candidat à retirer', () => {
     const r = lu('server/routes/lumi.ts');
     expect(r).toContain("const repli = origine === 'repli' || estUnRepli(message);");
-    expect(r).toContain('const raccourci = enAttente.length || repli ? null : detecterRaccourci(message);');
+    expect(r).toContain('const raccourci = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);');
     expect(r).toContain("action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) }");
     expect(r).toContain("'pas ca', 'non pas ca', 'c est pas ca'");
     // L'étage reconnu (1 ou 2) est celui qui part dans la trace.

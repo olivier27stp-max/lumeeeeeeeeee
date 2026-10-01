@@ -352,7 +352,6 @@ describe('sessions terrain : la session ouverte est résolue dans l org de l uti
 
 describe('modifications directes (miroir des routes PUT/PATCH) : toujours org_id = ctx.orgId', () => {
   it.each([
-    ['update_house', { house_id: ID, status: 'callback', territory_id: ID2 }, 'field_house_profiles', { current_status: 'callback', territory_id: ID2 }],
     ['update_territory', { territory_id: ID, name: 'Sud', is_exclusive: true }, 'field_territories', { name: 'Sud', is_exclusive: true }],
     ['update_d2d_pipeline_item', { deal_id: ID, stage: 'closed_won', d2d_status: 'hot' }, 'pipeline_deals', { stage: 'closed_won', d2d_status: 'hot' }],
     ['update_course', { course_id: ID, title: 'Sécurité 2', visibility: 'assigned' }, 'courses', { title: 'Sécurité 2', visibility: 'assigned' }],
@@ -370,6 +369,16 @@ describe('modifications directes (miroir des routes PUT/PATCH) : toujours org_id
     expect(op(appels[0], 'update')![0].updated_at).toBeTruthy();
     expect(r.note).toMatch(ACCENT);
     expect(appelInterneMock).not.toHaveBeenCalled();
+  });
+
+  it('update_house passe par la route « Modifier le pin » (PUT) : pin et pipeline synchronisés, aucune écriture directe (audit 2026-09-30)', async () => {
+    appelInterneMock.mockResolvedValue({ ok: true, status: 200, json: { id: ID, current_status: 'callback' } });
+    const { client, appels } = fauxClient();
+    const r = await PAR_NOM.update_house.handler!({ house_id: ID, status: 'callback', territory_id: ID2 }, ctxAvec(client));
+    expect(r.error).toBeUndefined();
+    expect(appelInterneMock.mock.calls[0].slice(1)).toEqual([`/field-sales/houses/${ID}`, { current_status: 'callback', territory_id: ID2 }, 'PUT']);
+    expect(appels).toHaveLength(0);
+    expect(r.note).toMatch(ACCENT);
   });
 
   it('update_d2d_pipeline_item pose won_at / lost_at comme la route, et refuse un appel sans changement', async () => {
@@ -426,9 +435,11 @@ describe('modifications directes (miroir des routes PUT/PATCH) : toujours org_id
   });
 
   it('une ligne absente ou une erreur Postgres ne laisse jamais passer de texte brut', async () => {
+    appelInterneMock.mockResolvedValueOnce({ ok: false, status: 404, json: { error: 'Not found' } });
     const absente = fauxClient([{ data: null, error: null }]);
     const r1 = await PAR_NOM.update_house.handler!({ house_id: ID, status: 'lead' }, ctxAvec(absente.client));
     expect(r1.error).toMatch(/introuvable/);
+    appelInterneMock.mockResolvedValueOnce({ ok: false, status: 500, json: { error: 'Field sales operation failed.' } });
     const brute = fauxClient([{ data: null, error: { code: '23514', message: 'new row violates check constraint "field_house_profiles_current_status_check"' } }]);
     const r2 = await PAR_NOM.update_house.handler!({ house_id: ID, status: 'lead' }, ctxAvec(brute.client));
     expect(r2.error).toBeTruthy();

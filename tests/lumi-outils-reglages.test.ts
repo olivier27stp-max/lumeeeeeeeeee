@@ -208,6 +208,26 @@ describe('écritures directes : filtrées par org_id = ctx.orgId, note en franç
     expect(sans.r.error).toMatch(/n’envoie pas de courriel/);
   });
 
+  it('parcours (steps) : réécrit l ÉTAPE que le moteur exécute, pas actions ; plusieurs textos → demande lequel', async () => {
+    const steps = [
+      { id: 'e1', type: 'action', nom: 'Confirmation', action: { type: 'send_sms', config: { body: 'Confirmé !' } }, suivant: 'e2' },
+      { id: 'e2', type: 'attendre', delai_secondes: 86400, suivant: 'e3' },
+      { id: 'e3', type: 'action', nom: 'Rappel', action: { type: 'send_sms', config: { body: 'C’est demain' } } },
+    ];
+    const regle = { id: 'r1', name: 'Rendez-vous', actions: [{ type: 'send_sms', config: { body: 'vieux' } }], steps };
+    const ambigu = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_sms', body: 'Nouveau' }, { automation_rules: { data: [regle] } });
+    expect(ambigu.r.error).toMatch(/envoie 2 textos\. Lequel réécrire \? 1\. Confirmation .* 2\. Rappel/);
+    expect(ambigu.appels.some((a) => a.ops.some(([m]) => m === 'update'))).toBe(false);
+
+    const { r, appels } = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_sms', body: 'À demain 9 h', message_number: 2 }, { automation_rules: { data: [regle] } });
+    expect(r).toMatchObject({ updated: true, ancien_texte: 'C’est demain' });
+    const maj = appels[1].ops.find(([m]) => m === 'update')![1];
+    expect(maj.actions).toBeUndefined();
+    expect(maj.steps[0].action.config.body).toBe('Confirmé !');
+    expect(maj.steps[2].action.config.body).toBe('À demain 9 h');
+    expect(maj.steps[1]).toEqual(steps[1]);
+  });
+
   it('update_automation_message sur une automatisation à ÉTAPES réécrit l’étape que le moteur exécute (pas seulement le reflet `actions`)', async () => {
     // Cas réel prod 2026-09-30 : le moteur lit `steps` ; réécrire `actions` seul = « mis à jour » et ancien texte envoyé.
     const steps = [
@@ -227,7 +247,7 @@ describe('écritures directes : filtrées par org_id = ctx.orgId, note en franç
     // Deux textos à des moments différents : on ne devine pas lequel.
     const deux = [...steps.slice(0, 2), { id: 'e4', type: 'action', action: { type: 'send_sms', config: { body: 'rappel' } }, suivant: null }];
     const ambigu = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_sms', body: 'x' }, { automation_rules: { data: [{ ...regle, steps: deux }] } });
-    expect(ambigu.r.error).toMatch(/envoie 2 textos à des moments différents/);
+    expect(ambigu.r.error).toMatch(/envoie 2 textos\. Lequel réécrire \?/);
   });
 
   it('delete_goal : visibilité prouvée à l identité (org_id) AVANT la suppression service filtrée par org_id ; introuvable = rien', async () => {
@@ -303,9 +323,16 @@ describe('écritures par route interne : bon chemin, refus traduits, note en fra
       expect(ctx.orgId).toBe('org');
       expect(cheminAppele).toEqual(chemin);
       expect(estFrancais(r.note), `${nom} : note = ${r.note}`).toBe(true);
-      expect(appels).toEqual([]);
+      // Aucune écriture directe : tout passe par la route (une lecture de contrôle est permise).
+      expect(appels.filter((x: any) => x.ops.some(([m]: [string]) => ['insert', 'update', 'upsert', 'delete'].includes(m)))).toEqual([]);
     });
   }
+
+  it('create_tax_config : une taxe active du même nom existe déjà → refus, rien n’est ajouté (audit 2026-09-30)', async () => {
+    const { r } = await executer('create_tax_config', { name: 'tvq', rate: 9.975 }, { tax_configs: { data: [{ name: 'TVQ', rate: 9.975 }] } });
+    expect(r.error).toMatch(/existe déjà/);
+    expect(vi.mocked(appelInterne)).not.toHaveBeenCalled();
+  });
 
   it('les charges utiles reprennent le contrat des routes (preset en majuscules, courriel normalisé, ids en liste)', async () => {
     await executer('setup_taxes', { preset_key: 'qc' });

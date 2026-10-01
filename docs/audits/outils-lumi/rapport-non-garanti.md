@@ -1,0 +1,9 @@
+## 7. Ce qui ne peut pas être garanti
+
+- **Le choix du modèle reste probabiliste.** La carte, la garde et les reçus sont déterministes ; le choix de l'outil et des paramètres, non. L'éval mesure un taux, pas une certitude. Ce qui est garanti : aucune action sensible ne s'exécute sans carte, la carte montre ce que le serveur exécutera (cibles lues en base), et le serveur refait tous ses contrôles au clic.
+- **L'injection indirecte** (texte d'un client, d'un formulaire, d'une note) : Lumi ne peut plus rien écrire d'office après avoir lu ce contenu, et ses souvenirs sont présentés comme des faits. Mais une consigne cachée peut encore l'amener à PROPOSER une action : c'est la carte, lue par un humain, qui l'arrête.
+- **Les envois « incertains »** (la requête est partie, la réponse jamais revenue) : Lumi le dit et ne réessaie pas, mais seul le fournisseur (Resend, Twilio, Stripe) sait si c'est parti.
+- **L'éval tourne sur staging**, avec des données de test : un cas « partiel » signifie souvent que la fiche visée n'existait pas. Les montants lus dépendent des RPC de statistiques, redéfinies sur staging PENDANT les passes par la session Statistiques (heure de Toronto, encaissé net) — sans effet sur le choix des outils, mais les chiffres des lectures ne sont pas comparables d'une passe à l'autre.
+- **Les RPC** : les handlers passent par les mêmes RPC que l'écran ; si une RPC change (la session agenda modifie `rpc_reschedule_event`, `rpc_schedule_job`, `rpc_add_visit`), le comportement de Lumi suit — c'est voulu, mais les tests unitaires de Lumi simulent ces RPC.
+- **Le coût** est mesuré sur l'éval (cache chaud, un message par conversation) ; une vraie conversation de plusieurs tours coûte davantage par demande.
+- **Les deux chemins de confirmation** (carte web, « oui » par texto) sont couverts ; le MCP externe (Claude.ai) a sa propre confirmation côté client, hors de notre contrôle.

@@ -68,13 +68,19 @@ export interface ApercuMessageLumi {
 }
 export interface FicheClientApercuLumi { id: string; name: string; company: string | null; email: string | null; phone: string | null; address: string | null; since: string | null; jobs: number; quotes: number; invoices: number }
 export interface ApercuFusionLumi { genre: 'fusion'; garder: FicheClientApercuLumi | null; absorber: FicheClientApercuLumi | null }
+/** Ligne d'un aperçu générique : un élément visé nommé, ou un détail lisible. `alerte` = introuvable dans l'entreprise. */
+export interface LigneApercuLumi { libelle: { fr: string; en: string }; valeur: string; valeur_en?: string; alerte?: boolean }
+/** Aperçu de toute autre écriture : ce qui est visé (client, facture, membre…) et le détail. */
+export interface ApercuActionLumi { genre: 'action'; cibles: LigneApercuLumi[]; details: LigneApercuLumi[] }
+/** Ce que la carte doit dire en plus : irréversible, part chez le client, jamais sans confirmation. */
+export interface DrapeauxApercuLumi { irreversible: boolean; vers_client: boolean; jamais_d_office: boolean }
 /** « Optimiser la journée » : chaque visite avec son ancienne et sa nouvelle heure, et ce que les clients recevront. */
 export interface ApercuOptimisationLumi {
   genre: 'optimisation'; date: string; fuseau: string; gain_minutes: number;
   lignes: Array<{ titre: string; equipe: string; avant: string; apres: string }>;
   clients: { rappels_replanifies: boolean; automatisations_avis: number };
 }
-export type ApercuLumi = ApercuDocumentLumi | ApercuMessageLumi | ApercuFusionLumi | ApercuOptimisationLumi;
+export type ApercuLumi = (ApercuDocumentLumi | ApercuMessageLumi | ApercuFusionLumi | ApercuActionLumi | ApercuOptimisationLumi) & { drapeaux?: DrapeauxApercuLumi };
 
 export interface PropositionLumi {
   tool_use_id: string;

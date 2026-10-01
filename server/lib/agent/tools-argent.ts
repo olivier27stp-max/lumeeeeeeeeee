@@ -31,7 +31,7 @@ import type { AgentTool, ToolContext } from './tools';
 import {
   executerIdempotent, champRequis, appelInterne, AppelInterneIncertain,
   traduireStatut, STATUT_DEVIS, STATUT_FACTURE,
-  enregistrerPaiementManuel,
+  enregistrerPaiementViaRoute, commissionsApresPaiement, bornesJourOrg,
 } from './tools-etendus';
 
 /* ── Garde-fous locaux ─────────────────────────────────────────── */
@@ -152,6 +152,23 @@ function normaliserLignesDevis(brut: any[]): Array<{
 }
 
 /** Lignes de facture normalisées (mêmes règles que saveInvoiceDraft). */
+/**
+ * Ferme les liens de paiement encore ouverts d'une facture annulée ou
+ * supprimée (audit 2026-09-30) : avant, le client pouvait encore payer une
+ * facture annulée par le lien reçu. La page publique le vérifie aussi.
+ */
+async function fermerLiensDePaiement(ctx: ToolContext, invoiceId: string): Promise<{ fermes: number; avertissement: string | null }> {
+  const { data, error } = await ctx.client.from('payment_requests')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('org_id', ctx.orgId).eq('invoice_id', invoiceId).in('status', ['pending', 'sent'])
+    .select('id');
+  if (error) {
+    console.error('[agent-tool:liens-paiement] fermeture', error.message);
+    return { fermes: 0, avertissement: 'Les liens de paiement déjà envoyés n’ont pas pu être désactivés ici ; la page de paiement refuse quand même une facture annulée.' };
+  }
+  return { fermes: (data ?? []).length, avertissement: null };
+}
+
 function normaliserLignesFacture(brut: any[]): Array<{ description: string; qty: number; unit_price_cents: number }> {
   return (Array.isArray(brut) ? brut : [])
     .map((it) => ({
@@ -1061,8 +1078,10 @@ const voidInvoiceTool: AgentTool = {
         .select('invoice_number, status, paid_cents')
         .single();
       if (error) throw error;
+      const liens = await fermerLiensDePaiement(ctx, invoiceId);
       return {
         voided: true,
+        ...(liens.avertissement ? { warning: liens.avertissement } : {}),
         invoice: { invoice_number: data.invoice_number, statut: traduireStatut(data.status, STATUT_FACTURE) },
         note: Number(inv.paid_cents) > 0
           ? 'Facture annulée. Attention : un paiement partiel y était enregistré — vérifie s’il faut le rembourser.'
@@ -1077,8 +1096,8 @@ const revertInvoiceToDraftTool: AgentTool = {
   declaration: {
     name: 'revert_invoice_to_draft',
     description:
-      'Put a sent (or voided) invoice back to DRAFT so it can be edited, like the app’s « Revert to draft ». '
-      + 'Refused if any payment was recorded on it.',
+      'Only answers whether an invoice can go back to draft. An ISSUED invoice cannot (its number and amounts are '
+      + 'frozen by law and by the database): the way out is void_invoice then duplicate_invoice. Tell the user that.',
     parameters: { type: 'object', properties: { invoice_id: { type: 'string', description: 'Invoice id.' } }, required: ['invoice_id'] },
   },
   handler: async (args, ctx) =>
@@ -1086,20 +1105,10 @@ const revertInvoiceToDraftTool: AgentTool = {
       const invoiceId = champRequis(args.invoice_id, 'La facture');
       const inv = await lireFacture(ctx, invoiceId, 'id, invoice_number, status, paid_cents');
       if (inv.status === 'draft') return { already_draft: true, invoice: { invoice_number: inv.invoice_number }, note: 'Cette facture est déjà en brouillon.' };
-      if (Number(inv.paid_cents) > 0) throw new Error('Un paiement est déjà enregistré sur cette facture — elle ne peut pas revenir en brouillon.');
-      // Miroir de revertToDraft (invoicesApi).
-      const { data, error } = await ctx.client
-        .from('invoices')
-        .update({ status: 'draft', issued_at: null, sent_at: null, updated_at: new Date().toISOString() })
-        .eq('org_id', ctx.orgId).eq('id', invoiceId).is('deleted_at', null)
-        .select('invoice_number, status')
-        .single();
-      if (error) throw error;
-      return {
-        reverted: true,
-        invoice: { invoice_number: data.invoice_number, statut: traduireStatut(data.status, STATUT_FACTURE) },
-        note: 'Facture remise en brouillon — modifiable à nouveau, rappels suspendus. Il faudra la renvoyer au client.',
-      };
+      // Audit 2026-09-30 : le trigger enforce_invoice_immutability fige numéro,
+      // montants et date d'émission d'une facture émise. L'écriture échouait
+      // TOUJOURS, et l'erreur (42501) se lisait « ton rôle ne le permet pas ».
+      throw new Error(`La facture ${inv.invoice_number ?? ''} a déjà été émise : elle ne peut plus revenir en brouillon (numéro et montants figés). Pour la corriger, annule-la puis crée une copie modifiable.`.replace('  ', ' '));
     }),
 };
 
@@ -1184,7 +1193,8 @@ const deleteInvoiceTool: AgentTool = {
         .select('invoice_number')
         .single();
       if (error) throw error;
-      return { deleted: true, invoice: { invoice_number: data.invoice_number }, note: 'Facture supprimée — elle n’apparaît plus dans Lume.' };
+      const liens = await fermerLiensDePaiement(ctx, invoiceId);
+      return { deleted: true, invoice: { invoice_number: data.invoice_number }, ...(liens.avertissement ? { warning: liens.avertissement } : {}), note: 'Facture supprimée — elle n’apparaît plus dans Lume.' };
     }),
 };
 
@@ -1228,30 +1238,17 @@ const recordInvoicePaymentTool: AgentTool = {
         throw new Error('Ce montant règle la facture au complet — utilise mark_invoice_paid pour la marquer payée.');
       }
       const methode = ['cash', 'e-transfer', 'check', 'card'].includes(String(args.method)) ? String(args.method) : null;
-      // Un VRAI paiement manuel : le trigger recalcule la facture (solde, statut).
-      const admin = getServiceClient();
-      await enregistrerPaiementManuel(ctx, { id: invoiceId, client_id: inv.client_id, job_id: inv.job_id, currency: inv.currency }, montant, methode);
-      const { data: apres } = await admin.from('invoices').select('invoice_number, balance_cents, status').eq('org_id', ctx.orgId).eq('id', invoiceId).maybeSingle();
-
-      // Facture soldée → commissions du rep. Stripe les génère par webhook et
-      // le bouton « Marquer payée » de l'app via generate-for-invoice ; Lumi
-      // les oubliait : un paiement enregistré par l'assistant ne payait
-      // jamais le vendeur. « no_rule » = aucun plan configuré → on le dit.
-      let avertCommission: string | null = null;
-      if (apres?.status === 'paid') {
-        try {
-          const res = await generateCommissionsForInvoice(admin, ctx.orgId, invoiceId);
-          if (res.skipped === 'no_rule') avertCommission = 'Aucune commission créée : le vendeur n’a pas de plan de commission (Réglages → Commissions).';
-        } catch (err: any) {
-          console.error(`[commissions] génération après paiement Lumi échouée (org ${ctx.orgId}, facture ${invoiceId}):`, err?.message);
-        }
-      }
+      // La route de l'écran, avec le montant (audit 2026-09-30) : une vraie ligne `payments`
+      // que le trigger additionne. Avant, la RPC n'écrivait aucun paiement : le prochain
+      // vrai paiement recalculait le solde et effaçait celui-ci.
+      const apres = await enregistrerPaiementViaRoute(ctx, invoiceId, { methode, montantCents: montant });
+      const avertCommission = apres.status === 'paid' ? await commissionsApresPaiement(ctx, invoiceId) : null;
       return {
         recorded: true,
         ...(avertCommission ? { warning: avertCommission } : {}),
-        invoice: { invoice_number: apres?.invoice_number || inv.invoice_number, statut: traduireStatut(apres?.status, STATUT_FACTURE) },
+        invoice: { invoice_number: apres.invoice_number || inv.invoice_number, statut: traduireStatut(apres.status, STATUT_FACTURE) },
         amount_cents: montant,
-        balance_cents: apres?.balance_cents ?? (solde - montant),
+        balance_cents: apres.balance_cents ?? (solde - montant),
         methode_paiement: methode,
         note: 'Paiement partiel enregistré : le solde a diminué et la facture est partiellement payée. Rien n’a été prélevé — c’est un paiement reçu à part.',
       };
@@ -1684,6 +1681,23 @@ const deleteInvoiceTemplateTool: AgentTool = {
 const CANAUX_DEMANDE = ['email', 'sms', 'both', 'link_only'];
 const CANAL_FR: Record<string, string> = { email: 'par courriel', sms: 'par texto', both: 'par courriel et texto', link_only: 'lien seulement (rien envoyé)' };
 
+/**
+ * Canaux demandés qui ne sont PAS partis (audit 2026-09-30) : la route répond
+ * 200 même quand le client n'a pas de courriel, que Twilio refuse ou que le
+ * client a répondu STOP — et Lumi disait « envoyé ».
+ */
+export function canauxNonPartis(sendVia: string, n: any): { demandes: number; rates: string[] } {
+  const voulus = sendVia === 'both' ? ['email', 'sms'] : sendVia === 'email' || sendVia === 'sms' ? [sendVia] : [];
+  const rates: string[] = [];
+  for (const canal of voulus) {
+    const r = n?.[canal];
+    const nom = canal === 'email' ? 'courriel' : 'texto';
+    if (!r) rates.push(`${nom} : ${canal === 'email' ? 'aucune adresse courriel' : 'aucun numéro de téléphone'} sur la fiche du client`);
+    else if (!r.sent) rates.push(`${nom} : ${r.reason || 'refusé'}`);
+  }
+  return { demandes: voulus.length, rates };
+}
+
 function resumeNotifications(n: any): Record<string, any> {
   const out: Record<string, any> = {};
   if (n?.email) out.email = n.email.sent ? 'envoyé' : `non envoyé (${n.email.reason || 'raison inconnue'})`;
@@ -1722,11 +1736,20 @@ const createPaymentRequestTool: AgentTool = {
       }
       if (!res.ok) throw new Error(res.json?.error || `Demande refusée (${res.status}).`);
       const pr = res.json?.payment_request || {};
+      const nonPartis = canauxNonPartis(sendVia, res.json?.notifications);
+      if (nonPartis.demandes > 0 && nonPartis.rates.length === nonPartis.demandes) {
+        // Le lien EXISTE, mais rien n'est parti : ni « envoyé », ni une erreur qui ferait recréer un lien.
+        return {
+          created: true, incomplet: true, payment_url: pr.payment_url || null, amount_cents: pr.amount_cents ?? null,
+          note: `Lien de paiement créé, mais il n’est PAS parti chez le client (${nonPartis.rates.join(' ; ')}). Donne le lien à l’utilisateur pour qu’il l’envoie lui-même.`,
+        };
+      }
       return {
         created: true,
         payment_url: pr.payment_url || null,
         amount_cents: pr.amount_cents ?? null,
         sent_via: CANAL_FR[sendVia],
+        ...(nonPartis.rates.length ? { warning: `Pas parti par ${nonPartis.rates.join(' ; ')}.` } : {}),
         notifications: resumeNotifications(res.json?.notifications),
         note: sendVia === 'link_only'
           ? 'Lien de paiement créé — rien n’a été envoyé. Donne le lien à l’utilisateur ou renvoie-le au client avec resend_payment_request.'
@@ -1765,8 +1788,13 @@ const resendPaymentRequestTool: AgentTool = {
       }
       if (!res.ok) throw new Error(res.json?.error || `Renvoi refusé (${res.status}).`);
       const pr = res.json?.payment_request || {};
+      const nonPartis = canauxNonPartis(sendVia, res.json?.notifications);
+      if (nonPartis.rates.length === nonPartis.demandes) {
+        throw new Error(`Le lien de paiement n’est pas reparti (${nonPartis.rates.join(' ; ')}).`);
+      }
       return {
         sent: true, payment_url: pr.payment_url || null, sent_via: CANAL_FR[sendVia],
+        ...(nonPartis.rates.length ? { warning: `Pas parti par ${nonPartis.rates.join(' ; ')}.` } : {}),
         notifications: resumeNotifications(res.json?.notifications),
         note: `Lien de paiement renvoyé ${CANAL_FR[sendVia]} par le moteur de Lume.`,
       };
@@ -1842,6 +1870,12 @@ const chargeCardOnFileTool: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'charge_card_on_file', args, async () => {
       const invoiceId = champRequis(args.invoice_id, 'La facture');
+      // Jamais de prélèvement sur une facture annulée, supprimée ou encore en brouillon
+      // (audit 2026-09-30 : une facture annulée garde un solde > 0 et passait).
+      const inv = await lireFacture(ctx, invoiceId, 'id, status, deleted_at');
+      if (inv.deleted_at) throw new Error('Cette facture a été supprimée — rien à prélever.');
+      if (inv.status === 'void' || inv.status === 'cancelled') throw new Error('Cette facture est annulée — on ne prélève pas la carte du client.');
+      if (inv.status === 'draft') throw new Error('Cette facture est encore un brouillon — envoie-la d’abord au client avant de prélever.');
       let res;
       try {
         res = await appelInterne(ctx, '/payments/card-on-file/charge', { invoiceId });
@@ -2009,7 +2043,8 @@ const listPaymentsTool: AgentTool = {
     name: 'list_payments',
     description:
       'List payments received (manual, Stripe, PayPal): amount, date, method, status, invoice and client. Returns '
-      + 'total_matching (exact) and sum_amount_cents. Source of payment ids for refund_payment.',
+      + 'total_matching (exact), sum_amount_cents (received, ALL matching payments, not just the page), '
+      + 'sum_refunded_cents and sum_net_cents (received minus refunds). Source of payment ids for refund_payment.',
     parameters: {
       type: 'object',
       properties: {
@@ -2024,28 +2059,52 @@ const listPaymentsTool: AgentTool = {
   },
   handler: async (args, ctx) => {
     const limit = clamp(args.limit, 20, 50);
+    // Mêmes filtres pour la page ET pour les sommes. Dates = jours de
+    // l'entreprise (avant : minuit UTC, la veille au soir à Québec).
+    const filtrer = (q: any) => {
+      let r = q.eq('org_id', ctx.orgId).is('deleted_at', null);
+      if (args.invoice_id) r = r.eq('invoice_id', String(args.invoice_id));
+      if (args.client_id) r = r.eq('client_id', String(args.client_id));
+      if (args.status) r = r.eq('status', String(args.status));
+      if (estDateYmd(args.from)) r = r.gte('payment_date', bornesJourOrg(args.from).debut);
+      if (estDateYmd(args.to)) r = r.lte('payment_date', bornesJourOrg(args.to).fin);
+      return r;
+    };
     let q = ctx.client
       .from('payments')
       .select('id, amount_cents, currency, status, method, provider, payment_date, paid_at, invoice_id, client_id, '
-        + 'invoice:invoices!payments_invoice_id_fkey(invoice_number), client:clients!payments_client_id_fkey(first_name, last_name, company)', { count: 'exact' })
-      .eq('org_id', ctx.orgId)
-      .is('deleted_at', null)
-      .order('payment_date', { ascending: false })
-      .limit(limit);
-    if (args.invoice_id) q = q.eq('invoice_id', String(args.invoice_id));
-    if (args.client_id) q = q.eq('client_id', String(args.client_id));
-    if (args.status) q = q.eq('status', String(args.status));
-    if (estDateYmd(args.from)) q = q.gte('payment_date', `${args.from}T00:00:00`);
-    if (estDateYmd(args.to)) q = q.lte('payment_date', `${args.to}T23:59:59`);
+        + 'invoice:invoices!payments_invoice_id_fkey(invoice_number), client:clients!payments_client_id_fkey(first_name, last_name, company)', { count: 'exact' });
+    q = filtrer(q).order('payment_date', { ascending: false }).limit(limit);
     const { data, error, count } = await q;
     if (error) return erreurOutil('list_payments', error);
     const rows = data || [];
     const total = count ?? rows.length;
+
+    // Sommes sur TOUS les paiements correspondants (avant : la page de 20 à 50
+    // seulement, remboursements ignorés), par tranches de 1000.
+    let recu = 0;
+    let rembourse = 0;
+    let lus = 0;
+    for (let debut = 0; debut < 20_000; debut += 1000) {
+      const { data: tranche, error: e } = await filtrer(ctx.client.from('payments').select('amount_cents, refunded_cents, status'))
+        .order('id', { ascending: true }).range(debut, debut + 999);
+      if (e) return erreurOutil('list_payments:sommes', e);
+      for (const p of (tranche || []) as any[]) {
+        if (p.status !== 'succeeded' && p.status !== 'refunded') continue;
+        recu += Number(p.amount_cents) || 0;
+        rembourse += Math.min(Number(p.refunded_cents) || (p.status === 'refunded' ? Number(p.amount_cents) || 0 : 0), Number(p.amount_cents) || 0);
+      }
+      lus += (tranche || []).length;
+      if ((tranche || []).length < 1000) break;
+    }
     return {
       total_matching: total,
       shown: rows.length,
       ...(total > rows.length ? { note: `Seuls ${rows.length} paiements sur ${total} sont listés. Le total exact est ${total}.` } : {}),
-      sum_amount_cents: rows.filter((p: any) => p.status === 'succeeded').reduce((s: number, p: any) => s + (Number(p.amount_cents) || 0), 0),
+      sum_amount_cents: recu,
+      sum_refunded_cents: rembourse,
+      sum_net_cents: recu - rembourse,
+      ...(lus < total ? { sums_partial: true, sums_note: `Sommes calculées sur ${lus} paiements sur ${total} : précise une période.` } : {}),
       payments: rows.map((p: any) => ({
         id: p.id, // interne : pour refund_payment
         amount_cents: p.amount_cents,
@@ -2112,7 +2171,7 @@ export const REGISTRE_ARGENT: Record<string, { sensible: boolean; reversible: bo
   // Factures récurrentes
   create_recurring_invoice:  A({ sensible: true }),
   update_recurring_invoice:  A({ sensible: true }),
-  delete_recurring_invoice:  A({}),                                        // désactivation (is_active)
+  delete_recurring_invoice:  A({ sensible: true }),                        // désactivation (is_active) : la facturation s'arrête
   run_recurring_invoice_now: A({ sensible: true, reversible: false }),
   // Modèles de facture
   create_invoice_template:   A({}),
@@ -2138,21 +2197,21 @@ export const PERMISSIONS_ARGENT: Record<string, { cle: PermissionKey; capacite: 
   convert_quote_to_invoice:  { cle: 'invoices.create',    capacite: 'la création de factures' },
   // Pré-réglages et modèles de devis
   list_quote_presets:        { cle: 'quotes.read',        capacite: 'la consultation des modèles de devis' },
-  create_quote_preset:       { cle: 'quotes.create',      capacite: 'la création de modèles de devis' },
-  update_quote_preset:       { cle: 'quotes.update',      capacite: 'la modification des modèles de devis' },
-  delete_quote_preset:       { cle: 'quotes.delete',      capacite: 'la suppression des modèles de devis' },
-  duplicate_quote_preset:    { cle: 'quotes.create',      capacite: 'la création de modèles de devis' },
+  create_quote_preset:       { cle: 'settings.update',      capacite: 'la création de modèles de devis' },
+  update_quote_preset:       { cle: 'settings.update',      capacite: 'la modification des modèles de devis' },
+  delete_quote_preset:       { cle: 'settings.update',      capacite: 'la suppression des modèles de devis' },
+  duplicate_quote_preset:    { cle: 'settings.update',      capacite: 'la création de modèles de devis' },
   list_quote_templates:      { cle: 'quotes.read',        capacite: 'la consultation des modèles de devis' },
-  create_quote_template:     { cle: 'quotes.create',      capacite: 'la création de modèles de devis' },
-  update_quote_template:     { cle: 'quotes.update',      capacite: 'la modification des modèles de devis' },
-  delete_quote_template:     { cle: 'quotes.delete',      capacite: 'la suppression des modèles de devis' },
+  create_quote_template:     { cle: 'settings.update',      capacite: 'la création de modèles de devis' },
+  update_quote_template:     { cle: 'settings.update',      capacite: 'la modification des modèles de devis' },
+  delete_quote_template:     { cle: 'settings.update',      capacite: 'la suppression des modèles de devis' },
   // Factures
   update_invoice:            { cle: 'invoices.update',    capacite: 'la modification des factures' },
   void_invoice:              { cle: 'invoices.update',    capacite: "l'annulation des factures" },
   revert_invoice_to_draft:   { cle: 'invoices.update',    capacite: 'la modification des factures' },
   duplicate_invoice:         { cle: 'invoices.create',    capacite: 'la création de factures' },
   delete_invoice:            { cle: 'invoices.delete',    capacite: 'la suppression des factures' },
-  record_invoice_payment:    { cle: 'financial.view_payments', capacite: "l'enregistrement d'un paiement" }, // même clé que mark_invoice_paid
+  record_invoice_payment:    { cle: 'payments.create',    capacite: "l'enregistrement d'un paiement" }, // même clé que mark_invoice_paid et que l'écran
   // Factures récurrentes
   list_recurring_invoices:   { cle: 'invoices.read',      capacite: 'la consultation des factures récurrentes' },
   create_recurring_invoice:  { cle: 'invoices.create',    capacite: 'la création de factures récurrentes' },

@@ -107,7 +107,13 @@ export function buildEmailHtml(data: ReportData, frequency: string, lienApp: str
   });
 }
 
-export async function sendScheduledReport(reportId: string): Promise<void> {
+/**
+ * `immediat` : envoi demandé maintenant (bouton, Lumi). Pas de file de reprise
+ * — un rapport qui part tout seul une heure plus tard, après qu'on a dit
+ * « envoyé », surprend — et un échec est une erreur (audit 2026-09-30 : avant,
+ * l'échec répondait « envoyé »).
+ */
+export async function sendScheduledReport(reportId: string, opts: { immediat?: boolean } = {}): Promise<void> {
   const admin = getServiceClient();
 
   const { data: report, error } = await admin.from('scheduled_reports')
@@ -142,15 +148,19 @@ export async function sendScheduledReport(reportId: string): Promise<void> {
 
   if (!isMailerConfigured()) throw new Error('SMTP not configured');
 
-  await sendEmail({
+  const envoi = await sendEmail({
     from: emailFrom,
     to: report.recipient_email,
     subject: `Ton rapport ${libelleFrequence(report.frequency)} — ${data.orgName}`,
     html,
     // Envoi de fond (cron) : last_sent_at est posé juste après, un échec
     // transitoire ne doit donc pas perdre le rapport — il part dans la file de reprise.
-    reessayer: true,
+    // … sauf l'envoi immédiat (bouton, Lumi) : un échec y est dit, pas remis à plus tard.
+    ...(opts.immediat ? { reessayer: false } : { reessayer: true }),
   });
+  if (opts.immediat && envoi && envoi.sent === false) {
+    throw new Error(`Report email not sent: ${envoi.error || 'unknown error'}`);
+  }
 
   // Update last_sent_at
   const { error: stampErr } = await admin.from('scheduled_reports')

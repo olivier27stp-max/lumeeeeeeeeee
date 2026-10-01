@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const h = vi.hoisted(() => ({
   appelInterne: vi.fn(),
   executerIdempotent: vi.fn(),
+  enregistrerPaiement: vi.fn(),
   runOneSchedule: vi.fn(),
   admin: null as any,
 }));
@@ -22,6 +23,8 @@ vi.mock('../server/lib/agent/tools-etendus', async (orig) => ({
   ...(await orig<typeof import('../server/lib/agent/tools-etendus')>()),
   appelInterne: h.appelInterne,
   executerIdempotent: h.executerIdempotent,
+  enregistrerPaiementViaRoute: h.enregistrerPaiement,
+  commissionsApresPaiement: async () => null,
 }));
 vi.mock('../server/lib/supabase', async (orig) => ({
   ...(await orig<typeof import('../server/lib/supabase')>()),
@@ -120,7 +123,7 @@ describe('manifestes : outils, registre, permissions, topics', () => {
 
   it('permissions : une clé par outil (lectures comprises), record_invoice_payment = même clé que mark_invoice_paid', () => {
     expect(Object.keys(PERMISSIONS_ARGENT).sort()).toEqual([...noms].sort());
-    expect(PERMISSIONS_ARGENT.record_invoice_payment.cle).toBe('financial.view_payments');
+    expect(PERMISSIONS_ARGENT.record_invoice_payment.cle).toBe('payments.create'); // = l'écran (audit 2026-09-30) ; avant : 'financial.view_payments');
     expect(PERMISSIONS_ARGENT.refund_payment.cle).toBe('payments.refund');
     expect(PERMISSIONS_ARGENT.update_reminder_settings.cle).toBe('settings.update');
     for (const p of Object.values(PERMISSIONS_ARGENT)) expect(p.capacite.length).toBeGreaterThan(3);
@@ -340,15 +343,19 @@ describe('factures', () => {
     const r = await lancer('void_invoice', { invoice_id: 'i1' }, f.client);
     expect(r).toMatchObject({ voided: true, invoice: { invoice_number: 'INV-0042', statut: 'annulée' } });
     expect(filtreOrg(f.journal[1]) && corps(f.journal[1], 'update').status === 'void').toBe(true);
+    // Les liens de paiement encore ouverts sont fermés (audit 2026-09-30).
+    const liens = f.journal.find((e) => e.table === 'payment_requests')!;
+    expect(corps(liens, 'update').status).toBe('cancelled');
+    expect(filtreOrg(liens) && aFiltre(liens, 'eq', 'invoice_id', 'i1') && aFiltre(liens, 'in', 'status', ['pending', 'sent'])).toBe(true);
   });
 
-  it('revert_invoice_to_draft : refus si un paiement existe ; sinon draft + issued_at/sent_at à null', async () => {
-    expect((await lancer('revert_invoice_to_draft', { invoice_id: 'i1' }, fauxClient(() => ({ data: { ...facture, paid_cents: 500 }, error: null })).client)).error).toMatch(/paiement/);
-    const f = fauxClient((_t, ops) => ({ data: { ...facture, status: ops.some(([m]) => m === 'update') ? 'draft' : 'sent' }, error: null }));
+  it('revert_invoice_to_draft : une facture émise ne revient jamais en brouillon (trigger d immuabilité) — refus honnête, aucune écriture', async () => {
+    const f = fauxClient(() => ({ data: { ...facture, status: 'sent' }, error: null }));
     const r = await lancer('revert_invoice_to_draft', { invoice_id: 'i1' }, f.client);
-    expect(r.reverted).toBe(true);
-    expect(corps(f.journal[1], 'update')).toMatchObject({ status: 'draft', issued_at: null, sent_at: null });
-    expect(filtreOrg(f.journal[1])).toBe(true);
+    expect(r.error).toMatch(/déjà été émise.*annule-la puis crée une copie/);
+    expect(f.journal.some((e) => a(e, 'update').length)).toBe(false);
+    const d = await lancer('revert_invoice_to_draft', { invoice_id: 'i1' }, fauxClient(() => ({ data: { ...facture, status: 'draft' }, error: null })).client);
+    expect(d.already_draft).toBe(true);
   });
 
   it('duplicate_invoice : mêmes RPC que l écran (create_draft puis save_draft avec les articles)', async () => {
@@ -370,6 +377,7 @@ describe('factures', () => {
     expect(r.deleted).toBe(true);
     expect(filtreOrg(f.journal[1]) && !!corps(f.journal[1], 'update').deleted_at && corps(f.journal[1], 'update').deleted_by === 'user-1').toBe(true);
     expect(f.journal.some((e) => a(e, 'delete').length)).toBe(false);
+    expect(corps(f.journal.find((e) => e.table === 'payment_requests')!, 'update').status).toBe('cancelled');
   });
 
   it('record_invoice_payment : refuse au-dessus du solde, renvoie vers mark_invoice_paid au solde exact, refuse un brouillon', async () => {
@@ -381,17 +389,16 @@ describe('factures', () => {
     expect(f.rpcs.length).toBe(0);
   });
 
-  it('record_invoice_payment : un VRAI paiement manuel (ligne payments), plus la RPC qui modifiait la facture sans paiement', async () => {
-    // Audit V2 (2026-09-30) : apply_invoice_payment modifiait la facture SANS
-    // ligne de paiement — absent des Paiements/rapports/QuickBooks, et effacé
-    // au premier paiement Stripe suivant (recalcul depuis payments).
-    const admin = fauxClient(() => ({ data: { invoice_number: 'INV-0042', balance_cents: 9000, status: 'partial' }, error: null }));
+  it('record_invoice_payment : paiement partiel par la route de l’écran (vraie ligne payments), jamais la RPC', async () => {
+    // Audit 2026-09-30 : apply_invoice_payment n'écrivait aucun paiement ; le prochain vrai
+    // paiement effaçait celui-ci. On passe par POST /invoices/:id/mark-paid avec le montant.
+    const admin = fauxClient(() => ({ data: null, error: null }));
     h.admin = admin.client;
+    h.enregistrerPaiement.mockResolvedValueOnce({ invoice_number: 'INV-0042', balance_cents: 9000, status: 'partial' });
     const f = fauxClient(() => ({ data: facture, error: null }));
     const r = await lancer('record_invoice_payment', { invoice_id: 'i1', amount_cents: 2500, method: 'cash' }, f.client);
+    expect(h.enregistrerPaiement).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG }), 'i1', { methode: 'cash', montantCents: 2500 });
     expect(admin.rpcs).toEqual([]);
-    const paiement = corps(appels(admin.journal, 'payments')[0], 'insert');
-    expect(paiement).toMatchObject({ org_id: ORG, created_by: 'user-1', invoice_id: 'i1', provider: 'manual', status: 'succeeded', method: 'cash', amount_cents: 2500 });
     expect(r).toMatchObject({ recorded: true, amount_cents: 2500, balance_cents: 9000, methode_paiement: 'cash', invoice: { statut: 'partiellement payée' } });
     expect(estFrancais(r.note)).toBe(true);
     expect(filtreOrg(f.journal[0])).toBe(true);
@@ -521,12 +528,22 @@ describe('paiements', () => {
   });
 
   it('charge_card_on_file : POST /payments/card-on-file/charge ; refus 402 traduit en français', async () => {
+    const envoyee = () => fauxClient(() => ({ data: { id: 'i1', status: 'sent', deleted_at: null }, error: null })).client;
     h.appelInterne.mockResolvedValueOnce({ ok: true, status: 200, json: { ok: true, status: 'processing', paymentIntentId: 'pi_1' } });
-    const r = await lancer('charge_card_on_file', { invoice_id: 'i1' }, fauxClient().client);
+    const r = await lancer('charge_card_on_file', { invoice_id: 'i1' }, envoyee());
     expect(h.appelInterne).toHaveBeenCalledWith(expect.anything(), '/payments/card-on-file/charge', { invoiceId: 'i1' });
     expect(r).toMatchObject({ charged: true, statut: 'en traitement' });
     h.appelInterne.mockResolvedValueOnce({ ok: false, status: 402, json: { ok: false, status: 'no_card_on_file', reason: 'No card on file for this client.' } });
-    expect((await lancer('charge_card_on_file', { invoice_id: 'i1' }, fauxClient().client)).error).toMatch(/pas de carte au dossier/);
+    expect((await lancer('charge_card_on_file', { invoice_id: 'i1' }, envoyee())).error).toMatch(/pas de carte au dossier/);
+  });
+
+  it('charge_card_on_file : jamais sur une facture annulée ou un brouillon (audit 2026-09-30)', async () => {
+    for (const status of ['void', 'draft']) {
+      h.appelInterne.mockClear();
+      const r = await lancer('charge_card_on_file', { invoice_id: 'i1' }, fauxClient(() => ({ data: { id: 'i1', status, deleted_at: null }, error: null })).client);
+      expect(r.error).toMatch(status === 'void' ? /annulée/ : /brouillon/);
+      expect(h.appelInterne).not.toHaveBeenCalled();
+    }
   });
 
   it('remove_card_on_file : POST /payments/card-on-file/remove ; 404 en français', async () => {
@@ -551,15 +568,17 @@ describe('paiements', () => {
     expect((await lancer('update_reminder_settings', {}, f.client)).error).toMatch(/Aucun réglage/);
   });
 
-  it('list_payments : org + deleted_at, filtres optionnels, somme des paiements réussis seulement, statuts traduits', async () => {
+  it('list_payments : org + deleted_at, filtres optionnels, bornes locales, sommes nettes sur TOUS les paiements, statuts traduits', async () => {
     const rows = [
       { id: 'p1', amount_cents: 5000, currency: 'CAD', status: 'succeeded', method: 'card', provider: 'stripe', payment_date: '2026-09-10T10:00:00Z', invoice: { invoice_number: 'INV-1' }, client: { first_name: 'Marie', last_name: 'Tremblay' } },
       { id: 'p2', amount_cents: 2000, currency: 'CAD', status: 'refunded', method: null, provider: 'manual', payment_date: '2026-09-09T10:00:00Z', invoice: null, client: { company: 'ACME' } },
     ];
     const f = fauxClient(() => ({ data: rows, error: null, count: 5 }));
     const r = await lancer('list_payments', { status: 'succeeded', from: '2026-09-01', limit: 2 }, f.client);
-    expect(filtreOrg(f.journal[0]) && aFiltre(f.journal[0], 'is', 'deleted_at', null) && aFiltre(f.journal[0], 'eq', 'status', 'succeeded') && aFiltre(f.journal[0], 'gte', 'payment_date', '2026-09-01T00:00:00')).toBe(true);
-    expect(r).toMatchObject({ total_matching: 5, shown: 2, sum_amount_cents: 5000 });
+    expect(filtreOrg(f.journal[0]) && aFiltre(f.journal[0], 'is', 'deleted_at', null) && aFiltre(f.journal[0], 'eq', 'status', 'succeeded') && aFiltre(f.journal[0], 'gte', 'payment_date', '2026-09-01T04:00:00.000Z')).toBe(true); // minuit à Québec, pas minuit UTC
+    // Sommes sur tous les paiements (requête à part, mêmes filtres) : reçu, remboursé, net.
+    expect(filtreOrg(f.journal[1]) && aFiltre(f.journal[1], 'eq', 'status', 'succeeded')).toBe(true);
+    expect(r).toMatchObject({ total_matching: 5, shown: 2, sum_amount_cents: 7000, sum_refunded_cents: 2000, sum_net_cents: 5000 });
     expect(r.note).toMatch(/2 paiements sur 5/);
     expect(r.payments[0]).toMatchObject({ id: 'p1', statut: 'réussi', fournisseur: 'Stripe', invoice_number: 'INV-1', client_name: 'Marie Tremblay' });
     expect(r.payments[1]).toMatchObject({ statut: 'remboursé', fournisseur: 'manuel', client_name: 'ACME' });

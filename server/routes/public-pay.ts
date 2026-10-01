@@ -61,7 +61,7 @@ router.get('/pay/:publicToken', async (req, res) => {
     const admin = getServiceClient();
     const { data: invoice } = await admin
       .from('invoices')
-      .select('id, invoice_number, subject, total_cents, balance_cents, currency, client_id, org_id, status')
+      .select('id, invoice_number, subject, total_cents, balance_cents, currency, client_id, org_id, status, deleted_at')
       .eq('id', paymentRequest.invoice_id)
       .maybeSingle();
 
@@ -72,6 +72,13 @@ router.get('/pay/:publicToken', async (req, res) => {
     // Cross-org safety: verify the invoice belongs to the same org as the payment request
     if (invoice.org_id !== paymentRequest.org_id) {
       return res.status(403).json({ error: 'Payment request mismatch.' });
+    }
+
+    // Facture annulée ou supprimée (audit 2026-09-30) : une facture annulée
+    // garde son solde, donc le lien restait payable. On ferme le lien.
+    if (invoice.deleted_at || invoice.status === 'void' || invoice.status === 'cancelled') {
+      await updatePaymentRequestStatus(paymentRequest.id, 'cancelled');
+      return res.status(410).json({ error: 'This payment link is no longer valid.' });
     }
 
     // Double-check: if invoice is fully paid, mark request as paid
@@ -280,9 +287,14 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
     // Verify invoice balance server-side (NEVER trust client)
     const { data: invoice } = await admin
       .from('invoices')
-      .select('id, balance_cents, currency, client_id, org_id')
+      .select('id, balance_cents, currency, client_id, org_id, status, deleted_at')
       .eq('id', paymentRequest.invoice_id)
       .maybeSingle();
+
+    if (invoice && (invoice.deleted_at || invoice.status === 'void' || invoice.status === 'cancelled')) {
+      await updatePaymentRequestStatus(paymentRequest.id, 'cancelled');
+      return res.status(410).json({ error: 'This payment link is no longer valid.' });
+    }
 
     if (!invoice || Number(invoice.balance_cents || 0) <= 0) {
       await updatePaymentRequestStatus(paymentRequest.id, 'paid');

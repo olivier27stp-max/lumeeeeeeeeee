@@ -1,0 +1,402 @@
+{
+ "argent.md:8": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Paiements via la route de l'écran (ligne payments)"
+ },
+ "argent.md:9": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Clé payments.create"
+ },
+ "argent.md:10": {
+  "statut": "corrigé",
+  "vague": "4",
+  "note": "taxesPourDocument : carte = facture"
+ },
+ "argent.md:11": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Refus facture annulée, brouillon, supprimée"
+ },
+ "argent.md:12": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Aperçu générique : cible, montants en $"
+ },
+ "argent.md:13": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Clé settings.update"
+ },
+ "argent.md:14": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "JAMAIS_D_OFFICE : argent jamais sans carte"
+ },
+ "argent.md:19": {
+  "statut": "corrigé",
+  "vague": "4",
+  "note": "Taux du client, totaux relus"
+ },
+ "argent.md:20": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Refus facture annulée"
+ },
+ "argent.md:21": {
+  "statut": "corrigé",
+  "vague": "5",
+  "note": "Liens fermés + page publique refuse ; send_invoice refuse"
+ },
+ "argent.md:22": {
+  "statut": "corrigé",
+  "vague": "4",
+  "note": "Taxes posées ; facture existante désignée"
+ },
+ "argent.md:23": {
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Jalon facturé ni retiré ni modifié ; get_job donne les jalons et leur facture"
+ },
+ "argent.md:24": {
+  "statut": "corrigé",
+  "vague": "5",
+  "note": "Sommes sur tous les paiements, nettes, bornes locales"
+ },
+ "argent.md:25": {
+  "statut": "corrigé",
+  "vague": "5b",
+  "note": "Canal demandé non parti = dit"
+ },
+ "argent.md:26": {
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Préfixe public limité à GET (statut) : créer/renvoyer un lien passe par la clé financial.view_payments"
+ },
+ "clients-devis.md:8": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Aperçu nomme la fiche ciblée"
+ },
+ "clients-devis.md:9": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Irréversible = jamais d'office"
+ },
+ "clients-devis.md:10": {
+  "statut": "corrigé",
+  "vague": "3",
+  "note": "Refus si client actif ou historique"
+ },
+ "clients-devis.md:11": {
+  "statut": "partiel",
+  "vague": "8",
+  "note": "Adresse + note « bureau actif » ; recherche sans accents non faite (fonction unaccent en base = migration)"
+ },
+ "clients-devis.md:16": {
+  "statut": "corrigé",
+  "vague": "4",
+  "note": "Totaux relus en base"
+ },
+ "clients-devis.md:17": {
+  "statut": "corrigé",
+  "vague": "8",
+  "note": "Filtre client + nom du client"
+ },
+ "clients-devis.md:18": {
+  "statut": "décision",
+  "vague": "",
+  "note": "Mode « argent » par défaut : ces écritures partent sans carte — décision produit"
+ },
+ "clients-devis.md:19": {
+  "statut": "corrigé",
+  "vague": "5",
+  "note": "Solde et valeur sur toutes les factures"
+ },
+ "envois.md:7": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Aperçu lit message_text"
+ },
+ "envois.md:8": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Numéro pris sur la fiche"
+ },
+ "envois.md:9": {
+  "statut": "partiel",
+  "vague": "2",
+  "note": "CRM, désabonnement, rebond vérifiés ; plafond et consentement F7 sur la route non"
+ },
+ "envois.md:10": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Envois jamais d'office"
+ },
+ "envois.md:11": {
+  "statut": "corrigé",
+  "vague": "2",
+  "note": "0 envoi = erreur, ignorés dits"
+ },
+ "envois.md:12": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Aperçu générique (clients et textes)"
+ },
+ "envois.md:13": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Aperçu générique"
+ },
+ "envois.md:14": {
+  "statut": "corrigé",
+  "vague": "5b",
+  "note": "Canal non parti = dit"
+ },
+ "envois.md:15": {
+  "statut": "corrigé",
+  "vague": "3",
+  "note": "Réécrit l'étape du parcours"
+ },
+ "envois.md:16": {
+  "statut": "corrigé",
+  "vague": "3",
+  "note": "Refus révoquée/acceptée, garde, échec dit"
+ },
+ "envois.md:17": {
+  "statut": "corrigé",
+  "vague": "3",
+  "note": "Jamais d'office ; échec immédiat dit"
+ },
+ "envois.md:18": {
+  "statut": "corrigé",
+  "vague": "8",
+  "note": "Message échappé"
+ },
+ "envois.md:19": {
+  "statut": "partiel",
+  "vague": "9",
+  "note": "Carte : même destinataire et même montant (solde) que le courriel ; modèle de courriel de l'org pas encore montré"
+ },
+ "envois.md:20": {
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Destinataire = client, sinon prospect (règle de la route)"
+ },
+ "envois.md:21": {
+  "statut": "décision",
+  "vague": "",
+  "note": "Limiteur de la route non appliqué : chaque texto de Lumi exige déjà une carte (jamais d'office) — risque accepté, à confirmer"
+ },
+ "envois.md:22": {
+  "statut": "corrigé",
+  "vague": "2+9",
+  "note": "Dédoublonnage, impayé vérifié, outil financier (qui ne voit pas les montants ne relance pas)"
+ },
+ "envois.md:23": {
+  "statut": "corrigé",
+  "vague": "3+9",
+  "note": "Carte toujours ; contrat toujours au client du job"
+ },
+ "envois.md:24": {
+  "statut": "corrigé",
+  "vague": "2",
+  "note": "Reçu « pas eu la confirmation »"
+ },
+ "envois.md:25": {
+  "statut": "partiel",
+  "vague": "1",
+  "note": "Jamais d'office ; textes générés non montrés sur la carte"
+ },
+ "envois.md:26": {
+  "statut": "décision",
+  "vague": "",
+  "note": "send_email : route owner/admin vs garde messages.send — aligner l'un ou l'autre (décision produit)"
+ },
+ "envois.md:27": {
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Codes Twilio 21211/21610/21614/21408/21612 dits en clair"
+ },
+ "envois.md:28": {
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "send_sms renvoie vers les autres outils d'envoi"
+ },
+ "equipe-paie.md:8": {
+  "statut": "corrigé",
+  "vague": "1b",
+  "note": "refusEscalade"
+ },
+ "equipe-paie.md:9": {
+  "statut": "corrigé",
+  "vague": "1b",
+  "note": "Rôle Admin = propriétaire seulement"
+ },
+ "equipe-paie.md:10": {
+  "statut": "corrigé",
+  "vague": "1b",
+  "note": "Permissions remises au modèle du rôle"
+ },
+ "equipe-paie.md:15": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Aperçu nomme la personne, montants en $"
+ },
+ "equipe-paie.md:16": {
+  "statut": "corrigé",
+  "vague": "1b",
+  "note": "Nommer un admin = propriétaire"
+ },
+ "equipe-paie.md:17": {
+  "statut": "corrigé",
+  "vague": "1b",
+  "note": "Réactiver un admin = propriétaire"
+ },
+ "equipe-paie.md:18": {
+  "statut": "corrigé",
+  "vague": "1b",
+  "note": "Heures lues (punch_in_at/out_at), toutes les pages"
+ },
+ "equipe-paie.md:19": {
+  "statut": "corrigé",
+  "vague": "1b",
+  "note": "refuserSurSoi"
+ },
+ "jobs-horaire.md:8": {
+  "statut": "corrigé",
+  "vague": "1b",
+  "note": "Aujourd'hui et heures au fuseau de l'entreprise"
+ },
+ "jobs-horaire.md:9": {
+  "statut": "corrigé",
+  "vague": "1b",
+  "note": "Bornes de jour locales"
+ },
+ "jobs-horaire.md:14": {
+  "statut": "corrigé",
+  "vague": "1b",
+  "note": "bornesJourOrg"
+ },
+ "jobs-horaire.md:15": {
+  "statut": "corrigé",
+  "vague": "6",
+  "note": "Assigne l'équipe + visites à venir"
+ },
+ "jobs-horaire.md:16": {
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "create_job accepte team_id (vérifié dans l'org)"
+ },
+ "jobs-horaire.md:17": {
+  "statut": "corrigé",
+  "vague": "2",
+  "note": "Reçus honnêtes"
+ },
+ "jobs-horaire.md:18": {
+  "statut": "partiel",
+  "vague": "3",
+  "note": "Sensible ; visites futures et plans de service non touchés"
+ },
+ "jobs-horaire.md:19": {
+  "statut": "corrigé",
+  "vague": "7",
+  "note": "Fiche vérifiée ; homonymes → demander"
+ },
+ "jobs-horaire.md:20": {
+  "statut": "ouvert",
+  "vague": "",
+  "note": "schedule_job : laissé à la session agenda (elle modifie rpc_schedule_job) — coordination faite"
+ },
+ "jobs-horaire.md:21": {
+  "statut": "corrigé",
+  "vague": "6",
+  "note": "visit_id ; jamais une visite passée"
+ },
+ "jobs-horaire.md:22": {
+  "statut": "corrigé",
+  "vague": "6",
+  "note": "Visites de l'org, sans les supprimées"
+ },
+ "jobs-horaire.md:23": {
+  "statut": "partiel",
+  "vague": "7",
+  "note": "Dit la vérité ; archivage réel inexistant à l'écran"
+ },
+ "jobs-horaire.md:24": {
+  "statut": "corrigé",
+  "vague": "7",
+  "note": "Qui ne voit pas les montants ne les écrit pas"
+ },
+ "jobs-horaire.md:25": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Aperçu : job, dates locales"
+ },
+ "reglages-rapports.md:6": {
+  "statut": "corrigé",
+  "vague": "1",
+  "note": "Jamais d'office"
+ },
+ "reglages-rapports.md:11": {
+  "statut": "corrigé",
+  "vague": "5",
+  "note": "last_month, dates, bornes locales"
+ },
+ "reglages-rapports.md:12": {
+  "statut": "corrigé",
+  "vague": "6",
+  "note": "Prospects, dates de la période comparée"
+ },
+ "reglages-rapports.md:13": {
+  "statut": "corrigé",
+  "vague": "5",
+  "note": "Total exact"
+ },
+ "reglages-rapports.md:14": {
+  "statut": "corrigé",
+  "vague": "1+5",
+  "note": "Carte après contenu externe ; souvenirs = faits"
+ },
+ "reglages-rapports.md:15": {
+  "statut": "corrigé",
+  "vague": "3",
+  "note": "Étape du parcours"
+ },
+ "reglages-rapports.md:16": {
+  "statut": "partiel",
+  "vague": "8",
+  "note": "2e automatisation créée ; filtre de déclencheur non"
+ },
+ "reglages-rapports.md:17": {
+  "statut": "partiel",
+  "vague": "1+9",
+  "note": "Carte : taux ACTUEL de la taxe (avant → après) ; textes d'automatisation générés pas encore montrés"
+ },
+ "reglages-rapports.md:18": {
+  "statut": "corrigé",
+  "vague": "3",
+  "note": "Sensible + jamais d'office"
+ },
+ "reglages-rapports.md:19": {
+  "statut": "corrigé",
+  "vague": "6",
+  "note": "Refus doublon"
+ },
+ "reglages-rapports.md:20": {
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Réattribuer un deal = propriétaire/admin ; « ses deals » déjà bornés par la RLS quand l'org le restreint"
+ },
+ "reglages-rapports.md:21": {
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Passe par la route « Modifier le pin » (pin + pipeline + cache)"
+ },
+ "reglages-rapports.md:22": {
+  "statut": "corrigé",
+  "vague": "6",
+  "note": "Lecture ratée = « rapport incomplet »"
+ }
+}

@@ -5,6 +5,7 @@ import { validate, passwordSchema } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, companyOrgIds } from '../lib/supabase';
 import { ROLE_PRESETS } from '../../src/lib/permissions';
 import { invalidateUserCache } from '../lib/rbac';
+import { refusEscalade, permissionsDuRole } from '../lib/garde-droits';
 import { getBaseUrl } from '../lib/config';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { extractIP } from '../lib/security';
@@ -239,6 +240,14 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
     }
 
     const { email, role } = req.body;
+
+    // Escalade (audit 2026-09-30) : inviter un admin, ou avec des permissions que l'inviteur n'a pas → propriétaire.
+    {
+      const refus = await refusEscalade(admin, auth.user.id, auth.orgId, {
+        cibleRoleNouveau: role, permissionsNouvelles: req.body.custom_permissions ?? null, permissionsActuelles: {},
+      });
+      if (refus) return res.status(403).json({ error: refus, code: 'escalade_refusee' });
+    }
 
     // Résoudre l'office cible. Par défaut l'office courant. Si un autre office
     // est choisi, il doit appartenir à la même compagnie ET l'inviteur doit y
@@ -673,6 +682,22 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
     if (error || !invitation) {
       return res.status(404).json({ error: 'Invitation not found.' });
     }
+    // Audit 2026-09-30 : une invitation acceptée ou révoquée ne revit pas par
+    // un renvoi (avant : remise « pending » avec un lien neuf). Et renvoyer,
+    // c'est redonner l'accès : même garde qu'à l'envoi (inviter un admin, ou
+    // avec des permissions que l'appelant n'a pas → propriétaire seulement).
+    if (invitation.status === 'accepted' || invitation.status === 'revoked') {
+      return res.status(409).json({
+        error: invitation.status === 'accepted' ? 'Cette invitation a déjà été acceptée.' : 'Cette invitation a été révoquée : envoie une nouvelle invitation.',
+        code: `invitation_${invitation.status}`,
+      });
+    }
+    {
+      const refus = await refusEscalade(admin, auth.user.id, auth.orgId, {
+        cibleRoleNouveau: invitation.role, permissionsNouvelles: invitation.custom_permissions ?? null, permissionsActuelles: {},
+      });
+      if (refus) return res.status(403).json({ error: refus, code: 'escalade_refusee' });
+    }
 
     // Generate new token and extend expiry. Store only the hash.
     const newToken = crypto.randomBytes(32).toString('hex');
@@ -701,6 +726,7 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
 
     const baseUrl = getBaseUrl();
     const inviteLink = `${baseUrl}/invite/${newToken}`;
+    let courrielParti = true;
     try {
       const { sendEmail, isMailerConfigured } = await import('../lib/mailer');
       if (isMailerConfigured()) {
@@ -714,14 +740,22 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
           branding,
           rappel: true,
         });
-        await sendEmail({
+        const envoi = await sendEmail({
           to: invitation.email,
           subject: rendered.subject,
           html: rendered.html,
         });
+        if (envoi && envoi.sent === false) courrielParti = false;
+      } else {
+        courrielParti = false;
       }
-    } catch (err) { console.error('[invitations] resend email failed:', err); }
+    } catch (err) { console.error('[invitations] resend email failed:', err); courrielParti = false; }
 
+    // Le lien est renouvelé ; si le courriel n'est pas parti, on le DIT (avant :
+    // « renvoyée » dans tous les cas). Le lien reste utilisable à la main.
+    if (!courrielParti) {
+      return res.status(502).json({ error: 'Le lien a été renouvelé, mais le courriel n’est pas parti. Copie le lien et envoie-le toi-même.', code: 'courriel_non_parti', invite_link: inviteLink });
+    }
     return res.json({ message: 'Invitation resent.', invite_link: inviteLink });
   } catch (err: any) {
     console.error('[invitations/resend]', err.message);
@@ -810,7 +844,23 @@ router.post('/invitations/update-role', validate(updateMemberRoleSchema), async 
       }
     }
 
+    // Escalade (audit 2026-09-30) : se modifier soi-même, toucher un admin, nommer un admin → propriétaire.
+    if (membership.role !== role || req.body.custom_permissions) {
+      const refus = await refusEscalade(admin, auth.user.id, auth.orgId, {
+        cibleUserId: memberId, cibleRoleActuel: membership.role, cibleRoleNouveau: role,
+        permissionsNouvelles: req.body.custom_permissions ?? null, permissionsActuelles: {},
+      });
+      if (refus) return res.status(403).json({ error: refus, code: 'escalade_refusee' });
+    }
+
     const updateData: Record<string, any> = { role };
+    // Nouveau rôle sans permissions sur mesure : ses permissions repartent du modèle du
+    // rôle (audit 2026-09-30). Avant, un admin rétrogradé gardait sa carte admin
+    // (lue AVANT le rôle par hasPermission et member_has_permission).
+    if (membership.role !== role && !req.body.custom_permissions && role !== 'owner') {
+      const modele = await permissionsDuRole(admin, auth.orgId, role);
+      if (modele) { updateData.permissions = modele; updateData.permissions_custom = false; }
+    }
     if (req.body.scope) updateData.scope = req.body.scope;
     if (req.body.team_id !== undefined) updateData.team_id = req.body.team_id || null;
     if (req.body.department_id !== undefined) updateData.department_id = req.body.department_id || null;
@@ -938,6 +988,11 @@ router.post('/invitations/reactivate-member', validate(removeMemberSchema), asyn
     }
     if (membership.status !== 'suspended') {
       return res.status(400).json({ error: 'Member is not suspended.', code: 'not_suspended' });
+    }
+    // Même règle que le retrait (audit 2026-09-30) : réactiver un admin, c'est au propriétaire.
+    {
+      const refus = await refusEscalade(admin, auth.user.id, auth.orgId, { cibleUserId: userId, cibleRoleActuel: membership.role });
+      if (refus) return res.status(403).json({ error: refus, code: 'escalade_refusee' });
     }
 
     // ── Gate de sièges (miroir du gate d'invitation, company-wide) ──

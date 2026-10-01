@@ -1111,13 +1111,36 @@ const saveJobBillingMilestonesTool: AgentTool = {
       });
 
       const { data: existants, error: eList } = await ctx.client
-        .from('job_billing_milestones').select('id')
+        .from('job_billing_milestones').select('id, label, amount_cents')
         .eq('org_id', ctx.orgId).eq('job_id', jobId);
       if (eList) throw eList;
       const idsExistants = new Set((existants || []).map((m: any) => String(m.id)));
       const idsGardes = new Set(jalons.map((j) => j.id).filter(Boolean) as string[]);
       for (const id of idsGardes) if (!idsExistants.has(id)) throw new Error('Un jalon cité est introuvable sur ce job — relis l’échéancier avant de le modifier.');
       const aSupprimer = [...idsExistants].filter((id) => !idsGardes.has(id));
+
+      // Un jalon DÉJÀ FACTURÉ ne se supprime pas et ne change pas de montant
+      // (audit 2026-09-30) : supprimé puis recréé, il était facturable une
+      // deuxième fois ; modifié, sa facture ne correspondait plus.
+      const { data: factures, error: eFac } = await ctx.client
+        .from('invoices').select('billing_milestone_id, invoice_number, status')
+        .eq('org_id', ctx.orgId).in('billing_milestone_id', [...idsExistants].length ? [...idsExistants] : ['00000000-0000-0000-0000-000000000000'])
+        .is('deleted_at', null);
+      if (eFac) throw eFac;
+      const facture = new Map<string, string>();
+      for (const f of (factures || []) as any[]) if (!['void', 'cancelled'].includes(String(f.status))) facture.set(String(f.billing_milestone_id), String(f.invoice_number ?? ''));
+      for (const id of aSupprimer) {
+        if (facture.has(id)) {
+          const lab = (existants || []).find((m: any) => String(m.id) === id)?.label ?? '';
+          throw new Error(`Le jalon « ${lab} » est déjà facturé (${facture.get(id)}) : je ne le retire pas de l’échéancier. Garde-le dans la liste.`);
+        }
+      }
+      for (const j of jalons) {
+        const avant = j.id ? (existants || []).find((m: any) => String(m.id) === j.id) : null;
+        if (avant && facture.has(j.id!) && Number(avant.amount_cents) !== j.amount_cents) {
+          throw new Error(`Le jalon « ${avant.label} » est déjà facturé (${facture.get(j.id!)}) : son montant ne change plus. Corrige plutôt la facture.`);
+        }
+      }
 
       if (aSupprimer.length) {
         const { error } = await ctx.client
@@ -1233,7 +1256,7 @@ const createInvoiceForMilestoneTool: AgentTool = {
     description:
       'Invoice ONE billing milestone of a split-billed job (deposit, completion…). Idempotent — one '
       + 'milestone = one invoice. The invoice stays a DRAFT; nothing is sent. Get milestone ids from '
-      + 'save_job_billing_milestones or the job details.',
+      + 'get_job (billing_milestones).',
     parameters: {
       type: 'object',
       properties: {
@@ -1333,7 +1356,12 @@ const createJobAgreementTool: AgentTool = {
         .limit(1).maybeSingle();
       if (eDevis) throw eDevis;
       if (devis) throw new Error('Cette job possède déjà une soumission associée : la soumission sert de document contractuel, on ne peut pas ajouter de contrat.');
-      const clientId = args.client_id ? String(args.client_id) : (job.client_id || null);
+      // Le contrat est celui du CLIENT DU JOB (audit 2026-09-30) : avant, un autre
+      // client_id était accepté — le lien de signature partait chez quelqu'un d'autre.
+      if (args.client_id && job.client_id && String(args.client_id) !== String(job.client_id)) {
+        throw new Error('Ce client n’est pas celui du job : un contrat se fait avec le client du job.');
+      }
+      const clientId = job.client_id || (args.client_id ? String(args.client_id) : null);
       if (!clientId) throw new Error('Ce job n’a pas de client : associe-lui un client avant de créer un contrat.');
       const { data, error } = await ctx.client
         .from('job_agreements')
@@ -1831,8 +1859,8 @@ const A = (a: Partial<{ sensible: boolean; reversible: boolean; vers_client: boo
 
 export const REGISTRE_TERRAIN: Record<string, { sensible: boolean; reversible: boolean; vers_client: boolean }> = {
   delete_job:                   A({ sensible: true, reversible: false }),
-  create_recurrence_rule:       A({}),
-  deactivate_recurrence_rule:   A({}),
+  create_recurrence_rule:       A({ sensible: true }),                      // crée des visites à répétition (audit 2026-09-30)
+  deactivate_recurrence_rule:   A({ sensible: true }),                      // plus aucune visite future ne se crée
   create_job_template:          A({}),
   schedule_job:                 A({}),
   unschedule_job:               A({ sensible: true, reversible: false }),   // retire des rendez-vous convenus avec le client
@@ -1847,7 +1875,7 @@ export const REGISTRE_TERRAIN: Record<string, { sensible: boolean; reversible: b
   save_job_billing_milestones:  A({ sensible: true }),                      // de l'argent (échéancier)
   create_invoice_for_visit:     A({ sensible: true }),
   create_invoice_for_milestone: A({ sensible: true }),
-  create_job_agreement:         A({}),
+  create_job_agreement:         A({ sensible: true }),                      // conditions d'un contrat envoyé au client
   send_agreement_email:         A({ sensible: true, reversible: false, vers_client: true }),
   send_agreement_sms:           A({ sensible: true, reversible: false, vers_client: true }),
   create_availability:          A({}),

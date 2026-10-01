@@ -107,7 +107,7 @@ router.post('/scheduled-reports/:id/send-now', async (req, res) => {
     const { data: report } = await admin.from('scheduled_reports')
       .select('id').eq('id', req.params.id).eq('org_id', auth.orgId).maybeSingle();
     if (!report) return res.status(404).json({ error: 'Report not found.' });
-    await sendScheduledReport(req.params.id);
+    await sendScheduledReport(req.params.id, { immediat: true });
     return res.json({ ok: true });
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to send report.', '[scheduled-reports]');

@@ -125,6 +125,17 @@ async function exigerAdmin(ctx: ToolContext, capacite: string): Promise<void> {
   }
 }
 
+/**
+ * Paie et heures SUR SOI-MÊME (audit 2026-09-30) : un admin ne change pas son
+ * propre taux, ne s'ajoute pas de prime, ne marque pas sa propre paie payée et
+ * n'approuve pas ses propres heures. Le propriétaire, lui, le peut.
+ */
+async function refuserSurSoi(ctx: ToolContext, userId: string, capacite: string): Promise<void> {
+  if (userId !== ctx.userId) return;
+  if ((await roleDuDemandeur(ctx)) === 'owner') return;
+  throw new Error(`Tu ne peux pas faire ${capacite} pour toi-même : demande au propriétaire de l’entreprise.`);
+}
+
 interface MembreOrg {
   user_id: string;
   role: string;
@@ -395,7 +406,7 @@ const resendInvitationTool: AgentTool = {
   declaration: {
     name: 'resend_invitation',
     description:
-      'Resend a pending or expired invitation email with a fresh 48 h link. Get the invitation id from list_invitations.',
+      'Resend a pending or expired invitation email with a fresh 48 h link (not an accepted or revoked one — send a new invitation instead). Get the invitation id from list_invitations.',
     parameters: {
       type: 'object',
       properties: { invitation_id: { type: 'string', description: 'Invitation id.' } },
@@ -431,7 +442,7 @@ const revokeInvitationTool: AgentTool = {
       const contexte = "la révocation de l'invitation";
       const r = await viaRoute(ctx, '/invitations/revoke', { invitationId }, contexte);
       if (!r.ok) return resultatIncertain(contexte);
-      return { revoked: true, invitation_id: invitationId, note: 'Invitation révoquée : le lien est mort et le siège est libéré. resend_invitation la remet en attente au besoin.' };
+      return { revoked: true, invitation_id: invitationId, note: 'Invitation révoquée : le lien est mort et le siège est libéré. Pour réinviter la personne, envoie une nouvelle invitation.' };
     }),
 };
 
@@ -733,6 +744,7 @@ const setHourlyRateTool: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'set_hourly_rate', args, async () => {
       const userId = identifiant(args.user_id, 'user_id', 'get_team');
+      await refuserSurSoi(ctx, userId, 'le changement de taux horaire');
       const cents = Number(args.hourly_rate_cents);
       if (!Number.isInteger(cents) || cents < 0 || cents > TAUX_HORAIRE_MAX_CENTS) {
         throw new Error(`hourly_rate_cents doit être un entier en cents entre 0 et ${TAUX_HORAIRE_MAX_CENTS} (0 $ à ${enDollars(TAUX_HORAIRE_MAX_CENTS)} de l'heure).`);
@@ -943,6 +955,7 @@ const approveTimesheetTool: AgentTool = {
     executerIdempotent(ctx, 'approve_timesheet', args, async () => {
       await exigerAdmin(ctx, "l'approbation des feuilles de temps");
       const userId = identifiant(args.user_id, 'user_id', 'get_team');
+      await refuserSurSoi(ctx, userId, 'l’approbation des heures');
       const from = dateYmd(args.from, 'from');
       const to = dateYmd(args.to, 'to');
       if (from > to) throw new Error('from doit précéder to.');
@@ -1026,6 +1039,7 @@ const addPayrollAdjustmentTool: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'add_payroll_adjustment', args, async () => {
       const userId = identifiant(args.user_id, 'user_id', 'get_team');
+      await refuserSurSoi(ctx, userId, 'un ajustement de paie');
       const montant = Number(args.amount_cents);
       if (!Number.isInteger(montant) || montant === 0 || Math.abs(montant) > AJUSTEMENT_MAX_CENTS) {
         throw new Error('amount_cents doit être un entier non nul en cents (négatif pour une retenue), sous 100 000 $.');
@@ -1077,6 +1091,7 @@ const markPayrollPeriodPaidTool: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'mark_payroll_period_paid', args, async () => {
       const userId = identifiant(args.user_id, 'user_id', 'get_team');
+      await refuserSurSoi(ctx, userId, 'le marquage « payé » de la paie');
       const ref = dateYmdOptionnelle(args.period_ref, 'period_ref');
       const note = texteOptionnel(args.note, 500);
       const membre = await membreDeLOrg(ctx, userId);

@@ -10,9 +10,24 @@ import type { PermissionKey } from '../../../src/lib/permissions';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
 import { validerArgs } from './validation-args';
+import { normaliserDatesHeures } from '../lumi/temps';
 import { getUserContext, hasPermission, type UserContext } from '../rbac';
 import { logger } from '../logger';
 import { journaliserTrace } from '../lumi/traces';
+
+/** Fuseau de l'entreprise (company_settings.timezone), gardé 10 min en mémoire. */
+const fuseaux = new Map<string, { fuseau: string; expire: number }>();
+async function fuseauDeLOrg(orgId: string): Promise<string> {
+  const c = fuseaux.get(orgId);
+  if (c && c.expire > Date.now()) return c.fuseau;
+  let fuseau = 'America/Toronto';
+  try {
+    const { data } = await getServiceClient().from('company_settings').select('timezone').eq('org_id', orgId).maybeSingle();
+    if ((data as any)?.timezone) fuseau = String((data as any).timezone);
+  } catch { /* défaut : l'Est */ }
+  fuseaux.set(orgId, { fuseau, expire: Date.now() + 600_000 });
+  return fuseau;
+}
 import { PERMISSIONS_DOMAINES, OUTILS_FINANCIERS_DOMAINES } from './outils-domaines';
 import { TOOLS_BY_NAME, type ToolContext } from './tools';
 
@@ -71,7 +86,7 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   add_note:                  { cle: 'jobs.read',          capacite: "l'ajout de notes" },
   cancel_visit:              { cle: 'calendar.update',    capacite: "l'annulation d'une visite" },
   cancel_quote:              { cle: 'quotes.update',      capacite: "l'annulation d'un devis" },
-  mark_invoice_paid:         { cle: 'financial.view_payments', capacite: "l'enregistrement d'un paiement" },
+  mark_invoice_paid:         { cle: 'payments.create',    capacite: "l'enregistrement d'un paiement" }, // = « Marquer payée » à l'écran (audit 2026-09-30)
   // Agrégats financiers : permission dédiée, comme la paie.
   get_financial_overview:    { cle: 'financial.view_reports', capacite: 'la vue financière' },
   get_revenue_summary:       { cle: 'financial.view_reports', capacite: 'le résumé des revenus' },
@@ -120,6 +135,8 @@ export const OUTILS_FINANCIERS = new Set([
   'list_invoices', 'create_invoice', 'create_invoice_from_job',
   'send_invoice', 'create_quote', 'send_quote', 'list_quotes',
   'mark_invoice_paid', 'cancel_quote',
+  // Relancer un impayé révèle qui doit combien (audit 2026-09-30).
+  'send_payment_reminders',
   'compare_revenue', 'get_top_clients', 'get_churn_risk',
   'analyze_profitability', 'get_top_services',
   'build_report',
@@ -152,6 +169,47 @@ export async function membreVoitLesMontants(userId: string | null | undefined, o
     console.error('[agent-garde] visibilité des montants indéterminable :', e?.message || e);
     return false;
   }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NUMEROS: Record<string, { table: 'jobs' | 'invoices' | 'quotes'; colonne: string; quoi: string }> = {
+  job_id: { table: 'jobs', colonne: 'job_number', quoi: 'job' },
+  invoice_id: { table: 'invoices', colonne: 'invoice_number', quoi: 'facture' },
+  quote_id: { table: 'quotes', colonne: 'quote_number', quoi: 'devis' },
+};
+
+/**
+ * Remplace un numéro affiché par l'identifiant, DANS l'org. Numéro exact
+ * d'abord ; sinon, pour un nombre seul, une fin de numéro unique (« 17 » →
+ * « INV-000017 », préfixe de bureau). Aucun ou plusieurs → erreur lisible.
+ */
+export async function resoudreNumeros(args: Record<string, any>, orgId: string): Promise<{ args: Record<string, any> } | { erreur: string }> {
+  const sortie = { ...args };
+  for (const [cle, def] of Object.entries(NUMEROS)) {
+    const v = sortie[cle];
+    if (typeof v !== 'string' || !v.trim() || UUID_RE.test(v.trim()) || /^ref\d+$/i.test(v.trim())) continue;
+    const brut = v.trim().replace(/^#/, '');
+    const db = getServiceClient();
+    let { data } = await db.from(def.table).select('id').eq('org_id', orgId).eq(def.colonne, brut).is('deleted_at', null).limit(2);
+    if ((!data || !data.length) && /^\d+$/.test(brut)) {
+      const { data: proches } = await db.from(def.table).select(`id, ${def.colonne}`).eq('org_id', orgId).ilike(def.colonne, `%${brut}`).is('deleted_at', null).limit(5);
+      data = (proches ?? []).filter((r: any) => String(r[def.colonne]).replace(/\D/g, '').replace(/^0+/, '') === brut.replace(/^0+/, '')) as any;
+    }
+    if (!data || data.length !== 1) {
+      return { erreur: data && data.length > 1 ? `Plusieurs ${def.quoi}s portent le numéro ${brut} : demande lequel.` : `Aucun(e) ${def.quoi} n° ${brut} dans cette entreprise : vérifie le numéro avec l'utilisateur.` };
+    }
+    sortie[cle] = (data[0] as any).id;
+  }
+  return { args: sortie };
+}
+
+/** Des arguments d'écriture portent-ils un montant (prix, *_cents…) ? */
+export function argsContiennentMontant(v: unknown): boolean {
+  if (Array.isArray(v)) return v.some(argsContiennentMontant);
+  if (v && typeof v === 'object') {
+    return Object.entries(v as Record<string, unknown>).some(([k, val]) => (CLES_MONTANTS.test(k) && val !== null && val !== undefined) || argsContiennentMontant(val));
+  }
+  return false;
 }
 
 /** Blanchit récursivement les champs de montants d'un résultat d'outil. */
@@ -291,6 +349,11 @@ export async function executerOutilGarde(opts: {
     journaliserRefus({ userId: opts.userId, orgId: opts.orgId, outil: opts.name, cle: 'financial.view_pricing', role: null, raison: 'montants' });
     return { refus: 'Cette personne ne voit pas les montants dans Lume (réglage de son rôle) : cet outil financier ne lui est pas accessible. Dis-le-lui simplement.' };
   }
+  // Audit 2026-09-30 : qui ne VOIT pas les montants ne les ÉCRIT pas non plus
+  // (un technicien réécrivait les prix d'un job par update_job).
+  if (!voitLesMontants && tool.kind === 'write' && argsContiennentMontant(opts.args)) {
+    return { refus: 'Cette personne ne voit pas les montants dans Lume (réglage de son rôle) : elle ne peut pas non plus les modifier. Fais la demande sans prix, ou vois avec l’administrateur.' };
+  }
 
   // R2/R7 : les arguments sont validés contre la déclaration de l'outil AVANT
   // le handler — types, champs requis, choix permis ; les champs inconnus sont
@@ -300,7 +363,15 @@ export async function executerOutilGarde(opts: {
   if (validation.ignores.length) console.warn(`[agent-garde:${opts.name}] champs inconnus ignorés : ${validation.ignores.join(', ')}`);
 
   const ctx: ToolContext = { client: opts.client, orgId: opts.orgId, userId: opts.userId, accessToken: opts.accessToken, ...(opts.dryRun ? { dryRun: true } : {}) };
-  const result = await tool.handler(validation.args, ctx);
+  // Une date-heure sans décalage (« 2026-10-01T09:00 ») est une heure de L'ENTREPRISE, pas d'UTC (audit 2026-09-30).
+  const avecDates = normaliserDatesHeures(validation.args, await fuseauDeLOrg(opts.orgId));
+  // Un NUMÉRO affiché (« job 33 », « INV-000017 », « devis 8 ») passé comme identifiant
+  // est résolu dans l'org (audit 2026-09-30) : avant, la requête échouait (uuid
+  // invalide) et Lumi répondait « souci de connexion à Lume ».
+  const resolution = await resoudreNumeros(avecDates, opts.orgId);
+  if ('erreur' in resolution) return { result: { error: resolution.erreur } };
+  const args = resolution.args;
+  const result = await tool.handler(args, ctx);
   return {
     result: voitLesMontants
       ? result

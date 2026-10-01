@@ -84,7 +84,7 @@ describe('item 10 — routeur', () => {
     // … aussi sur une suite de conversation, avec l'échange précédent en contexte (le prompt impose action null sur un « il », « le pire »…).
     expect(route).toContain("if (modeRouteur() === 'actif' && !enAttente.length && !repli)");
     expect(route).toContain("routeur = await classifier(message, contexteRouteur(historique));");
-    expect(route).toContain("routeur.decision === 'action' && routeur.verdict?.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null");
+    expect(route).toContain("routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) && !ficheJobHorsSujet ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null");
     // Le coût du routeur est journalisé dans ai_usage (il compte dans le budget de l'org).
     expect(route).toMatch(/journaliserUsage\(ctx\.admin, \{\s*orgId: ctx\.auth\.orgId, userId: ctx\.auth\.user\.id, conversationId, model: MODELE_ROUTEUR/);
   });
