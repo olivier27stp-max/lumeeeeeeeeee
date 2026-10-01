@@ -39,6 +39,7 @@ const api = {
   publier: vi.fn(async (_id: string, _a: boolean) => undefined),
   generer: vi.fn(),
   stats: vi.fn(async (_id?: string): Promise<any> => ({ par_regle: {}, par_etape: {} })),
+  restaurer: vi.fn(async (id: string) => ({ ...regle({ id }), deleted_at: null, is_active: false }) as any),
 };
 const confirmerMock = vi.fn(async (_o: unknown) => true);
 const toasts = { erreur: [] as string[], succes: [] as string[], info: [] as string[] };
@@ -71,6 +72,7 @@ vi.mock('../src/lib/automationBuilderApi', () => ({
   apercuAutomatisation: (id: string) => api.apercu(id),
   changerPublication: (id: string, a: boolean) => api.publier(id, a),
   chargerStatistiques: (id?: string) => api.stats(id),
+  restaurerAutomatisation: (id: string) => api.restaurer(id),
 }));
 vi.mock('../src/hooks/usePlanFeature', () => ({
   usePlanFeature: () => ({ hasFeature: etat.aLumi, loading: false }),
@@ -180,6 +182,42 @@ describe('rien n’est créé en base avant la première vraie sauvegarde', () =
     expect(api.modifier).not.toHaveBeenCalled();
   });
 
+  // Audit du 2026-10-01, vu sur lumecrm.net : l'écran d'une automatisation
+  // neuve disait « Enregistré » (0 ligne en base), accueillait par une alerte
+  // rouge, et titrait « Choisir le déclencheur » au-dessus de « Devis envoyé ».
+  it('une automatisation neuve dit « Pas encore enregistrée », jamais « Enregistré »', async () => {
+    await ouvrir('/automations/nouvelle');
+    expect(container.textContent).toContain('Pas encore enregistrée');
+    expect(container.querySelector('header')?.textContent).not.toMatch(/Enregistré(?!e)/);
+  });
+
+  it('un canevas vide n’accueille pas par une alerte rouge « à corriger avant de publier »', async () => {
+    await ouvrir('/automations/nouvelle');
+    expect(container.textContent).not.toMatch(/à corriger avant de publier/);
+    expect(container.textContent).toContain('Ajouter une première étape');
+  });
+
+  it('le déclencheur en place est dit en clair : « Quand — Devis envoyé », avec l’invitation à en changer', async () => {
+    // Le catalogue des autres tests est vide ; ici on veut le VRAI libellé.
+    api.charger.mockImplementationOnce(async () => ({
+      rules: etat.regles,
+      catalogue: { declencheurs: [{ cle: 'quote.sent', fr: 'Devis envoyé', en: 'Quote sent' }], actions: [] },
+    }) as never);
+    await ouvrir('/automations/nouvelle');
+    const carte = bouton('Cliquer pour choisir un autre déclencheur');
+    expect(carte?.textContent).toMatch(/Quand\s*Devis envoyé/);
+    expect(container.textContent).not.toContain('Choisir le déclencheur');
+  });
+
+  it('après la première sauvegarde, l’indicateur passe à « Enregistré »', async () => {
+    await ouvrir('/automations/nouvelle');
+    cliquer(bouton('Cliquer pour choisir un autre déclencheur'));
+    cliquer(bouton('Facture envoyée'));
+    await attendre();
+    expect(api.creer).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain('Pas encore enregistrée');
+  });
+
   it('sans Autopilot, l’écran de vente de Lumi s’affiche et rien n’est créé', async () => {
     etat.aLumi = false;
     await ouvrir('/automations/nouvelle?lumi=1');
@@ -193,11 +231,11 @@ describe('rien n’est créé en base avant la première vraie sauvegarde', () =
     await ouvrir('/automations/nouvelle?lumi=1');
 
     // 1re écriture : on choisit un déclencheur.
-    cliquer(bouton('Choisir le déclencheur'));
+    cliquer(bouton('Cliquer pour choisir un autre déclencheur'));
     cliquer(bouton('Facture envoyée'));
     await attendre();
     // 2e écriture pendant que la création est en vol.
-    cliquer(bouton('Choisir le déclencheur'));
+    cliquer(bouton('Cliquer pour choisir un autre déclencheur'));
     cliquer(bouton('Job terminé'));
     await attendre();
     expect(api.creer).toHaveBeenCalledTimes(1);
@@ -331,5 +369,54 @@ describe('textes de suppression d’étape', () => {
     const bloc = (debut: string) => src.slice(src.indexOf(debut), src.indexOf(debut) + 1600);
     expect(bloc('const supprimerEtape = useCallback')).toContain('danger: true');
     expect(bloc('const supprimerDepuis = useCallback')).toContain('danger: true');
+  });
+});
+
+// ─── Une automatisation à la corbeille ─────────────────────────
+
+describe('une automatisation à la corbeille ne s’édite pas (audit du 2026-10-01)', () => {
+  // Observé : ouverte par son adresse, elle s'affichait comme une autre et
+  // le texte d'une étape se réécrivait en base.
+  beforeEach(() => {
+    etat.regles = [regle({ id: 'r-corbeille', name: 'Relance supprimée', deleted_at: '2026-09-30T10:00:00Z' })];
+    api.restaurer.mockClear();
+  });
+
+  it('l’écran dit qu’elle est à la corbeille, sans canevas ni panneau', async () => {
+    await ouvrir('/automations/r-corbeille');
+    expect(container.textContent).toContain('Relance supprimée');
+    expect(container.textContent).toContain('Cette automatisation est à la corbeille');
+    expect(container.textContent).toContain('elle reviendra en brouillon');
+    // Rien de ce qui permet de modifier ou de publier.
+    expect(bouton('Ajouter')).toBeUndefined();
+    expect(container.querySelector('[role="switch"]')).toBeNull();
+    expect(container.querySelector('textarea')).toBeNull();
+    expect(api.modifier).not.toHaveBeenCalled();
+  });
+
+  it('« Restaurer » la sort de la corbeille et rend l’éditeur', async () => {
+    await ouvrir('/automations/r-corbeille');
+    cliquer(bouton('Restaurer'));
+    await attendre();
+    expect(api.restaurer).toHaveBeenCalledWith('r-corbeille');
+    expect(container.textContent).not.toContain('Cette automatisation est à la corbeille');
+    expect(toasts.succes).toContain('Automatisation restaurée, en brouillon.');
+    expect(container.querySelector('[role="switch"]')).not.toBeNull();
+  });
+
+  it('« Mes automatisations » ramène à la liste', async () => {
+    await ouvrir('/automations/r-corbeille');
+    cliquer(bouton('Mes automatisations'));
+    await attendre();
+    expect(lieu()).toBe('/automations');
+  });
+
+  it('une restauration refusée laisse l’écran en place et dit pourquoi', async () => {
+    api.restaurer.mockRejectedValueOnce(new Error('Permission refusée'));
+    await ouvrir('/automations/r-corbeille');
+    cliquer(bouton('Restaurer'));
+    await attendre();
+    expect(toasts.erreur).toContain('Permission refusée');
+    expect(container.textContent).toContain('Cette automatisation est à la corbeille');
   });
 });

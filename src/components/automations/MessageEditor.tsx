@@ -28,12 +28,14 @@ interface Props {
   fr: boolean;
   /** Rechargement de la liste après enregistrement. */
   onSaved: () => void;
+  /** Le déclencheur de la règle, pour un aperçu fidèle du courriel (bouton de l'entité). */
+  declencheur?: string;
 }
 
 /** Saut de ligne — nommé pour rester lisible dans les découpes de texte. */
 const SAUT = '\n';
 
-export default function MessageEditor({ ruleId, ruleName, actionType, body, subject, fr, onSaved }: Props) {
+export default function MessageEditor({ ruleId, ruleName, actionType, body, subject, fr, onSaved, declencheur }: Props) {
   const estCourriel = actionType === 'send_email';
 
   // ── Courriel : aperçu compact + ouverture de l'éditeur pleine page ──
@@ -123,6 +125,7 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
             fr={fr}
             onClose={() => setEditeurOuvert(false)}
             onSaved={onSaved}
+            declencheur={declencheur}
           />
         )}
       </div>

@@ -134,7 +134,7 @@ async function rendre() {
 
 /** Tous les boutons dont le texte contient `t`. */
 function boutons(t: string) {
-  return Array.from(container.querySelectorAll('button')).filter((b) =>
+  return Array.from(document.body.querySelectorAll('button')).filter((b) =>
     b.textContent?.includes(t),
   );
 }
@@ -210,7 +210,7 @@ describe('ce que la corbeille refuse de faire', () => {
     await rendre();
     ouvrirOnglet('Corbeille');
     await act(async () => {});
-    const inter = Array.from(container.querySelectorAll('button')).find((b) =>
+    const inter = Array.from(document.body.querySelectorAll('button')).find((b) =>
       (b.getAttribute('aria-label') || '').includes('Publier Règle jetée'),
     ) as HTMLButtonElement | undefined;
     expect(inter, 'l’interrupteur doit exister sur la ligne').toBeDefined();
@@ -234,7 +234,7 @@ describe('restaurer', () => {
     ouvrirOnglet('Corbeille');
     await act(async () => {});
 
-    const menu = Array.from(container.querySelectorAll('button')).find((b) =>
+    const menu = Array.from(document.body.querySelectorAll('button')).find((b) =>
       (b.getAttribute('aria-label') || '').includes('Actions pour Règle jetée'),
     );
     cliquer(menu, 'menu « … »');
@@ -258,13 +258,13 @@ describe('restaurer', () => {
     ouvrirOnglet('Corbeille');
     await act(async () => {});
 
-    const menu = Array.from(container.querySelectorAll('button')).find((b) =>
+    const menu = Array.from(document.body.querySelectorAll('button')).find((b) =>
       (b.getAttribute('aria-label') || '').includes('Actions pour Règle jetée'),
     );
     cliquer(menu, 'menu « … »');
     await act(async () => {});
 
-    const dansMenu = Array.from(container.querySelectorAll('[role="menuitem"]'))
+    const dansMenu = Array.from(document.body.querySelectorAll('[role="menuitem"]'))
       .map((e) => e.textContent || '');
     expect(dansMenu.join(' | ')).toContain('Restaurer');
     expect(dansMenu.some((t) => t.includes('Modifier')), 'pas de « Modifier »').toBe(false);
@@ -278,7 +278,7 @@ describe('supprimer définitivement (demande du 2026-09-30)', () => {
     await rendre();
     ouvrirOnglet('Corbeille');
     await act(async () => {});
-    const menu = Array.from(container.querySelectorAll('button')).find((b) =>
+    const menu = Array.from(document.body.querySelectorAll('button')).find((b) =>
       (b.getAttribute('aria-label') || '').includes('Actions pour Règle jetée'),
     );
     cliquer(menu, 'menu « … »');
@@ -299,7 +299,7 @@ describe('supprimer définitivement (demande du 2026-09-30)', () => {
     await rendre();
     ouvrirOnglet('Corbeille');
     await act(async () => {});
-    const menu = Array.from(container.querySelectorAll('button')).find((b) =>
+    const menu = Array.from(document.body.querySelectorAll('button')).find((b) =>
       (b.getAttribute('aria-label') || '').includes('Actions pour Règle jetée'),
     );
     cliquer(menu, 'menu « … »');
@@ -314,7 +314,7 @@ describe('supprimer définitivement (demande du 2026-09-30)', () => {
   it('une ligne VIVANTE n’offre jamais « Supprimer définitivement »', async () => {
     reglesServies = [regle({ id: 'v', name: 'Règle vivante' })];
     await rendre();
-    const menu = Array.from(container.querySelectorAll('button')).find((b) =>
+    const menu = Array.from(document.body.querySelectorAll('button')).find((b) =>
       (b.getAttribute('aria-label') || '').includes('Actions pour Règle vivante'),
     );
     cliquer(menu, 'menu « … »');
