@@ -18,7 +18,13 @@ let b: Bureau & { fuseau: string };
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const TOUT_LE_JOUR = { fenetre: { debut: 0, fin: 24 } };
 
-beforeAll(async () => { b = await preparerBureau(); });
+beforeAll(async () => {
+  b = await preparerBureau();
+  // Le plafond « 3 messages commerciaux par 24 h » se compte par NUMÉRO, et ces tests gardent les mêmes numéros
+  // fictifs d'une passe à l'autre : à la 4e passe de la journée, le texto attendu était SAUTÉ (`plafond_frequence`,
+  // constaté le 2026-10-02). Chaque passe repart d'un compteur propre.
+  await b.admin.from('messages').delete().eq('org_id', b.orgA).in('phone_number', ['+12045559141', '+12045559142', '+12045559143', '+12045559144']);
+});
 
 describe('parcours vidé de sa dernière étape : l’ancien message resté dans `actions` ne part pas', () => {
   it('[M1-01] règle publiée, `steps = []`, `actions = [texto « ancien »]` : l’événement n’envoie RIEN, rien n’est planifié, le journal dit « parcours vide »', async () => {

@@ -196,7 +196,8 @@ describe('point 10 — une règle déjà active réagit bien à ce qui arrive AP
     const etape = p.ouvertes[2] ?? p.ouvertes[1];
     const c = await creerClient(b, m);
     const d = await creerDeal(b, c.id, etape.id, p.id);
-    const vieux = await creerDeal(b, (await creerClient(b, `${m} vieux`)).id, etape.id, p.id);
+    const vieuxClient = await creerClient(b, `${m} vieux`);
+    const vieux = await creerDeal(b, vieuxClient.id, etape.id, p.id);
     await pause(DELAI_GRACE_MS + 1_500);
     await traiterEvenementsPipeline(b.admin, { orgId: b.orgA });
     // Sans mouvement depuis 8 jours (seuil franchi hier) ; l'autre dort depuis 60 jours (avant l'activation).
@@ -207,10 +208,19 @@ describe('point 10 — une règle déjà active réagit bien à ce qui arrive AP
     await detecterStagnation(b.admin);
     await pause(DELAI_GRACE_MS + 1_500);
     await traiterEvenementsPipeline(b.admin, { orgId: b.orgA });
-    expect(await envoisApres(m, 1)).toHaveLength(1);
+    // (La détection vaut pour toute l'étape : les opportunités laissées là par des passes précédentes de ce test
+    //  réagissent aussi — celles de 8 jours reçoivent le message, celles de 60 jours sont ignorées. On juge NOS deux
+    //  fiches ; un total exact ne valait que dans un bureau vierge, constaté le 2026-10-02.)
+    const envois = await envoisApres(m, 1);
+    const fiches = await ok<Array<{ id: string; email: string }>>(b.admin.from('clients').select('id, email').in('id', [c.id, vieuxClient.id]), 'fiches');
+    const adresse = (clientId: string) => fiches.find((f) => f.id === clientId)!.email;
+    const destinataires = envois.map((e) => e.destinataire);
+    expect(destinataires.filter((x) => x === adresse(c.id)), 'l’opportunité qui vient de franchir ses 7 jours reçoit le message, une fois').toHaveLength(1);
+    expect(destinataires, 'celle qui dormait déjà avant l’activation ne reçoit rien').not.toContain(adresse(vieuxClient.id));
     const journal = await journauxDe(b, id);
     const ignorees = journal.filter((j) => j.result_data?.saute_code === 'anterieur_activation');
-    expect(ignorees.map((j) => j.entity_id)).toEqual([vieux.id]);
+    expect(ignorees.map((j) => j.entity_id)).toContain(vieux.id);
+    expect(ignorees.map((j) => j.entity_id)).not.toContain(d.id);
     expect(String(ignorees[0].result_data?.saute)).toMatch(/déjà sans mouvement avant l’activation/);
   }, 300_000);
 
@@ -227,6 +237,12 @@ describe('point 10 — une règle déjà active réagit bien à ce qui arrive AP
       // 200 jours : le seuil de 6 mois a été franchi il y a deux semaines environ. 400 jours : bien avant l'activation.
       await ok(b.admin.from('jobs').update({ completed_at: il(200), updated_at: il(200) }).eq('id', jRecent.id), 'job récent');
       await ok(b.admin.from('jobs').update({ completed_at: il(400), updated_at: il(400) }).eq('id', jAncien.id), 'job ancien');
+      // Le plafond horaire vaut pour l'ENTREPRISE, au plus bas des règles du même seuil : la règle de [B10-04]
+      // (25 par heure, encore publiée) et les réservations de l'heure écoulée (passes précédentes) le rempliraient
+      // avant nous. On part d'un bureau qui n'a rien déclenché cette heure-ci, avec notre seule règle.
+      await ok(b.admin.from('automation_rules').update({ is_active: false }).eq('org_id', b.orgA).eq('trigger_event', 'client.inactive').eq('is_active', true).select('id'), 'autres règles « client inactif »');
+      await ok(b.admin.from('clients_inactifs_declenches').update({ declenche_at: new Date(Date.now() - 2 * 3600_000).toISOString() })
+        .eq('org_id', b.orgA).gte('declenche_at', new Date(Date.now() - 3600_000).toISOString()).select('client_id'), 'réservations de l’heure');
       const id = await regle(b, m, { trigger_event: 'client.inactive', conditions: { mois: 6, max_par_heure: 1000 }, actions: [courriel(m, 'Ça fait longtemps')] });
       await activeeDepuis(id, 60);
       await balayerEntreprise(b.admin, b.orgA);
