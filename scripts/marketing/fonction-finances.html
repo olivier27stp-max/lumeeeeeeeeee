@@ -1,0 +1,41 @@
+<!doctype html>
+<!-- Maquette de Finances → Facturation, pour la fonction « Finances et paie » de l'accueil.
+     Calquée sur la capture apercu-finances.webp. Données fictives. Régénérer : capture Playwright au viewport de html/body, deviceScaleFactor 2.5, puis WebP qualité 90 → public/landing/fonction-finances.webp -->
+<html lang="fr"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Inter, -apple-system, system-ui, sans-serif; color: #111; -webkit-font-smoothing: antialiased; background: #fafafa; overflow: hidden; }
+svg.ic { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.card { background: #fff; border: 1px solid #ebebeb; border-radius: 16px; }
+.lab { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #8a8a8a; }
+html, body { width: 800px; height: 500px; }
+.wrap { padding: 24px 26px; }
+.kp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.k { padding: 14px 16px; }
+.k .top { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: #9a9a9a; }
+.k b { display: block; font-size: 22px; font-weight: 700; margin-top: 12px; letter-spacing: -.01em; }
+.k small { display: block; font-size: 11.5px; color: #9a9a9a; margin-top: 8px; }
+.bd { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
+.paid { background: #14532d; color: #fff; } .pend { background: #3a2a10; color: #fde68a; } .late { background: #3f1418; color: #fecaca; } .void { background: #2b2b2b; color: #e5e5e5; }
+.tb { margin-top: 14px; overflow: hidden; }
+.r { display: grid; grid-template-columns: 1.5fr 1fr 1.5fr .9fr .9fr; align-items: center; height: 46px; padding: 0 16px; border-top: 1px solid #f1f1f1; font-size: 12.5px; color: #333; }
+.r.h { border-top: 0; height: 38px; font-size: 12px; font-weight: 600; color: #444; }
+.r .c { font-weight: 600; color: #111; } .r .c small { display: block; font-weight: 400; font-size: 10.5px; color: #9a9a9a; }
+.red { color: #dc2626; } .r .num { font-weight: 600; color: #111; font-variant-numeric: tabular-nums; }
+.r .num.red { color: #dc2626; }
+</style></head><body><div class="wrap">
+<div class="kp">
+<div class="card k"><div class="top"><span class="bd paid">✓ PAYÉE</span>6</div><b>$4,820.00</b><small>Ce mois-ci</small></div>
+<div class="card k"><div class="top"><span class="bd pend">◷ EN ATTENTE</span>1</div><b>$1,626.90</b><small>Ce mois-ci</small></div>
+<div class="card k"><div class="top"><span class="bd late">! EN RETARD</span>2</div><b>$344.92</b><small>Ce mois-ci</small></div>
+</div>
+<div class="card tb">
+<div class="r h"><span>Client</span><span>Échéance</span><span>Statut</span><span>Total</span><span>Solde</span></div>
+<div class="r"><span class="c">Sophie Bouchard<small>Immeubles Bouchard</small></span><span>24 sept. 2026</span><span><span class="bd pend">◷ EN ATTENTE DE PAIEMENT</span></span><span class="num">$1,626.90</span><span class="num">$1,626.90</span></div>
+<div class="r"><span class="c">Jean-Pierre Gagnon</span><span class="red">5 sept. 2026</span><span><span class="bd late">! EN RETARD</span></span><span class="num">$172.46</span><span class="num red">$172.46</span></div>
+<div class="r"><span class="c">Marie Tremblay</span><span>3 sept. 2026</span><span><span class="bd paid">✓ PAYÉE</span></span><span class="num">$385.00</span><span class="num">$0.00</span></div>
+<div class="r"><span class="c">Luc Lavoie</span><span class="red">31 août 2026</span><span><span class="bd late">! EN RETARD</span></span><span class="num">$172.46</span><span class="num red">$172.46</span></div>
+<div class="r"><span class="c">Robert Côté</span><span>21 août 2026</span><span><span class="bd void">⊘ ANNULÉE</span></span><span class="num">$2,012.06</span><span class="num">$0.00</span></div>
+<div class="r"><span class="c">André Côté</span><span>16 août 2026</span><span><span class="bd paid">✓ PAYÉE</span></span><span class="num">$455.00</span><span class="num">$0.00</span></div>
+</div></div></body></html>
