@@ -101,10 +101,10 @@ function LogoMarquee({ fr }: { fr: boolean }) {
 }
 
 /* ── Quatre fonctions, texte et capture en alternance, dans l'ordre d'une
-   job : demande → pipeline → dispatch → facture. Les deux premières rangées
+   job : demande → pipeline → avis → facture. Les trois premières rangées
    sont propres à l'accueil (formulaire de demande intégré au site du client,
-   pipeline et ses automatisations par étape) ; les deux autres reprennent
-   fonctionsData (mêmes textes et captures que les pages « En savoir plus »). ── */
+   pipeline et ses automatisations par étape, demande d'avis) ; la dernière
+   reprend fonctionsData (mêmes textes et captures que les pages « En savoir plus »). ── */
 type FeatureRow = { slug: string; job: Bi; title: Bi; lead: Bi; shot: string; alt: Bi; w: number; h: number };
 const REQUEST_FORM_ROW: FeatureRow = {
   slug: 'clients',
@@ -135,18 +135,34 @@ const PIPELINE_ROW: FeatureRow = {
   w: 760,
   h: 640,
 };
+/* Avis : workflow de server/lib/reviews.ts — lien envoyé à tous à la fin de
+   la job (sauf champ client « noreview »), choix Google / Facebook sur
+   /survey/:token, sans note préalable (le « review gating » est interdit). */
+const REVIEWS_ROW: FeatureRow = {
+  slug: 'avis',
+  job: { fr: 'Avis clients', en: 'Client reviews' },
+  title: { fr: 'Les avis Google et Facebook rentrent tout seuls.', en: 'Google and Facebook reviews come in on their own.' },
+  lead: {
+    fr: "Quand la job est terminée, ton client reçoit un texto et un courriel avec un lien. Il choisit Google ou Facebook et laisse son avis en 30 secondes. Toi, tu n'as plus rien à demander.",
+    en: "When the job is done, your client gets a text and an email with a link. They pick Google or Facebook and leave a review in 30 seconds. You don't have to ask anymore.",
+  },
+  shot: '/landing/fonction-avis.webp',
+  alt: { fr: "Texto de demande d'avis et page de choix Google ou Facebook", en: 'Review request text and Google or Facebook choice page' },
+  w: 840,
+  h: 540,
+};
 /* Images des fonctions : maquettes HTML calquées sur les vraies captures
    (scripts/marketing/fonction-*.html), rendues en 2,5x. Les captures de l'app
    n'existent qu'en 1x et devenaient floues une fois agrandies sur un écran
    Retina. */
 const ZOOM_SHOTS: Record<string, { shot: string; alt: Bi; w: number; h: number }> = {
-  calendrier: { shot: '/landing/fonction-calendrier.webp', alt: { fr: 'Calendrier des jobs dans Lume', en: 'Job calendar in Lume' }, w: 840, h: 377 },
   finances: { shot: '/landing/fonction-finances.webp', alt: { fr: 'Factures payées, en attente et en retard dans Lume', en: 'Paid, pending and overdue invoices in Lume' }, w: 800, h: 500 },
 };
 const FEATURE_ROWS: FeatureRow[] = [
   REQUEST_FORM_ROW,
   PIPELINE_ROW,
-  ...['calendrier', 'finances'].flatMap((slug) => {
+  REVIEWS_ROW,
+  ...['finances'].flatMap((slug) => {
     const f = FONCTIONS.find((x) => x.slug === slug);
     return f ? [{ slug, job: f.job, title: f.title, lead: f.lead, ...ZOOM_SHOTS[slug] }] : [];
   }),
