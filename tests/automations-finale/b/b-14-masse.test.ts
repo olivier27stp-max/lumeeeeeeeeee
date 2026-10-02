@@ -27,10 +27,23 @@ const mesures: Record<string, any> = {};
 const N = 300;
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-afterAll(() => {
+/** Les factures semées par cette mesure : rendues au bureau à la fin (voir afterAll). */
+const semees: string[] = [];
+
+afterAll(async () => {
   mkdirSync('D:/lume-final/sorties/b', { recursive: true });
   writeFileSync('D:/lume-final/sorties/b/b-14-masse.json', JSON.stringify(mesures, null, 2));
-});
+  // Le bureau est rendu comme il était. Sans ce ménage, chaque passe laissait 600 factures en
+  // retard et 600 événements « facture envoyée » en file : les relances de paiement de la suite
+  // (K-020…) et sa file d'événements (B-118, B-120) passaient derrière (constaté le 2026-10-01).
+  const maintenant = new Date().toISOString();
+  for (let i = 0; i < semees.length; i += 200) {
+    const lot = semees.slice(i, i + 200);
+    await b.admin.from('invoices').update({ status: 'void', deleted_at: maintenant }).in('id', lot);
+    await b.admin.from('automation_evenements_base').update({ traite_at: maintenant, last_error: 'ménage de la mesure de charge B14' })
+      .eq('org_id', b.orgA).is('traite_at', null).in('entity_id', lot);
+  }
+}, 300_000);
 
 /** N clients (numéros fictifs AAA-555-01NN, tous différents) et N factures échues d'hier, en deux insertions. */
 async function semer(m: string, n: number): Promise<string[]> {
@@ -52,6 +65,7 @@ async function semer(m: string, n: number): Promise<string[]> {
       issued_at: new Date(Date.now() - 20 * 86_400_000).toISOString(), status: 'sent', due_date: hier, subject: `Facture ${m}`,
     })),
   ).select('id'), 'factures');
+  semees.push(...factures.map((f) => f.id));
   return factures.map((f) => f.id);
 }
 

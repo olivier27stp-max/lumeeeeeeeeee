@@ -67,8 +67,14 @@ beforeAll(async () => {
 afterAll(async () => {
   const { viderCacheFuseau } = await import('../../../server/lib/automations-fuseau-org');
   // Le bureau est rendu comme il était : les factures du test sortent de la fenêtre des relances.
+  // … et leurs événements « facture envoyée » (posés par le trigger de la base) ne restent pas
+  // en file : 500 lignes en attente feraient attendre les tests suivants du bureau.
+  const maintenant = new Date().toISOString();
   for (let i = 0; i < crees.length; i += 200) {
-    await b.admin.from('invoices').update({ status: 'void', deleted_at: new Date().toISOString() }).in('id', crees.slice(i, i + 200));
+    const lot = crees.slice(i, i + 200);
+    await b.admin.from('invoices').update({ status: 'void', deleted_at: maintenant }).in('id', lot);
+    await b.admin.from('automation_evenements_base').update({ traite_at: maintenant, last_error: 'ménage du test M22' })
+      .eq('org_id', b.orgB).is('traite_at', null).in('entity_id', lot);
   }
   await b.admin.from('company_settings').update({ timezone: fuseauAvant }).eq('org_id', b.orgB);
   viderCacheFuseau();

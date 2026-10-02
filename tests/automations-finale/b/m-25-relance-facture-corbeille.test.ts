@@ -38,7 +38,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const { viderCacheFuseau } = await import('../../../server/lib/automations-fuseau-org');
-  if (crees.length) await b.admin.from('invoices').update({ status: 'void', deleted_at: new Date().toISOString() }).in('id', crees);
+  if (crees.length) {
+    const maintenant = new Date().toISOString();
+    await b.admin.from('invoices').update({ status: 'void', deleted_at: maintenant }).in('id', crees);
+    await b.admin.from('automation_evenements_base').update({ traite_at: maintenant, last_error: 'ménage du test M25' })
+      .eq('org_id', b.orgB).is('traite_at', null).in('entity_id', crees);
+  }
   await b.admin.from('company_settings').update({ timezone: fuseauAvant }).eq('org_id', b.orgB);
   viderCacheFuseau();
   if (reglagesAvant) await b.admin.from('reminder_settings').upsert(reglagesAvant, { onConflict: 'org_id' });
