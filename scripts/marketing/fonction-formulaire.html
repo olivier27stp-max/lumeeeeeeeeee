@@ -1,0 +1,46 @@
+<!doctype html>
+<!-- Maquette du constructeur de formulaire de demande (Réglages → Formulaire de demande),
+     pour la 1re fonction de l'accueil. Calquée sur la capture apercu-formulaire.webp.
+     Données fictives. Régénérer : capture Playwright au viewport de html/body, deviceScaleFactor 2.5, puis WebP qualité 90 → public/landing/fonction-formulaire.webp -->
+<html lang="fr"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Inter, -apple-system, system-ui, sans-serif; color: #111; -webkit-font-smoothing: antialiased; background: #fafafa; overflow: hidden; }
+svg.ic { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.card { background: #fff; border: 1px solid #ebebeb; border-radius: 16px; }
+.lab { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #8a8a8a; }
+html, body { width: 720px; height: 606px; }
+.wrap { padding: 26px 30px; }
+.hd { display: flex; align-items: flex-start; justify-content: space-between; }
+h1 { font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+.sub { font-size: 12.5px; color: #9a9a9a; margin-top: 5px; }
+.acts { display: flex; gap: 8px; }
+.on { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 10px; background: #e9f8ef; color: #16a34a; font-size: 12.5px; font-weight: 600; }
+.save { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 10px; background: #ececec; font-size: 12.5px; font-weight: 600; color: #222; }
+.tabs { display: inline-flex; gap: 2px; background: #f1f1f1; border-radius: 12px; padding: 4px; margin-top: 22px; }
+.tabs span { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 9px; font-size: 12.5px; color: #8a8a8a; font-weight: 500; }
+.tabs span.a { background: #fff; color: #111; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.card { padding: 18px 20px; margin-top: 16px; }
+.logo { display: flex; gap: 14px; margin-top: 14px; }
+.ph { width: 82px; height: 82px; border-radius: 12px; background: #f3f3f3; border: 1px solid #ececec; display: grid; place-items: center; color: #c4c4c4; flex: none; }
+.lt { font-size: 12px; color: #444; line-height: 1.45; }
+.up { margin-top: 10px; height: 46px; border: 1.5px dashed #e0e0e0; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: #333; font-weight: 500; }
+.f { margin-top: 14px; } .f .lab { font-size: 10.5px; }
+.in { margin-top: 6px; border: 1px solid #e6e6e6; background: #fafafa; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #222; }
+.in.ph2 { color: #b0b0b0; height: 52px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.chips span { font-size: 11px; font-weight: 600; color: #444; border: 1px solid #e3e3e3; border-radius: 999px; padding: 4px 10px; background: #fafafa; }
+</style></head><body><div class="wrap">
+<div class="hd"><div><h1>Formulaire de demande</h1><p class="sub">Créez et personnalisez votre formulaire de demande de service</p></div>
+<div class="acts"><span class="on"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="5"/><circle cx="16" cy="12" r="2.5"/></svg>Actif</span><span class="save"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>Sauvegarder</span></div></div>
+<div class="tabs"><span class="a"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>Constructeur</span><span><svg class="ic" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Intégration</span><span><svg class="ic" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Aperçu</span></div>
+<div class="card"><p class="lab">Logo du formulaire</p>
+<div class="logo"><div class="ph"><svg class="ic" viewBox="0 0 24 24" style="width:22px;height:22px"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg></div>
+<div style="flex:1"><p class="lt">Aucun logo. Téléversez-en un, ou définissez le logo de l'entreprise dans Paramètres → Entreprise.</p><div class="up"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>Téléverser un logo</div></div></div></div>
+<div class="card"><p class="lab">En-tête du formulaire</p>
+<div class="f"><p class="lab">Titre du formulaire</p><div class="in">Demande de service</div></div>
+<div class="f"><p class="lab">Message de succès</p><div class="in">Merci ! Nous vous reviendrons sous peu.</div></div></div>
+<div class="card"><p class="lab">Coordonnées (champs par défaut)</p>
+<div class="chips"><span>Prénom *</span><span>Nom *</span><span>Entreprise</span><span>Courriel *</span><span>Téléphone *</span></div></div>
+</div></body></html>

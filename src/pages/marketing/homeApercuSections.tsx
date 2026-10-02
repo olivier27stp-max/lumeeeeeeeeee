@@ -114,10 +114,10 @@ const REQUEST_FORM_ROW: FeatureRow = {
     fr: "Garde ton site actuel. Colle le code d'intégration dans ta page et le formulaire Lume y apparaît. Chaque demande crée le client et le lead dans ton pipeline, sans rien retaper.",
     en: 'Keep your current website. Paste the embed code into your page and the Lume form shows up there. Every request creates the client and the lead in your pipeline, with nothing retyped.',
   },
-  shot: '/landing/apercu-formulaire-zoom.webp',
+  shot: '/landing/fonction-formulaire.webp',
   alt: { fr: 'Constructeur du formulaire de demande dans Lume', en: 'Request form builder in Lume' },
   w: 720,
-  h: 740,
+  h: 606,
 };
 /* Étapes et pipelines : PipelineDetail ; déclencheurs par étape
    deal.stage_entered / stage_exited / stage_idle (eventBus). Pas de capture du
@@ -130,17 +130,18 @@ const PIPELINE_ROW: FeatureRow = {
     fr: "Monte ton pipeline comme tu vends : tes étapes, dans ton ordre. Chaque étape a ses propres automatisations : un texto, un courriel ou une tâche part quand un lead y entre, en sort ou y dort trop longtemps.",
     en: 'Build your pipeline the way you sell: your stages, in your order. Each stage has its own automations: a text, an email or a task goes out when a lead enters it, leaves it or sits there too long.',
   },
-  shot: '/landing/apercu-automatisations-zoom.webp',
+  shot: '/landing/fonction-automatisations.webp',
   alt: { fr: 'Automatisations par étape dans Lume', en: 'Per-stage automations in Lume' },
-  w: 938,
-  h: 819,
+  w: 760,
+  h: 640,
 };
-/* Captures recadrées sur la fonction (*-zoom.webp, tirées des captures
-   pleine page) : en pleine page, le texte de l'app devenait illisible une fois
-   réduit dans la colonne. */
+/* Images des fonctions : maquettes HTML calquées sur les vraies captures
+   (scripts/marketing/fonction-*.html), rendues en 2,5x. Les captures de l'app
+   n'existent qu'en 1x et devenaient floues une fois agrandies sur un écran
+   Retina. */
 const ZOOM_SHOTS: Record<string, { shot: string; alt: Bi; w: number; h: number }> = {
-  calendrier: { shot: '/landing/apercu-calendrier-zoom.webp', alt: { fr: 'Calendrier des jobs dans Lume', en: 'Job calendar in Lume' }, w: 1110, h: 585 },
-  finances: { shot: '/landing/apercu-finances-zoom.webp', alt: { fr: 'Factures payées, en attente et en retard dans Lume', en: 'Paid, pending and overdue invoices in Lume' }, w: 970, h: 675 },
+  calendrier: { shot: '/landing/fonction-calendrier.webp', alt: { fr: 'Calendrier des jobs dans Lume', en: 'Job calendar in Lume' }, w: 840, h: 377 },
+  finances: { shot: '/landing/fonction-finances.webp', alt: { fr: 'Factures payées, en attente et en retard dans Lume', en: 'Paid, pending and overdue invoices in Lume' }, w: 800, h: 500 },
 };
 const FEATURE_ROWS: FeatureRow[] = [
   REQUEST_FORM_ROW,
