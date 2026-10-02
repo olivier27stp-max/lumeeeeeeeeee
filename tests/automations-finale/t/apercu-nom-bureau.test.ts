@@ -126,3 +126,18 @@ describe('04-courriel:793 — l’essai qui ne part pas : le serveur répond une
     expect(((await (await essai()).json()) as { error: string }).error).toBe('The test could not be sent: the email service did not respond. Nothing was sent.');
   });
 });
+
+describe('03-texto:438 (même racine) — les exemples sont dans la langue de celui qui lira', () => {
+  it('aperçu réel d’un bureau qui écrit en ANGLAIS : la date et l’heure d’exemple sont anglaises', async () => {
+    etat.langue = 'en';
+    const html = await apercu({ corpsHtml: '<p>See you on [appointment_date] at [appointment_time].</p>', declencheur: 'appointment.created' });
+    expect(paragraphes(html)).toContain('See you on August 14, 2026 at 9:00 a.m..');
+    expect(html).not.toContain('août');
+    expect(html).not.toContain('9 h 00');
+  });
+
+  it('bureau qui écrit en français : inchangé', async () => {
+    const html = await apercu({ corpsHtml: '<p>À bientôt le [appointment_date] à [appointment_time].</p>', declencheur: 'appointment.created' });
+    expect(paragraphes(html)).toContain('À bientôt le 14 août 2026 à 9 h 00.');
+  });
+});

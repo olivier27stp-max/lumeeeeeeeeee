@@ -841,7 +841,8 @@ router.post('/emails/apercu', async (req, res) => {
       : t);
     const avecExemples = (t: string, html = true) => {
       const rendu = remplacerParExemples(avecNomDuBureau(t, html), type, langueEntreprise(company) === 'fr');
-      return type ? rendu : remplacerVariables(rendu);
+      // Les exemples dans la langue où le courriel PARTIRA : celle des messages du bureau.
+      return type ? rendu : remplacerVariables(rendu, langueEntreprise(company) === 'fr');
     };
 
     /* Un bouton d'exemple : le gabarit en pose un à l'envoi, et sans lui
