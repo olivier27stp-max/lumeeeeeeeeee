@@ -264,13 +264,26 @@ async function revaliderDevis(c: Ctx): Promise<Revalidation> {
 }
 
 async function revaliderRendezVous(c: Ctx): Promise<Revalidation> {
-  const { ligne: v, illisible } = await lire(c, 'schedule_events', 'status, deleted_at', c.entityId);
+  const { ligne: v, illisible } = await lire(c, 'schedule_events', 'status, deleted_at, job_id', c.entityId);
   if (illisible) return {};
   if (!v || v.deleted_at) return supprimee('le rendez-vous a été supprimé');
   const annulationVoulue = c.etatsDuDeclencheur.includes('cancelled');
   if (c.cochee && !annulationVoulue && texte(v.status) === 'cancelled') return plusValide('le rendez-vous a été annulé');
 
-  const clientId: string | null | undefined = undefined;
+  // Le JOB de la visite : annuler un job ne touche pas ses visites, qui
+  // restent « prévues » au calendrier (B-01).
+  let clientId: string | null | undefined;
+  const jobId = idOuNull(v.job_id);
+  if (jobId) {
+    const { ligne: j, illisible: jobIllisible } = await lire(c, 'jobs', 'status, deleted_at, client_id', jobId);
+    if (!jobIllisible && j) {
+      clientId = idOuNull(j.client_id);
+      if (j.deleted_at) return { ...supprimee('le job a été supprimé'), clientId };
+      if (c.cochee && !annulationVoulue && texte(j.status) === 'cancelled') return plusValide('le job a été annulé', clientId);
+    }
+  } else {
+    clientId = null;
+  }
 
   return { clientId };
 }
