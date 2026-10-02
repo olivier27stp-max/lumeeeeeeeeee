@@ -549,11 +549,23 @@ export default function Automations() {
    * directement : c'est là que mène « Voir les automatisations à vérifier »
    * de la Vue d'ensemble, qui atterrissait sur « Toutes » (audit V2, A-14).
    */
-  const [parametres] = useSearchParams();
-  const [onglet, setOnglet] = useState<'toutes' | 'verifier' | 'corbeille' | 'modeles'>(() => {
-    const demande = parametres.get('onglet');
-    return demande === 'verifier' || demande === 'corbeille' || demande === 'modeles' ? demande : 'toutes';
-  });
+  /*
+   * L'onglet ouvert EST dans l'adresse (triage `03-onglets-etats:86` et `:96`). Il n'y était que LU,
+   * à l'arrivée : recharger la page ramenait sur « Toutes », et l'adresse gardait `?onglet=verifier`
+   * après un clic sur « Toutes » — un lien copié rouvrait le mauvais onglet. L'adresse est maintenant
+   * la seule source : changer d'onglet l'écrit (« Toutes » = pas de paramètre), sans empiler l'historique.
+   */
+  const [parametres, setParametres] = useSearchParams();
+  const demande = parametres.get('onglet');
+  const onglet: 'toutes' | 'verifier' | 'corbeille' | 'modeles' =
+    demande === 'verifier' || demande === 'corbeille' || demande === 'modeles' ? demande : 'toutes';
+  const setOnglet = (cle: 'toutes' | 'verifier' | 'corbeille' | 'modeles') => {
+    setParametres((avant) => {
+      const suivant = new URLSearchParams(avant);
+      if (cle === 'toutes') suivant.delete('onglet'); else suivant.set('onglet', cle);
+      return suivant;
+    }, { replace: true });
+  };
   /** Relie les onglets à leur panneau (`aria-controls` / `aria-labelledby`). */
   const idOnglets = useId();
   /** Menu « Créer » : les cinq départs de GHL. */

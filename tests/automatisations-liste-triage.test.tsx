@@ -496,6 +496,41 @@ describe('03-onglets-etats:143 — la liste s’affiche dès qu’elle est lue, 
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('03-onglets-etats:86 et :96 — l’onglet ouvert est dans l’adresse', () => {
+  const choisi = () => Array.from(conteneur.querySelectorAll('[role="tab"][aria-selected="true"]')).map((o) => (o.textContent || '').trim());
+
+  it('ouvrir « Corbeille » l’écrit dans l’adresse : un rechargement (ou un lien copié) rouvre le même onglet', async () => {
+    await rendre();
+    expect(adresse).toBe('/automations');
+    await cliquer(onglet(/^Corbeille/));
+    expect(adresse).toBe('/automations?onglet=corbeille');
+    expect(choisi()).toEqual(['Corbeille (0)']);
+    // « Recharger » : la page repart de l'adresse.
+    await act(async () => racine!.unmount());
+    conteneur.remove();
+    await rendre('fr', adresse);
+    expect(choisi()).toEqual(['Corbeille (0)']);
+  });
+
+  it('arrivé par ?onglet=verifier, cliquer « Toutes » retire le paramètre', async () => {
+    await rendre('fr', '/automations?onglet=verifier');
+    expect(choisi()).toEqual(['À vérifier (0)']);
+    await cliquer(onglet(/^Toutes/));
+    expect(choisi()).toEqual(['Toutes']);
+    expect(adresse).toBe('/automations');
+  });
+
+  it('chaque onglet a son adresse ; une valeur inconnue ouvre « Toutes »', async () => {
+    await rendre('fr', '/automations?onglet=nimporte');
+    expect(choisi()).toEqual(['Toutes']);
+    await cliquer(onglet(/^Prêtes à publier/));
+    expect(adresse).toBe('/automations?onglet=modeles');
+    await cliquer(onglet(/^À vérifier/));
+    expect(adresse).toBe('/automations?onglet=verifier');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
