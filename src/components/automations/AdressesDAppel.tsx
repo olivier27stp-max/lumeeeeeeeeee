@@ -253,10 +253,17 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
             <div className="flex items-center justify-between gap-3">
               <span className="truncate text-[13px] font-medium text-text-primary">{a.name}</span>
               <div className="flex shrink-0 items-center gap-1">
+                {/* « Active » sur fond vert ressemblait à une étiquette : rien ne
+                    disait qu'un clic met l'adresse en pause. `aria-pressed` dit
+                    l'état, l'info-bulle ce que le clic fera (06-reglages-globaux:329). */}
                 <button
                   type="button"
                   onClick={() => basculer(a)}
-                  className={`rounded px-2 py-1 text-[11px] font-medium transition-colors ${
+                  aria-pressed={a.enabled}
+                  title={a.enabled
+                    ? (fr ? 'Cliquer pour mettre en pause' : 'Click to pause')
+                    : (fr ? 'Cliquer pour remettre en service' : 'Click to turn back on')}
+                  className={`rounded px-2 py-1 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                     a.enabled
                       ? 'bg-success-light text-success'
                       : 'bg-surface-tertiary text-text-tertiary'
