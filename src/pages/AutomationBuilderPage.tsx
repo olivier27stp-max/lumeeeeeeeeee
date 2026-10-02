@@ -1519,17 +1519,14 @@ export default function AutomationBuilderPage() {
       setEtapeChoisie(null);
       return;
     }
-    /*
-     * CE QUI NE SE REBRANCHE PAS EST DIT, ET RETIRÉ (triage éditeur, S-12).
-     * Supprimer une condition ne rebranche que sa branche « si oui » : la
-     * branche « si non » quittait l'écran et restait en base, reliée à rien —
-     * sous un dialogue qui promettait que tout « se rebranche tout seul ».
-     */
+    // Ce qui ne se rebranche pas est DIT, et retiré (S-12) : supprimer une
+    // condition ne rebranche que sa branche « si oui ».
     const recousu = retirerEtape(steps, idEtape);
     const perdues = etapesPerdues(steps, recousu);
     const n = perdues.length;
     const cible = steps.find((e) => e.id === idEtape);
     const ok = await confirmer({
+      danger: true,
       title: fr ? 'Supprimer cette étape ?' : 'Delete this step?',
       message: n === 0
         ? (fr
@@ -1543,7 +1540,6 @@ export default function AutomationBuilderPage() {
             ? `La suite reste dans le parcours et se rebranche. ${n > 1 ? `${n} étapes que plus rien n’atteindrait seront retirées` : 'Une étape que plus rien n’atteindrait sera retirée'} avec elle.`
             : `What follows stays in the journey and reconnects. ${n > 1 ? `${n} steps that nothing would reach will be removed` : 'One step that nothing would reach will be removed'} with it.`),
       confirmLabel: fr ? 'Supprimer' : 'Delete',
-      danger: true,
     });
     if (!ok) return;
     memoriser(sansEtapes(recousu, perdues));
