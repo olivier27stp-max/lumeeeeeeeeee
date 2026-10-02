@@ -146,9 +146,11 @@ export default function AutomationsReglages() {
                 ? 'Suspendre temporairement des automatisations sur une période donnée — vacances de la construction, fermeture d’hiver.'
                 : 'Temporarily pause selected workflows over a date range.'}
             >
+              {/* La carte disait qu'on ne peut que les éteindre une à une, alors
+                  que la liste offre « Tout arrêter » (06-reglages-globaux:72). */}
               <DejaEnPlace texte={fr
-                ? 'En attendant, chaque automatisation se met en pause individuellement depuis la liste (interrupteur « Publiée / Brouillon »). Les plages de dates arriveront ici.'
-                : 'For now, each automation pauses individually from the list. Date ranges will come here.'}
+                ? 'En attendant : « Tout arrêter », dans la liste, met en pause toutes les automatisations d’un coup (les envois prévus sont gardés) ; et chaque automatisation se met en pause individuellement depuis la liste (interrupteur « Publiée / Brouillon »). Les plages de dates arriveront ici.'
+                : 'For now: “Pause everything”, in the list, pauses all automations at once (scheduled sends are kept); and each automation pauses individually from the list (“Published / Draft” switch). Date ranges will come here.'}
               />
             </Carte>
 
