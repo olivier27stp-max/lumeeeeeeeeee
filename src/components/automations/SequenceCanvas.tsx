@@ -36,6 +36,13 @@ interface Props {
   declencheurLabel: string;
   steps: Etape[];
   fr: boolean;
+  /**
+   * La langue dans laquelle le bureau ENVOIE ses messages (réglage « Messages
+   * en FR / EN »). La carte montre CE texte-là — `body_en` dans un bureau
+   * anglais quand l'étape en porte un — comme le champ principal du panneau.
+   * Non fournie : français, le défaut du moteur.
+   */
+  langueEnvoi?: 'fr' | 'en';
   /** Étape sélectionnée, mise en évidence. */
   selectionId?: string | null;
   onSelection: (id: string) => void;
@@ -118,8 +125,20 @@ function titreEtape(etape: Etape, fr: boolean): string {
   }
 }
 
+/**
+ * Le texte d'un champ de message QUI PART, selon la langue d'envoi du bureau —
+ * la règle du moteur (`champLocalise`, server/lib/actions) : en anglais,
+ * `<champ>_en` s'il est rempli ; sinon le texte de base.
+ */
+function texteEnvoye(config: Record<string, unknown> | undefined, champ: string, langueEnvoi: 'fr' | 'en'): string {
+  const anglais = config?.[`${champ}_en`];
+  if (langueEnvoi === 'en' && typeof anglais === 'string' && anglais.trim()) return anglais;
+  const base = config?.[champ];
+  return typeof base === 'string' ? base : '';
+}
+
 /** Le détail d'une étape, en une ligne — ce qu'on veut lire sans ouvrir. */
-function detailEtape(etape: Etape, fr: boolean): string {
+function detailEtape(etape: Etape, fr: boolean, langueEnvoi: 'fr' | 'en' = 'fr'): string {
   if (etape.type === 'attendre') {
     // « 7 jour(s) avant le rendez-vous » — sinon la carte afficherait
     // « tout de suite », le délai propre de cette attente étant 0.
@@ -137,7 +156,10 @@ function detailEtape(etape: Etape, fr: boolean): string {
   if (etape.type === 'action') {
     if (etape.action?.type === 'log_activity') return fr ? 'Étape technique, automatique' : 'Technical step, automatic';
     // Un courriel stocke du HTML : on résume son TEXTE, pas son balisage.
-    const texte = texteSansHtml(String(etape.action?.config?.body ?? etape.action?.config?.title ?? '')).replace(/\s+/g, ' ');
+    // … et le texte que le bureau ENVOIE : dans un bureau anglais, la carte
+    // montrait le français pendant que l'anglais partait.
+    const config = etape.action?.config as Record<string, unknown> | undefined;
+    const texte = texteSansHtml(texteEnvoye(config, 'body', langueEnvoi) || texteEnvoye(config, 'title', langueEnvoi)).replace(/\s+/g, ' ');
     return texte.length > 60 ? `${texte.slice(0, 60)}…` : texte;
   }
   if (etape.type === 'si') {
@@ -181,9 +203,9 @@ function Connecteur({
 
 /** Une carte d'étape. */
 function Carte({
-  etape, fr, selectionnee, enErreur, onClick, onMenu, lectureSeule,
+  etape, fr, langueEnvoi, selectionnee, enErreur, onClick, onMenu, lectureSeule,
 }: {
-  etape: Etape; fr: boolean; selectionnee: boolean; enErreur?: boolean;
+  etape: Etape; fr: boolean; langueEnvoi: 'fr' | 'en'; selectionnee: boolean; enErreur?: boolean;
   onClick: () => void;
   /** Le menu « … » de la carte — dupliquer, supprimer. */
   onMenu?: (id: string) => void;
@@ -195,7 +217,7 @@ function Carte({
     : etape.type === 'arreter' ? Square
     : ICONES[etape.action?.type] ?? Send;
 
-  const detail = detailEtape(etape, fr);
+  const detail = detailEtape(etape, fr, langueEnvoi);
 
   /*
    * La bordure de la carte. Calculée ici, pas dans le JSX : le détecteur
@@ -265,7 +287,7 @@ function Carte({
 }
 
 export default function SequenceCanvas({
-  declencheurLabel, steps, fr, selectionId, onSelection, onAjouter, onMenu, onDeclencheur,
+  declencheurLabel, steps, fr, langueEnvoi = 'fr', selectionId, onSelection, onAjouter, onMenu, onDeclencheur,
   declencheurDetail, lectureSeule, etapesEnErreur,
 }: Props) {
   const parId = new Map(steps.map((e) => [e.id, e]));
@@ -295,7 +317,7 @@ export default function SequenceCanvas({
     if (etape.type === 'si') {
       return (
         <div className="flex flex-col items-center">
-          <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
+          <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
           {/* Deux branches, côte à côte : c'est le seul endroit où le
               parcours se divise, et ça doit se voir. */}
           <div className="flex items-start gap-6 pt-1">
@@ -315,7 +337,7 @@ export default function SequenceCanvas({
     const suivant = etape.type === 'arreter' ? null : etape.suivant;
     return (
       <div className="flex flex-col items-center">
-        <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
+        <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
         {etape.type !== 'arreter' && (
           <>
             <Connecteur fr={fr} lectureSeule={lectureSeule} onAjouter={() => onAjouter(etape.id)} />

@@ -1188,8 +1188,9 @@ export default function PanneauEtape({
               </p>
             )}
 
-            {/* Ce qui bloque l'enregistrement, dit avant de cliquer. */}
-            {problemes.length > 0 && (
+            {/* Ce qui bloque l'enregistrement, dit avant de cliquer. (Étape « si » :
+                ses lignes illisibles sont déjà dites sous la zone « Conditions ».) */}
+            {problemes.length > 0 && brouillon.type !== 'si' && (
               <ul className="space-y-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/30">
                 {problemes.map((p) => (
                   <li key={p} className="text-[11px] text-amber-800 dark:text-amber-200">

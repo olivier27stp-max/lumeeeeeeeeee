@@ -686,6 +686,9 @@ describe('étape « Si… » — ce que la zone « Conditions » ne sait pas lir
     expect(enregistrer().disabled).toBe(true);
     expect(alerte()).toContain('Ligne illisible « montant 5000 » : il manque un signe (=, !=, >, >=, <, <=) ou « est l’un de » entre le champ et la valeur.');
     expect(alerte()).toContain('Ligne illisible « statut = » : il manque la valeur.');
+    // Dit sous la zone, et le premier refus à côté du bouton — pas une troisième fois dans une liste.
+    expect(texte().split('Ligne illisible « statut = »').length - 1).toBe(1);
+    expect(texte().split('Ligne illisible « montant 5000 »').length - 1).toBe(2);
     cliquer(enregistrer());
     expect(enregistrees).toEqual([]);
   });

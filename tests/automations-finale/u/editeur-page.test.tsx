@@ -1656,6 +1656,9 @@ describe('ligne 2 (ajustement) — le panneau montre dans son champ principal le
     api.langue.mockImplementation(async () => 'en');
     etat.regles = [bilingue()];
     await ouvrir();
+    // La carte du canevas montre, elle aussi, le texte qui part.
+    expect(carteEtape('Envoyer un texto')?.textContent).toContain(EN);
+    expect(carteEtape('Envoyer un texto')?.textContent).not.toContain(FR);
     cliquer(carteEtape('Envoyer un texto'));
     await attendre(2);
     expect(principal()).toBe(EN);

@@ -583,6 +583,8 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       const principalEn = p.getByLabel('Texte du message *', { exact: true });
       await page.waitForFunction((attendu) => Array.from(document.querySelectorAll('textarea')).some((t) => t.value === attendu), EN, { timeout: 15_000 }).catch(() => undefined);
       verifier(await principalEn.inputValue() === EN, `bureau EN : le champ principal montre l’anglais (${await principalEn.inputValue()})`);
+      const texteCarte = (await carte(page, 'Envoyer un texto').textContent()) ?? '';
+      verifier(texteCarte.includes(EN) && !texteCarte.includes(FR), `bureau EN : la carte du canevas montre l’anglais (${texteCarte})`);
       const blocFr = p.getByRole('button', { name: TITRE_FR });
       verifier(await blocFr.getAttribute('aria-expanded') === 'false', 'bureau EN : la version française est dans un bloc replié');
       await principalEn.fill('20% off until June 1st.');

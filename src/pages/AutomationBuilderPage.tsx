@@ -3084,6 +3084,7 @@ export default function AutomationBuilderPage() {
                       declencheurLabel={declencheurLabel}
                       steps={etapesAffichees}
                       fr={fr}
+                      langueEnvoi={langueEnvoi}
                       lectureSeule={formatOrigine}
                       selectionId={etapeChoisie}
                       // Format d'origine : le clic convertit, puis ouvre l'étape.
