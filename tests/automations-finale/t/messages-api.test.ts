@@ -12,7 +12,7 @@ vi.mock('../../../src/lib/orgApi', () => ({ getCurrentOrgId: async () => 'org-1'
 
 import { base, remettre, ligne } from './faux-supabase';
 import {
-  updateRuleMessage, messagesDeRegle, texteDuMessage, avecTexteDuMessage,
+  updateRuleMessage, ecrireMessageDeRegle, lireMessageDeRegle, messagesDeRegle, texteDuMessage, avecTexteDuMessage, texteQuiPart,
 } from '../../../src/lib/automationRulesApi';
 
 type Action = { type: string; config: Record<string, unknown> };
@@ -147,5 +147,69 @@ describe('une seule source de vérité : le parcours (`steps`)', () => {
     // Règle à plat : seul le premier message du type change.
     const plat = avecTexteDuMessage({ steps: null, actions: [sms('a'), sms('b')] }, 'send_sms', 'c');
     expect(plat.actions.map((a) => a.config.body)).toEqual(['c', 'b']);
+  });
+});
+
+describe('03-texto:345 et 04-courriel:834 — bureau dont les messages partent en ANGLAIS : on lit et on écrit le texte qui part', () => {
+  const FR = 'Bonjour, votre rendez-vous est confirmé.';
+  const EN = 'Hi, your appointment is confirmed.';
+
+  it('le texte qui part : la version anglaise quand le bureau écrit en anglais et qu’elle existe, sinon le français', () => {
+    expect(texteQuiPart({ body: FR, body_en: EN }, 'body', 'en')).toBe(EN);
+    expect(texteQuiPart({ body: FR, body_en: EN }, 'body', 'fr')).toBe(FR);
+    // Pas (ou plus) de version anglaise : le français part à tout le monde, comme dans le moteur.
+    expect(texteQuiPart({ body: FR }, 'body', 'en')).toBe(FR);
+    expect(texteQuiPart({ body: FR, body_en: '  ' }, 'body', 'en')).toBe(FR);
+    expect(texteDuMessage({ steps: null, actions: [sms(FR, { body_en: EN })] }, 'send_sms', 'en')).toBe(EN);
+    expect(texteDuMessage({ steps: null, actions: [sms(FR, { body_en: EN })] }, 'send_sms')).toBe(FR);
+  });
+
+  it('texto : écrire « en anglais » change `body_en` — celui que les clients reçoivent — et laisse le français', async () => {
+    poser({ actions: [sms(FR, { body_en: EN })] });
+    await updateRuleMessage('r1', 'send_sms', 'Hi, see you tomorrow.', undefined, { langue: 'en' });
+    expect(enBase().actions).toEqual([sms(FR, { body_en: 'Hi, see you tomorrow.' })]);
+  });
+
+  it('courriel : écrire « en anglais » change `subject_en` et `body_en`, pas `subject` ni `body`', async () => {
+    poser({ actions: [courriel('Votre rendez-vous', '<p>À demain.</p>', { subject_en: 'Your appointment', body_en: '<p>See you tomorrow.</p>' })] });
+    await updateRuleMessage('r1', 'send_email', '<p>See you tomorrow.</p>', 'Your appointment tomorrow', { langue: 'en' });
+    expect(enBase().actions[0].config).toEqual({
+      subject: 'Votre rendez-vous', body: '<p>À demain.</p>', subject_en: 'Your appointment tomorrow', body_en: '<p>See you tomorrow.</p>',
+    });
+  });
+
+  it('les deux versions s’écrivent en UNE écriture ; une version anglaise vidée est RETIRÉE (jamais `body_en: ""`)', async () => {
+    poser({ actions: [courriel('Objet', '<p>Corps</p>', { subject_en: 'Subject', body_en: '<p>Body</p>' })] });
+    await ecrireMessageDeRegle('r1', 'send_email', { body: '<p>Corps corrigé</p>', subject: 'Objet', body_en: '<p>Fixed body</p>', subject_en: 'Subject' });
+    expect(base.ecritures).toHaveLength(1);
+    expect(enBase().actions[0].config).toEqual({ subject: 'Objet', body: '<p>Corps corrigé</p>', subject_en: 'Subject', body_en: '<p>Fixed body</p>' });
+    await ecrireMessageDeRegle('r1', 'send_email', { body_en: '<div></div>', subject_en: '  ' });
+    expect(enBase().actions[0].config).toEqual({ subject: 'Objet', body: '<p>Corps corrigé</p>' });
+  });
+
+  it('le français, lui, ne se vide pas : c’est lui qui part quand il n’y a pas d’autre version', async () => {
+    poser({ actions: [sms(FR, { body_en: EN })] });
+    await expect(ecrireMessageDeRegle('r1', 'send_sms', { body: '   ' })).rejects.toThrow(/ne peut pas être vide/);
+    await expect(updateRuleMessage('r1', 'send_sms', ' ', undefined, { langue: 'en' })).rejects.toThrow(/ne peut pas être vide/);
+    expect(base.ecritures).toHaveLength(0);
+  });
+
+  it('dans un parcours aussi : la version anglaise s’écrit dans l’étape, et le reflet `actions` la porte', async () => {
+    poser({ steps: [{ id: 'e1', type: 'action', action: sms(FR, { body_en: EN }), suivant: null }], actions: [] });
+    await updateRuleMessage('r1', 'send_sms', 'Hi, see you tomorrow.', undefined, { langue: 'en' });
+    expect((enBase().steps as Array<{ action: Action }>)[0].action).toEqual(sms(FR, { body_en: 'Hi, see you tomorrow.' }));
+    expect(enBase().actions).toEqual([sms(FR, { body_en: 'Hi, see you tomorrow.' })]);
+  });
+
+  it('un écran qui n’a reçu que le français relit le message pour montrer aussi sa version anglaise', async () => {
+    poser({ actions: [sms('Autre texto'), sms(FR, { body_en: EN })] });
+    const m = await lireMessageDeRegle('r1', 'send_sms', { corpsLu: FR });
+    expect(m.rang).toBe(1);
+    expect(m.config.body_en).toBe(EN);
+  });
+
+  it('la mise à jour locale d’un écran suit le champ écrit', () => {
+    const apres = avecTexteDuMessage({ steps: null, actions: [sms(FR, { body_en: EN })] }, 'send_sms', 'Hi!', 'body_en');
+    expect(apres.actions).toEqual([sms(FR, { body_en: 'Hi!' })]);
   });
 });

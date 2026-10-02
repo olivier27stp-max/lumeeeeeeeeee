@@ -121,6 +121,13 @@ export interface EcritureMessage {
   body?: string;
   /** L'objet français (courriel seulement). */
   subject?: string;
+  /**
+   * La version anglaise : elle part À LA PLACE du français quand la langue du
+   * bureau est l'anglais. Vide = retirée (le français part à tout le monde) —
+   * jamais de `body_en: ""` en base.
+   */
+  body_en?: string;
+  subject_en?: string;
 }
 
 /** Les étapes d'un parcours dans l'ordre où il les rencontre : le fil principal, puis les embranchements. */
@@ -188,6 +195,19 @@ export function messagesDeRegle(
   return messages;
 }
 
+/**
+ * Le texte d'un champ (`body`, `subject`) tel que le moteur l'ENVOIE dans une
+ * langue : la version anglaise si le bureau écrit en anglais et qu'elle est
+ * renseignée, sinon le français (`champLocalise`, server/lib/actions).
+ */
+export function texteQuiPart(config: Record<string, any> | null | undefined, champ: 'body' | 'subject', langue: 'fr' | 'en' = 'fr'): string {
+  if (langue === 'en') {
+    const en = config?.[`${champ}_en`];
+    if (typeof en === 'string' && en.trim()) return en;
+  }
+  return String(config?.[champ] ?? '');
+}
+
 /** Le message désigné par `cible` — lève, avec une phrase claire, s'il n'y en a pas exactement un. */
 function messageVise(messages: MessageDeRegle[], cible: CibleMessage, fr: boolean): MessageDeRegle {
   const modifieAilleurs = () => new Error(fr
@@ -238,14 +258,16 @@ const texteVisible = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&n
  * écrivent aux clients au nom de l'entreprise.
  *
  * `subject` n'a de sens que pour un courriel ; il est ignoré pour un SMS.
- * `cible` désigne le message (voir `CibleMessage`).
+ * `cible` désigne le message (voir `CibleMessage`) ; `cible.langue = 'en'`
+ * écrit la version anglaise (`body_en`, `subject_en`) — celle qui part quand
+ * le bureau écrit en anglais — au lieu du texte français.
  */
 export async function updateRuleMessage(
   id: string,
   actionType: 'send_sms' | 'send_email',
   body: string,
   subject?: string,
-  cible: CibleMessage = {},
+  cible: CibleMessage & { langue?: 'fr' | 'en' } = {},
 ): Promise<void> {
   /*
    * UN MESSAGE VIDE NE PART PAS (audit V2, A-06).
@@ -264,7 +286,28 @@ export async function updateRuleMessage(
     throw new Error(fr ? 'L’objet du courriel ne peut pas être vide.' : 'The email subject cannot be empty.');
   }
   const objet = actionType === 'send_email' && subject !== undefined ? subject : undefined;
-  return ecrireMessageDeRegle(id, actionType, { body, subject: objet }, cible);
+  const { langue, ...message } = cible;
+  return ecrireMessageDeRegle(
+    id,
+    actionType,
+    langue === 'en' ? { body_en: body, subject_en: objet } : { body, subject: objet },
+    message,
+  );
+}
+
+/**
+ * Lit UN message d'une automatisation, avec ses deux versions (`body`,
+ * `body_en`…). Les écrans qui ne reçoivent que le texte français s'en servent
+ * pour montrer aussi la version anglaise.
+ */
+export async function lireMessageDeRegle(id: string, actionType: TypeMessage, cible: CibleMessage = {}): Promise<MessageDeRegle> {
+  const { data: rule, error } = await supabase
+    .from('automation_rules')
+    .select('actions, steps')
+    .eq('id', id)
+    .single();
+  if (error) throw error;
+  return messageVise(messagesDeRegle(rule, actionType), cible, interfaceEnFrancais());
 }
 
 /**
@@ -281,6 +324,8 @@ export async function ecrireMessageDeRegle(
   const fr = interfaceEnFrancais();
   const estCourriel = actionType === 'send_email';
 
+  // Le français ne se vide pas : c'est le texte qui part quand il n'y a pas
+  // d'autre version. La version anglaise, elle, se retire en la vidant.
   if (ecriture.body !== undefined && !texteVisible(ecriture.body)) {
     throw new Error(fr ? 'Le message ne peut pas être vide.' : 'The message cannot be empty.');
   }
@@ -300,6 +345,15 @@ export async function ecrireMessageDeRegle(
     const neuf: Record<string, any> = { ...(config || {}) };
     if (ecriture.body !== undefined) neuf.body = ecriture.body;
     if (estCourriel && ecriture.subject !== undefined) neuf.subject = ecriture.subject;
+    const anglais: Array<['body_en' | 'subject_en', string | undefined]> = [
+      ['body_en', ecriture.body_en],
+      ['subject_en', estCourriel ? ecriture.subject_en : undefined],
+    ];
+    for (const [cle, valeur] of anglais) {
+      if (valeur === undefined) continue;
+      const vide = cle === 'body_en' ? !texteVisible(valeur) : !valeur.trim();
+      if (vide) delete neuf[cle]; else neuf[cle] = valeur;
+    }
     return neuf;
   };
 
@@ -346,27 +400,34 @@ export async function ecrireMessageDeRegle(
 /**
  * Le texte que le moteur ENVERRA pour ce type d'envoi (le premier message de
  * ce type) : celui du parcours quand la règle en a un (le moteur ne lit alors
- * plus `actions`), sinon celui de l'action d'origine. Ce que les écrans
- * affichent doit être ce qui part.
+ * plus `actions`), sinon celui de l'action d'origine ; dans la langue donnée,
+ * la version anglaise si elle existe. Ce que les écrans affichent doit être ce
+ * qui part.
  */
 export function texteDuMessage(
   rule: Pick<AutomationRule, 'actions' | 'steps'>,
   actionType: 'send_sms' | 'send_email',
+  langue: 'fr' | 'en' = 'fr',
 ): string {
-  return String(messagesDeRegle(rule, actionType)[0]?.config?.body ?? '');
+  return texteQuiPart(messagesDeRegle(rule, actionType)[0]?.config, 'body', langue);
 }
 
-/** La règle telle qu'après `updateRuleMessage` sur son premier message de ce type (mise à jour locale d'un écran). */
+/**
+ * La règle telle qu'après `updateRuleMessage` sur son premier message de ce
+ * type (mise à jour locale d'un écran). `cle` : le champ écrit — `body_en`
+ * quand l'écran a modifié la version anglaise.
+ */
 export function avecTexteDuMessage<T extends Pick<AutomationRule, 'actions' | 'steps'>>(
   rule: T,
   actionType: 'send_sms' | 'send_email',
   body: string,
+  cle: 'body' | 'body_en' = 'body',
 ): T {
   const vise = messagesDeRegle(rule, actionType)[0];
   if (!vise) return rule;
   if (Array.isArray(rule.steps)) {
     const steps = (rule.steps as Array<Record<string, any>>).map((e) => (e && e.id === vise.etapeId
-      ? { ...e, action: { ...e.action, config: { ...e.action?.config, body } } }
+      ? { ...e, action: { ...e.action, config: { ...e.action?.config, [cle]: body } } }
       : e));
     return { ...rule, steps, actions: refletDuParcours(steps) };
   }
@@ -376,7 +437,7 @@ export function avecTexteDuMessage<T extends Pick<AutomationRule, 'actions' | 's
     actions: (rule.actions || []).map((a) => {
       if (a.type !== actionType) return a;
       rang += 1;
-      return rang === vise.rang ? { ...a, config: { ...a.config, body } } : a;
+      return rang === vise.rang ? { ...a, config: { ...a.config, [cle]: body } } : a;
     }),
   };
 }

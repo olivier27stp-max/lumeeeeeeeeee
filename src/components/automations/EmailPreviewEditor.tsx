@@ -10,12 +10,14 @@
    Aucune balise n'est jamais visible.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useId } from 'react';
 import { X, Loader2, Check, Plus, Trash2, Type, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
 import { cn } from '../../lib/utils';
-import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRulesApi';
+import {
+  ecrireMessageDeRegle, lireMessageDeRegle, getAutomationLanguage, getCompanyBranding, type EcritureMessage,
+} from '../../lib/automationRulesApi';
 import {
   htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES, VARIABLES_CONNUES, VARIABLES_POINTEES_CONNUES,
 } from '../../lib/emailBodyText';
@@ -58,6 +60,15 @@ interface Props {
    * regardant, pas depuis un index.
    */
   revenirAuDefaut?: () => Promise<void> | void;
+}
+
+/** Les deux versions qu'un courriel d'automatisation peut porter. */
+type Langue = 'fr' | 'en';
+
+/** Une version du courriel, telle qu'on la modifie. */
+interface Version {
+  blocs: Bloc[];
+  objet: string;
 }
 
 /** Un bloc du courriel : titre, paragraphe ou puce. */
@@ -156,8 +167,38 @@ export default function EmailPreviewEditor({
   ruleId, ruleName, body, subject, fr, onClose, onSaved, enregistrerTexte, typeCourriel, declencheur,
   revenirAuDefaut,
 }: Props) {
-  const [blocs, setBlocs] = useState<Bloc[]>(() => texteEnBlocs(htmlVersTexte(body)));
-  const [objet, setObjet] = useState(subject);
+  /*
+   * LES DEUX VERSIONS (triage « modèles », 04-courriel:834).
+   *
+   * Un courriel d'automatisation peut porter une version anglaise (`body_en`,
+   * `subject_en`) : le moteur l'envoie À LA PLACE du français quand la langue
+   * du bureau est l'anglais. L'éditeur ne montrait que le français : un bureau
+   * anglophone corrigeait un texte que ses clients ne recevaient pas, pendant
+   * que l'anglais, invisible, continuait de partir.
+   *
+   * On montre donc la version qui PART, on dit laquelle, et l'autre reste à un
+   * clic. `blocs` et `objet` sont ceux de la version affichée.
+   */
+  const modeRegle = !!ruleId && !enregistrerTexte;
+  const [versions, setVersions] = useState<Record<Langue, Version>>(() => ({
+    fr: { blocs: texteEnBlocs(htmlVersTexte(body)), objet: subject },
+    en: { blocs: [], objet: '' },
+  }));
+  const [langue, setLangue] = useState<Langue>('fr');
+  const { blocs, objet } = versions[langue];
+  const setBlocs = useCallback((maj: (b: Bloc[]) => Bloc[]) => {
+    setVersions((v) => ({ ...v, [langue]: { ...v[langue], blocs: maj(v[langue].blocs) } }));
+  }, [langue]);
+  const setObjet = useCallback((maj: string | ((o: string) => string)) => {
+    setVersions((v) => ({ ...v, [langue]: { ...v[langue], objet: typeof maj === 'function' ? maj(v[langue].objet) : maj } }));
+  }, [langue]);
+  /** Ce qu'on sait de la règle une fois relue. `pret` = on peut montrer le texte. */
+  const [lecture, setLecture] = useState<{ pret: boolean; aAnglais: boolean; langueBureau: Langue | null }>(
+    { pret: !modeRegle, aAnglais: false, langueBureau: null },
+  );
+  /** « La version anglaise reste valable telle quelle » : coché par l'utilisateur. */
+  const [anglaisConfirme, setAnglaisConfirme] = useState(false);
+  const idAnglaisConfirme = useId();
   const [actif, setActif] = useState<number | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
   const [enregistre, setEnregistre] = useState(false);
@@ -262,7 +303,10 @@ export default function EmailPreviewEditor({
        traite avant les crochets : `{{client.x}}` passerait sinon pour la clé
        bancale `{client.x`. Champ connu → rien à dire ; inconnu → signalé tel
        qu'écrit, pour que l'auteur voie exactement ce qu'il a tapé. */
-    const texte = `${objet} ${blocsEnTexte(blocs)}`.replace(
+    // Les deux versions partent aux clients : mêmes variables, même contrôle.
+    const ecrit = [versions.fr, ...(lecture.aAnglais ? [versions.en] : [])]
+      .map((v) => `${v.objet} ${blocsEnTexte(v.blocs)}`).join(' ');
+    const texte = ecrit.replace(
       /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g,
       (entier, obj: string, cle: string) => {
         // {{soumission.total}}, {{facture.lien}}… : remplies par le moteur
@@ -310,7 +354,7 @@ export default function EmailPreviewEditor({
       if (!connues.has(cle)) vues.add(cle);
     }
     return [...vues];
-  }, [objet, blocs, variables]);
+  }, [versions, lecture.aAnglais, variables]);
 
   // L'en-tête et le pied de page sont ajoutés par le SERVEUR à l'envoi
   // (`buildEmailLayout`), comme pour une facture ou un devis. Les afficher ici
@@ -328,14 +372,67 @@ export default function EmailPreviewEditor({
    * en envoie plusieurs (`CibleMessage`), et il dit s'il reste quelque chose à
    * enregistrer — sans attendre que la liste, derrière, se soit rechargée.
    */
-  const [enBase, setEnBase] = useState({ body, subject });
-  useEffect(() => { setEnBase({ body, subject }); }, [body, subject]);
-
-  const initial = useMemo(
-    () => ({ blocs: blocsEnTexte(texteEnBlocs(htmlVersTexte(enBase.body))), objet: enBase.subject }),
-    [enBase],
+  const [enBase, setEnBase] = useState<{ body: string; subject: string; body_en: string; subject_en: string }>(
+    { body, subject, body_en: '', subject_en: '' },
   );
-  const modifie = blocsEnTexte(blocs) !== initial.blocs || objet !== initial.objet;
+  useEffect(() => { setEnBase((b) => ({ ...b, body, subject })); }, [body, subject]);
+
+  /* À l'ouverture : la version anglaise du courriel, s'il en a une, et la
+     langue dans laquelle le bureau écrit à ses clients. Le texte n'est montré
+     qu'ensuite — sinon on commencerait à corriger la version qui ne part pas. */
+  useEffect(() => {
+    if (!modeRegle || !ruleId) return;
+    let vivant = true;
+    void (async () => {
+      let anglais: { body: string; subject: string } | null = null;
+      let langueBureau: Langue | null = null;
+      try {
+        const message = await lireMessageDeRegle(ruleId, 'send_email', { corpsLu: body, objetLu: subject });
+        const corps = typeof message.config.body_en === 'string' ? message.config.body_en : '';
+        const sujet = typeof message.config.subject_en === 'string' ? message.config.subject_en : '';
+        if (corps.trim() || sujet.trim()) anglais = { body: corps, subject: sujet };
+      } catch (e: unknown) {
+        console.error('[automations/courriel] version anglaise illisible', e);
+      }
+      try {
+        langueBureau = await getAutomationLanguage();
+      } catch (e: unknown) {
+        console.error('[automations/courriel] langue des messages illisible', e);
+      }
+      if (!vivant) return;
+      if (anglais) {
+        const lu = anglais;
+        setVersions((v) => ({ ...v, en: { blocs: texteEnBlocs(htmlVersTexte(lu.body)), objet: lu.subject } }));
+        setEnBase((b) => ({ ...b, body_en: lu.body, subject_en: lu.subject }));
+        // On ouvre sur la version qui part.
+        if (langueBureau === 'en' && lu.body.trim()) setLangue('en');
+      }
+      setLecture({ pret: true, aAnglais: !!anglais, langueBureau });
+    })();
+    return () => { vivant = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- à l'ouverture seulement : relire à chaque frappe remplacerait la saisie.
+  }, []);
+
+  const initial = useMemo(() => ({
+    fr: { blocs: blocsEnTexte(texteEnBlocs(htmlVersTexte(enBase.body))), objet: enBase.subject },
+    en: { blocs: blocsEnTexte(texteEnBlocs(htmlVersTexte(enBase.body_en))), objet: enBase.subject_en },
+  }), [enBase]);
+  const modifieFr = blocsEnTexte(versions.fr.blocs) !== initial.fr.blocs || versions.fr.objet !== initial.fr.objet;
+  const modifieEn = lecture.aAnglais
+    && (blocsEnTexte(versions.en.blocs) !== initial.en.blocs || versions.en.objet !== initial.en.objet);
+  const modifie = modifieFr || modifieEn;
+  /**
+   * Le français a changé ici, pas l'anglais : il partirait tel quel, périmé,
+   * sans que personne le voie. On le dit, et « Enregistrer » attend qu'on le
+   * mette à jour, qu'on le vide, ou qu'on confirme qu'il reste valable — la
+   * même règle, avec les mêmes mots, que le panneau d'étape de l'éditeur.
+   */
+  const anglaisARevoir = lecture.aAnglais && modifieFr && !modifieEn && blocsEnTexte(versions.en.blocs).trim() !== '';
+  const anglaisPerime = anglaisARevoir && !anglaisConfirme;
+  /** La version que les clients reçoivent — `null` quand la langue du bureau n'a pas pu être lue. */
+  const langueQuiPart: Langue | null = lecture.langueBureau === null
+    ? null
+    : lecture.langueBureau === 'en' && lecture.aAnglais && enBase.body_en.trim() ? 'en' : 'fr';
 
   /**
    * Ferme la fenêtre, en demandant confirmation si du travail serait perdu.
@@ -410,7 +507,7 @@ export default function EmailPreviewEditor({
   };
 
   const enregistrer = async () => {
-    if (!modifie || enregistrement) return;
+    if (!modifie || enregistrement || anglaisPerime) return;
     setEnregistrement(true);
     try {
       // Le HTML n'est reconstruit qu'ici : l'utilisateur ne l'a jamais vu.
@@ -420,19 +517,39 @@ export default function EmailPreviewEditor({
       } else if (ruleId) {
         // Une règle peut envoyer DEUX courriels : on écrit dans celui qu'on a
         // ouvert (désigné par le texte lu), jamais dans « tous les courriels ».
-        await updateRuleMessage(ruleId, 'send_email', corpsHtml, objet, { corpsLu: enBase.body, objetLu: enBase.subject });
+        // Et seulement la ou les versions modifiées : une version anglaise
+        // vidée est retirée (le français part alors à tout le monde).
+        const htmlDe = (v: Version) => texteVersHtml(blocsEnTexte(v.blocs));
+        const ecriture: EcritureMessage = {
+          ...(modifieFr ? { body: htmlDe(versions.fr), subject: versions.fr.objet } : {}),
+          ...(modifieEn ? { body_en: htmlDe(versions.en), subject_en: versions.en.objet } : {}),
+        };
+        await ecrireMessageDeRegle(ruleId, 'send_email', ecriture, { corpsLu: enBase.body, objetLu: enBase.subject });
+        const anglaisVide = modifieEn && !blocsEnTexte(versions.en.blocs).trim();
+        setEnBase((b) => ({
+          body: ecriture.body ?? b.body,
+          subject: ecriture.subject ?? b.subject,
+          body_en: anglaisVide ? '' : ecriture.body_en ?? b.body_en,
+          subject_en: ecriture.subject_en ?? b.subject_en,
+        }));
+        setAnglaisConfirme(false);
+        // Plus de version anglaise : il ne reste que le français à montrer.
+        if (anglaisVide && !versions.en.objet.trim()) {
+          setLecture((l) => ({ ...l, aAnglais: false }));
+          setLangue('fr');
+        }
       } else {
         // Ni destination injectée, ni règle : rien n'aurait été écrit, et
         // l'utilisateur aurait vu « enregistré » pour du travail perdu.
         throw new Error(fr ? 'Aucune destination d’enregistrement' : 'No save destination');
       }
-      setEnBase({ body: corpsHtml, subject: objet });
+      if (enregistrerTexte) setEnBase((b) => ({ ...b, body: corpsHtml, subject: objet }));
       setEnregistre(true);
       setTimeout(() => setEnregistre(false), 1800);
       onSaved();
       toast.success(fr ? 'Courriel enregistré' : 'Email saved');
     } catch (e: any) {
-      // `updateRuleMessage` lève quand la RLS filtre la ligne — sans quoi
+      // `ecrireMessageDeRegle` lève quand la RLS filtre la ligne — sans quoi
       // l'utilisateur croirait avoir enregistré.
       toast.error(e?.message || (fr ? 'Enregistrement impossible' : 'Could not save'));
     } finally {
@@ -503,7 +620,60 @@ export default function EmailPreviewEditor({
           </button>
         </div>
 
-        {ongletApercu ? (
+        {/* Quelle version on regarde, et laquelle part. */}
+        {modeRegle && lecture.pret && (lecture.aAnglais || lecture.langueBureau === 'en') && (
+          <div className="shrink-0 border-b border-outline/40 px-3 py-2 sm:px-5">
+            {lecture.aAnglais && (
+              <div role="group" aria-label={fr ? 'Version du courriel' : 'Email version'} className="flex flex-wrap items-center gap-1.5">
+                {(['fr', 'en'] as const).map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    aria-pressed={langue === l}
+                    onClick={() => { setLangue(l); setActif(null); setCibleObjet(false); }}
+                    className={cn(
+                      'rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                      langue === l
+                        ? 'border-primary bg-primary/10 text-text-primary'
+                        : 'border-outline/50 text-text-tertiary hover:text-text-secondary',
+                    )}
+                  >
+                    {l === 'fr' ? (fr ? 'Version française' : 'French version') : (fr ? 'Version anglaise' : 'English version')}
+                    {langueQuiPart === l && (
+                      <span className="font-normal"> — {fr ? 'celle qui part' : 'the one sent'}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className={cn('text-[11px] leading-relaxed text-text-tertiary', lecture.aAnglais && 'mt-1')}>
+              {!lecture.aAnglais
+                ? (fr
+                  ? 'La langue des messages du bureau est l’anglais, mais ce courriel n’a pas de version anglaise : c’est ce texte français qui part.'
+                  : 'The office message language is English, but this email has no English version: this French text is the one sent.')
+                : lecture.langueBureau === null
+                  ? (fr
+                    ? 'Impossible de lire la langue des messages du bureau pour le moment : vérifiez les deux versions.'
+                    : 'The office message language cannot be read right now: check both versions.')
+                  : langueQuiPart === 'en'
+                    ? (fr
+                      ? 'Vos clients reçoivent la version anglaise : la langue des messages du bureau est l’anglais. Vide = le texte français part à tout le monde.'
+                      : 'Your clients receive the English version: the office message language is English. Empty = the French text goes to everyone.')
+                    : (fr
+                      ? 'Vos clients reçoivent la version française. La version anglaise part à la place du texte français quand la langue du bureau est l’anglais.'
+                      : 'Your clients receive the French version. The English version is sent instead of the French text when the office language is English.')}
+            </p>
+          </div>
+        )}
+
+        {!lecture.pret ? (
+          <div className="flex-1 overflow-y-auto p-3 sm:p-5">
+            <p role="status" className="flex items-center justify-center gap-2 py-10 text-[12px] text-text-tertiary">
+              <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+              {fr ? 'Chargement du courriel…' : 'Loading the email…'}
+            </p>
+          </div>
+        ) : ongletApercu ? (
           <div className="flex-1 overflow-y-auto bg-surface-secondary p-3 sm:p-5">
             {chargementApercu ? (
               <p className="flex items-center justify-center gap-2 py-10 text-[12px] text-text-tertiary">
@@ -687,6 +857,28 @@ export default function EmailPreviewEditor({
           </div>
         )}
 
+        {/* Le français a changé, pas l'anglais : mêmes mots que le panneau
+            d'étape de l'éditeur (PanneauEtape). */}
+        {anglaisARevoir && (
+          <div className="shrink-0 border-t border-amber-500/30 bg-amber-500/10 px-5 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+            <p>
+              {fr
+                ? 'Le texte français a changé, pas sa version anglaise. Mettez-la à jour — ou videz-la pour que le français parte à tout le monde.'
+                : 'The French text changed, not its English version. Update it — or empty it so the French goes to everyone.'}
+            </p>
+            <label htmlFor={idAnglaisConfirme} className="mt-1.5 flex cursor-pointer items-center gap-2">
+              <input
+                id={idAnglaisConfirme}
+                type="checkbox"
+                checked={anglaisConfirme}
+                onChange={(e) => setAnglaisConfirme(e.target.checked)}
+                className="h-4 w-4 rounded border-outline text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              />
+              <span>{fr ? 'La version anglaise reste valable telle quelle' : 'The English version still holds as is'}</span>
+            </label>
+          </div>
+        )}
+
         {/* Pied : variables + enregistrement */}
         <div className="border-t border-outline/50 px-5 py-3 shrink-0 bg-surface-secondary">
           {/* La palette a une hauteur BORNÉE. Pour une automatisation, elle
@@ -754,10 +946,10 @@ export default function EmailPreviewEditor({
               </button>
               <button
                 onClick={enregistrer}
-                disabled={!modifie || enregistrement}
+                disabled={!modifie || enregistrement || anglaisPerime}
                 className={cn(
                   'px-4 py-1.5 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1.5',
-                  modifie && !enregistrement
+                  modifie && !enregistrement && !anglaisPerime
                     ? 'bg-primary text-white hover:bg-primary/90'
                     : 'bg-surface-tertiary text-text-tertiary cursor-not-allowed',
                 )}

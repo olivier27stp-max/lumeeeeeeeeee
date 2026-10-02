@@ -190,9 +190,10 @@ describe('éditeur — plus de HTML à l’écran', () => {
     // Depuis la page Modèles de courriel, la destination est injectée : un
     // second éditeur aurait divergé du premier au premier correctif.
     expect(apercu).toContain('enregistrerTexte');
-    // Sans citer la suite des arguments : l'appel désigne désormais LE courriel
-    // modifié (une règle peut en envoyer deux), ce qui ne change rien à la règle.
-    expect(apercu).toMatch(/updateRuleMessage\(ruleId, 'send_email', corpsHtml, objet[,)]/);
+    // Sans citer la suite des arguments : l'écriture désigne désormais LE courriel
+    // modifié (une règle peut en envoyer deux) et porte ses deux versions, française
+    // et anglaise — ce qui ne change rien à la règle : l'éditeur écrit dans la règle.
+    expect(apercu).toMatch(/(updateRuleMessage|ecrireMessageDeRegle)\(ruleId, 'send_email', /);
   });
 
   it('le courriel s’édite bloc par bloc, pas dans un champ unique', () => {

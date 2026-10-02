@@ -7,7 +7,7 @@
  */
 import type { Page } from '@playwright/test';
 import {
-  CAPTURES, creerRegle, deplierMessages, editeurCourriel, fermer, lireRegle, ouvrirListe, ouvrirPage, supprimerRegle, verifier,
+  CAPTURES, creerRegle, deplierMessages, editeurCourriel, fermer, langueDuBureau, lireRegle, ouvrirListe, ouvrirPage, supprimerRegle, verifier,
 } from './banc.mts';
 
 type Action = { type: string; config: Record<string, unknown> };
@@ -51,6 +51,50 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       verifier(pareil(a[1].config, c2), 'le second courriel a gardé son objet ET son corps');
       await page.screenshot({ path: `${CAPTURES}/courriel816.png` });
     } finally {
+      await page.context().close();
+      await supprimerRegle(r.id);
+    }
+  },
+
+  /** 04-courriel:834 — bureau en anglais : l'éditeur montre et modifie la version anglaise, celle qui part. */
+  async courriel834() {
+    const config = {
+      subject: 'Votre rendez-vous', subject_en: 'Your appointment',
+      body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>`,
+      body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>`,
+    };
+    const r = await regle('bureau-anglais', [{ type: 'send_email', config }]);
+    const page = await ouvrirPage();
+    try {
+      await langueDuBureau('en');
+      await ouvrirListe(page);
+      await deplierMessages(page, r.nom);
+      await page.getByRole('button', { name: 'Modifier', exact: true }).first().click();
+      await objet(page).waitFor();
+      verifier(await objet(page).inputValue() === 'Your appointment', 'l’éditeur s’ouvre sur l’objet ANGLAIS, celui qui part');
+      const anglais = editeurCourriel(page).getByRole('button', { name: /^Version anglaise/ });
+      verifier(await anglais.getAttribute('aria-pressed') === 'true', 'la version anglaise est la version affichée');
+      verifier((await anglais.innerText()).includes('celle qui part'), 'l’écran dit que c’est la version anglaise qui part');
+      await page.screenshot({ path: `${CAPTURES}/courriel834-anglais.png` });
+      await objet(page).fill('Your appointment tomorrow');
+      await enregistrerCourriel(page).click();
+      await page.getByText('Courriel enregistré').waitFor();
+      const [a] = await actions(r.id);
+      verifier(a.config.subject_en === 'Your appointment tomorrow', 'la base : subject_en porte la correction');
+      verifier(a.config.subject === 'Votre rendez-vous' && a.config.body === config.body && a.config.body_en === config.body_en, 'la base : le français et le corps anglais n’ont pas bougé');
+      // La version française reste à un clic, et la corriger seule demande de revoir l'anglais.
+      await page.getByRole('button', { name: 'Modifier', exact: true }).first().click();
+      await objet(page).waitFor();
+      await editeurCourriel(page).getByRole('button', { name: /^Version française/ }).click();
+      verifier(await objet(page).inputValue() === 'Votre rendez-vous', 'la version française se lit à un clic');
+      await objet(page).fill('Votre rendez-vous de demain');
+      await page.getByText('Le texte français a changé, pas sa version anglaise.').waitFor();
+      verifier(await enregistrerCourriel(page).isDisabled(), '« Enregistrer » attend qu’on revoie la version anglaise');
+      await page.getByLabel('La version anglaise reste valable telle quelle').check();
+      verifier(await enregistrerCourriel(page).isEnabled(), 'une fois confirmée, on peut enregistrer');
+      await page.screenshot({ path: `${CAPTURES}/courriel834-francais-a-revoir.png` });
+    } finally {
+      await langueDuBureau('fr');
       await page.context().close();
       await supprimerRegle(r.id);
     }

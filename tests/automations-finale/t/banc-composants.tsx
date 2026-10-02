@@ -47,14 +47,15 @@ export const texteEcran = (): string => document.body.textContent ?? '';
 export function boutons(): HTMLButtonElement[] {
   return Array.from(document.body.querySelectorAll('button'));
 }
+/** Les noms d'un bouton : son texte, son `aria-label`, son `title`. */
+const nomDe = (b: HTMLButtonElement): string[] => [(b.textContent ?? '').trim(), b.getAttribute('aria-label') ?? '', b.getAttribute('title') ?? ''].filter(Boolean);
 /** Le bouton dont le texte (ou le nom accessible) est exactement celui-ci. */
 export function bouton(nom: string, rang = 0): HTMLButtonElement {
-  const trouves = boutons().filter((b) => (b.textContent ?? '').trim() === nom || b.getAttribute('aria-label') === nom);
+  const trouves = boutons().filter((b) => nomDe(b).includes(nom));
   if (!trouves[rang]) throw new Error(`bouton « ${nom} » (n° ${rang}) introuvable — boutons : ${boutons().map((b) => (b.textContent ?? '').trim() || b.getAttribute('aria-label')).join(' | ')}`);
   return trouves[rang];
 }
-export const boutonPresent = (nom: string): boolean =>
-  boutons().some((b) => (b.textContent ?? '').trim() === nom || b.getAttribute('aria-label') === nom);
+export const boutonPresent = (nom: string): boolean => boutons().some((b) => nomDe(b).includes(nom));
 
 /** Les champs (input, textarea) dont le nom accessible est exactement celui-ci. */
 export function champs<T extends HTMLInputElement | HTMLTextAreaElement = HTMLTextAreaElement>(nom: string): T[] {

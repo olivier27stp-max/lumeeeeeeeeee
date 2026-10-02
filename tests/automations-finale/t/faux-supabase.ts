@@ -20,12 +20,14 @@ export interface FausseBase {
   /** Nombre de lectures faites, par table. */
   lectures: Record<string, number>;
   erreurLecture: { message: string; code?: string } | null;
+  /** Panne de lecture d'UNE table (les autres répondent). */
+  erreursLectureParTable: Record<string, { message: string; code?: string }>;
   erreurEcriture: { message: string; code?: string } | null;
   ecritureFiltree: boolean;
 }
 
 export const base: FausseBase = {
-  tables: {}, ecritures: [], lectures: {}, erreurLecture: null, erreurEcriture: null, ecritureFiltree: false,
+  tables: {}, ecritures: [], lectures: {}, erreurLecture: null, erreursLectureParTable: {}, erreurEcriture: null, ecritureFiltree: false,
 };
 
 /** Remet la fausse base à neuf, avec ces lignes. */
@@ -34,6 +36,7 @@ export function remettre(tables: Record<string, Ligne[]> = {}): void {
   base.ecritures = [];
   base.lectures = {};
   base.erreurLecture = null;
+  base.erreursLectureParTable = {};
   base.erreurEcriture = null;
   base.ecritureFiltree = false;
 }
@@ -59,6 +62,7 @@ function requete(table: string) {
     }
     base.lectures[table] = (base.lectures[table] ?? 0) + 1;
     if (base.erreurLecture) return { data: null, error: base.erreurLecture };
+    if (base.erreursLectureParTable[table]) return { data: null, error: base.erreursLectureParTable[table] };
     if (unique) return { data: lignes[0] ? structuredClone(lignes[0]) : null, error: null };
     return { data: structuredClone(lignes), error: null };
   };
