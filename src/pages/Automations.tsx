@@ -859,10 +859,15 @@ export default function Automations() {
   // (constat D-18) : au retour sur l'onglet, et toutes les 30 secondes tant qu'il est visible.
   useRafraichissementVisible(() => { void lireChiffres.current(); });
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options: { silencieux?: boolean } = {}) => {
     const numero = ++dernierChargement.current;
     const perime = () => numero !== dernierChargement.current;
-    if (!dejaLue.current) setLoading(true);
+    /* Un rechargement SILENCIEUX (après l'enregistrement d'un message) ne remplace JAMAIS le tableau
+       par la roue : la roue démontait la ligne dépliée, donc l'éditeur de courriel resté ouvert — il
+       « disparaissait tout seul » (triage « modèles », `04-courriel:260`, report de l'agent T). Depuis
+       `06-menu-actions:255` un rechargement garde déjà le tableau ; `silencieux` le garantit aussi
+       quand la lecture précédente avait échoué. */
+    if (!dejaLue.current && !options.silencieux) setLoading(true);
     // « Déclenchées », « En cours », les échecs et le détail › : UNE route, comptée en base. Elle part
     // EN MÊME TEMPS que la lecture de la liste, et la liste ne l'ATTEND pas (triage
     // `03-onglets-etats:143`) : le tableau s'affiche dès qu'il est lu, les chiffres se posent ensuite
@@ -1010,7 +1015,7 @@ export default function Automations() {
     }
   };
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   /*
    * PERF-1 (audit V2) : la liste relisait ICI toutes les règles une deuxième
@@ -2924,7 +2929,7 @@ export default function Automations() {
                               ) : (
                                 rule.actions
                                   .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
-                                  .map((a, i) => (rule.deleted_at ? (
+                                  .map((a, i, messages) => (rule.deleted_at ? (
                                     <MessageFige
                                       key={`${rule.id}-${a.type}-${i}`}
                                       type={a.type as 'send_sms' | 'send_email'}
@@ -2944,13 +2949,21 @@ export default function Automations() {
                                   ) : (
                                     <MessageEditor
                                       key={`${rule.id}-${a.type}-${i}`}
+                                      // LE message de cette ligne : son rang parmi ceux du même type (deux textos ne s'écrasent plus).
+                                      rang={messages.slice(0, i).filter((m) => m.type === a.type).length}
+                                      // La version anglaise et la langue du bureau : le champ montre le texte qui PART.
+                                      bodyEn={typeof a.config?.body_en === 'string' ? a.config.body_en : undefined}
+                                      langueBureau={langueIllisible ? null : orgLang ?? undefined}
+                                      // À la corbeille : on lit, on ne modifie pas. (Aujourd'hui la corbeille passe par
+                                      // `MessageFige`, plus haut ; la propriété est là pour le jour où l'éditeur la porte.)
+                                      lectureSeule={!!rule.deleted_at}
                                       ruleId={rule.id}
                                       ruleName={localizeAutomationName(rule.name, language)}
                                       actionType={a.type as 'send_sms' | 'send_email'}
                                       body={String(a.config?.body ?? '')}
                                       subject={a.config?.subject ? String(a.config.subject) : undefined}
                                       fr={fr}
-                                      onSaved={load}
+                                      onSaved={() => { void load({ silencieux: true }); }}
                                       declencheur={rule.trigger_event}
                                     />
                                   )))

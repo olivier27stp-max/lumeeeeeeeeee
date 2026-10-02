@@ -439,6 +439,55 @@ describe('06-menu-actions:255 — le tableau reste à l’écran pendant un rech
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('04-courriel:260 (report de l’agent T) — enregistrer un message ne referme pas la ligne dépliée', () => {
+  const saisirTexto = async (valeur: string) => {
+    await act(async () => {
+      const champ = conteneur.querySelector('tbody textarea') as HTMLTextAreaElement;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(champ, valeur);
+      champ.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await laisser();
+  };
+
+  it('« Enregistrer » relit la liste EN SILENCE : le tableau reste, la ligne reste dépliée, le champ est le même', async () => {
+    const r = regle({ name: 'Rappel' });
+    let liberer: (v: api.AutomationRule[]) => void = () => undefined;
+    vi.mocked(api.getAutomationRules).mockResolvedValueOnce([r]).mockReturnValueOnce(new Promise((ok) => { liberer = ok; }));
+    await rendre();
+    await cliquer(bouton(/^Voir les messages de Rappel$/));
+    const champ = conteneur.querySelector('tbody textarea');
+    expect(champ).not.toBeNull();
+    let retire = false;
+    const veille = new MutationObserver(() => { if (!conteneur.querySelector('table') || !conteneur.querySelector('tbody textarea')) retire = true; });
+    veille.observe(conteneur, { childList: true, subtree: true });
+    await saisirTexto('Bonjour, à demain.');
+    await cliquer(Array.from(conteneur.querySelectorAll('tbody button')).find((b) => /^Enregistrer$/.test((b.textContent || '').trim())));
+    await laisser();
+    // La relecture est partie, et rien n'a été démonté pendant qu'elle court.
+    expect(api.getAutomationRules).toHaveBeenCalledTimes(2);
+    expect(conteneur.querySelector('.animate-spin')).toBeNull();
+    expect(conteneur.querySelector('tbody textarea')).toBe(champ);
+    await act(async () => { liberer([{ ...r, actions: [{ type: 'send_sms', config: { body: 'Bonjour, à demain.' } }] } as api.AutomationRule]); });
+    await laisser();
+    veille.disconnect();
+    expect(retire).toBe(false);
+    expect(conteneur.querySelector('tbody textarea')).toBe(champ);
+  });
+
+  it('la liste passe à l’éditeur LE message visé (son rang parmi ceux du même type), la version anglaise et la langue du bureau', async () => {
+    const { readFileSync } = await import('node:fs');
+    const page = readFileSync('src/pages/Automations.tsx', 'utf8');
+    for (const propriete of [
+      'rang={messages.slice(0, i).filter((m) => m.type === a.type).length}',
+      "bodyEn={typeof a.config?.body_en === 'string' ? a.config.body_en : undefined}",
+      'langueBureau={langueIllisible ? null : orgLang ?? undefined}',
+      'lectureSeule={!!rule.deleted_at}',
+      'onSaved={() => { void load({ silencieux: true }); }}',
+    ]) expect(page, propriete).toContain(propriete);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:130 — le chargement est ANNONCÉ (role="status"), pas une roue muette', () => {
   it('pendant la lecture : « Chargement… » dans un role="status" ; il disparaît quand la liste arrive', async () => {
     let liberer: (v: api.AutomationRule[]) => void = () => undefined;
