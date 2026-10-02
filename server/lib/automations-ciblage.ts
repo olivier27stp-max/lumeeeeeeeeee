@@ -44,7 +44,7 @@ export { estDemandeDAvis, regleDemandeUnAvis } from '../../src/lib/automationCib
 export const PLAFOND_APERCU_CIBLAGE = 20_000;
 /** Nombre de clients montrés par « Voir la liste ». */
 export const TAILLE_APERCU_CIBLAGE = 20;
-/** Nombre de clients touchés gardés pour bâtir la liste (la route en retire ceux que l'utilisateur ne peut pas voir). */
+/** Nombre de clients touchés gardés au-delà des 20 affichés. */
 export const CANDIDATS_APERCU_CIBLAGE = 200;
 const PAGE = 1000;
 
@@ -259,7 +259,7 @@ export interface ApercuCiblage {
   dont: { stop_texto: number; desabonnes_courriel: number; sans_telephone: number; sans_courriel: number; sans_avis: number };
   /** Les premiers clients touchés, par ordre alphabétique. */
   apercu: ClientApercu[];
-  /** Les 200 premiers clients touchés : la route s'en sert pour ne montrer que ceux que l'utilisateur a le droit de voir. */
+  /** Les 200 premiers clients touchés (même ordre que `apercu`) — pour un écran qui pagine, et pour comparer le compteur au moteur. */
   candidats: ClientApercu[];
   /** Le carnet dépasse le plafond : `total` ne compte que les `plafond` premières fiches. */
   tronque: boolean;
