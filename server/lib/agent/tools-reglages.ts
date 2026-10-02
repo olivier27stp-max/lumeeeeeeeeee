@@ -893,7 +893,7 @@ const setAutomationLanguage: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'set_automation_language',
-    description: 'Set the language (fr or en) of the automatic SMS and emails the org sends to clients. Owner/admin only.',
+    description: 'Set the language (fr or en) of the automatic SMS and emails the org sends to clients - for the WHOLE company, not one automation. Owner/admin only.',
     parameters: {
       type: 'object',
       properties: { language: { type: 'string', enum: ['fr', 'en'], description: 'fr or en.' } },
@@ -911,7 +911,20 @@ const setAutomationLanguage: AgentTool = {
         .select('org_id');
       if (error) throw error;
       if (!data || data.length === 0) throw new Error('Seuls le propriétaire ou un administrateur peuvent changer la langue des automatisations.');
-      return { updated: true, language: langue, note: langue === 'fr' ? 'Les messages automatiques partiront désormais en français.' : 'Les messages automatiques partiront désormais en anglais.' };
+      // RELU en base (A-05) : la langue annoncée est celle qui est enregistrée.
+      const { data: relu, error: eRelu } = await ctx.client.from('company_settings').select('default_language').eq('org_id', ctx.orgId).maybeSingle();
+      if (eRelu) throw eRelu;
+      const enregistree = relu?.default_language === 'en' ? 'en' : 'fr';
+      if (enregistree !== langue) throw new Error('La langue n’a pas été enregistrée — réessaie.');
+      const fr = langueDuTour() === 'fr';
+      return {
+        updated: true,
+        language: enregistree,
+        recu: enregistree === 'fr'
+          ? (fr ? 'Les messages automatiques partent maintenant en français, pour toute l’entreprise.' : 'Automatic messages now go out in French, for the whole company.')
+          : (fr ? 'Les messages automatiques partent maintenant en anglais, pour toute l’entreprise.' : 'Automatic messages now go out in English, for the whole company.'),
+        note: enregistree === 'fr' ? 'Les messages automatiques partiront désormais en français.' : 'Les messages automatiques partiront désormais en anglais.',
+      };
     }),
 };
 

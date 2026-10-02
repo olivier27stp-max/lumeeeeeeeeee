@@ -174,7 +174,8 @@ describe('écritures directes : filtrées par org_id = ctx.orgId, note en franç
     ['toggle_automation_rule', { rule_id: 'r1', is_active: false }, ['automation_rules'], { automation_rules: { data: [{ id: 'r1', name: 'Avis', is_active: false }] } }],
     ['update_automation_message', { rule_id: 'r1', action_type: 'send_sms', body: 'Merci !' }, ['automation_rules'], { automation_rules: { data: [{ id: 'r1', name: 'Avis', actions: [{ type: 'send_sms', config: { body: 'ancien' } }] }] } }],
     ['update_automation_sms_body', { rule_id: 'r1', body: 'Merci !' }, ['automation_rules'], { automation_rules: { data: [{ id: 'r1', name: 'Avis', actions: [{ type: 'send_sms', config: { body: 'ancien' } }] }] } }],
-    ['set_automation_language', { language: 'en' }, ['company_settings'], { company_settings: { data: [{ org_id: 'org' }] } }],
+    // L'outil RELIT la langue après l'avoir écrite (A-05) : la base rend ce qui est enregistré.
+    ['set_automation_language', { language: 'en' }, ['company_settings'], { company_settings: { data: [{ org_id: 'org', default_language: 'en' }] } }],
     ['update_tax_config', { tax_id: 'x1', rate: 9.975 }, ['tax_configs'], { tax_configs: { data: [{ id: 'x1', name: 'TVQ', rate: 9.975, is_active: true }] } }],
     ['delete_tax_config', { tax_id: 'x1' }, ['tax_configs'], { tax_configs: { data: [{ id: 'x1', name: 'TVQ' }] } }],
     ['set_default_tax_group', { group_id: 'g1' }, ['tax_groups', 'company_settings'], { tax_groups: { data: [{ id: 'g1', name: 'Québec' }] }, company_settings: { data: [] } }],
