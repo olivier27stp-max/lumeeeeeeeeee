@@ -2242,7 +2242,14 @@ export default function AutomationBuilderPage() {
   }, []);
 
   /** Quitter l'éditeur — en demandant d'abord si du travail se perdrait. */
-  const quitterEditeur = useCallback(async () => {
+  /**
+   * Quitter l'éditeur — vers la liste, ou vers une autre page de l'app
+   * (`destination`). TOUTES les sorties offertes par l'éditeur passent ici :
+   * « Voir Autopilot » partait par un `navigate` nu, et quittait donc sans
+   * question quand une étape était incomplète, là où « Mes automatisations »
+   * et « Précédent » demandent (triage éditeur, S-14).
+   */
+  const quitterEditeur = useCallback(async (destination = '/automations') => {
     /*
      * ENREGISTRER AVANT DE PARTIR, plutôt qu'avertir.
      *
@@ -2285,7 +2292,7 @@ export default function AutomationBuilderPage() {
     // Déjà enregistré (ou abandon confirmé) : le départ n'a rien à refaire.
     sortieGeree.current = true;
     // Sur l'entrée en double de la garde : la liste la REMPLACE (sinon « Précédent », depuis la liste, la retrouverait).
-    navigate('/automations', surEntreeDeGarde() ? { replace: true } : undefined);
+    navigate(destination, surEntreeDeGarde() ? { replace: true } : undefined);
   }, [regle, etapesIncompletes, etatSauvegarde, nom, steps, fr, navigate, ecrire]);
 
   const declencheurLabel = useMemo(() => {
@@ -2990,7 +2997,9 @@ export default function AutomationBuilderPage() {
                       </p>
                       <button
                         type="button"
-                        onClick={() => navigate('/settings/billing')}
+                        onClick={() => (ajoutEnAttente
+                          ? quandPanneauLibre(() => void quitterEditeur('/settings/billing'))
+                          : void quitterEditeur('/settings/billing'))}
                         className="glass-button mt-3 inline-flex items-center gap-1.5 text-[12px]"
                       >
                         {fr ? 'Voir Autopilot' : 'See Autopilot'}

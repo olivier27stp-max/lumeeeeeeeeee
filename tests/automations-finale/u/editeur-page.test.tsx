@@ -37,6 +37,8 @@ const etat = vi.hoisted(() => ({
   regles: [] as Array<Record<string, unknown> & { id: string }>,
   champs: [] as unknown[],
   membres: [] as Array<{ user_id: string; nom: string }> | Error,
+  /** Le forfait du bureau inclut-il Lumi (`includes_ai`) ? Sans lui : la carte « inclus dans Autopilot ». */
+  lumi: true,
 }));
 const api = vi.hoisted(() => ({
   editeur: vi.fn(),
@@ -113,7 +115,7 @@ vi.mock('../../../src/lib/supabase', () => {
     },
   };
 });
-vi.mock('../../../src/hooks/usePlanFeature', () => ({ usePlanFeature: () => ({ hasFeature: true, loading: false }) }));
+vi.mock('../../../src/hooks/usePlanFeature', () => ({ usePlanFeature: () => ({ hasFeature: etat.lumi, loading: false }) }));
 vi.mock('../../../src/hooks/useModuleAccess', () => ({ useModuleAccess: () => ({ isEnabled: false, loading: false }) }));
 vi.mock('../../../src/components/champs/automatisations', async (orig) => ({
   ...(await orig<typeof import('../../../src/components/champs/automatisations')>()),
@@ -147,6 +149,7 @@ beforeEach(() => {
   etat.regles = [regle()];
   etat.champs = [];
   etat.membres = [];
+  etat.lumi = true;
   api.editeur.mockReset();
   api.editeur.mockImplementation(async (id: string | null) => ({
     rule: etat.regles.find((r) => r.id === id) ?? null,
@@ -196,6 +199,7 @@ async function ouvrir(chemin = `/automations/${ID}`) {
           <Routes>
             <Route path="/automations/:id" element={<><AutomationBuilderPage /><Lieu /></>} />
             <Route path="/automations" element={<Lieu />} />
+            <Route path="/settings/billing" element={<Lieu />} />
           </Routes>
         </LanguageProvider>
       </MemoryRouter>,
@@ -2085,5 +2089,61 @@ describe('EDT-166 (régression) — l’entrée d’historique de la garde s’e
     await precedent();
     expect(confirmerMock).toHaveBeenCalledTimes(1);
     expect(ici()).toBe('editeur');
+  });
+});
+
+// ─── Triage « éditeur », S-14 (07-clavardage-lumi:461) ──────────
+
+describe('S-14 — « Voir Autopilot » passe par la même garde que « Mes automatisations » et « Précédent »', () => {
+  const INCOMPLETE = [
+    { id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Bonjour' } }, suivant: 'e2' },
+    { id: 'e2', type: 'action', nom: null, action: { type: 'create_task', config: { title: '' } }, suivant: null },
+  ];
+  /** Forfait sans Lumi, parcours qui porte une étape incomplète, et une modification : « 1 étape(s) à compléter ». */
+  async function ouvrirSansLumiAvecTravailNonEnregistrable() {
+    etat.lumi = false;
+    etat.regles = [regle({ steps: INCOMPLETE })];
+    await ouvrir('/automations/' + ID + '?lumi=1');
+    cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v2');
+    await attendre();
+    expect(barreDuHaut()).toContain('1 étape(s) à compléter');
+    expect(bouton('Voir Autopilot')).toBeDefined();
+  }
+
+  it('une étape incomplète : « Voir Autopilot » pose « Quitter sans enregistrer ? » — « Annuler » garde l’éditeur et le travail', async () => {
+    await ouvrirSansLumiAvecTravailNonEnregistrable();
+    confirmerMock.mockImplementationOnce(async () => false);
+    cliquer(bouton('Voir Autopilot'));
+    await attendre(12);
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    const question = confirmerMock.mock.calls[0][0] as { title: string; message: string };
+    expect(question.title).toBe('Quitter sans enregistrer ?');
+    expect(question.message).toBe('Une étape est incomplète, donc le parcours n’a pas pu être enregistré. Si vous quittez maintenant, ces modifications seront perdues.');
+    expect(lieu()).toContain(`/automations/${ID}`);
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Nom de l’automatisation"]')?.value).toBe('Relance devis v2');
+  });
+
+  it('… « Quitter » : on part vers la facturation, sans toast d’après coup', async () => {
+    await ouvrirSansLumiAvecTravailNonEnregistrable();
+    cliquer(bouton('Voir Autopilot'));
+    await attendre(12);
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(lieu()).toBe('/settings/billing');
+    expect(toasts.erreur.join('\n')).not.toContain('quittée sans enregistrer');
+  });
+
+  it('rien à perdre : « Voir Autopilot » part sans question ; un travail enregistrable est ENREGISTRÉ avant de partir', async () => {
+    etat.lumi = false;
+    await ouvrir('/automations/' + ID + '?lumi=1');
+    cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v2');
+    await attendre();
+    cliquer(bouton('Voir Autopilot'));
+    await attendre(12);
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect((api.modifier.mock.calls[0][1] as { name?: string }).name).toBe('Relance devis v2');
+    expect(lieu()).toBe('/settings/billing');
   });
 });
