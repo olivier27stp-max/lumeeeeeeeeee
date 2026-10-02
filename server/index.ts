@@ -51,6 +51,7 @@ import communicationsRouter from './routes/communications';
 import automationTestRouter from './routes/automation-test';
 import automationEventsRouter from './routes/automation-events';
 import automationRulesRouter from './routes/automation-rules';
+import automationMessagesRouter from './routes/automation-messages';
 import automationPublicationRouter from './routes/automation-publication';
 import automationStatsRouter from './routes/automation-stats';
 import portalRouter from './routes/portal';
@@ -862,6 +863,8 @@ app.use('/api', communicationsRouter);
 app.use('/api', automationTestRouter);
 app.use('/api', automationEventsRouter);
 app.use('/api', automationRulesRouter);
+// Le texte d'un message d'automatisation : PATCH /api/automations/rules/:id/messages.
+app.use('/api', automationMessagesRouter);
 app.use('/api', automationPublicationRouter);
 app.use('/api', automationStatsRouter);
 app.use('/api', portalRouter);
