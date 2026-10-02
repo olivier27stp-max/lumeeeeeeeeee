@@ -30,6 +30,7 @@ import { cn } from '../../lib/utils';
 import type { Etape } from '../../lib/sequenceTypes';
 import { trouverAction } from '../../lib/automationCatalogue';
 import { texteSansHtml } from '../../lib/automationTemplates';
+import { estCorpsHtml } from '../../lib/emailBodyText';
 
 interface Props {
   /** Le déclencheur, affiché en tête — il n'est pas une étape. */
@@ -159,7 +160,12 @@ function detailEtape(etape: Etape, fr: boolean, langueEnvoi: 'fr' | 'en' = 'fr')
     // … et le texte que le bureau ENVOIE : dans un bureau anglais, la carte
     // montrait le français pendant que l'anglais partait.
     const config = etape.action?.config as Record<string, unknown> | undefined;
-    const texte = texteSansHtml(texteEnvoye(config, 'body', langueEnvoi) || texteEnvoye(config, 'title', langueEnvoi)).replace(/\s+/g, ' ');
+    const brut = texteEnvoye(config, 'body', langueEnvoi) || texteEnvoye(config, 'title', langueEnvoi);
+    // Seul un VRAI corps HTML est débalisé. Un texte tapé garde ses « < » et
+    // ses « > » : « Rabais si le total est < 500 $ ou > 1000 $ » s'affichait
+    // « Rabais si le total est 1000 $ » — tout ce qui était entre les deux
+    // signes passait pour une balise (triage actions, 03-champs-types:177).
+    const texte = (estCorpsHtml(brut) ? texteSansHtml(brut) : brut).replace(/\s+/g, ' ').trim();
     return texte.length > 60 ? `${texte.slice(0, 60)}…` : texte;
   }
   if (etape.type === 'si') {

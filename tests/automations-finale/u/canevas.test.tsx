@@ -95,3 +95,29 @@ describe('la carte d’une étape montre le texte que le bureau ENVOIE (comme le
     expect(carte('Send a text')).toContain(FR);
   });
 });
+
+// ─── Triage « actions », 03-champs-types:177 ────────────────────
+
+describe('03:177 — la carte résume le texte tel qu’il est écrit, « < » et « > » compris', () => {
+  it('« Rabais si le total est < 500 $ ou > 1000 $ » : rien ne disparaît entre les deux signes', () => {
+    const texte = 'Rabais si le total est < 500 $ ou > 1000 $';
+    monter([action('send_sms', { body: texte })]);
+    expect(carte('Envoyer un texto')).toContain(texte);
+  });
+
+  it('un courriel écrit en texte dans l’éditeur garde aussi ses signes', () => {
+    monter([action('send_email', { subject: 'Objet', body: 'Total < 500 $ : 5 % ; total > 1000 $ : 10 %' })]);
+    expect(carte('Envoyer un courriel')).toContain('Total < 500 $ : 5 % ; total > 1000 $ : 10 %');
+  });
+
+  it('un vrai corps HTML (courriel fourni) reste résumé en TEXTE, sans balise', () => {
+    monter([action('send_email', { subject: 'Objet', body: '<div style="font-family:sans-serif;"><h2>Bonjour [client_first_name],</h2><p>Votre devis est prêt &amp; signé.</p></div>' })]);
+    expect(carte('Envoyer un courriel')).toContain('Bonjour [client_first_name], Votre devis est prêt & signé.');
+    expect(carte('Envoyer un courriel')).not.toMatch(/<div|<h2>|style=/);
+  });
+
+  it('un texte long est toujours coupé à 60 caractères, signes compris', () => {
+    monter([action('send_sms', { body: `Rabais < 500 $ ${'x'.repeat(80)}` })]);
+    expect(carte('Envoyer un texto')).toContain(`${`Rabais < 500 $ ${'x'.repeat(80)}`.slice(0, 60)}…`);
+  });
+});

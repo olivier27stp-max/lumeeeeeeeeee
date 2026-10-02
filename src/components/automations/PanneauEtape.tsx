@@ -47,7 +47,7 @@ import {
   BoutonsVariablesChamps, ConditionsChampsEtape, EditeurMajChamp, sansConditionsIncompletes,
 } from '../champs/automatisations';
 import type { ChampPerso, ObjetChamp } from '../../lib/champs/types';
-import { htmlVersTexte, texteVersHtml, variablesInconnues, variableLisible } from '../../lib/emailBodyText';
+import { estCorpsHtml, htmlVersTexte, texteVersHtml, variablesInconnues, variableLisible } from '../../lib/emailBodyText';
 import { confirmer } from '../ui/ConfirmDialog';
 import { analyserConditions, conditionsConservees, texteDesConditions } from '../../lib/conditionsEtapeSi';
 
@@ -147,9 +147,6 @@ function sansVersionsRetirees(etape: Etape, aRetirer: Array<{ cle: string; princ
  * jamais touché : il est enregistré tel qu'on l'a tapé.
  */
 const CLES_CORPS_COURRIEL = ['body', cleAnglaise('body')];
-/** Du HTML du produit : il COMMENCE par une balise de bloc. « total < 500 $ » n'en est pas. */
-const estCorpsHtml = (valeur: string | undefined): valeur is string =>
-  typeof valeur === 'string' && /^\s*<(div|p|h[1-6]|ul|table)\b[^>]*>/i.test(valeur);
 
 /** L'étape telle que le panneau l'édite, et ce qu'il faut pour rendre le HTML à l'enregistrement. */
 function versEdition(etape: Etape): { etape: Etape; html: Record<string, { html: string; texte: string }> } {

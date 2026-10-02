@@ -35,6 +35,16 @@ function echapper(s: string): string {
 }
 
 /**
+ * Ce texte est-il du HTML du produit (le corps d'un courriel fourni) ? Il
+ * COMMENCE alors par une balise de bloc. « Rabais si le total est < 500 $ ou
+ * > 1000 $ » n'en est pas : un texte tapé garde ses « < » et ses « > ».
+ * Une seule règle pour le panneau d'étape (qui édite du texte) et la carte du
+ * canevas (qui le résume).
+ */
+export const estCorpsHtml = (valeur: string | undefined | null): valeur is string =>
+  typeof valeur === 'string' && /^\s*<(div|p|h[1-6]|ul|table)\b[^>]*>/i.test(valeur);
+
+/**
  * HTML → texte éditable.
  *
  * Chaque paragraphe devient une ligne, les sauts de ligne sont préservés, et
