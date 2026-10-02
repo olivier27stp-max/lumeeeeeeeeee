@@ -1510,7 +1510,7 @@ export default function AutomationBuilderPage() {
    */
   const supprimerDepuis = useCallback(async (idEtape: string) => {
     // L'étape en cours d'ajout n'a rien après elle qui soit à elle : l'abandonner suffit.
-    if (ajoutEnAttente?.etape.id === idEtape) {
+    if (ajoutEnAttente?.etape?.id === idEtape) {
       setEtapeEnAttente(null);
       setMenuEtape(null);
       setEtapeChoisie(null);
@@ -1549,7 +1549,7 @@ export default function AutomationBuilderPage() {
 
   const supprimerEtape = useCallback(async (idEtape: string) => {
     // L'étape en cours d'ajout n'est pas dans le parcours : rien à recoudre.
-    if (ajoutEnAttente?.etape.id === idEtape) {
+    if (ajoutEnAttente?.etape?.id === idEtape) {
       setEtapeEnAttente(null);
       setEtapeChoisie(null);
       return;
@@ -3426,7 +3426,7 @@ export default function AutomationBuilderPage() {
           objetChamps={objetRegle}
           langueEnvoi={langueEnvoi}
           stats={statsEtapes?.[etapeOuverte.id] ?? null}
-          nouvelle={ajoutEnAttente?.etape.id === etapeOuverte.id}
+          nouvelle={ajoutEnAttente?.etape?.id === etapeOuverte.id}
           modifieePar={modifieePar}
           onEnregistrer={enregistrerEtape}
           onSupprimer={supprimerEtape}
