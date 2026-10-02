@@ -317,6 +317,22 @@ export async function drapeau(b: Bureau, feature: string, enabled: boolean) {
   oublierDrapeaux(b.orgA);
 }
 
+/**
+ * Ces règles tournent depuis `jours` jours.
+ *
+ * Une automatisation qu'on active ne réagit qu'à ce qui arrive APRÈS (mission
+ * finale, point 10) : une opportunité déjà dormante ou un client déjà inactif
+ * le jour de la publication ne la déclenche pas. Un test qui veut voir un
+ * déclencheur de balayage partir vieillit donc l'ACTIVATION de sa règle, pour
+ * que le seuil soit franchi après elle. Écrit `automation_rules.activee_le`
+ * (migration M-01 : sans elle, la date d'activation est `updated_at`, que la
+ * base réécrit — ce test ne peut alors pas la reculer).
+ */
+export async function activeesDepuis(b: Bureau, ids: string[], jours: number): Promise<void> {
+  await ok(b.admin.from('automation_rules')
+    .update({ activee_le: new Date(Date.now() - jours * 86_400_000).toISOString() }).in('id', ids), 'activation ancienne');
+}
+
 /** Un champ personnalisé créé comme dans Réglages → Champs personnalisés (vraie route). */
 export async function creerChamp(api: Api, corps: Record<string, unknown>): Promise<{ id: string; key: string; options?: Array<{ id: string; label: string }> }> {
   const r = await api.appeler('POST', '/api/custom-fields', corps);

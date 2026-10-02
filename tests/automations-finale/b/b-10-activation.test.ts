@@ -171,3 +171,75 @@ describe('point 10 — « Date atteinte » : seules les dates du jour visé part
     expect(n).toBe(1);
   });
 });
+
+/*
+ * Ajouté par l'agent M (corrections). Décision de la mission pour B-06 et B-07 : par défaut, une automatisation
+ * qu'on active ne réagit qu'à ce qui arrive APRÈS son activation. [B10-03] et [B10-04] ci-dessus prouvent que
+ * les cas déjà là sont ignorés ; ces deux-ci prouvent que le déclencheur n'est pas devenu muet pour autant.
+ * La date d'activation d'une règle est `automation_rules.activee_le` (migration proposée M-01, appliquée à la
+ * pile locale) : le test la recule pour que le seuil soit franchi après elle.
+ */
+describe('point 10 — une règle déjà active réagit bien à ce qui arrive APRÈS son activation', () => {
+  /** Attend `n` envois (les écouteurs du bus ne sont pas attendus par l'émetteur), puis laisse 3 s à un envoi de trop. */
+  const envoisApres = async (m: string, n: number) => {
+    for (let i = 0; i < 40 && (await envoisAvec(b, m)).length < n; i++) await pause(500);
+    await pause(3_000);
+    return envoisAvec(b, m);
+  };
+  const activeeDepuis = async (id: string, jours: number) =>
+    ok(b.admin.from('automation_rules').update({ activee_le: new Date(Date.now() - jours * 86_400_000).toISOString() }).eq('id', id), 'activation ancienne');
+
+  it('[B10-03b] « Opportunité qui dort » active depuis 30 jours : une opportunité qui franchit ses 7 jours reçoit le message ; le journal dit pourquoi les anciennes ont été ignorées', async () => {
+    const { detecterStagnation, traiterEvenementsPipeline, DELAI_GRACE_MS } = await import('../../../server/lib/pipelineEvenements');
+    const m = marque('B10-03b');
+    const p = await pipelineParDefaut(b);
+    const etape = p.ouvertes[2] ?? p.ouvertes[1];
+    const c = await creerClient(b, m);
+    const d = await creerDeal(b, c.id, etape.id, p.id);
+    const vieux = await creerDeal(b, (await creerClient(b, `${m} vieux`)).id, etape.id, p.id);
+    await pause(DELAI_GRACE_MS + 1_500);
+    await traiterEvenementsPipeline(b.admin, { orgId: b.orgA });
+    // Sans mouvement depuis 8 jours (seuil franchi hier) ; l'autre dort depuis 60 jours (avant l'activation).
+    await ok(b.admin.from('deals').update({ last_activity_at: new Date(Date.now() - 8 * 86_400_000).toISOString() }).eq('id', d.id), 'endormie 8 j');
+    await ok(b.admin.from('deals').update({ last_activity_at: new Date(Date.now() - 60 * 86_400_000).toISOString() }).eq('id', vieux.id), 'endormie 60 j');
+    const id = await regle(b, m, { trigger_event: 'deal.stage_idle', conditions: { idle_days: 7, stage_id: etape.id }, actions: [courriel(m, 'On ne vous oublie pas')] });
+    await activeeDepuis(id, 30);
+    await detecterStagnation(b.admin);
+    await pause(DELAI_GRACE_MS + 1_500);
+    await traiterEvenementsPipeline(b.admin, { orgId: b.orgA });
+    expect(await envoisApres(m, 1)).toHaveLength(1);
+    const journal = await journauxDe(b, id);
+    const ignorees = journal.filter((j) => j.result_data?.saute_code === 'anterieur_activation');
+    expect(ignorees.map((j) => j.entity_id)).toEqual([vieux.id]);
+    expect(String(ignorees[0].result_data?.saute)).toMatch(/déjà sans mouvement avant l’activation/);
+  }, 300_000);
+
+  it('[B10-04b] « Client inactif » active depuis 2 mois : le client qui a franchi ses 6 mois APRÈS reçoit le message ; ceux déjà inactifs avant, non', async () => {
+    const { balayerEntreprise } = await import('../../../server/lib/client-inactif');
+    await drapeau(b, 'auto_client_inactif', true);
+    try {
+      const m = marque('B10-04b');
+      const recent = await creerClient(b, `${m} récent`);
+      const ancien = await creerClient(b, `${m} ancien`);
+      const jRecent = await creerJob(b, `${m} récent`, recent.id, { status: 'completed' });
+      const jAncien = await creerJob(b, `${m} ancien`, ancien.id, { status: 'completed' });
+      const il = (jours: number) => new Date(Date.now() - jours * 86_400_000).toISOString();
+      // 200 jours : le seuil de 6 mois a été franchi il y a deux semaines environ. 400 jours : bien avant l'activation.
+      await ok(b.admin.from('jobs').update({ completed_at: il(200), updated_at: il(200) }).eq('id', jRecent.id), 'job récent');
+      await ok(b.admin.from('jobs').update({ completed_at: il(400), updated_at: il(400) }).eq('id', jAncien.id), 'job ancien');
+      const id = await regle(b, m, { trigger_event: 'client.inactive', conditions: { mois: 6, max_par_heure: 1000 }, actions: [courriel(m, 'Ça fait longtemps')] });
+      await activeeDepuis(id, 60);
+      await balayerEntreprise(b.admin, b.orgA);
+      const envois = await envoisApres(m, 1);
+      const fiches = await ok<Array<{ id: string; email: string }>>(b.admin.from('clients').select('id, email').in('id', [recent.id, ancien.id]), 'fiches');
+      const adresse = (id: string) => fiches.find((f) => f.id === id)!.email;
+      // (D'autres clients du bureau, laissés par des passes précédentes, ont pu franchir leur seuil dans la même
+      //  fenêtre : on juge NOS deux fiches.)
+      const destinataires = envois.map((e) => e.destinataire);
+      expect(destinataires).toContain(adresse(recent.id));
+      expect(destinataires).not.toContain(adresse(ancien.id));
+    } finally {
+      await drapeau(b, 'auto_client_inactif', false);
+    }
+  }, 300_000);
+});

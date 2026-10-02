@@ -13,8 +13,12 @@ export type Ligne = Record<string, any>;
 
 export interface RequeteFaite { table: string; op: 'select' | 'insert' | 'update' | 'delete'; valeur?: unknown }
 
-export function fauxSupabase(tables: Record<string, Ligne[]>, options: { erreurs?: Record<string, string> } = {}) {
+export function fauxSupabase(
+  tables: Record<string, Ligne[]>,
+  options: { erreurs?: Record<string, string>; rpc?: Record<string, (args: Ligne) => Ligne[]> } = {},
+) {
   const requetes: RequeteFaite[] = [];
+  const appelsRpc: Array<{ nom: string; args: Ligne }> = [];
   const lire = (l: Ligne, c: string) => {
     const m = /^(\w+)->>?(\w+)$/.exec(c);
     return m ? l[m[1]]?.[m[2]] : l[c];
@@ -66,9 +70,28 @@ export function fauxSupabase(tables: Record<string, Ligne[]>, options: { erreurs
     };
     return b;
   };
-  const rpc = async () => ({ data: null, error: null });
+  /**
+   * Une fonction SQL qui rend des lignes : `options.rpc[nom](args)`. Comme avec
+   * PostgREST, son résultat se filtre, se trie et se borne (gte / order / limit).
+   */
+  const rpc = (nom: string, args: Ligne = {}) => {
+    appelsRpc.push({ nom, args });
+    let lignes = [...(options.rpc?.[nom]?.(args) ?? [])];
+    const b: Ligne = {
+      gte: (c: string, v: any) => { lignes = lignes.filter((l) => l[c] >= v); return b; },
+      order: (c: string, o: { ascending?: boolean } = {}) => {
+        lignes.sort((x, y) => (x[c] < y[c] ? -1 : x[c] > y[c] ? 1 : 0) * (o.ascending === false ? -1 : 1));
+        return b;
+      },
+      limit: (n: number) => { lignes = lignes.slice(0, n); return b; },
+      then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
+        Promise.resolve({ data: options.rpc?.[nom] ? lignes : null, error: null }).then(res, rej),
+    };
+    return b;
+  };
   return {
     client: { from, rpc } as never,
+    appelsRpc,
     tables,
     requetes,
     /** Nombre de lectures (select) par table depuis le début, ou depuis `depuis`. */

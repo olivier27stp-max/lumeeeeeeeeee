@@ -36,6 +36,7 @@ import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
 import { typeEnvoi } from './desabonnement';
 import { revaliderTache, motifArret, phraseArret, sortDuRappelAvant } from './sortie-parcours';
 import { normaliserJoursAvant } from './rappels-dates';
+import { casAnterieurALActivation } from './automations-activation';
 
 interface AutomationRule {
   id: string;
@@ -59,6 +60,9 @@ interface AutomationRule {
    */
   settings?: ReglagesRegle | null;
   is_active: boolean;
+  /** Depuis quand la règle est active (migration proposée M-01) ; repli : `updated_at`. Voir automations-activation.ts. */
+  activee_le?: string | null;
+  updated_at?: string | null;
   /** Portée pipeline (déclencheurs `deal.*`). `null` = toutes les étapes. */
   pipeline_id?: string | null;
   stage_id?: string | null;
@@ -1543,6 +1547,14 @@ async function handleEvent(event: CRMEvent) {
         // étiquette posée, étape…) : pas la sienne → rien, pas même une trace.
         const { ciblage, filtres } = separerCiblage(rule.conditions, event.type);
         if (!evaluateConditions(ciblage, event)) continue;
+        // Activation sans effet rétroactif (point 10) : ce qui dormait ou
+        // était inactif AVANT l'activation de la règle n'est pas un événement
+        // pour elle. Seuls les déclencheurs de balayage entrent ici.
+        const dejaLa = await casAnterieurALActivation(engineConfig.supabase, rule, event);
+        if (dejaLa) {
+          await journaliserRegleEcartee(engineConfig.supabase, rule, event, null, { saute: dejaLa, saute_code: 'anterieur_activation' });
+          continue;
+        }
         // À partir d'ici l'événement EST celui de la règle : si un filtre
         // l'écarte, le journal le dit (L-004).
         if (!evaluateConditions(filtres, event)) {

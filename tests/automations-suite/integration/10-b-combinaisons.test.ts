@@ -11,7 +11,7 @@ import { marque, attendre } from '../harnais/moteur';
 import { cibleProd } from '../harnais/bureau-test';
 import {
   preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux,
-  traiterPipeline, creerClient, creerJob, creerDeal, pipelineParDefaut, drapeau, ok, type Api, type Bureau,
+  traiterPipeline, creerClient, creerJob, creerDeal, pipelineParDefaut, drapeau, activeesDepuis, ok, type Api, type Bureau,
 } from './10-b-outils';
 
 let b: Bureau & { fuseau: string };
@@ -46,6 +46,8 @@ describe('[B] déclencheurs balayés : deux règles, réglages différents', () 
     await creerJob(b, m, client.id, { status: 'completed', completed_at: new Date(Date.now() - 200 * 86_400_000).toISOString() });
     const a = await regle(`${m} plafond 25`, 'client.inactive', { mois: 6, max_par_heure: 25 });
     const c = await regle(`${m} plafond 50`, 'client.inactive', { mois: 6, max_par_heure: 50 });
+    // Les deux règles tournent depuis 2 mois : le client est devenu inactif APRÈS leur activation (point 10).
+    await activeesDepuis(b, [a, c], 60);
     const { balayerEntreprise } = await import('../../../server/lib/client-inactif');
     await balayerEntreprise(b.admin, b.orgA);
     const lien = (t: Array<{ linked_entity_id: string | null }>) => t.filter((x) => x.linked_entity_id === client.id);
@@ -71,6 +73,8 @@ describe('[B] déclencheurs balayés : deux règles, réglages différents', () 
     await ok(b.admin.from('deals').update({ last_activity_at: new Date(Date.now() - 5 * 86_400_000).toISOString() }).eq('id', deal.id), 'deal endormi 5 j');
     const sept = await regle(`${m} 7 jours`, 'deal.stage_idle', { stage_id: e2.id }, [{ type: 'create_task', config: { title: `${m} 7 jours`, body: 'Pour {client_name}' } }]);
     const trois = await regle(`${m} 3 jours`, 'deal.stage_idle', { stage_id: e2.id, idle_days: 3 }, [{ type: 'create_task', config: { title: `${m} 3 jours`, body: 'Pour {client_name}' } }]);
+    // Les deux règles tournent depuis un mois : l'opportunité s'est endormie APRÈS leur activation (point 10).
+    await activeesDepuis(b, [sept, trois], 30);
     await ok(b.admin.rpc('pipeline_detecter_stagnation'), 'détection');
     await traiterPipeline(b);
     const moi = (t: Array<{ description: string | null }>) => t.filter((x) => x.description === `Pour Cliente ${m}`);

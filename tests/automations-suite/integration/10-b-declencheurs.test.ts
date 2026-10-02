@@ -19,7 +19,7 @@ import { marque, attendre } from '../harnais/moteur';
 import {
   preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux,
   traiterBase, traiterPipeline, creerClient, creerJob, creerDevis, creerFacture, creerDeal, pipelineParDefaut,
-  drapeau, creerChamp, ecrireChamps, ok, SIGNATURE_PNG, NAVIGATEUR, type Api, type Bureau,
+  drapeau, activeesDepuis, creerChamp, ecrireChamps, ok, SIGNATURE_PNG, NAVIGATEUR, type Api, type Bureau,
 } from './10-b-outils';
 
 // Secrets de TEST, posés avant tout import du serveur (config.ts les lit au
@@ -382,6 +382,9 @@ describe('[B] rendez-vous, contrats, clients', () => {
     const ilYa7Mois = new Date(Date.now() - 213 * 86_400_000).toISOString();
     await creerJob(b, m, client.id, { status: 'completed', completed_at: ilYa7Mois });
     const p = await paire(m, { declencheur: 'client.inactive', vraie: { mois: 6 }, fausse: { mois: 12 } });
+    // Les règles tournent depuis 2 mois : le client a franchi les 6 mois d'inactivité APRÈS leur activation
+    // (une règle activée aujourd'hui ne relance pas un client déjà inactif — point 10 de la mission finale).
+    await activeesDepuis(b, regles.slice(-2), 60);
     const { balayerEntreprise } = await import('../../../server/lib/client-inactif');
     await balayerEntreprise(b.admin, b.orgA);
     await verifier(p, { declencheur: 'client.inactive', entityType: 'client', entityId: client.id, lienType: 'client', lienId: client.id });
@@ -580,6 +583,9 @@ describe('[B] pipeline de ventes (trigger SQL → pipeline_events → bus)', () 
     // À l'insertion, la base impose last_activity_at = now() : on vieillit le deal ensuite.
     await ok(b.admin.from('deals').update({ last_activity_at: new Date(Date.now() - 10 * 86_400_000).toISOString() }).eq('id', deal.id), 'deal endormi');
     const p = await paire(m, { declencheur: 'deal.stage_idle', vraie: { stage_id: e2.id, idle_days: 7 }, fausse: { stage_id: e3.id } });
+    // Les règles tournent depuis un mois : l'opportunité s'est endormie APRÈS leur activation (point 10 :
+    // une règle activée aujourd'hui n'alerte pas pour ce qui dormait déjà).
+    await activeesDepuis(b, regles.slice(-2), 30);
     await ok(b.admin.rpc('pipeline_detecter_stagnation'), 'détection');
     await traiterPipeline(b);
     await verifier(p, { declencheur: 'deal.stage_idle', entityType: 'deal', entityId: deal.id, lienType: null, lienId: null, description: `Pour Cliente ${m}` });
