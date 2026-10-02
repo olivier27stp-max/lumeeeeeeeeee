@@ -164,6 +164,10 @@ Petite passe en prod (5 à 10 demandes réalistes, en joual aussi) → lire chaq
 - Cible (d), features hors Lumi : écrans jamais nommés.
 - [P] Comparer automatiquement les chiffres dits par Lumi aux chiffres rendus par les outils, seulement si Rafba le demande.
 
+### 9.3 bis — `main` est rouge depuis 13:21 UTC (pas de ce chantier)
+
+[V] Le commit `f6af753d` (« saisie manuelle d'une carte sur la facture via Stripe Connect », poussé directement sur `main` par Olivier St-Pierre) fait échouer `tests/portefeuilles-moyens-paiement.test.ts` : `server/lib/stripe-connect.ts` n'a plus `automatic_payment_methods: { enabled: true }` et le paiement de la page publique impose de nouveau `payment_method_types: ['card']`. Ce test protège Apple Pay / Google Pay (corrigés par #437) : [?] ils sont probablement de nouveau invisibles pour les clients en prod. Toute PR échoue « Lint · Test · Build » tant que ce n'est pas réglé. À voir avec Rafba et l'auteur du commit avant de toucher au paiement.
+
 ### 9.4 À coordonner
 
 - **Repli d'écriture des automatisations, PAS fait** (confirmé par la session Automatisations le 2026-10-02, qui s'arrête elle aussi) : dans `tools-lot-entreprise.ts` (≈ ligne 456, `create_automation_from_template` / `duplicate_automation_rule`), le repli `update({ is_active: false })` doit être remplacé par la porte d'écriture `ecrireRegle`. **`ecrireRegle` n'existe que sur la branche `mission/automatisations-finale` (poussée), pas sur `main`.** Ce remplacement fait partie du durcissement des écritures de cette mission ; sa passation est sur la branche `mission/automatisations-finale-passation`, fichier `docs/mission-automatisations-finale/PASSATION.md`, § 5.3. À faire seulement après le merge de cette branche, et coordonné avec la personne qui reprend les Automatisations.
