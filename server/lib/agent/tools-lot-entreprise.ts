@@ -682,7 +682,7 @@ const createAutomationFromTemplate: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'create_automation_from_template',
-    description: 'Start an automation from a library template, as a DRAFT (paused): nothing is sent until enabled with toggle_automation_rule. Only when the request names what the template does; if several could fit, ask which one. Custom flow described in words: create_automation_from_text.',
+    description: 'Start an automation from a library template, as a DRAFT (paused): nothing is sent until enabled with toggle_automation_rule. Only when the template does exactly what is asked; if it does more (an extra channel or step) or several could fit, use create_automation_from_text or ask.',
     parameters: {
       type: 'object',
       properties: { template_key: { type: 'string', description: 'Template key from list_automation_templates.' } },
