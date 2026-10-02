@@ -22,6 +22,7 @@ import {
   htmlVersTexte, texteVersHtml, remplacerVariables, variablesInconnues, VARIABLES_PROPOSEES, VARIABLES_CONNUES, VARIABLES_POINTEES_CONNUES,
 } from '../../lib/emailBodyText';
 import { variablesPour, VARIABLES_PAR_TYPE } from '../../lib/variablesCourriel';
+import { trouverAction } from '../../lib/automationCatalogue';
 import { apercuCourriel, envoyerEssaiCourriel } from '../../lib/emailTemplatesApi';
 import { useChampsTous, variablesChampsPourCourriel } from '../champs/automatisations';
 
@@ -157,8 +158,8 @@ function ChampBloc({
 
 /** Au-delà, une boîte de réception coupe l'objet : l'essentiel doit tenir avant. */
 const OBJET_REPERE = 70;
-/** Plafond de l'objet d'un courriel d'AUTOMATISATION — celui du serveur (`OBJET_MAX`, server/lib/automation-messages.ts). */
-const OBJET_MAX_AUTOMATISATION = 200;
+/** Plafond de l'objet d'un courriel d'AUTOMATISATION — celui du catalogue (champ « Objet » de « Envoyer un courriel »), que le serveur applique aussi. */
+const OBJET_MAX_AUTOMATISATION = trouverAction('send_email')?.champs.find((c) => c.cle === 'subject')?.max ?? 200;
 
 /** Au-delà de ce nombre de variables, la palette offre une recherche. */
 const SEUIL_RECHERCHE_VARIABLES = 12;

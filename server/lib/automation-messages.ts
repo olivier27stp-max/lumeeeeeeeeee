@@ -21,16 +21,23 @@
    tenue par tests/automations-finale/t/messages-route.test.ts.
    ═══════════════════════════════════════════════════════════════ */
 
+import { trouverAction } from '../../src/lib/automationCatalogue';
+
 export type Canal = 'send_sms' | 'send_email';
 export type Config = Record<string, unknown>;
 export interface Action { type: string; config: Config }
 export type Etape = Record<string, unknown> & { id?: unknown; type?: unknown; action?: { type?: unknown; config?: Config } | null };
 
-/** Plafond d'un texto — la borne du champ `body` de `send_sms` au catalogue. */
-export const TEXTO_MAX = 1600;
-/** Plafonds d'un courriel — ceux des champs `subject` et `body` de `send_email` au catalogue. */
-export const OBJET_MAX = 200;
-export const COURRIEL_MAX = 10000;
+/* Les plafonds sont ceux du CATALOGUE de l'éditeur — une seule source : un
+   texte accepté dans l'éditeur plein écran l'est ici, et l'inverse. Les nombres
+   écrits en dur ne servent que si le catalogue perdait le champ. */
+const plafond = (action: string, champ: string, repli: number): number =>
+  trouverAction(action)?.champs.find((c) => c.cle === champ)?.max ?? repli;
+/** Plafond d'un texto — champ « Texte du message » de « Envoyer un texto ». */
+export const TEXTO_MAX = plafond('send_sms', 'body', 1600);
+/** Plafonds d'un courriel — champs « Objet » et « Message » de « Envoyer un courriel ». */
+export const OBJET_MAX = plafond('send_email', 'subject', 200);
+export const COURRIEL_MAX = plafond('send_email', 'body', 10000);
 /** Plafond du champ `actions` côté serveur (`corpsAutomatisation`, server/lib/validation.ts). */
 const ACTIONS_REFLET_MAX = 20;
 
