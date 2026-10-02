@@ -394,6 +394,15 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
     }
   };
 
+  /*
+   * Pendant que la copie se crée, la fenêtre ne se ferme pas (01-bibliotheque:489).
+   * Échap la fermait, et une seconde plus tard l'éditeur de la copie s'ouvrait
+   * quand même — sur quelqu'un qui croyait avoir renoncé. « Retour » et
+   * « Utiliser ce modèle » sont déjà désactivés pendant la création ; Échap, la
+   * croix et le fond attendent eux aussi.
+   */
+  const fermerSiPossible = () => { if (!enCours.current) onClose(); };
+
   const listeCategories = (prefixe: string) => (
     <div className="space-y-1">
       {categoriesVisibles.map((c) => {
@@ -550,7 +559,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
   };
 
   return (
-    <Modal open={open} onClose={onClose} size="4xl" title={fr ? 'Bibliothèque de modèles' : 'Template library'}
+    <Modal open={open} onClose={fermerSiPossible} size="4xl" title={fr ? 'Bibliothèque de modèles' : 'Template library'}
       footer={apercu ? (
         <>
           <button type="button" onClick={() => setApercu(null)} disabled={envoi} className="glass-button inline-flex items-center gap-1.5">
