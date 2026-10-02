@@ -322,7 +322,19 @@ export default function EmailPreviewEditor({
       .catch(() => { /* aperçu sans logo : pas bloquant */ });
   }, []);
 
-  const initial = useMemo(() => ({ blocs: blocsEnTexte(texteEnBlocs(htmlVersTexte(body))), objet: subject }), [body, subject]);
+  /*
+   * Le texte EN BASE sur lequel on travaille : celui de l'ouverture, puis celui
+   * du dernier enregistrement. Il désigne le courriel à modifier quand la règle
+   * en envoie plusieurs (`CibleMessage`), et il dit s'il reste quelque chose à
+   * enregistrer — sans attendre que la liste, derrière, se soit rechargée.
+   */
+  const [enBase, setEnBase] = useState({ body, subject });
+  useEffect(() => { setEnBase({ body, subject }); }, [body, subject]);
+
+  const initial = useMemo(
+    () => ({ blocs: blocsEnTexte(texteEnBlocs(htmlVersTexte(enBase.body))), objet: enBase.subject }),
+    [enBase],
+  );
   const modifie = blocsEnTexte(blocs) !== initial.blocs || objet !== initial.objet;
 
   /**
@@ -406,12 +418,15 @@ export default function EmailPreviewEditor({
       if (enregistrerTexte) {
         await enregistrerTexte(corpsHtml, objet);
       } else if (ruleId) {
-        await updateRuleMessage(ruleId, 'send_email', corpsHtml, objet);
+        // Une règle peut envoyer DEUX courriels : on écrit dans celui qu'on a
+        // ouvert (désigné par le texte lu), jamais dans « tous les courriels ».
+        await updateRuleMessage(ruleId, 'send_email', corpsHtml, objet, { corpsLu: enBase.body, objetLu: enBase.subject });
       } else {
         // Ni destination injectée, ni règle : rien n'aurait été écrit, et
         // l'utilisateur aurait vu « enregistré » pour du travail perdu.
         throw new Error(fr ? 'Aucune destination d’enregistrement' : 'No save destination');
       }
+      setEnBase({ body: corpsHtml, subject: objet });
       setEnregistre(true);
       setTimeout(() => setEnregistre(false), 1800);
       onSaved();
