@@ -791,16 +791,32 @@ export default function Automations() {
    * succès (audit V2, A-10). Une création à la fois.
    */
   const creationDossierEnVol = useRef(false);
+  /*
+   * Le champ de nom REMPLACE le bouton « Nouveau dossier » : à sa fermeture (Échap, « Annuler », ou
+   * le dossier créé) le focus retombait sur le corps de la page — au clavier, on repartait du tout
+   * début (triage `11-clavier:113`). Il revient sur le bouton.
+   */
+  const boutonNouveauDossier = useRef<HTMLButtonElement>(null);
+  const focusAuBoutonDossier = useRef(false);
+  const fermerSaisieDossier = () => {
+    focusAuBoutonDossier.current = true;
+    setSaisieDossier(false);
+    setNomDossier('');
+  };
+  useEffect(() => {
+    if (saisieDossier || !focusAuBoutonDossier.current) return;
+    focusAuBoutonDossier.current = false;
+    boutonNouveauDossier.current?.focus();
+  }, [saisieDossier]);
   const validerNouveauDossier = async () => {
     const nom = nomDossier.trim();
-    if (!nom) { setSaisieDossier(false); return; }
+    if (!nom) { fermerSaisieDossier(); return; }
     if (creationDossierEnVol.current) return;
     creationDossierEnVol.current = true;
     try {
       const d = await creerDossier(nom);
       setDossiers((prev) => [...prev, d].sort((a, b) => a.name.localeCompare(b.name)));
-      setNomDossier('');
-      setSaisieDossier(false);
+      fermerSaisieDossier();
       toast.success(fr ? `Dossier « ${d.name} » créé` : `Folder “${d.name}” created`);
     } catch (e: unknown) {
       toast.error(messageDErreur(e, fr));
@@ -1623,7 +1639,7 @@ export default function Automations() {
                   onChange={(e) => setNomDossier(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') void validerNouveauDossier();
-                    if (e.key === 'Escape') { setSaisieDossier(false); setNomDossier(''); }
+                    if (e.key === 'Escape') fermerSaisieDossier();
                   }}
                   placeholder={fr ? 'Nom du dossier' : 'Folder name'}
                   className="w-44 rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-[13px] text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -1637,7 +1653,7 @@ export default function Automations() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setSaisieDossier(false); setNomDossier(''); }}
+                  onClick={fermerSaisieDossier}
                   className="text-[13px] text-text-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   {fr ? 'Annuler' : 'Cancel'}
@@ -1646,6 +1662,7 @@ export default function Automations() {
             ) : (
               <button
                 type="button"
+                ref={boutonNouveauDossier}
                 onClick={() => setSaisieDossier(true)}
                 className="glass-button inline-flex items-center gap-1.5"
               >

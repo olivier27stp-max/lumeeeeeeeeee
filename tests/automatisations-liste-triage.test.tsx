@@ -598,6 +598,53 @@ describe('11-clavier:50 — les onglets se parcourent aux flèches', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('11-clavier:113 — après la saisie d’un dossier, le focus revient sur « Nouveau dossier »', () => {
+  const champ = () => conteneur.querySelector('#nouveau-dossier') as HTMLInputElement | null;
+  const ouvrirSaisie = async () => {
+    const b = bouton(/^Nouveau dossier$/) as HTMLButtonElement;
+    b.focus();
+    await cliquer(b);
+    expect(champ()).not.toBeNull();
+  };
+
+  it('Échap : le champ disparaît et le focus est sur « Nouveau dossier », pas sur le corps de la page', async () => {
+    await rendre();
+    await ouvrirSaisie();
+    await touche(champ(), 'Escape');
+    expect(champ()).toBeNull();
+    expect(document.activeElement).toBe(bouton(/^Nouveau dossier$/));
+  });
+
+  it('« Annuler » aussi', async () => {
+    await rendre();
+    await ouvrirSaisie();
+    await cliquer(bouton(/^Annuler$/));
+    expect(document.activeElement).toBe(bouton(/^Nouveau dossier$/));
+  });
+
+  it('le dossier créé (Entrée) : le focus revient aussi au bouton', async () => {
+    vi.mocked(builder.creerDossier).mockResolvedValue({ id: 'd9', name: 'Factures', position: 0, created_at: '' } as never);
+    await rendre();
+    await ouvrirSaisie();
+    await act(async () => {
+      const poser = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      poser.call(champ(), 'Factures');
+      champ()!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await touche(champ(), 'Enter');
+    await laisser();
+    expect(builder.creerDossier).toHaveBeenCalledWith('Factures');
+    expect(champ()).toBeNull();
+    expect(document.activeElement).toBe(bouton(/^Nouveau dossier$/));
+  });
+
+  it('au premier affichage, le bouton ne vole pas le focus', async () => {
+    await rendre();
+    expect(document.activeElement).toBe(document.body);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('11-clavier:178, :209, :161 — les menus « ⋮ » et « Créer » au clavier', () => {
   const menu = () => document.body.querySelector('[role="menu"]') as HTMLElement | null;
   const actif = () => (document.activeElement?.textContent || '').replace(/\s+/g, ' ').trim();
