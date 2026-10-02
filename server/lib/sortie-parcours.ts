@@ -424,8 +424,10 @@ async function revaliderEtiquettes(c: Ctx, clientId: string | null | undefined):
   const doitNePasAvoir: string[] = [];
   if (norme(c.conditions?.client_a_etiquette)) doitAvoir.push(norme(c.conditions?.client_a_etiquette));
   if (norme(c.conditions?.client_sans_etiquette)) doitNePasAvoir.push(norme(c.conditions?.client_sans_etiquette));
-  // « Étiquette ajoutée / retirée » : l'étiquette de l'ÉVÉNEMENT doit toujours y être (ou n'y être toujours pas).
-  const duDeclencheur = norme(c.metadonnees?.tag);
+  // « Étiquette ajoutée / retirée » pour UNE étiquette choisie (`conditions.tag`) :
+  // elle doit toujours y être (ou n'y être toujours pas). Une règle qui écoute
+  // N'IMPORTE quelle étiquette ne dit pas laquelle compte : elle n'est pas rejugée.
+  const duDeclencheur = norme(c.conditions?.tag);
   if (duDeclencheur && c.declencheur === 'client.tagged') doitAvoir.push(duDeclencheur);
   if (duDeclencheur && c.declencheur === 'client.untagged') doitNePasAvoir.push(duDeclencheur);
   if (!doitAvoir.length && !doitNePasAvoir.length) return null;

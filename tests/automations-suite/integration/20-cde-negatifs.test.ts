@@ -142,7 +142,10 @@ describe('C — tâche DÉJÀ en file quand la règle cesse de tourner', () => {
     ]);
     expect(await notesMarquees(b, m)).toEqual([]);
     expect(await envoisMarques(b, depuis, m)).toEqual([]);
-    expect(await journaux(b, regle)).toEqual([]);
+    // Rien n'est FAIT — et, depuis la mission finale (B-05), chaque tâche annulée laisse une ligne « saute »
+    // au journal qui dit pourquoi (`regle_inactive`) : avant, l'arrêt n'existait que sur la tâche.
+    expect((await journaux(b, regle)).map((l) => [l.result_success, (l.result_data as { saute_code?: string } | null)?.saute_code]))
+      .toEqual([[true, 'regle_inactive'], [true, 'regle_inactive']]);
   });
 
   it('[C-011] mise à la CORBEILLE avant l’échéance → tâche annulée « supprimée »', async () => {

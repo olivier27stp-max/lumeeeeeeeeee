@@ -116,10 +116,11 @@ describe('M — rafale de 1 000 événements', () => {
     const type = `qa_file_${m.slice(-13, -1)}`;
     const id = await regle(m, type, 3600);
     const N = 120;
-    // Entité « job » : une tâche différée dont le CLIENT n'existe pas est
-    // annulée (correctif C-024) — ici on mesure le débit, pas ce garde.
+    // Entité « webhook » : elle n'a pas de fiche à relire. Une tâche différée dont le client OU le job
+    // n'existe pas est annulée par la revalidation (C-024, puis B-03 : le job) — ici on mesure le débit,
+    // pas ce garde.
     await enParallele(Array.from({ length: N }, () => async () => {
-      await b.eventBus.emit('note.added', { orgId: b.orgA, entityType: 'job', entityId: randomUUID(), metadata: {} });
+      await b.eventBus.emit('note.added', { orgId: b.orgA, entityType: 'webhook', entityId: randomUUID(), metadata: {} });
     }), 30);
     const taches = await attendre(
       async () => (await b.admin.from('automation_scheduled_tasks').select('id', { count: 'exact', head: true }).eq('automation_rule_id', id).eq('status', 'pending')).count ?? 0,

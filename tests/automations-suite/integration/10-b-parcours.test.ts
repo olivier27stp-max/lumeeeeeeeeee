@@ -453,7 +453,10 @@ describe('[B] réglages : ré-entrée, arrêt sur réponse, sortie de parcours, 
     await avancer(t.id);
     const [fin] = await tachesPlanifiees(b.admin, id);
     expect(fin).toMatchObject({ status: 'cancelled', last_error: 'Annulée : le client a répondu.' });
-    expect(await journaux(b.admin, id)).toHaveLength(0);
+    // Aucun envoi — et, depuis la mission finale (B-05), l'arrêt laisse UNE ligne « saute » au journal qui dit pourquoi.
+    const lignes = await journaux(b.admin, id);
+    expect(lignes.map((l) => [l.action_type, l.result_success, (l.result_data as { saute_code?: string } | null)?.saute_code]))
+      .toEqual([['send_sms', true, 'client_a_repondu']]);
   });
 
   it('[B-323] sortie de parcours (drapeau auto_sortie_parcours) : facture payée pendant l’attente → relance annulée avec son motif', async () => {

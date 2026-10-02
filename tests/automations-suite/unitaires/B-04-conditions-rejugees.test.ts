@@ -78,18 +78,25 @@ describe('[B-04] « Étiquette ajoutée » / « Étiquette retirée »', () => {
   });
 
   it('« Étiquette ajoutée » + délai : l’étiquette est toujours là → le message part', async () => {
-    const r = await revaliderTache(monde(['À rappeler']).client, base({ declencheur: 'client.tagged', metadonnees: { tag: 'À rappeler' } }));
+    const r = await revaliderTache(monde(['À rappeler']).client, base({ declencheur: 'client.tagged', metadonnees: { tag: 'À rappeler' }, conditions: { tag: 'À rappeler' } }));
     expect(r.arret).toBeUndefined();
   });
 
+  it('une règle qui écoute N’IMPORTE quelle étiquette (aucune choisie) n’est pas rejugée : elle ne dit pas laquelle compte', async () => {
+    const sb = monde([]);
+    const r = await revaliderTache(sb.client, base({ declencheur: 'client.tagged', metadonnees: { tag: 'À rappeler' }, conditions: {} }));
+    expect(r.arret).toBeUndefined();
+    expect(sb.lectures()).toEqual(['clients']);
+  });
+
   it('« Étiquette retirée » + délai : elle a été reposée → arrêt', async () => {
-    const r = await revaliderTache(monde(['à rappeler']).client, base({ declencheur: 'client.untagged', metadonnees: { tag: 'À rappeler' } }));
+    const r = await revaliderTache(monde(['à rappeler']).client, base({ declencheur: 'client.untagged', metadonnees: { tag: 'À rappeler' }, conditions: { tag: 'À rappeler' } }));
     expect(r.arret?.changement).toBe('le client a maintenant l’étiquette « à rappeler »');
   });
 
   it('un parcours qui retire LUI-MÊME l’étiquette (« étiquette posée → la retirer → attendre → écrire ») ne s’annule pas', async () => {
     const r = await revaliderTache(monde([]).client, base({
-      declencheur: 'client.tagged', metadonnees: { tag: 'À rappeler' }, actionsDeLaRegle: ['retirer_etiquette', 'send_sms'],
+      declencheur: 'client.tagged', metadonnees: { tag: 'À rappeler' }, conditions: { tag: 'À rappeler' }, actionsDeLaRegle: ['retirer_etiquette', 'send_sms'],
     }));
     expect(r.arret).toBeUndefined();
   });
