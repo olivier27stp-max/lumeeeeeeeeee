@@ -33,6 +33,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { genererParcours } from '../lib/lumi/generer-parcours';
 import { lireDejaPubliees, noteDejaPubliees, typesDAction } from '../lib/lumi/deja-publiees';
+import { demandeTropCourte, ouvrirPanneau, reponseSansChangement, journaliserProposition } from '../lib/lumi/panneau-automatisation';
+import { refletDesActions } from '../lib/automations-etapes';
 import { sequenceEtapes } from '../lib/validation';
 import {
   validate, automationRuleCreateSchema, automationRuleUpdateSchema,
@@ -368,7 +370,8 @@ router.post('/automations/rules/generer', async (req, res) => {
   };
 
   const demande = String((req.body as { demande?: unknown })?.demande ?? '').trim();
-  if (demande.length < 10) {
+  // Dix caractères pour une PREMIÈRE demande ; en conversation, « oui » ou « active-la » sont des réponses (A-12).
+  if (demandeTropCourte(demande, (req.body as { echanges?: unknown })?.echanges)) {
     return res.status(400).json({ error: 'Décris ton automatisation en une phrase.' });
   }
   const langue = (req.body as { langue?: string })?.langue === 'en' ? 'en' : 'fr';
@@ -396,6 +399,8 @@ router.post('/automations/rules/generer', async (req, res) => {
         .map((e) => ({ role: e.role as 'user' | 'assistant', content: String(e.content) }))
     : undefined;
 
+  // L'automatisation ouverte telle qu'ENREGISTRÉE (son nom, le fil gardé avec elle) — lib/lumi/panneau-automatisation.ts.
+  const panneau = await ouvrirPanneau(auth.client, auth.orgId, ruleIdEnvoye);
   const resultat = await genererParcours({
     admin: getServiceClient(),
     orgId: auth.orgId,
@@ -403,13 +408,22 @@ router.post('/automations/rules/generer', async (req, res) => {
     demande,
     langue,
     echanges,
-    parcoursActuel: corps?.parcours_actuel ?? null,
+    parcoursActuel: corps?.parcours_actuel ? { ...corps.parcours_actuel, nom: panneau.nom, avant: panneau.etapesDAvant } : null,
+    canal: 'panneau',
+    ruleId: panneau.id,
   });
 
   if (!resultat.parcours) {
     // `sans_lumi` : l'écran propose Autopilot au lieu d'afficher une erreur.
     return refuser({ error: resultat.erreur ?? 'Lumi n’a rien pu construire.', sans_lumi: resultat.sansLumi === true });
   }
+
+  // Rien n'a changé (question, refus, « active-la ») : le parcours à l'écran repart tel quel — lib/lumi/panneau-automatisation.ts.
+  const sansChangement = await reponseSansChangement({
+    panneau, parcours: resultat.parcours, parcoursALEcran: corps?.parcours_actuel, demande, langue,
+    client: auth.client, admin: getServiceClient(), orgId: auth.orgId, userId: auth.user.id,
+  });
+  if (sansChangement) return res.json(sansChangement);
 
   // Le garde-fou : ce que Lumi propose doit passer la validation humaine.
   const verdict = sequenceEtapes.safeParse(resultat.parcours.steps);
@@ -521,6 +535,8 @@ router.post('/automations/rules/generer', async (req, res) => {
             (resultat.parcours.resume || (langue === 'fr' ? 'Parcours construit.' : 'Path built.'))
             + (autre ? (langue === 'fr' ? ` — Et une 2e automatisation, « ${autre.nom} » : ${autre.resume}` : ` — And a second automation, “${autre.nom}”: ${autre.resume}`) : '')
           ).slice(0, 2000),
+          // Ce que Lumi vient de remplacer (étapes d'avant) : c'est ce qui rend « annule ça » possible au tour suivant.
+          ...(resultat.parcours.remplacees?.length ? { avant: resultat.parcours.remplacees } : {}),
         },
       ].slice(-40);
       const { error: ecritureErr } = await auth.client
@@ -534,11 +550,17 @@ router.post('/automations/rules/generer', async (req, res) => {
     }
   }
 
+  // Le journal d'actions de Lumi (A-17) : ce qu'il propose dans l'éditeur n'apparaissait nulle part.
+  journaliserProposition(getServiceClient(), { orgId: auth.orgId, userId: auth.user.id, panneau, parcours: resultat.parcours });
+
   return res.json({
     nom: resultat.parcours.nom,
     trigger_event: resultat.parcours.trigger_event,
     resume: resultat.parcours.resume,
     steps: verdict.data,
+    // Ce que le SERVEUR a constaté (avant / après) : l'éditeur n'enregistre que si quelque chose a changé.
+    modifie: resultat.parcours.modifie !== false,
+    renomme: resultat.parcours.renomme === true,
     autre,
   });
 });
@@ -671,7 +693,8 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
 
   const { data, error } = await auth.client
     .from('automation_rules')
-    .update({ ...patch, updated_at: new Date().toISOString() })
+    // `actions` REDIT le parcours quand il change (A-02) — lib/automations-etapes.ts.
+    .update({ ...patch, ...refletDesActions(patch, existante.steps), updated_at: new Date().toISOString() })
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .select(COLONNES)
