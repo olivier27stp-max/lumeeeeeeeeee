@@ -800,34 +800,43 @@ export default function Automations() {
     }
   };
 
+  /**
+   * « Client inactif » : dire combien de clients sont visés AVANT d'activer, et demander.
+   *
+   * UNE fonction pour l'interrupteur d'une ligne ET pour la publication en lot : le lot publiait
+   * d'un coup, sans rien demander (triage de la liste, `07-lot:188`). Aucune publication en lot ne
+   * contourne une confirmation que l'interrupteur demande.
+   * `plusieurs` : le lot nomme l'automatisation dans le message (il peut en porter plusieurs).
+   */
+  const confirmerClientInactif = async (rule: AutomationRule, plusieurs = false): Promise<boolean> => {
+    confirmationOuverte.current = true;
+    try {
+      let n: number | null = null;
+      try {
+        n = await apercuClientsInactifs(Number((rule.conditions as Record<string, unknown> | null)?.mois ?? 6));
+      } catch (e) {
+        console.error('[Automations] aperçu clients inactifs', e);
+      }
+      const combien = n === null
+        ? (fr ? 'Les messages partiront par petits lots, en journée.' : 'Messages will go out in small batches, during the day.')
+        : (fr
+          ? `${n} client${n > 1 ? 's' : ''} correspond${n > 1 ? 'ent' : ''} aujourd’hui. Les messages partiront par petits lots, en journée.`
+          : `${n} client${n > 1 ? 's' : ''} match${n > 1 ? '' : 'es'} today. Messages will go out in small batches, during the day.`);
+      return await confirmer({
+        title: fr ? 'Activer « Client inactif » ?' : 'Activate “Inactive client”?',
+        message: plusieurs ? `${localizeAutomationName(rule.name, language)} — ${combien}` : combien,
+        confirmLabel: fr ? 'Activer' : 'Activate',
+      });
+    } finally {
+      confirmationOuverte.current = false;
+    }
+  };
+
   const handleToggle = async (rule: AutomationRule) => {
     // Une confirmation déjà à l'écran : les clics suivants n'en ouvrent pas d'autres.
     if (confirmationOuverte.current) return;
     const versActive = !fileBascule.etatAffiche(rule.id, rule.is_active);
-    // « Client inactif » : dire combien de clients sont visés AVANT d'activer.
-    if (versActive && rule.trigger_event === 'client.inactive') {
-      confirmationOuverte.current = true;
-      try {
-        let n: number | null = null;
-        try {
-          n = await apercuClientsInactifs(Number((rule.conditions as Record<string, unknown> | null)?.mois ?? 6));
-        } catch (e) {
-          console.error('[Automations] aperçu clients inactifs', e);
-        }
-        const ok = await confirmer({
-          title: fr ? 'Activer « Client inactif » ?' : 'Activate “Inactive client”?',
-          message: n === null
-            ? (fr ? 'Les messages partiront par petits lots, en journée.' : 'Messages will go out in small batches, during the day.')
-            : (fr
-              ? `${n} client${n > 1 ? 's' : ''} correspond${n > 1 ? 'ent' : ''} aujourd’hui. Les messages partiront par petits lots, en journée.`
-              : `${n} client${n > 1 ? 's' : ''} match${n > 1 ? '' : 'es'} today. Messages will go out in small batches, during the day.`),
-          confirmLabel: fr ? 'Activer' : 'Activate',
-        });
-        if (!ok) return;
-      } finally {
-        confirmationOuverte.current = false;
-      }
-    }
+    if (versActive && rule.trigger_event === 'client.inactive' && !(await confirmerClientInactif(rule))) return;
     if (versActive && !(await confirmerTextesDExemple([rule]))) return;
     setRestentAffichees((prev) => (prev.has(rule.id) ? prev : new Set(prev).add(rule.id)));
     const voulu = fileBascule.basculer(rule.id, rule.is_active);
@@ -1174,7 +1183,18 @@ export default function Automations() {
   const publierEnLot = async (actif: boolean) => {
     const cibles = reglesCochees.filter((r) => !r.deleted_at && r.is_active !== actif);
     if (cibles.length === 0) { setCochees(new Set()); return; }
-    if (actif && !(await confirmerTextesDExemple(cibles))) return;
+    // Une confirmation déjà à l'écran : un second clic sur « Publier » n'en ouvre pas une autre.
+    if (confirmationOuverte.current) return;
+    if (actif) {
+      // Les MÊMES confirmations que l'interrupteur d'une ligne, dans le même ordre : le nombre de
+      // clients visés par chaque « Client inactif », puis le texte d'exemple. Un refus arrête le lot
+      // entier : rien n'est publié.
+      const inactifs = cibles.filter((r) => r.trigger_event === 'client.inactive');
+      for (const r of inactifs) {
+        if (!(await confirmerClientInactif(r, cibles.length > 1))) return;
+      }
+      if (!(await confirmerTextesDExemple(cibles))) return;
+    }
     setLotEnCours(true);
     try {
       const resultats = await changerPublicationEnLot(cibles.map((r) => r.id), actif);
