@@ -554,6 +554,57 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     verifier((await etapes(regle.id))[0]?.action?.config?.body === HTML, 'réenregistré sans rien changer : le HTML d’origine est intact en base');
     await page.context().close();
   },
+
+  /** Lignes 8 et 9 (actions) — 999 jours, une adresse en http:// : refusés dans le panneau ; le serveur dit où et quoi. */
+  async l8() {
+    const b = await leBureau();
+    const regle = await creerRegle({ trigger_event: 'lead.created', steps: [
+      action('create_task', { title: 'Rappeler [client_name]', echeance_jours: '3' }, 'e1', 'e2'),
+      action('webhook', { url: 'https://crochets.lume-qa.test/entrant' }, 'e2', null),
+    ] });
+    const page = await ouvrirPage();
+    const ecritures: number[] = [];
+    page.on('response', (r) => { if (r.request().method() === 'PATCH' && r.url().includes(`/api/automations/rules/${regle.id}`)) ecritures.push(r.status()); });
+    await ouvrirEditeur(page, regle.id);
+    await carte(page, 'Créer une tâche').click();
+    const p = panneau(page);
+    const jours = p.getByLabel('À faire dans (jours)', { exact: false });
+    await jours.fill('999');
+    verifier(await enregistrer(page).isDisabled(), '999 jours : « Enregistrer » est désactivé');
+    verifier(await p.getByText('« À faire dans (jours) » doit être au plus 365.').first().isVisible(), 'la borne est dite dans le panneau');
+    await jours.fill('-5');
+    verifier(await p.getByText('« À faire dans (jours) » doit être au moins 0.').first().isVisible(), '-5 jours : « au moins 0 »');
+    await pause(5000);
+    verifier(ecritures.length === 0, `aucun envoi au serveur pendant le refus (${ecritures.join(', ') || 'aucun'})`);
+    await jours.fill('30');
+    await enregistrer(page).click();
+    await pause(5000);
+    verifier((await etapes(regle.id))[0]?.action?.config?.echeance_jours === '30', '30 jours : enregistré');
+    await carte(page, 'Appeler un webhook').click();
+    const adresse = panneau(page).getByLabel('L’adresse', { exact: false });
+    for (const v of ['http://crochets.lume-qa.test/entrant', 'pas une adresse', 'ftp://crochets.lume-qa.test']) {
+      await adresse.fill(v);
+      verifier(await enregistrer(page).isDisabled() && await panneau(page).getByText('« L’adresse » doit commencer par https://.').first().isVisible(), `« ${v} » : refusé dans le panneau, avec la raison`);
+    }
+    await adresse.fill('https://localhost/interne');
+    verifier(await enregistrer(page).isDisabled() && await panneau(page).getByText('« L’adresse » ne peut pas viser une adresse interne.').first().isVisible(), 'une adresse interne : refusée');
+    await pause(4000);
+    verifier((await etapes(regle.id))[1]?.action?.config?.url === 'https://crochets.lume-qa.test/entrant', 'la base garde l’adresse valide');
+    // Le vrai serveur, appelé sans l'éditeur : le refus nomme l'étape, avec ses accents — et en anglais.
+    const jeton = await page.evaluate(() => JSON.parse(localStorage.getItem('lume-auth-token') ?? '{}').access_token as string);
+    const refus = async (langue: string) => {
+      const r = await fetch(`http://127.0.0.1:3497/api/automations/rules/${regle.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}`, 'x-org-id': b.orgA, 'Accept-Language': langue },
+        body: JSON.stringify({ steps: [action('create_task', { title: 'Rappeler', echeance_jours: '999' }, 'e1', 'e2'), action('webhook', { url: 'http://x.test/a' }, 'e2', null)] }),
+      });
+      return { status: r.status, erreur: ((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? '' };
+    };
+    const fr = await refus('fr');
+    verifier(fr.status === 400 && fr.erreur.includes('Étape 1 (« Créer une tâche ») : « À faire dans (jours) » doit être au plus 365.') && fr.erreur.includes('Étape 2 (« Appeler un webhook ») : « L’adresse » doit commencer par https://.'), `le serveur, en français : ${fr.status} ${fr.erreur}`);
+    const en = await refus('en');
+    verifier(en.status === 400 && en.erreur.includes('Step 1 (“Create a task”): “Due in (days)” must be at most 365.') && !/Étape|doit/.test(en.erreur), `le serveur, en anglais : ${en.status} ${en.erreur}`);
+    await page.context().close();
+  },
 };
 
 const demandes = process.argv.slice(2);

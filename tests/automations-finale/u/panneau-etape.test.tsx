@@ -79,7 +79,7 @@ afterEach(async () => {
 const texte = () => conteneur.textContent || '';
 const boutons = () => Array.from(conteneur.querySelectorAll('button'));
 const boutonExact = (t: string) => boutons().find((b) => b.textContent?.trim() === t);
-const enregistrer = () => (boutonExact('Enregistrer') ?? boutonExact('Save'))!;
+const enregistrer = () => (boutonExact('Enregistrer') ?? boutonExact('Save action') ?? boutonExact('Save'))!;
 function cliquer(el: Element | undefined | null) {
   if (!el) throw new Error('rien à cliquer');
   act(() => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
@@ -468,5 +468,76 @@ describe('ligne 2 — la version anglaise d’un texte (`body_en`, `subject_en`)
     saisir(champ('Message text *'), '20 %');
     expect(texte()).toContain('“Message text” changed, not its English version: update it, empty it, or confirm it still holds.');
     expect(texte()).toContain('The English version still holds as is');
+  });
+});
+
+// ─── Triage « actions », lignes 8 et 9 ──────────────────────────
+
+describe('lignes 8 et 9 — une saisie que le serveur refuserait est refusée DANS LE PANNEAU, avec la borne dite', () => {
+  const tache = (jours: string) => monter('create_task', { title: 'Rappeler [client_name]', echeance_jours: jours }, { declencheur: 'lead.created' });
+  const jours = () => champ('À faire dans (jours)')!;
+
+  it('999 jours : « Enregistrer » est refusé, la borne est dite, rien ne part', async () => {
+    await tache('3');
+    expect(enregistrer().disabled).toBe(false);
+    saisir(jours(), '999');
+    expect(enregistrer().disabled).toBe(true);
+    expect(texte()).toContain('« À faire dans (jours) » doit être au plus 365.');
+    cliquer(enregistrer());
+    expect(enregistrees).toEqual([]);
+  });
+
+  it('-5 jours : refusé (« au moins 0 ») ; revenir à 30 lève le refus, et 30 est enregistré', async () => {
+    await tache('3');
+    saisir(jours(), '-5');
+    expect(enregistrer().disabled).toBe(true);
+    expect(texte()).toContain('« À faire dans (jours) » doit être au moins 0.');
+    saisir(jours(), '30');
+    expect(enregistrer().disabled).toBe(false);
+    expect(texte()).not.toContain('doit être au');
+    cliquer(enregistrer());
+    expect(configEnregistree()?.echeance_jours).toBe('30');
+  });
+
+  it('aux bornes (0 et 365) : accepté', async () => {
+    await tache('3');
+    for (const v of ['0', '365']) {
+      saisir(jours(), v);
+      expect(enregistrer().disabled, v).toBe(false);
+    }
+  });
+
+  it('une valeur estimée de 10 000 001 $ : refusée', async () => {
+    await monter('modifier_client', { statut: 'active', valeur: '500' }, { declencheur: 'lead.created' });
+    saisir(champ('Valeur estimée ($)'), '10000001');
+    expect(enregistrer().disabled).toBe(true);
+    expect(texte()).toContain('« Valeur estimée ($) » doit être au plus 10000000.');
+  });
+
+  it('webhook : http://, « pas une adresse », ftp:// → « doit commencer par https:// » ; une adresse interne → refusée aussi', async () => {
+    await monter('webhook', { url: 'https://crochets.lume-qa.test/entrant' }, { declencheur: 'lead.created' });
+    const adresse = () => champ('L’adresse')!;
+    expect(enregistrer().disabled).toBe(false);
+    for (const v of ['http://crochets.lume-qa.test/entrant', 'pas une adresse', 'ftp://crochets.lume-qa.test']) {
+      saisir(adresse(), v);
+      expect(enregistrer().disabled, v).toBe(true);
+      expect(texte(), v).toContain('« L’adresse » doit commencer par https://.');
+    }
+    saisir(adresse(), 'https://localhost/interne');
+    expect(enregistrer().disabled).toBe(true);
+    expect(texte()).toContain('« L’adresse » ne peut pas viser une adresse interne.');
+    cliquer(enregistrer());
+    expect(enregistrees).toEqual([]);
+    saisir(adresse(), 'https://exemple.test/entrant');
+    expect(enregistrer().disabled).toBe(false);
+    cliquer(enregistrer());
+    expect(configEnregistree()?.url).toBe('https://exemple.test/entrant');
+  });
+
+  it('en anglais', async () => {
+    await monter('create_task', { title: 'Call back', echeance_jours: '3' }, { declencheur: 'lead.created', fr: false });
+    saisir(champ('Due in (days)'), '999');
+    expect(enregistrer().disabled).toBe(true);
+    expect(texte()).toContain('“Due in (days)” must be at most 365.');
   });
 });

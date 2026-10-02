@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { actionsDuParcours } from '../../../src/lib/publicationAutomatisation';
 import { estFormatOrigine } from '../../../src/lib/sequenceTypes';
-import { ACTIONS, ENTITE_PAR_DECLENCHEUR, actionCompatible, champQuiFixeLEntite, entiteDuChamp, problemesAvantPublication } from '../../../src/lib/automationCatalogue';
+import { ACTIONS, ENTITE_PAR_DECLENCHEUR, actionCompatible, champQuiFixeLEntite, entiteDuChamp, fauteDeValeur, problemesAvantPublication } from '../../../src/lib/automationCatalogue';
 import { objetDeLaRegle } from '../../../src/components/champs/automatisations';
 import type { ChampPerso } from '../../../src/lib/champs/types';
 
@@ -189,5 +189,84 @@ describe('ligne 6 — « Appel reçu de l’extérieur » n’apporte ni devis, 
       '« Envoyer la facture » ne peut pas suivre ce déclencheur.',
       '« Assigner l’opportunité » ne peut pas suivre ce déclencheur.',
     ]);
+  });
+});
+
+// ─── Triage « actions », lignes 8 et 9 ──────────────────────────
+
+describe('`fauteDeValeur` — ce qu’une valeur de champ a de fautif : la même règle pour le panneau, la publication et le serveur', () => {
+  const champ = (cleAction: string, cle: string) => ACTIONS.find((a) => a.cle === cleAction)!.champs.find((c) => c.cle === cle)!;
+  const jours = champ('create_task', 'echeance_jours');
+  const valeur = champ('modifier_client', 'valeur');
+  const adresse = champ('webhook', 'url');
+
+  it('un nombre hors bornes : la borne est dite, en français (avec ses accents) et en anglais', () => {
+    expect(fauteDeValeur(jours, '999')).toEqual({ fr: 'doit être au plus 365', en: 'must be at most 365' });
+    expect(fauteDeValeur(jours, '-5')).toEqual({ fr: 'doit être au moins 0', en: 'must be at least 0' });
+    expect(fauteDeValeur(valeur, '10000001')).toEqual({ fr: 'doit être au plus 10000000', en: 'must be at most 10000000' });
+    expect(fauteDeValeur(jours, 'abc')).toEqual({ fr: 'doit être un nombre', en: 'must be a number' });
+  });
+
+  it('aux bornes, et vide : valide', () => {
+    for (const v of ['0', '365', ' 30 ', '']) expect(fauteDeValeur(jours, v), v).toBeNull();
+    expect(fauteDeValeur(valeur, '10000000')).toBeNull();
+  });
+
+  it('une adresse de webhook : https seulement, bien formée, jamais interne', () => {
+    expect(fauteDeValeur(adresse, 'http://crochets.lume-qa.test/entrant')).toEqual({ fr: 'doit commencer par https://', en: 'must start with https://' });
+    expect(fauteDeValeur(adresse, 'pas une adresse')?.fr).toBe('doit commencer par https://');
+    expect(fauteDeValeur(adresse, 'ftp://crochets.lume-qa.test')?.fr).toBe('doit commencer par https://');
+    expect(fauteDeValeur(adresse, 'https://localhost/interne')).toEqual({ fr: 'ne peut pas viser une adresse interne', en: 'cannot target an internal address' });
+    for (const interne of ['https://127.0.0.1/x', 'https://10.0.0.4/x', 'https://192.168.1.1/x', 'https://172.16.0.1/x', 'https://169.254.169.254/latest', 'https://serveur.local/x', 'https://base.internal/x']) {
+      expect(fauteDeValeur(adresse, interne)?.fr, interne).toBe('ne peut pas viser une adresse interne');
+    }
+    expect(fauteDeValeur(adresse, 'https://')?.fr).toBe('n’est pas une adresse valide');
+    expect(fauteDeValeur(adresse, 'https://crochets.lume-qa.test/entrant')).toBeNull();
+  });
+
+  it('une valeur semée en vrai nombre ou en vrai booléen (règle d’avant la validation) est jugée sur sa forme, pas refusée pour son type', () => {
+    expect(fauteDeValeur(jours, 30)).toBeNull();
+    expect(fauteDeValeur(jours, 999)?.fr).toBe('doit être au plus 365');
+    expect(fauteDeValeur(champ('create_notification', 'par_courriel'), true)).toBeNull();
+    expect(fauteDeValeur(jours, undefined)).toBeNull();
+    expect(fauteDeValeur(jours, { n: 1 })?.fr).toBe('doit être du texte');
+  });
+
+  it('la publication le refuse, sur l’étape, avec la même phrase', () => {
+    const problemes = problemesAvantPublication({
+      trigger_event: 'lead.created', conditions: {},
+      steps: [
+        { id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Bonjour [client_first_name]' } }, suivant: 'e2' },
+        { id: 'e2', type: 'action', action: { type: 'create_task', config: { title: 'Rappeler', echeance_jours: '999' } }, suivant: 'e3' },
+        { id: 'e3', type: 'action', action: { type: 'webhook', config: { url: 'http://crochets.lume-qa.test/entrant' } }, suivant: null },
+      ],
+    }).filter((p) => p.gravite === 'bloquant');
+    expect(problemes.map((p) => [p.etapeId, p.message])).toEqual([
+      ['e2', '« Créer une tâche » : « À faire dans (jours) » doit être au plus 365.'],
+      ['e3', '« Appeler un webhook » : « L’adresse » doit commencer par https://.'],
+    ]);
+  });
+
+  it('… en anglais', () => {
+    const problemes = problemesAvantPublication({
+      trigger_event: 'lead.created', conditions: {}, fr: false,
+      steps: [
+        { id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Hi' } }, suivant: 'e2' },
+        { id: 'e2', type: 'action', action: { type: 'webhook', config: { url: 'http://x.test' } }, suivant: null },
+      ],
+    }).filter((p) => p.gravite === 'bloquant').map((p) => p.message);
+    expect(problemes).toEqual(['“Call a webhook”: “The address” must start with https://.']);
+  });
+
+  it('un champ CACHÉ ne bloque rien (son contrôle n’est pas à l’écran)', () => {
+    const problemes = problemesAvantPublication({
+      trigger_event: 'quote.sent', conditions: {},
+      steps: [
+        { id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Bonjour [client_first_name]' } }, suivant: 'e2' },
+        // « Le membre » n'est visible que pour « Un membre précis ».
+        { id: 'e2', type: 'action', action: { type: 'create_notification', config: { title: 'Suivi', destinataire: 'proprietaire', membre_id: 'pas-un-identifiant' } }, suivant: null },
+      ],
+    }).filter((p) => p.gravite === 'bloquant');
+    expect(problemes).toEqual([]);
   });
 });

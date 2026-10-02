@@ -369,3 +369,74 @@ describe('A-09 — garde de version : une écriture PÉRIMÉE de l’éditeur n�
     expect(r.json.updated_at).toBe(enBase().updated_at);
   });
 });
+
+// ─── Triage « actions », lignes 8, 9 et 24 ──────────────────────
+
+describe('lignes 8, 9 et 24 — un nombre hors bornes, une adresse de webhook refusée : le refus dit OÙ et QUOI, avec ses accents — et en anglais', () => {
+  const etapes = (jours: string, url = 'https://crochets.lume-qa.test/entrant') => [
+    { id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Bonjour [client_first_name]' } }, suivant: 'e2' },
+    { id: 'e2', type: 'action', action: { type: 'create_task', config: { title: 'Rappeler', echeance_jours: jours } }, suivant: 'e3' },
+    { id: 'e3', type: 'action', action: { type: 'webhook', config: { url } }, suivant: null },
+  ];
+  const modifier = (corps: unknown, entetes: Record<string, string> = {}) => appeler('PATCH', `/automations/rules/${REGLE}`, corps, entetes);
+
+  it('999 jours : 400, l’étape est nommée, la borne est dite, rien n’est écrit', async () => {
+    const r = await modifier({ steps: etapes('999') });
+    expect(r.status).toBe(400);
+    expect(r.json.error).toBe('Étape 2 (« Créer une tâche ») : « À faire dans (jours) » doit être au plus 365.');
+    expect(r.json.details[0].path).toEqual(['steps', 1, 'action', 'config', 'echeance_jours']);
+    expect(ecritures()).toEqual([]);
+  });
+
+  it('-5 jours, et un montant de 10 000 001 $', async () => {
+    expect((await modifier({ steps: etapes('-5') })).json.error).toBe('Étape 2 (« Créer une tâche ») : « À faire dans (jours) » doit être au moins 0.');
+    const client = await modifier({ steps: [{ id: 'e1', type: 'action', action: { type: 'modifier_client', config: { valeur: '10000001' } }, suivant: null }] });
+    expect(client.status).toBe(400);
+    expect(client.json.error).toBe('Étape 1 (« Modifier le client ») : « Valeur estimée ($) » doit être au plus 10000000.');
+  });
+
+  it('une adresse en http://, mal formée, interne : chacune a sa phrase', async () => {
+    const refus = async (url: string) => (await modifier({ steps: etapes('30', url) })).json.error;
+    expect(await refus('http://crochets.lume-qa.test/entrant')).toBe('Étape 3 (« Appeler un webhook ») : « L’adresse » doit commencer par https://.');
+    expect(await refus('pas une adresse')).toBe('Étape 3 (« Appeler un webhook ») : « L’adresse » doit commencer par https://.');
+    expect(await refus('https://localhost/interne')).toBe('Étape 3 (« Appeler un webhook ») : « L’adresse » ne peut pas viser une adresse interne.');
+    expect(ecritures()).toEqual([]);
+  });
+
+  it('ligne 24 — une interface en anglais reçoit le refus en anglais, pas en français', async () => {
+    const r = await modifier({ steps: etapes('999', 'http://x.test/a') }, { 'Accept-Language': 'en' });
+    expect(r.status).toBe(400);
+    expect(r.json.error).toContain('Step 2 (“Create a task”): “Due in (days)” must be at most 365.');
+    expect(r.json.error).toContain('Step 3 (“Call a webhook”): “The address” must start with https://.');
+    expect(r.json.error).not.toMatch(/Étape|doit|obligatoire/);
+    const vide = await modifier({ steps: [{ id: 'e1', type: 'action', action: { type: 'create_task', config: { title: '' } }, suivant: null }] }, { 'Accept-Language': 'en' });
+    expect(vide.json.error).toBe('Step 1 (“Create a task”): the field “Task title” is required.');
+  });
+
+  it('l’éditeur envoie les étapes ET leur reflet `actions` : la faute n’est dite qu’UNE fois, sur l’étape', async () => {
+    const steps = etapes('999');
+    const r = await modifier({ steps, actions: steps.map((e) => e.action) });
+    expect(r.status).toBe(400);
+    expect(r.json.error).toBe('Étape 2 (« Créer une tâche ») : « À faire dans (jours) » doit être au plus 365.');
+    expect(r.json.details).toHaveLength(1);
+  });
+
+  it('une règle simple (sans parcours) : l’action est nommée', async () => {
+    const r = await modifier({ steps: [], actions: [{ type: 'create_task', config: { title: 'Rappeler', echeance_jours: '-5' } }] });
+    expect(r.json.error).toBe('Action 1 (« Créer une tâche ») : « À faire dans (jours) » doit être au moins 0.');
+  });
+
+  it('aux bornes et avec une adresse https publique : accepté', async () => {
+    const r = await modifier({ steps: etapes('365') });
+    expect(r.status).toBe(200);
+    expect(ecritures()).toHaveLength(1);
+  });
+
+  it('publier une règle déjà en base avec une valeur hors bornes (posée avant la validation) : refusé, l’étape est nommée', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'lead.created', steps: etapes('999') })];
+    const r = await appeler('POST', `/automations/rules/${REGLE}/publication`, { actif: true });
+    expect(r.status).toBe(422);
+    expect(JSON.stringify(r.json)).toContain('« Créer une tâche » : « À faire dans (jours) » doit être au plus 365.');
+    expect(enBase().is_active).toBe(false);
+  });
+});

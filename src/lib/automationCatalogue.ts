@@ -1352,6 +1352,87 @@ export const CLES_CHAMPS_ACTION = Array.from(
   new Set(ACTIONS.flatMap((a) => a.champs.map((c) => c.cle))),
 ).sort();
 
+/** Ce qu'une valeur a de fautif, à lire après le nom du champ : « doit être au plus 365 ». */
+export interface FauteValeur { fr: string; en: string }
+
+/**
+ * CE QU'UNE VALEUR DE CHAMP A DE FAUTIF — une seule règle pour le panneau, la
+ * publication et le serveur (triage actions, lignes 8 et 9).
+ *
+ * Le serveur refusait déjà une valeur hors bornes ou une adresse en http://,
+ * mais lui seul : le panneau laissait « Enregistrer » actif, sans un mot, et
+ * le refus arrivait trois secondes plus tard, par l'enregistrement
+ * automatique, sans désigner l'étape. La même fonction juge maintenant la
+ * saisie DANS le panneau (avec la borne), sur le canevas avant de publier, et
+ * à l'enregistrement (`server/lib/validation.ts`).
+ *
+ * Toutes les valeurs sont du TEXTE (`config` est du jsonb rempli depuis des
+ * champs de formulaire) : « 250 », « true ». Vide = absent, donc jamais
+ * fautif ici — le caractère obligatoire se juge ailleurs. `null` = valide.
+ */
+export function fauteDeValeur(champ: ChampAction, brut: unknown): FauteValeur | null {
+  // Une règle semée d'avant la validation peut porter un vrai nombre ou un
+  // vrai booléen : jugé sur sa forme écrite, pas refusé pour son type.
+  const texte = typeof brut === 'number' || typeof brut === 'boolean' ? String(brut) : brut;
+  if (texte === undefined || texte === null) return null;
+  if (typeof texte !== 'string') return { fr: 'doit être du texte', en: 'must be text' };
+  const v = texte.trim();
+  if (v === '') return null;
+
+  switch (champ.type) {
+    case 'bascule':
+      return v === 'true' || v === 'false' ? null : { fr: 'doit valoir true ou false', en: 'must be true or false' };
+
+    case 'nombre': {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return { fr: 'doit être un nombre', en: 'must be a number' };
+      if (champ.min_valeur !== undefined && n < champ.min_valeur) {
+        return { fr: `doit être au moins ${champ.min_valeur}`, en: `must be at least ${champ.min_valeur}` };
+      }
+      if (champ.max_valeur !== undefined && n > champ.max_valeur) {
+        return { fr: `doit être au plus ${champ.max_valeur}`, en: `must be at most ${champ.max_valeur}` };
+      }
+      return null;
+    }
+
+    case 'choix': {
+      const permis = (champ.options ?? []).map((o) => o.cle);
+      return permis.includes(v) ? null : { fr: `doit être l’un de : ${permis.join(', ')}`, en: `must be one of: ${permis.join(', ')}` };
+    }
+
+    case 'membre':
+      // Un identifiant de membre, pas un nom : la route vérifie ensuite qu'il
+      // appartient bien à l'organisation.
+      return /^[0-9a-fA-F-]{36}$/.test(v) ? null : { fr: 'doit être un membre valide', en: 'must be a valid member' };
+
+    case 'url': {
+      // https UNIQUEMENT. Un webhook en http laisse passer les données du
+      // client en clair, et `file://` ou `http://169.254.169.254` visent des
+      // ressources internes au serveur (SSRF).
+      if (!/^https:\/\//i.test(v)) return { fr: 'doit commencer par https://', en: 'must start with https://' };
+      let hote: string;
+      try {
+        hote = new URL(v).hostname.toLowerCase();
+      } catch {
+        return { fr: 'n’est pas une adresse valide', en: 'is not a valid address' };
+      }
+      const interne =
+        hote === 'localhost' ||
+        hote === '169.254.169.254' ||
+        /^127\./.test(hote) ||
+        /^10\./.test(hote) ||
+        /^192\.168\./.test(hote) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(hote) ||
+        hote.endsWith('.local') ||
+        hote.endsWith('.internal');
+      return interne ? { fr: 'ne peut pas viser une adresse interne', en: 'cannot target an internal address' } : null;
+    }
+
+    default:
+      return null; // texte, zone, étiquette : seule la longueur compte
+  }
+}
+
 /**
  * Un champ est-il visible, compte tenu de ce qui est déjà rempli ?
  *
@@ -1585,6 +1666,20 @@ export function problemesAvantPublication(regle: {
         dire(
           `« ${modele.fr} » : « ${champ.fr} » est vide${ou}.`,
           `“${modele.en}”: “${champ.en}” is empty${ou}.`,
+          'bloquant', etapeId,
+        );
+      }
+    }
+
+    // Une valeur que le serveur refuserait (hors bornes, adresse en http://) :
+    // dite ici, sur l'étape, par la même règle que le panneau et l'enregistrement.
+    for (const champ of modele.champs) {
+      if (!champVisible(champ, config)) continue;
+      const faute = fauteDeValeur(champ, config[champ.cle]);
+      if (faute) {
+        dire(
+          `« ${modele.fr} » : « ${champ.fr} » ${faute.fr}${ou}.`,
+          `“${modele.en}”: “${champ.en}” ${faute.en}${ou}.`,
           'bloquant', etapeId,
         );
       }

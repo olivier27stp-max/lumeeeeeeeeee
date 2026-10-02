@@ -35,6 +35,7 @@ import {
   FAMILLES_ACTIONS,
   actionCompatible,
   champVisible,
+  fauteDeValeur,
   trouverAction,
 } from '../../lib/automationCatalogue';
 import type { ChampAction as ModeleChamp } from '../../lib/automationCatalogue';
@@ -492,6 +493,18 @@ export default function PanneauEtape({
       if (!config[champ.cle]?.trim()) {
         out.push(fr ? `« ${champ.fr} » est vide.` : `“${champ.en}” is empty.`);
       }
+    }
+    /*
+     * UNE SAISIE QUE LE SERVEUR REFUSERAIT EST REFUSÉE ICI, avec la borne
+     * (triage actions, lignes 8 et 9). 999 jours, -5 jours, 10 000 001 $, une
+     * adresse en http:// : « Enregistrer » restait actif, et le refus arrivait
+     * trois secondes plus tard, par l'enregistrement automatique. La règle est
+     * celle du serveur (`fauteDeValeur`, catalogue partagé).
+     */
+    for (const champ of modele.champs) {
+      if (!champVisible(champ, config)) continue;
+      const faute = fauteDeValeur(champ, config[champ.cle]);
+      if (faute) out.push(fr ? `« ${champ.fr} » ${faute.fr}.` : `“${champ.en}” ${faute.en}.`);
     }
     /*
      * « Mettre à jour un champ » n'écrit QUE sur la fiche de l'événement
