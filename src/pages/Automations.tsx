@@ -1952,14 +1952,30 @@ export default function Automations() {
                   {visibles.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="px-4 py-14 text-center">
-                        <Zap className="mx-auto mb-3 h-7 w-7 text-text-tertiary" aria-hidden="true" />
+                        {onglet === 'verifier' && statsIllisibles
+                          ? <AlertTriangle className="mx-auto mb-3 h-7 w-7 text-warning" aria-hidden="true" />
+                          : <Zap className="mx-auto mb-3 h-7 w-7 text-text-tertiary" aria-hidden="true" />}
                         <p className="text-[13px] font-medium text-text-primary">
                           {onglet === 'corbeille'
                             ? (fr ? 'La corbeille est vide' : 'The bin is empty')
                             : onglet === 'verifier'
-                              ? (fr ? 'Aucune erreur — tout roule' : 'No errors — all running smoothly')
+                              /*
+                               * « Tout roule » ne s'affirme que si les échecs ONT ÉTÉ LUS et qu'il n'y en a
+                               * aucun (triage `03-onglets-etats:229`, constat D-17). Lecture en panne : on dit
+                               * qu'on ne sait pas ; lecture en cours : on attend.
+                               */
+                              ? (statsIllisibles
+                                ? (fr ? 'Les échecs n’ont pas pu être lus : impossible de dire si tout va bien.' : 'The failures could not be read: no way to tell whether all is well.')
+                                : stats === null
+                                  ? (fr ? 'Lecture des échecs…' : 'Reading failures…')
+                                  : (fr ? 'Aucune erreur — tout roule' : 'No errors — all running smoothly'))
                               : (fr ? 'Aucune automatisation' : 'No automations')}
                         </p>
+                        {onglet === 'verifier' && statsIllisibles && (
+                          <button type="button" onClick={() => void lireChiffres.current()} className="glass-button mt-4">
+                            {fr ? 'Réessayer' : 'Try again'}
+                          </button>
+                        )}
                         {onglet === 'toutes' && modeles.length > 0 && (
                           <button
                             type="button"

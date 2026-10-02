@@ -255,6 +255,55 @@ describe('07-lot:188 — publier « Client inactif » EN LOT pose la même confi
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('03-onglets-etats:229 et 10-volume:210 — « À vérifier » ne dit « tout roule » que s’il le SAIT', () => {
+  it('lecture des échecs en panne : « À vérifier (?) », jamais « (0) » ni « tout roule » — et « Réessayer » relit', async () => {
+    const r = regle({ name: 'En échec', is_active: true });
+    vi.mocked(api.getAutomationRules).mockResolvedValue([r]);
+    statsMock.mockRejectedValue(new Error('panne simulée'));
+    await rendre();
+    expect(onglet(/^À vérifier/)?.textContent).toBe('À vérifier (?)');
+    await cliquer(onglet(/^À vérifier/));
+    expect(texte()).not.toContain('tout roule');
+    expect(conteneur.querySelector('tbody')?.textContent).toContain('Les échecs n’ont pas pu être lus : impossible de dire si tout va bien.');
+
+    // La lecture revient : l'automatisation en échec est là.
+    statsMock.mockResolvedValue({ par_regle: { [r.id]: { echecs: 1 } }, texto_configure: true });
+    await cliquer(Array.from(conteneur.querySelectorAll('tbody button')).find((b) => b.textContent === 'Réessayer'));
+    await laisser();
+    expect(onglet(/^À vérifier/)?.textContent).toBe('À vérifier (1)');
+    expect(conteneur.querySelector('tbody')?.textContent).toContain('En échec');
+    expect(texte()).not.toContain('n’ont pas pu être lus');
+  });
+
+  it('en anglais, la panne ne dit pas non plus « all running smoothly »', async () => {
+    statsMock.mockRejectedValue(new Error('panne simulée'));
+    await rendre('en');
+    await cliquer(onglet(/^Needs review/));
+    expect(texte()).not.toContain('all running smoothly');
+    expect(conteneur.querySelector('tbody')?.textContent).toContain('The failures could not be read');
+  });
+
+  it('échecs lus, aucun : « Aucune erreur — tout roule » (inchangé)', async () => {
+    await rendre();
+    await cliquer(onglet(/^À vérifier \(0\)$/));
+    expect(conteneur.querySelector('tbody')?.textContent).toContain('Aucune erreur — tout roule');
+  });
+
+  it('une automatisation qui a échoué une fois reste dans l’onglet quand une autre a échoué 205 fois (comptes venus de la base, sans plafond)', async () => {
+    const bruyante = regle({ name: 'A bruyante', is_active: true });
+    const discrete = regle({ name: 'B discrète', is_active: true });
+    vi.mocked(api.getAutomationRules).mockResolvedValue([bruyante, discrete]);
+    statsMock.mockResolvedValue({ par_regle: { [bruyante.id]: { echecs: 205 }, [discrete.id]: { echecs: 1 } }, texto_configure: true });
+    await rendre('fr', '/automations?onglet=verifier');
+    expect(onglet(/^À vérifier/)?.textContent).toBe('À vérifier (2)');
+    const noms = Array.from(conteneur.querySelectorAll('tbody tr td:nth-child(2) button span.font-medium')).map((n) => n.textContent);
+    expect(noms).toEqual(['A bruyante', 'B discrète']);
+    expect(texte()).toContain('205 échec(s) dans les 7 derniers jours');
+    expect(texte()).toContain('1 échec(s) dans les 7 derniers jours');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('12-permissions:86 et :102 — « voir » sans « modifier » : la liste en lecture seule', () => {
   const lectureSeule = () => { droits.role = 'technician'; droits.permissions = { 'automations.read': true }; };
   const RAISON = 'Votre rôle permet de voir les automatisations, pas de les modifier.';
