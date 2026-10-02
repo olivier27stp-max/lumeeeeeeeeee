@@ -159,6 +159,13 @@ const MARQUES_DONNEES = [
   // « est-ce que mes clients REÇOIVENT un rappel » : ce que les clients reçoivent
   // dépend des réglages et des automatisations de CE compte, pas du produit.
   /\b(mes|nos)\s+(clients?|employ[ée]s?|techniciens?)\b[^.?]{0,15}\b(re[cç]oi\w*|ont re[cç]u|ont pay[ée]|ont sign[ée]|ont accept[ée])\b/i,
+  // « mes clients me paient SURTOUT comment : par carte, par virement ou comptant ? » : une habitude de MES
+  // clients est une répartition à lire dans le compte, pas un mode d'emploi. Passe en prod du 2026-10-02 : les
+  // mots « carte, virement, comptant » ramenaient le paragraphe d'aide de la facturation, sans aucun chiffre.
+  /\b(mes|nos)\s+(clients?|employ[ée]s?|techniciens?)(?![\wÀ-ÿ])[^.?]{0,40}\b(surtout|le plus souvent|la plupart du temps|majoritairement|principalement|d[’' ]habitude|en g[ée]n[ée]ral)\b/i,
+  /\b(la plupart|la majorit[ée])\s+(de|des)\s+(mes|nos)\s+(clients?|employ[ée]s?|techniciens?)(?![\wÀ-ÿ])/i,
+  /\b(my|our)\s+(clients?|customers?|employees?|techs?|technicians?)\b[^.?]{0,40}\b(mostly|most often|usually|mainly)\b/i,
+  /\bmost of (my|our)\s+(clients?|customers?|employees?|techs?|technicians?)\b/i,
   // L'anglais n'avait aucune règle de quantité : « How many invoices are overdue
   // right now » partait à l'article « facture impayée ». « How many clients CAN I
   // have », « how much does it COST » et « how much is the Scale PLAN » restent des
