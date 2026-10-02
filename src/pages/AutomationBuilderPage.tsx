@@ -434,10 +434,18 @@ export default function AutomationBuilderPage() {
   const [modifieePar, setModifieePar] = useState<'lumi' | 'autre' | null>(null);
   /** Le panneau ouvert a-t-il un brouillon non enregistré ? (PanneauEtape.onModifie) */
   const brouillonEtapeModifie = useRef(false);
-  const signalerBrouillonEtape = useCallback((m: boolean) => { brouillonEtapeModifie.current = m; }, []);
+  /** … et son reflet en ÉTAT : la garde du bouton « Précédent » doit réagir quand une saisie commence. */
+  const [saisieEnCours, setSaisieEnCours] = useState(false);
+  const signalerBrouillonEtape = useCallback((m: boolean) => {
+    brouillonEtapeModifie.current = m;
+    setSaisieEnCours(m || brouillonDeclencheurModifie.current);
+  }, []);
   /** Même chose pour les réglages du déclencheur (PanneauDeclencheur.onModifie). */
   const brouillonDeclencheurModifie = useRef(false);
-  const signalerBrouillonDeclencheur = useCallback((m: boolean) => { brouillonDeclencheurModifie.current = m; }, []);
+  const signalerBrouillonDeclencheur = useCallback((m: boolean) => {
+    brouillonDeclencheurModifie.current = m;
+    setSaisieEnCours(m || brouillonEtapeModifie.current);
+  }, []);
 
   // ── De quoi remplir les menus du panneau ──
   // Les membres (pour « assigner a ») et les etiquettes deja utilisees.
@@ -2047,6 +2055,69 @@ export default function AutomationBuilderPage() {
    * d'enregistrer, est DIT par un message (le toast vit hors de la page).
    */
   const sortieGeree = useRef(false);
+
+  /*
+   * … ET CE QUI NE PEUT PAS S'ENREGISTRER EN PARTANT SE DEMANDE AVANT (triage
+   * éditeur, EDT-166). Une étape incomplète, un parcours que le serveur
+   * refuse, une saisie en cours dans un panneau : « Précédent » quittait
+   * l'éditeur, le travail était perdu, et un toast le disait après coup.
+   * « Mes automatisations », lui, pose la question.
+   *
+   * Le routeur ne sait pas retenir un retour arrière. Tant qu'il y a quelque
+   * chose à perdre, on pose donc une entrée d'historique en double (même
+   * adresse) : « Précédent » la consomme sans quitter la page, et c'est là
+   * qu'on demande. Oui : on recule pour de bon. Non : on la repose.
+   */
+  const aPerdreEnPartant = !!regle && !disparue && !modifieeAilleurs
+    && (etatSauvegarde === 'incomplet' || etatSauvegarde === 'refuse' || !!etapeEnAttente || saisieEnCours);
+  const raisonDePerte = useRef<'incomplet' | 'refuse' | 'saisie'>('saisie');
+  raisonDePerte.current = etatSauvegarde === 'incomplet' ? 'incomplet' : etatSauvegarde === 'refuse' ? 'refuse' : 'saisie';
+  useEffect(() => {
+    if (!aPerdreEnPartant) return;
+    const MARQUE = 'lumeGardeEditeur';
+    const poser = () => window.history.pushState({ ...(window.history.state ?? {}), [MARQUE]: true }, '');
+    if (!(window.history.state as Record<string, unknown> | null)?.[MARQUE]) poser();
+    let enSortie = false;
+    let questionOuverte = false;
+    const surRetour = () => {
+      // Notre propre recul, ou une question déjà à l'écran : rien à refaire.
+      if (enSortie || questionOuverte) return;
+      // Encore sur l'entrée en double (un « Suivant ») : rien n'est quitté.
+      if ((window.history.state as Record<string, unknown> | null)?.[MARQUE]) return;
+      questionOuverte = true;
+      const enFrancais = frBascule.current;
+      const raison = raisonDePerte.current;
+      void confirmer({
+        title: enFrancais ? 'Quitter sans enregistrer ?' : 'Leave without saving?',
+        message: raison === 'incomplet'
+          ? (enFrancais
+            ? 'Une étape est incomplète, donc le parcours n’a pas pu être enregistré. Si vous quittez maintenant, ces modifications seront perdues.'
+            : 'A step is incomplete, so the journey could not be saved. If you leave now, those changes are lost.')
+          : raison === 'refuse'
+            ? (enFrancais
+              ? 'Le parcours tel qu’il est a été refusé à l’enregistrement. Si vous quittez maintenant, ces modifications seront perdues.'
+              : 'The journey as it stands was refused when saving. If you leave now, those changes are lost.')
+            : (enFrancais
+              ? 'Une étape est en cours de modification et n’a pas été enregistrée. Si vous quittez maintenant, ce que vous y avez saisi sera perdu.'
+              : 'A step is being edited and has not been saved. If you leave now, what you entered there is lost.'),
+        confirmLabel: enFrancais ? 'Quitter' : 'Leave',
+        danger: true,
+      }).then((quitter) => {
+        questionOuverte = false;
+        if (quitter) {
+          // Abandon confirmé : le départ n'a plus rien à dire ni à tenter.
+          enSortie = true;
+          sortieGeree.current = true;
+          window.history.back();
+        } else {
+          poser();
+        }
+      });
+    };
+    window.addEventListener('popstate', surRetour);
+    return () => window.removeEventListener('popstate', surRetour);
+  }, [aPerdreEnPartant]);
+
   // Une règle disparue (404) n'a plus rien à enregistrer au départ.
   const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, contenu: contenuParcours, aRegle: !!regle && !disparue && !modifieeAilleurs });
   etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, contenu: contenuParcours, aRegle: !!regle && !disparue && !modifieeAilleurs };

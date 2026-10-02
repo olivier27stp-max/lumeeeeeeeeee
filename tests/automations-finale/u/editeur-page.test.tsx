@@ -449,6 +449,115 @@ describe('S-01 — « Ouvrir » une 2e automatisation sur réseau lent : chacune
   });
 });
 
+// ─── Triage « éditeur », EDT-166 ────────────────────────────────
+
+describe('EDT-166 — « Précédent » du navigateur : ce qui ne peut pas s’enregistrer en partant se demande AVANT', () => {
+  const marque = () => (window.history.state as Record<string, unknown> | null)?.lumeGardeEditeur === true;
+  /** Le « Précédent » du navigateur : l'entrée en double est consommée, la page ne change pas encore. */
+  const precedent = async () => {
+    await act(async () => {
+      window.history.back();
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    await attendre();
+  };
+  const question = () => confirmerMock.mock.calls.at(-1)?.[0] as { title: string; message: string; confirmLabel: string } | undefined;
+  /** Une règle dont une étape est incomplète (tâche sans titre), puis une modification : « 1 étape(s) à compléter ». */
+  async function ouvrirAvecEtapeIncomplete() {
+    etat.regles = [regle({
+      steps: [
+        { id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Bonjour' } }, suivant: 'e2' },
+        { id: 'e2', type: 'action', nom: null, action: { type: 'create_task', config: { title: '' } }, suivant: null },
+      ],
+    })];
+    await ouvrir();
+    cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v2');
+    await attendre();
+    expect(barreDuHaut()).toContain('1 étape(s) à compléter');
+  }
+
+  beforeEach(() => { window.history.replaceState(null, ''); });
+
+  it('une étape incomplète : « Précédent » pose la question — « Annuler » garde l’éditeur et le travail', async () => {
+    await ouvrirAvecEtapeIncomplete();
+    expect(marque()).toBe(true);
+    confirmerMock.mockImplementationOnce(async () => false);
+    await precedent();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(question()?.title).toBe('Quitter sans enregistrer ?');
+    expect(question()?.message).toBe('Une étape est incomplète, donc le parcours n’a pas pu être enregistré. Si vous quittez maintenant, ces modifications seront perdues.');
+    // Refusé : la garde est reposée, l'éditeur et sa saisie sont toujours là.
+    expect(marque()).toBe(true);
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Nom de l’automatisation"]')?.value).toBe('Relance devis v2');
+    expect(toasts.erreur).toEqual([]);
+  });
+
+  it('… « Quitter » : on recule pour de bon, sans toast d’après coup ni tentative d’enregistrement', async () => {
+    await ouvrirAvecEtapeIncomplete();
+    const reculer = vi.spyOn(window.history, 'back');
+    await precedent();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    // Le premier recul est celui de l'utilisateur ; le second, le nôtre : on quitte vraiment.
+    expect(reculer).toHaveBeenCalledTimes(2);
+    act(() => root.unmount());
+    root = createRoot(container);
+    expect(toasts.erreur.join('\n')).not.toContain('quittée sans enregistrer');
+    expect(api.modifier).not.toHaveBeenCalled();
+    reculer.mockRestore();
+  });
+
+  it('une saisie en cours dans un panneau d’étape : même question, avec sa raison', async () => {
+    await ouvrir();
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    expect(marque()).toBe(false);
+    saisir(panneauEtape()?.querySelector('textarea'), 'En cours de frappe');
+    await attendre(2);
+    expect(marque()).toBe(true);
+    confirmerMock.mockImplementationOnce(async () => false);
+    await precedent();
+    expect(question()?.message).toBe('Une étape est en cours de modification et n’a pas été enregistrée. Si vous quittez maintenant, ce que vous y avez saisi sera perdu.');
+    expect(panneauEtape()?.querySelector('textarea')?.value).toBe('En cours de frappe');
+  });
+
+  it('une étape choisie dans le tiroir, pas encore enregistrée : même garde', async () => {
+    await ouvrir();
+    await ajouterParLeTiroir('Envoyer un texto');
+    expect(marque()).toBe(true);
+    confirmerMock.mockImplementationOnce(async () => false);
+    await precedent();
+    expect(question()?.title).toBe('Quitter sans enregistrer ?');
+    expect(cartes()).toContain('Envoyer un texto');
+  });
+
+  it('rien à perdre (tout est enregistré, ou enregistrable en partant) : aucune entrée en double, aucune question', async () => {
+    await ouvrir();
+    expect(marque()).toBe(false);
+    cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v2');
+    await attendre();
+    // « Modifié » : le départ enregistre (A-04) — pas besoin de retenir.
+    expect(marque()).toBe(false);
+    window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+    await attendre();
+    expect(confirmerMock).not.toHaveBeenCalled();
+  });
+
+  it('en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    await ouvrir();
+    cliquer(carteEtape('Send a text message'));
+    await attendre(2);
+    saisir(container.querySelector('aside[aria-label="Edit step"] textarea'), 'Typing');
+    await attendre(2);
+    confirmerMock.mockImplementationOnce(async () => false);
+    await precedent();
+    expect(question()).toMatchObject({ title: 'Leave without saving?', confirmLabel: 'Leave' });
+    expect(question()?.message).toBe('A step is being edited and has not been saved. If you leave now, what you entered there is lost.');
+  });
+});
+
 // ─── Triage « éditeur », S-32 ───────────────────────────────────
 
 describe('S-32 — la pause globale du bureau (« Tout arrêter ») se voit dans l’éditeur', () => {

@@ -6,7 +6,7 @@
  *   (sans argument : tous les scénarios)
  */
 import type { Page } from '@playwright/test';
-import { admin, carte, creerRegle, fermer, leBureau, lireRegle, ouvrirEditeur, ouvrirPage, panneau, pause, tiroir, verifier } from './banc.mts';
+import { admin, BASE, carte, creerRegle, fermer, leBureau, lireRegle, ouvrirEditeur, ouvrirPage, panneau, pause, tiroir, verifier } from './banc.mts';
 
 type Etapes = Array<{ id: string; action?: { config?: Record<string, unknown> } } & Record<string, unknown>>;
 const etapes = async (id: string): Promise<Etapes> => ((await lireRegle(id)).steps ?? []) as Etapes;
@@ -124,6 +124,34 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     verifier(JSON.stringify(deuxieme.steps).includes('Texto de la DEUXIÈME') && !JSON.stringify(deuxieme.steps).includes('Texto de LUMI'), 'la 2e garde son parcours');
     verifier(JSON.stringify(premiere.steps).includes('Texto de LUMI') && premiere.name === `${marque} première`, 'ce que Lumi a posé dans la 1re y est enregistré, sous son nom');
     verifier(((await carte(page, 'Envoyer un texto').textContent()) ?? '').includes('Texto de la DEUXIÈME'), 'l’écran montre le parcours de la 2e');
+    await page.context().close();
+  },
+
+  /** EDT-166 — « Précédent » du navigateur avec une étape incomplète : on demande avant de perdre le travail. */
+  async e166() {
+    const regle = await creerRegle({ steps: [action('send_sms', { body: 'Texto ALPHA' }, 'e1', 'e2'), action('create_task', { title: '' }, 'e2', null)] });
+    const page = await ouvrirPage();
+    await page.goto(`${BASE}/automations`);
+    await page.getByRole('heading', { name: 'Mes automatisations' }).waitFor({ timeout: 120_000 });
+    await ouvrirEditeur(page, regle.id);
+    // Du vrai travail : un texto réécrit — que l'étape incomplète empêche d'enregistrer.
+    await carte(page, 'Envoyer un texto').click();
+    await zoneTexto(page).fill('Texto ALPHA réécrit');
+    await enregistrer(page).click();
+    await page.locator('header').getByText('1 étape(s) à compléter').waitFor({ timeout: 10_000 });
+    await page.goBack();
+    const question = page.getByRole('dialog').filter({ hasText: 'Quitter sans enregistrer ?' });
+    await question.waitFor({ timeout: 10_000 });
+    verifier(page.url().includes(`/automations/${regle.id}`), '« Précédent » : la question est posée, l’éditeur n’est pas quitté');
+    await question.getByRole('button', { name: 'Annuler', exact: true }).click();
+    verifier(((await carte(page, 'Envoyer un texto').textContent()) ?? '').includes('Texto ALPHA réécrit'), '« Annuler » : le travail est toujours à l’écran');
+    await page.goBack();
+    await question.waitFor({ timeout: 10_000 });
+    await question.getByRole('button', { name: 'Quitter', exact: true }).click();
+    await page.waitForURL(/\/automations$/, { timeout: 20_000 });
+    verifier(true, '« Quitter » : on revient à la liste');
+    await pause(1500);
+    verifier(await page.getByText('quittée sans enregistrer').count() === 0, 'sans toast d’après coup');
     await page.context().close();
   },
 
