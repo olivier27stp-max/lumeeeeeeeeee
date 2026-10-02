@@ -21,6 +21,8 @@ export class FausseBase {
   /** Nombre de requêtes de LECTURE exécutées, par table. */
   lectures: Record<string, number> = {};
   ecritures: Array<{ table: string; genre: 'insert' | 'update'; valeurs: Ligne }> = [];
+  /** L'horloge de la base (`created_at` par défaut) : un test qui joue à une date fixe la règle sur la même. */
+  horloge: () => Date = () => new Date();
   private compteur = 0;
 
   constructor(tables: Record<string, Ligne[]> = {}) {
@@ -111,7 +113,7 @@ class Requete {
             return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "idx_execution_logs_immediat_dedup"' } };
           }
           n.id ??= this.base.nouvelId();
-          n.created_at ??= new Date().toISOString();
+          n.created_at ??= this.base.horloge().toISOString();
           this.base.lignes(this.table).push(n);
           this.base.ecritures.push({ table: this.table, genre: 'insert', valeurs: structuredClone(n) });
         }
