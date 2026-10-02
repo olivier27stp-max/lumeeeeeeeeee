@@ -957,9 +957,17 @@ export default function AutomationBuilderPage() {
       setModifieePar('lumi');
       memoriser(propose.steps as Etape[]);
       setResumeLumi(propose.resume || null);
-      // Le nom et le déclencheur suivent la proposition — c'est ce que
-      // l'utilisateur a décrit, il pourra les changer.
-      if (propose.nom) setNom(propose.nom);
+      /*
+       * LE NOM NE SUIT LA PROPOSITION QUE SI ON L'A DEMANDÉ (constat A-04).
+       * « Change le message » renommait l'automatisation : `propose.nom`
+       * était appliqué à chaque réponse — y compris le nom EN BASE, rendu
+       * tel quel par le serveur, qui écrasait un nom que l'utilisateur
+       * venait de taper. Le serveur dit maintenant si un renommage a été
+       * demandé (`renomme`). Une automatisation toute neuve, encore sans nom
+       * à elle, prend celui que Lumi lui donne.
+       */
+      const sansNomChoisi = ['', 'Nouvelle automatisation', 'New automation'].includes(nom.trim());
+      if (propose.nom && (propose.renomme === true || sansNomChoisi)) setNom(propose.nom);
       if (propose.trigger_event && regle) {
         // Mise à jour FONCTIONNELLE : `regle` ici date d'avant la création
         // du brouillon, et l'écraser remettrait un id vide.

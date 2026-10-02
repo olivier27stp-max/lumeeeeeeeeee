@@ -382,6 +382,16 @@ export interface ParcoursPropose {
   /** La version de la règle après que le serveur y a gardé la conversation (garde A-09). */
   updated_at?: string | null;
   /**
+   * Ce que le SERVEUR a constaté (avant / après). `modifie: false` : une
+   * question, un refus, « active-la » — le parcours rendu est celui de
+   * l'écran, il n'y a RIEN à enregistrer. Absent (ancien serveur) : modifié.
+   */
+  modifie?: boolean;
+  /** Lumi a été PRIÉ de renommer (« appelle-la X ») : seul cas où `nom` remplace le nom à l'écran. */
+  renomme?: boolean;
+  /** Après « active-la » / « mets-la en pause » : l'état de publication tel que le serveur vient de le laisser. */
+  publiee?: boolean;
+  /**
    * Une deuxième automatisation sur un AUTRE déclencheur (ex. « quand le
    * client répond, envoie mon lien Calendly »). L'éditeur la crée à part,
    * en brouillon.

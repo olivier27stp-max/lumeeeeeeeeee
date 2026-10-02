@@ -1764,3 +1764,74 @@ describe('P2-13 — quitter l’éditeur ne perd rien (comportement de la vraie 
     expect(confirmerMock).not.toHaveBeenCalled();
   });
 });
+
+// ─── Lumi ↔ éditeur (constats de l'agent Lumi, D:/lume-final/notes/L-corrections.md) ───
+
+describe('Lumi ↔ éditeur — ce que la route de génération répond est appliqué tel quel, ni plus ni moins', () => {
+  const TEXTO_DE_LUMI = [
+    { id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Texto de LUMI' } }, suivant: 'e2' },
+    { id: 'e2', type: 'action', nom: null, action: { type: 'create_task', config: { title: 'Rappeler [client_name]' } }, suivant: null },
+  ];
+  /** Le nom à l'écran : le bouton de l'en-tête (un clic l'ouvre en champ de saisie). */
+  const nomAffiche = () => container.querySelector('header button span.truncate')?.textContent
+    ?? container.querySelector<HTMLInputElement>('input[aria-label="Nom de l’automatisation"]')?.value;
+  async function renommer(nouveau: string) {
+    cliquer(container.querySelector('header button span.truncate')?.parentElement);
+    await attendre(2);
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), nouveau);
+    await attendre(2);
+  }
+  async function demander(demande = 'change le message du texto') {
+    saisir(container.querySelector('textarea[id$="-prompt"]'), demande);
+    cliquer(boutonExact('Construire') ?? boutonExact('Envoyer'));
+    await attendre(12);
+  }
+  const avancer = async (ms: number) => {
+    await act(async () => { vi.advanceTimersByTime(ms); });
+    await attendre();
+  };
+  const dernierPatch = () => api.modifier.mock.calls.at(-1)?.[1] as Record<string, unknown> | undefined;
+
+  describe('A-04 — « change le message » ne renomme pas l’automatisation', () => {
+    it('`renomme: false` : le nom à l’écran reste celui de l’utilisateur, même si la réponse porte un autre nom', async () => {
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance de soumission en un texto', trigger_event: 'quote.sent', resume: 'Texto réécrit.', steps: TEXTO_DE_LUMI, autre: null, modifie: true, renomme: false }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander();
+      expect(nomAffiche()).toBe('Relance devis');
+      await avancer(3000);
+      expect(dernierPatch()?.name).toBe('Relance devis');
+      expect(JSON.stringify(dernierPatch()?.steps)).toContain('Texto de LUMI');
+    });
+
+    it('un nom tapé juste avant, pas encore enregistré : il survit — le serveur rend le nom EN BASE, qui ne l’écrase plus', async () => {
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Texto réécrit.', steps: TEXTO_DE_LUMI, autre: null, modifie: true, renomme: false }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await renommer('Mon nom à moi');
+      await demander();
+      expect(nomAffiche()).toBe('Mon nom à moi');
+      await avancer(3000);
+      expect(dernierPatch()?.name).toBe('Mon nom à moi');
+    });
+
+    it('`renomme: true` (« appelle-la X ») : le nom suit', async () => {
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance VIP', trigger_event: 'quote.sent', resume: 'Renommée « Relance VIP ».', steps: regle().steps, autre: null, modifie: true, renomme: true }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('appelle-la Relance VIP');
+      expect(nomAffiche()).toBe('Relance VIP');
+      await avancer(3000);
+      expect(dernierPatch()?.name).toBe('Relance VIP');
+    });
+
+    it('une automatisation toute neuve, encore sans nom à elle : elle prend celui que Lumi lui donne', async () => {
+      etat.regles = [regle({ name: 'Nouvelle automatisation', steps: [] })];
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance de devis', trigger_event: 'quote.sent', resume: 'Parcours construit.', steps: TEXTO_DE_LUMI, autre: null, modifie: true, renomme: false }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('relance mes devis après deux jours');
+      expect(nomAffiche()).toBe('Relance de devis');
+    });
+  });
+});
