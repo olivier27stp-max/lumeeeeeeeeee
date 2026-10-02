@@ -65,9 +65,14 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
   async function creer() {
     setCreation(true);
     try {
-      const nouvelle = await creerAdresseDAppel(
-        fr ? 'Formulaire de mon site' : 'My website form',
-      );
+      /* Trois adresses créées s'appelaient toutes « Formulaire de mon site » :
+         impossible de savoir laquelle est collée chez Zapier
+         (06-reglages-globaux:198). La suivante porte un numéro. */
+      const base = fr ? 'Formulaire de mon site' : 'My website form';
+      const pris = new Set(adresses.map((a) => a.name.trim().toLowerCase()));
+      let nom = base;
+      for (let n = 2; pris.has(nom.toLowerCase()); n += 1) nom = `${base} (${n})`;
+      const nouvelle = await creerAdresseDAppel(nom);
       setAdresses((a) => [...a, nouvelle]);
       // On la dévoile tout de suite : elle vient d'être créée pour être
       // copiée, la masquer obligerait à un clic de plus sans rien protéger.
