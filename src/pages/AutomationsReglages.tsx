@@ -13,7 +13,7 @@
    (Standard / Avancé — Lume n'a qu'un seul constructeur).
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Info } from 'lucide-react';
 import { toast } from 'sonner';
@@ -21,7 +21,7 @@ import { useTranslation } from '../i18n';
 import PermissionGate from '../components/PermissionGate';
 import SousNavigation from '../components/automations/SousNavigation';
 import AdressesDAppel from '../components/automations/AdressesDAppel';
-import { getAutomationLanguage } from '../lib/automationRulesApi';
+import { useLangueMessages } from '../hooks/useLangueMessages';
 
 /** Une carte de réglage, avec son titre, son explication et son contenu. */
 function Carte({
@@ -51,16 +51,14 @@ export default function AutomationsReglages() {
   const fr = language === 'fr';
   const navigate = useNavigate();
 
-  /** `null` = on n'a pas pu la lire : on le dit, on n'affiche pas « Français » d'office. */
-  const [orgLang, setOrgLang] = useState<'fr' | 'en' | null>(null);
-  const [chargement, setChargement] = useState(true);
-
-  useEffect(() => {
-    getAutomationLanguage()
-      .then(setOrgLang)
-      .catch((e: unknown) => { console.error('[automations/reglages] langue des messages illisible', e); })
-      .finally(() => setChargement(false));
-  }, []);
+  /*
+   * La MÊME valeur que le sélecteur « FR / EN » de la liste (`lib/langueMessages.ts`) : la carte la relit à
+   * son affichage, et montre le choix en cours quand une écriture partie de la liste n'est pas encore en
+   * base (elle disait « Français » jusqu'au rechargement — `06-reglages-globaux:116`).
+   * `null` = on n'a pas pu la lire : on le dit, on n'affiche pas « Français » d'office.
+   */
+  const { langue: orgLang, illisible } = useLangueMessages('[automations/reglages] langue des messages illisible');
+  const chargement = orgLang === null && !illisible;
 
 
   return (

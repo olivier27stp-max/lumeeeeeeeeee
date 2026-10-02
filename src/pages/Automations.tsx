@@ -34,6 +34,7 @@ import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
 import { usePermissions } from '../hooks/usePermissions';
+import { useLangueMessages } from '../hooks/useLangueMessages';
 import { hasPermission } from '../lib/permissions';
 import BandeauPause from '../components/automations/BandeauPause';
 import SousNavigation from '../components/automations/SousNavigation';
@@ -64,8 +65,6 @@ import { creerFileBascule } from '../lib/fileBascule';
 import {
   type AutomationRule,
   getAutomationRules,
-  getAutomationLanguage,
-  setAutomationLanguage,
   avisActives,
 } from '../lib/automationRulesApi';
 
@@ -622,10 +621,14 @@ export default function Automations() {
    * anglais, l'écran surlignait « FR » et affirmait que les messages partaient
    * en français (audit du 2026-10-01). Inconnue, on ne surligne rien.
    */
-  const [orgLang, setOrgLang] = useState<'fr' | 'en' | null>(null);
-  /** La lecture a échoué : on le dit à côté de la bascule. */
-  const [langueIllisible, setLangueIllisible] = useState(false);
-  const [savingLang, setSavingLang] = useState(false);
+  /*
+   * UNE source, partagée avec la carte des Réglages globaux (`lib/langueMessages.ts`) : le sélecteur
+   * d'ici et la carte de là-bas ne peuvent plus dire deux choses (`06-reglages-globaux:116`).
+   * `langueIllisible` : la lecture a échoué, on le dit à côté de la bascule.
+   */
+  const {
+    langue: orgLang, illisible: langueIllisible, ecriture: savingLang, changer: ecrireLangue,
+  } = useLangueMessages('[automations] langue des messages illisible');
 
   /**
    * Onglet de la liste — les quatre de GHL. `?onglet=verifier` l'ouvre
@@ -779,36 +782,20 @@ export default function Automations() {
     setTriDate(valeur);
   };
 
-  useEffect(() => {
-    getAutomationLanguage()
-      .then(setOrgLang)
-      .catch((e: unknown) => {
-        console.error('[automations] langue des messages illisible', e);
-        setLangueIllisible(true);
-      });
-  }, []);
-
   const changerLangue = async (lang: 'fr' | 'en') => {
     if (lang === orgLang || savingLang) return;
-    setSavingLang(true);
-    const avant = orgLang;
-    setOrgLang(lang);
     try {
-      await setAutomationLanguage(lang);
-      // Enregistrée : elle est maintenant connue, même si la lecture avait échoué.
-      setLangueIllisible(false);
+      // L'écran suit le clic ; il revient en arrière si le serveur refuse (voir `lib/langueMessages.ts`).
+      await ecrireLangue(lang);
       toast.success(fr
         ? (lang === 'en' ? 'Messages en anglais' : 'Messages en français')
         : (lang === 'en' ? 'Messages set to English' : 'Messages set to French'));
     } catch (e: unknown) {
-      setOrgLang(avant);
       // La RAISON (« seul un administrateur… »), pas un « impossible » muet.
       console.error('[automations] langue des messages', e);
       toast.error(e instanceof Error && e.message
         ? e.message
         : (fr ? 'Impossible de changer la langue' : 'Could not change language'));
-    } finally {
-      setSavingLang(false);
     }
   };
 
