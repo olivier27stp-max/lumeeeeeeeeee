@@ -1585,8 +1585,11 @@ export default function AutomationBuilderPage() {
       conditions: (regle?.conditions ?? null) as Record<string, unknown> | null,
       is_preset: regle?.is_preset,
       fr,
+      // L'entité que fixe le champ surveillé (« Date atteinte » sur un champ
+      // du pipeline = une opportunité) : la même que pour le tiroir et le panneau.
+      entite: objetRegle,
     }),
-    [regle?.trigger_event, regle?.actions, regle?.conditions, regle?.is_preset, steps, fr],
+    [regle?.trigger_event, regle?.actions, regle?.conditions, regle?.is_preset, steps, fr, objetRegle],
   );
   /** Les étapes fautives, pour les signaler SUR le canevas (§6.5). */
   const etapesEnErreur = useMemo(
@@ -1824,6 +1827,7 @@ export default function AutomationBuilderPage() {
         conditions: (regle.conditions ?? null) as Record<string, unknown> | null,
         is_preset: regle.is_preset,
         fr,
+        entite: objetRegle,
       });
       const bloquants = problemes.filter((p) => p.gravite === 'bloquant');
       if (bloquants.length > 0) {

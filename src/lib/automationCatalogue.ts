@@ -1250,6 +1250,47 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
 };
 
 /**
+ * LE CHAMP PERSONNALISÉ DONT L'OBJET FIXE L'ENTITÉ DE LA RÈGLE — la règle
+ * partagée du triage actions, lignes 5 et 7.
+ *
+ * Deux déclencheurs font arriver une entité qui dépend d'un champ choisi dans
+ * leurs réglages : « Date atteinte » (le champ date surveillé : un champ du
+ * pipeline émet une OPPORTUNITÉ, pas un client) et « Champ personnalisé
+ * modifié » (le champ surveillé). L'éditeur le savait pour son tiroir ; le
+ * canevas et le serveur l'ignoraient, et les trois se contredisaient.
+ *
+ * UNE fonction dit où lire ce champ dans `conditions` ; l'éditeur (qui a la
+ * liste des champs) et le serveur (qui les lit en base) y cherchent l'objet
+ * du champ, et passent l'entité à `actionCompatible` et à
+ * `problemesAvantPublication`. Rend `''` quand aucun champ n'est choisi.
+ */
+export function champQuiFixeLEntite(
+  cleDeclencheur: string | null | undefined,
+  conditions: Record<string, unknown> | null | undefined,
+): string {
+  if (cleDeclencheur === 'date.reached') {
+    const v = conditions?.champ_id;
+    return typeof v === 'string' ? v : '';
+  }
+  if (cleDeclencheur === 'custom_field.changed') {
+    // L'éditeur écrit `{ field_id: { eq: id } }` ; une règle plus ancienne peut le porter à plat.
+    const v = conditions?.field_id;
+    if (v && typeof v === 'object' && !Array.isArray(v)) return String((v as { eq?: unknown }).eq ?? '');
+    return typeof v === 'string' ? v : '';
+  }
+  return '';
+}
+
+/**
+ * L'entité que fixe l'objet de ce champ (`custom_fields.object_type` : client,
+ * deal, job, quote, invoice). Une « propriété » n'en fixe aucune : aucun
+ * déclencheur ne fait arriver une propriété.
+ */
+export function entiteDuChamp(objetDuChamp: string | null | undefined): string | null {
+  return objetDuChamp && objetDuChamp !== 'property' ? objetDuChamp : null;
+}
+
+/**
  * Cette action peut-elle suivre ce déclencheur ?
  *
  * C'est la question qui décide si un parcours marchera. « Envoyer la
@@ -1425,6 +1466,14 @@ export function problemesAvantPublication(regle: {
   /** Les réglages du déclencheur — voir `DeclencheurCatalogue.champs`. */
   conditions?: Record<string, unknown> | null;
   fr?: boolean;
+  /**
+   * L'entité que les réglages de la règle FIXENT (l'objet du champ surveillé —
+   * voir `champQuiFixeLEntite`), quand l'appelant la connaît. Sans elle, « Date
+   * atteinte » sur un champ du pipeline passait pour un déclencheur de client :
+   * le canevas et le serveur refusaient « Assigner l'opportunité », que le
+   * tiroir venait d'offrir.
+   */
+  entite?: string | null;
 }): ProblemePublication[] {
   const fr = regle.fr !== false;
   const out: ProblemePublication[] = [];
@@ -1510,7 +1559,7 @@ export function problemesAvantPublication(regle: {
     }
 
     // L'action peut-elle seulement partir sur ce déclencheur ?
-    if (regle.trigger_event && !actionCompatible(modele, regle.trigger_event)) {
+    if (regle.trigger_event && !actionCompatible(modele, regle.trigger_event, regle.entite)) {
       dire(
         `« ${modele.fr} » ne peut pas suivre ce déclencheur${ou}.`,
         `“${modele.en}” cannot follow this trigger${ou}.`,

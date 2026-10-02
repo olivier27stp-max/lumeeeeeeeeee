@@ -47,7 +47,7 @@ import { logger } from '../lib/logger';
 import { messageCorbeille, STATUT_CORBEILLE } from '../lib/automations-corbeille';
 import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, declencheurOffertA, refusDeclencheurNonOffert, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
-import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee, activerApresEcritureUtilisateur } from '../lib/automations-publication';
+import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee, activerApresEcritureUtilisateur, entiteDeLaRegle } from '../lib/automations-publication';
 import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
 import { problemeJoursAvant } from '../lib/rappels-dates';
 import {
@@ -250,7 +250,9 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
 
   // Naître publiée = publier : mêmes vérifications que la route de publication (M8).
   if (req.body.is_active === true) {
-    const problemes = problemesBloquants(req.body, fr);
+    // L'entité que fixe le champ surveillé (« Date atteinte » sur un champ du pipeline…).
+    const entite = await entiteDeLaRegle(auth.client, auth.orgId, req.body);
+    const problemes = problemesBloquants({ ...req.body, entite }, fr);
     if (problemes.length) return res.status(422).json({ error: messageRefus(problemes, fr), code: 'publication_refusee', problemes });
   }
 
@@ -702,7 +704,8 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   // publication (M8), sur la règle telle qu'elle SERA après modification.
   if (patch.is_active === true) {
     // (Une règle à la corbeille a déjà été refusée plus haut — J-065.)
-    const problemes = problemesBloquants({ ...existante, ...patch }, fr);
+    const apres = { ...existante, ...patch };
+    const problemes = problemesBloquants({ ...apres, entite: await entiteDeLaRegle(auth.client, auth.orgId, apres) }, fr);
     if (problemes.length) return res.status(422).json({ error: messageRefus(problemes, fr), code: 'publication_refusee', problemes });
   }
 
@@ -718,8 +721,10 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
    */
   const parcoursModifie = (['trigger_event', 'steps', 'actions', 'conditions'] as const).some((k) => k in patch);
   if (existante.is_active && patch.is_active === undefined && parcoursModifie) {
-    const avant = new Set(problemesBloquants(existante, fr));
-    const nouveaux = problemesBloquants({ ...existante, ...patch }, fr).filter((p) => !avant.has(p));
+    // Chaque état est jugé avec SON entité : changer le champ surveillé change la fiche qui arrive.
+    const apres = { ...existante, ...patch };
+    const avant = new Set(problemesBloquants({ ...existante, entite: await entiteDeLaRegle(auth.client, auth.orgId, existante) }, fr));
+    const nouveaux = problemesBloquants({ ...apres, entite: await entiteDeLaRegle(auth.client, auth.orgId, apres) }, fr).filter((p) => !avant.has(p));
     if (nouveaux.length) {
       return res.status(422).json({ error: messagePublieeCassee(nouveaux, fr), code: 'publiee_cassee', problemes: nouveaux });
     }

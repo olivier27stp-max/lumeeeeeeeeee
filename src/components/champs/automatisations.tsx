@@ -10,7 +10,7 @@
  */
 import { useId, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ENTITE_PAR_DECLENCHEUR } from '../../lib/automationCatalogue';
+import { ENTITE_PAR_DECLENCHEUR, champQuiFixeLEntite, entiteDuChamp } from '../../lib/automationCatalogue';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { listerChamps } from '../../lib/champsPersoApi';
 import { LIBELLES_OBJET, OBJETS, variableAffichee, variableModele, type ChampPerso, type ObjetChamp } from '../../lib/champs/types';
@@ -93,11 +93,11 @@ export function objetDeLaRegle(
   champs: ChampPerso[],
 ): ObjetChamp | null {
   if (!cleDeclencheur) return null;
-  const id = cleDeclencheur === 'custom_field.changed' ? champSurveille(conditions)
-    : cleDeclencheur === 'date.reached' ? String(conditions?.champ_id ?? '') : '';
+  // La règle PARTAGÉE avec le serveur (catalogue) dit où lire le champ qui fixe l'entité.
+  const id = champQuiFixeLEntite(cleDeclencheur, conditions);
   if (id) {
-    const objet = champs.find((c) => c.id === id)?.object_type;
-    if (objet && objet !== 'property') return objet;
+    const objet = entiteDuChamp(champs.find((c) => c.id === id)?.object_type) as ObjetChamp | null;
+    if (objet) return objet;
   }
   const entite = ENTITE_PAR_DECLENCHEUR[cleDeclencheur];
   return entite === '*' ? null : objetDeLEntiteMoteur(entite);

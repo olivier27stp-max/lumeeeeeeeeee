@@ -21,6 +21,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { bloquantsPublication, type RegleAPublier } from '../../src/lib/publicationAutomatisation';
+import { champQuiFixeLEntite, entiteDuChamp } from '../../src/lib/automationCatalogue';
 import { logger } from './logger';
 import { MESSAGES_EN } from './automations-langue';
 import { getServiceClient } from './supabase';
@@ -45,6 +46,35 @@ export function messagePublieeCassee(problemes: string[], fr = true): string {
 /** Les problèmes bloquants d'une règle, en texte (vide = publiable). */
 export function problemesBloquants(regle: RegleAPublier, fr = true): string[] {
   return bloquantsPublication({ ...regle, fr }).map((p) => p.message);
+}
+
+/**
+ * L'ENTITÉ QUE LES RÉGLAGES DE LA RÈGLE FIXENT (triage actions, lignes 5 et 7).
+ *
+ * « Date atteinte » sur un champ date du PIPELINE fait arriver une
+ * opportunité ; « Champ personnalisé modifié » fait arriver la fiche du champ
+ * surveillé. Le serveur jugeait sur le seul déclencheur : il refusait de
+ * publier « Assigner l'opportunité » que l'éditeur venait d'offrir, et
+ * publiait sans broncher « Envoyer la facture » sur un champ du client.
+ *
+ * La règle partagée (`champQuiFixeLEntite`) dit où lire le champ ; on y lit
+ * son objet avec le client de l'UTILISATEUR (la RLS borne au bureau). Champ
+ * non choisi, introuvable ou lecture en échec : `null` — on juge alors sur le
+ * déclencheur seul, comme avant.
+ */
+export async function entiteDeLaRegle(
+  client: SupabaseClient,
+  orgId: string,
+  regle: { trigger_event?: string | null; conditions?: Record<string, unknown> | null },
+): Promise<string | null> {
+  const idChamp = champQuiFixeLEntite(regle.trigger_event, regle.conditions);
+  if (!/^[0-9a-f-]{36}$/i.test(idChamp)) return null;
+  const { data, error } = await client.from('custom_fields').select('object_type').eq('id', idChamp).eq('org_id', orgId).maybeSingle();
+  if (error) {
+    logger.error('[publication] objet du champ surveillé illisible', { field_id: idChamp, message: error.message });
+    return null;
+  }
+  return entiteDuChamp((data as { object_type?: string | null } | null)?.object_type);
 }
 
 /**
@@ -113,7 +143,8 @@ export async function changerPublication(
         erreur: t('Cette automatisation est à la corbeille : restaurez-la avant de la publier.'),
       };
     }
-    const problemes = problemesBloquants(regle as RegleAPublier, fr);
+    const entite = await entiteDeLaRegle(client, orgId, regle as RegleAPublier);
+    const problemes = problemesBloquants({ ...(regle as RegleAPublier), entite }, fr);
     if (problemes.length > 0) {
       return { ok: false, id, statut: 422, erreur: messageRefus(problemes, fr), problemes };
     }

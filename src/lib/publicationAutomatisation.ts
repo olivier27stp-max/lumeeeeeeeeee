@@ -30,6 +30,8 @@ export interface RegleAPublier {
   conditions?: Record<string, unknown> | null;
   is_preset?: boolean | null;
   fr?: boolean;
+  /** L'entité que les réglages de la règle fixent — voir `champQuiFixeLEntite` (catalogue). */
+  entite?: string | null;
 }
 
 /** L'action « À compléter » posée à la création : ce n'est pas un vrai envoi. */
@@ -107,6 +109,7 @@ export function problemesPublication(regle: RegleAPublier): ProblemePublication[
       actions: actions.filter((a) => trouverAction(String((a as { type?: unknown })?.type ?? ''))),
       conditions: regle.conditions ?? null,
       fr: regle.fr,
+      entite: regle.entite,
     });
   }
 
@@ -119,6 +122,7 @@ export function problemesPublication(regle: RegleAPublier): ProblemePublication[
     actions: estProvisoire(actions) ? [] : actions,
     conditions: regle.conditions ?? null,
     fr: regle.fr,
+    entite: regle.entite,
   });
 }
 

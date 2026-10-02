@@ -449,6 +449,58 @@ describe('S-01 — « Ouvrir » une 2e automatisation sur réseau lent : chacune
   });
 });
 
+// ─── Triage « actions », ligne 5 (= déclencheurs 06:149) ────────
+
+describe('ligne 5 — « Date atteinte » sur un champ du pipeline : ce que le tiroir laisse ajouter se publie', () => {
+  const DATE_PIPELINE = 'cccccccc-0000-4000-8000-0000000000d1';
+  const DATE_CLIENT = 'cccccccc-0000-4000-8000-0000000000d2';
+  const champ = (id: string, objet: string, label: string) => ({
+    id, object_type: objet, folder_id: null, key: label.toLowerCase().replace(/\W+/g, '_'), label, placeholder: null, help_text: null,
+    field_type: 'date', config: {}, is_required: false, position: 0, archived_at: null, options: [],
+  });
+  const surLeChamp = (idChamp: string) => regle({
+    trigger_event: 'date.reached', conditions: { champ_id: idChamp, jours_avant: 7 },
+    steps: [
+      { id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Bonjour [client_first_name]' } }, suivant: 'e2' },
+      { id: 'e2', type: 'action', nom: null, action: { type: 'assigner_deal', config: {} }, suivant: null },
+    ],
+  });
+  beforeEach(() => {
+    etat.champs = [champ(DATE_PIPELINE, 'deal', 'Fermeture prévue'), champ(DATE_CLIENT, 'client', 'Fin de garantie')];
+  });
+
+  it('champ du PIPELINE : le canevas n’affiche aucun bandeau rouge, et « Publier » propose la confirmation', async () => {
+    etat.regles = [surLeChamp(DATE_PIPELINE)];
+    await ouvrir();
+    expect(container.textContent).not.toMatch(/chose[s]? à corriger avant de publier/);
+    expect(container.textContent).not.toContain('ne peut pas suivre ce déclencheur');
+    expect(carteEtape('Assigner l’opportunité')?.parentElement?.className).not.toContain('border-danger');
+    // Le tiroir l'offre toujours (c'était déjà le cas) : les trois disent la même chose.
+    cliquer(boutonExact('Ajouter'));
+    await attendre(2);
+    expect(bouton('Assigner l’opportunité', tiroirActions() ?? undefined)?.disabled).toBe(false);
+    cliquer(tiroirActions()?.querySelector('button[aria-label="Fermer"]'));
+    await attendre(2);
+
+    cliquer(container.querySelector('button[role="switch"]'));
+    await attendre(12);
+    expect(toasts.erreur).toEqual([]);
+    expect((confirmerMock.mock.calls[0][0] as { title: string }).title).toBe('Publier cette automatisation ?');
+    expect(api.publier).toHaveBeenCalledWith(ID, true);
+  });
+
+  it('champ du CLIENT : l’action sur l’opportunité est signalée sur le canevas, et « Publier » est refusé', async () => {
+    etat.regles = [surLeChamp(DATE_CLIENT)];
+    await ouvrir();
+    expect(container.textContent).toContain('1 chose à corriger avant de publier');
+    expect(bouton('« Assigner l’opportunité » ne peut pas suivre ce déclencheur.')).toBeDefined();
+    cliquer(container.querySelector('button[role="switch"]'));
+    await attendre(12);
+    expect(toasts.erreur.join('\n')).toContain('« Assigner l’opportunité » ne peut pas suivre ce déclencheur.');
+    expect(api.publier).not.toHaveBeenCalled();
+  });
+});
+
 // ─── Triage « éditeur », EDT-166 ────────────────────────────────
 
 describe('EDT-166 — « Précédent » du navigateur : ce qui ne peut pas s’enregistrer en partant se demande AVANT', () => {

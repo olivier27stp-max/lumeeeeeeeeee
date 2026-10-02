@@ -6,7 +6,7 @@
  *   (sans argument : tous les scénarios)
  */
 import type { Page } from '@playwright/test';
-import { admin, BASE, carte, creerRegle, fermer, leBureau, lireRegle, ouvrirEditeur, ouvrirPage, panneau, pause, tiroir, verifier } from './banc.mts';
+import { admin, assurerChamp, BASE, carte, creerRegle, fermer, leBureau, lireRegle, ouvrirEditeur, ouvrirPage, panneau, pause, tiroir, verifier } from './banc.mts';
 
 type Etapes = Array<{ id: string; action?: { config?: Record<string, unknown> } } & Record<string, unknown>>;
 const etapes = async (id: string): Promise<Etapes> => ((await lireRegle(id)).steps ?? []) as Etapes;
@@ -147,6 +147,52 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await enregistrer(page).click();
     await pause(6000);
     verifier((await etapes(regle.id))[0]?.delai_secondes === 5 * 86400, '5 jours sont en base');
+    await page.context().close();
+  },
+
+  /** Lignes 5 et 7 (actions) — l'entité que fixe le champ surveillé : tiroir, canevas et serveur d'accord. */
+  async l5() {
+    const b = await leBureau();
+    const datePipeline = await assurerChamp('deal', 'u_fermeture', 'Fermeture prévue U', 'date');
+    const texteClient = await assurerChamp('client', 'u_surnom', 'Surnom U', 'single_line');
+    const page = await ouvrirPage();
+    const jeton = await page.evaluate(() => JSON.parse(localStorage.getItem('lume-auth-token') ?? '{}').access_token as string).catch(() => '');
+    const publier = async (id: string) => {
+      const r = await fetch(`http://127.0.0.1:3497/api/automations/rules/${id}/publication`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}`, 'x-org-id': b.orgA }, body: JSON.stringify({ actif: true }),
+      });
+      return { status: r.status, json: await r.json().catch(() => null) as { problemes?: string[] } | null };
+    };
+    // (5) « Date atteinte » sur un champ du pipeline + « Assigner l'opportunité ».
+    const pipeline = await creerRegle({ trigger_event: 'date.reached', conditions: { champ_id: datePipeline, jours_avant: 7 }, steps: [
+      action('send_sms', { body: 'Bonjour [client_first_name]' }, 'e1', 'e2'), action('assigner_deal', {}, 'e2', null),
+    ] });
+    await ouvrirEditeur(page, pipeline.id);
+    await carte(page, 'Assigner l’opportunité').waitFor();
+    await pause(1500);
+    verifier(await page.getByText(/chose[s]? à corriger avant de publier/).count() === 0, 'champ du pipeline : aucun bandeau rouge sur le canevas');
+    const jetonLu = await page.evaluate(() => JSON.parse(localStorage.getItem('lume-auth-token') ?? '{}').access_token as string);
+    const pub = await (async () => {
+      const r = await fetch(`http://127.0.0.1:3497/api/automations/rules/${pipeline.id}/publication`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jetonLu}`, 'x-org-id': b.orgA }, body: JSON.stringify({ actif: true }),
+      });
+      return { status: r.status, json: await r.json().catch(() => null) as { problemes?: string[] } | null };
+    })();
+    verifier(pub.status === 200, `champ du pipeline : le serveur publie (${pub.status} ${JSON.stringify(pub.json?.problemes ?? '')})`);
+    await admin.from('automation_rules').update({ is_active: false }).eq('id', pipeline.id);
+    void publier;
+    // (7) « Champ personnalisé modifié » sur un champ du client + « Envoyer la facture ».
+    const client = await creerRegle({ trigger_event: 'custom_field.changed', conditions: { field_id: { eq: texteClient } }, steps: [
+      action('send_sms', { body: 'Bonjour [client_first_name]' }, 'e1', 'e2'), action('envoyer_facture', {}, 'e2', null),
+    ] });
+    const r7 = await fetch(`http://127.0.0.1:3497/api/automations/rules/${client.id}/publication`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jetonLu}`, 'x-org-id': b.orgA }, body: JSON.stringify({ actif: true }),
+    });
+    const j7 = await r7.json().catch(() => null) as { problemes?: string[] } | null;
+    verifier(r7.status === 422 && JSON.stringify(j7?.problemes) === JSON.stringify(['« Envoyer la facture » ne peut pas suivre ce déclencheur.']), `champ du client : le serveur refuse « Envoyer la facture » (${r7.status})`);
+    await ouvrirEditeur(page, client.id);
+    await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+    verifier(await tiroir(page).getByRole('button', { name: /^Envoyer la facture/ }).isDisabled(), 'champ du client : le tiroir grise « Envoyer la facture » — comme le serveur');
     await page.context().close();
   },
 

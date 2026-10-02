@@ -73,6 +73,104 @@ beforeEach(() => {
   etat.tables = { automation_rules: [regle()], automation_scheduled_tasks: [], automation_folders: [], org_features: [], custom_fields: [] };
 });
 
+// ─── Triage « actions », lignes 5 et 7 (= déclencheurs 06:181) ──
+
+describe('lignes 5 et 7 — la publication juge les actions sur l’entité que fixe le champ surveillé', () => {
+  const DATE_PIPELINE = 'cccccccc-0000-4000-8000-0000000000d1';
+  const DATE_CLIENT = 'cccccccc-0000-4000-8000-0000000000d2';
+  const TEXTE_CLIENT = 'cccccccc-0000-4000-8000-0000000000d3';
+  const D_UN_AUTRE_BUREAU = 'cccccccc-0000-4000-8000-0000000000d4';
+  const MEMBRE = '99999999-0000-4000-8000-000000000001';
+  const etape = (id: string, type: string, config: Record<string, string>, suivant: string | null) => ({ id, type: 'action', action: { type, config }, suivant });
+  /** Un texto au client, puis l'action jugée. */
+  const parcours = (...actions: Array<[string, Record<string, string>]>) => [
+    etape('e1', 'send_sms', { body: 'Bonjour [client_first_name]' }, 'e2'),
+    ...actions.map(([type, config], i) => etape(`e${i + 2}`, type, config, i + 1 < actions.length ? `e${i + 3}` : null)),
+  ];
+  const SIX: Array<[string, Record<string, string>]> = [
+    ['envoyer_facture', {}], ['envoyer_soumission', {}], ['modifier_statut_rendezvous', { statut: 'completed' }],
+    ['move_deal_stage', { cible: 'gagne' }], ['modifier_deal', { source: 'Site' }], ['assigner_deal', { membre_id: MEMBRE }],
+  ];
+  const publier = () => appeler('POST', `/automations/rules/${REGLE}/publication`, { actif: true });
+
+  beforeEach(() => {
+    etat.tables.custom_fields = [
+      { id: DATE_PIPELINE, org_id: ORG, object_type: 'deal', field_type: 'date' },
+      { id: DATE_CLIENT, org_id: ORG, object_type: 'client', field_type: 'date' },
+      { id: TEXTE_CLIENT, org_id: ORG, object_type: 'client', field_type: 'text' },
+      { id: D_UN_AUTRE_BUREAU, org_id: 'un-autre-bureau', object_type: 'deal', field_type: 'date' },
+    ];
+  });
+
+  it('« Date atteinte » sur un champ date du PIPELINE + « Assigner l’opportunité » : publiée (c’est bien une opportunité qui arrive)', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'date.reached', conditions: { champ_id: DATE_PIPELINE, jours_avant: 7 }, steps: parcours(['assigner_deal', { membre_id: MEMBRE }]) })];
+    const r = await publier();
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    expect(enBase().is_active).toBe(true);
+  });
+
+  it('… les trois actions sur l’opportunité passent ; facture, devis et rendez-vous restent refusés', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'date.reached', conditions: { champ_id: DATE_PIPELINE }, steps: parcours(...SIX) })];
+    const r = await publier();
+    expect(r.status).toBe(422);
+    expect(r.json.problemes).toEqual([
+      '« Envoyer la facture » ne peut pas suivre ce déclencheur.',
+      '« Envoyer le devis » ne peut pas suivre ce déclencheur.',
+      '« Changer le statut du rendez-vous » ne peut pas suivre ce déclencheur.',
+    ]);
+  });
+
+  it('« Date atteinte » sur un champ date du CLIENT : « Assigner l’opportunité » reste refusée', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'date.reached', conditions: { champ_id: DATE_CLIENT }, steps: parcours(['assigner_deal', { membre_id: MEMBRE }]) })];
+    const r = await publier();
+    expect(r.status).toBe(422);
+    expect(r.json.problemes).toEqual(['« Assigner l’opportunité » ne peut pas suivre ce déclencheur.']);
+  });
+
+  it('le champ d’un AUTRE bureau ne compte pas : jugé sur le déclencheur seul', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'date.reached', conditions: { champ_id: D_UN_AUTRE_BUREAU }, steps: parcours(['assigner_deal', { membre_id: MEMBRE }]) })];
+    expect((await publier()).status).toBe(422);
+  });
+
+  it('« Champ personnalisé modifié » sur un champ du CLIENT : les six actions liées à une autre fiche sont refusées (le tiroir les grise déjà)', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'custom_field.changed', conditions: { field_id: { eq: TEXTE_CLIENT } }, steps: parcours(...SIX) })];
+    const r = await publier();
+    expect(r.status).toBe(422);
+    expect(r.json.problemes).toEqual([
+      '« Envoyer la facture » ne peut pas suivre ce déclencheur.',
+      '« Envoyer le devis » ne peut pas suivre ce déclencheur.',
+      '« Changer le statut du rendez-vous » ne peut pas suivre ce déclencheur.',
+      '« Déplacer l’opportunité » ne peut pas suivre ce déclencheur.',
+      '« Modifier l’opportunité » ne peut pas suivre ce déclencheur.',
+      '« Assigner l’opportunité » ne peut pas suivre ce déclencheur.',
+    ]);
+    expect(enBase().is_active).toBe(false);
+  });
+
+  it('« Champ personnalisé modifié » SANS champ choisi : l’entité dépend de la donnée, rien n’est refusé d’avance', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'custom_field.changed', conditions: {}, steps: parcours(...SIX) })];
+    expect((await publier()).status).toBe(200);
+  });
+
+  it('publier par PATCH (`is_active: true`) et créer déjà publiée suivent la même règle', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'date.reached', conditions: { champ_id: DATE_PIPELINE }, steps: parcours(['assigner_deal', { membre_id: MEMBRE }]) })];
+    expect((await appeler('PATCH', `/automations/rules/${REGLE}`, { is_active: true })).status).toBe(200);
+
+    const corps = { name: 'Neuve', trigger_event: 'custom_field.changed', delay_seconds: 0, is_active: true, conditions: { field_id: { eq: TEXTE_CLIENT } }, actions: [{ type: 'send_sms', config: { body: 'Bonjour' } }], steps: parcours(['envoyer_facture', {}]) };
+    const creee = await appeler('POST', '/automations/rules', corps);
+    expect(creee.status).toBe(422);
+    expect(creee.json.problemes).toEqual(['« Envoyer la facture » ne peut pas suivre ce déclencheur.']);
+  });
+
+  it('automatisation PUBLIÉE : pointer « Date atteinte » d’un champ du pipeline vers un champ du client est refusé si une action sur l’opportunité s’y trouve', async () => {
+    etat.tables.automation_rules = [regle({ is_active: true, trigger_event: 'date.reached', conditions: { champ_id: DATE_PIPELINE }, steps: parcours(['assigner_deal', { membre_id: MEMBRE }]) })];
+    const r = await appeler('PATCH', `/automations/rules/${REGLE}`, { conditions: { champ_id: DATE_CLIENT } });
+    expect(r.status).toBe(422);
+    expect(r.json.code).toBe('publiee_cassee');
+    expect(r.json.problemes).toEqual(['« Assigner l’opportunité » ne peut pas suivre ce déclencheur.']);
+  });
+});
+
 // ─── Triage « éditeur », 05b-canevas-outils-origine:303 ─────────
 
 describe('05b:303 — une automatisation PUBLIÉE ne se vide pas ; `actions` peut refléter un parcours', () => {

@@ -82,6 +82,18 @@ export async function creerRegle(over: Record<string, unknown>): Promise<{ id: s
   return { id: String(data.id) };
 }
 
+/** Un champ personnalisé du bureau A (u), créé une fois (retrouvé ensuite par sa clé). */
+export async function assurerChamp(objet: 'client' | 'deal', cle: string, libelle: string, type: 'date' | 'single_line'): Promise<string> {
+  const b = await leBureau();
+  const { data: deja } = await admin.from('custom_fields').select('id').eq('org_id', b.orgA).eq('object_type', objet).eq('key', cle).is('archived_at', null).maybeSingle();
+  if (deja?.id) return String(deja.id);
+  const { data, error } = await admin.from('custom_fields')
+    .insert({ org_id: b.orgA, object_type: objet, key: cle, label: libelle, field_type: type, config: {}, position: 900 })
+    .select('id').single();
+  if (error) throw new Error(`champ ${cle} : ${error.message}`);
+  return String(data.id);
+}
+
 export async function lireRegle(id: string): Promise<Record<string, unknown>> {
   const { data, error } = await admin.from('automation_rules').select('*').eq('id', id).single();
   if (error) throw new Error(`lecture : ${error.message}`);
