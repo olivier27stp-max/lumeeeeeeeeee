@@ -868,7 +868,29 @@ produit).
 
 ## 9. Comptes par bureau et par modèle
 
-<!-- COMPTES : rempli par le coordinateur (lecture de la prod) -->
+Lecture seule de la prod, le 2026-10-02 à 12:35 UTC (`scripts/qa/finale/unification-essai-a-blanc.mts`).
+685 règles dans `automation_rules`, 14 bureaux ; l'ancienne table `automations` est vide.
+
+| Bureau | Règles | À parcours (`steps`) | À plat (`actions`) | dont publiées | Neuves (aucune étape) | Corbeille | Envois en attente sur des règles à plat |
+|---|---|---|---|---|---|---|---|
+| Entreprise réelle n° 1 | 51 | 4 | 40 | 21 | 3 | 4 | 110 |
+| Entreprise réelle n° 2 | 40 | 1 | 39 | 32 | 0 | 0 | 2 |
+| 12 bureaux de test, d'essai et d'archive | 594 | 37 | 468 | 333 | 3 | 86 | 115 |
+| **Total** | **685** | **42** | **547** | **386** | **6** | **90** | **227** |
+
+Ce que ces comptes disent :
+
+- **80 % des règles vivantes sont à l'ancien format à plat** (547 sur 595) : ce sont surtout les préréglages
+  semés à l'ouverture d'un compte (39 ou 40 par bureau), jamais convertis.
+- Conversion en parcours : possible sans rien perdre pour **537 des 547** (mêmes actions et même délai à
+  l'aller-retour). Les 10 autres sont le même préréglage retiré, « Estimate Follow-Up (3 days) », branché sur
+  `estimate.sent` — un événement que rien n'émet : il est publié mais ne part jamais (une occurrence dans
+  l'entreprise réelle n° 2).
+- **41 règles à parcours portent une copie `actions` périmée** (5 dans les deux entreprises réelles) : semées ou
+  créées avant que `actions` soit recopié du parcours à chaque écriture.
+- Par déclencheur, règles vivantes : `quote.sent` 105, `job.completed` 100, `lead.created` 76, `invoice.sent` 76,
+  `appointment.created` 62, `quote.approved` 48, `invoice.paid` 29, `quote.viewed` 28, `lead.status_changed` 27,
+  `agreement.signed` 14, `estimate.sent` 14, `appointment.cancelled` 14, `deal.stage_entered` 1, `invoice.overdue` 1.
 
 ## 10. Écarts entre les notes de départ et le code, et ce qui n'a pas été vérifié
 
