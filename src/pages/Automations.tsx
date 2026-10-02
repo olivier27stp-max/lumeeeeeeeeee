@@ -2213,6 +2213,9 @@ export default function Automations() {
                       <input
                         type="checkbox"
                         checked={toutCoche}
+                        /* Une partie des lignes cochées : l'état INTERMÉDIAIRE (tiret), pas une case vide
+                           (triage `07-lot:66`). Il n'existe qu'en propriété du champ, pas en attribut. */
+                        ref={(el) => { if (el) el.indeterminate = !toutCoche && visibles.some((r) => cochees.has(r.id)); }}
                         onChange={basculerTout}
                         disabled={!peutModifier}
                         title={peutModifier ? undefined : raisonLectureSeule}

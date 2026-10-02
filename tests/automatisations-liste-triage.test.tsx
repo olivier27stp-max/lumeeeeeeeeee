@@ -1107,6 +1107,24 @@ describe('07-lot:159 — deux refus de publication sont lisibles, un par ligne',
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('07-lot:66 — « Tout cocher » partiellement cochée montre l’état intermédiaire', () => {
+  it('aucune : vide ; une sur deux : intermédiaire ; toutes : cochée ; puis de nouveau vide', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'A' }), regle({ name: 'B' })]);
+    await rendre();
+    const tout = () => caseDe(/^Tout cocher$/)!;
+    expect([tout().checked, tout().indeterminate]).toEqual([false, false]);
+    await cliquer(caseDe(/^Cocher A$/));
+    expect([tout().checked, tout().indeterminate]).toEqual([false, true]);
+    await cliquer(caseDe(/^Cocher B$/));
+    expect([tout().checked, tout().indeterminate]).toEqual([true, false]);
+    await cliquer(caseDe(/^Cocher A$/));
+    expect([tout().checked, tout().indeterminate]).toEqual([false, true]);
+    await cliquer(bouton(/^Tout décocher$/));
+    expect([tout().checked, tout().indeterminate]).toEqual([false, false]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
