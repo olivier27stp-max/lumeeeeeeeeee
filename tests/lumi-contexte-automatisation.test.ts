@@ -105,6 +105,29 @@ describe('ce qui ne doit PAS être pris pour une automatisation', () => {
     expect((await automatisationsCitees('change le message de la relance pour quelque chose de plus court', o)).nombre).toBe(1);
   });
 
+  it('une demande de CRÉATION qui décrit ce que fait une automatisation existante ne la « cite » pas (I-008, I-017, I-020)', async () => {
+    base.regles = [
+      regle('p7', 'Invoice Reminder — 7 Days', 'invoice.sent', 'x', { is_preset: true, is_active: true }),
+      regle('cs', 'Contrat signé', 'agreement.signed', 'x', { is_active: true }),
+      regle('sp', 'Suivi prospect — 1 jour', 'lead.created', 'x'),
+    ];
+    for (const demande of [
+      'Create an automation: 7 days after an invoice is sent, if it is still unpaid, email the client a reminder with the payment link.',
+      'Crée une automatisation qui envoie un courriel de bienvenue au client quand il signe son contrat.',
+      'Crée une automatisation : quand un nouveau prospect arrive, notifie-moi, et 1 jour plus tard envoie-lui un courriel de suivi.',
+    ]) {
+      expect((await automatisationsCitees(demande, o)).nombre, demande).toBe(0);
+    }
+    // … sauf si elle la nomme entre guillemets.
+    expect((await automatisationsCitees('Crée une automatisation comme « Contrat signé », mais par texto', o)).nombre).toBe(1);
+  });
+
+  it('les mots d’un nom dans le désordre ne suffisent pas quand la phrase ne parle pas d’une automatisation qu’on a', async () => {
+    base.regles = [regle('sp', 'Suivi prospect — 1 jour', 'lead.created', 'x')];
+    expect((await automatisationsCitees('envoie un courriel de suivi au prospect Marie Tremblay, 1 jour après la visite', o)).nombre).toBe(0);
+    expect((await automatisationsCitees('change le courriel de mon suivi de prospect à 1 jour', o)).nombre).toBe(1);
+  });
+
   it('un message trop court ou sans mot utile ne déclenche aucune lecture', async () => {
     expect((await automatisationsCitees('oui', o)).nombre).toBe(0);
     expect(base.requetes).toBe(0);

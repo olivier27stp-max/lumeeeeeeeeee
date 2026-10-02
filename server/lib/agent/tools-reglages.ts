@@ -740,7 +740,7 @@ const updateAutomationFromText: AgentTool = {
       + 'Same rule, nothing is enabled. Pass the user\'s own words; one change per call unless they asked for several. '
       + 'NOT possible yet: targeting by client TYPE (commercial, residential): do not call - ask ONE question instead ("Do these clients carry a tag such as Commercial? I can filter on a tag."). '
       + 'Actions that exist: text message, email, internal notification, task, tag, review request, wait, condition. An automatic phone call, WhatsApp or voicemail does NOT exist: say so, do not call. '
-      + 'A new WORDING only: update_automation_message. A new name: rename_automation_rule.',
+      + 'A new WORDING only: update_automation_message. A new name: rename_automation_rule. Never use it when the user asks to CREATE an automation, even if a similar one exists: create the new one (create_automation_from_text or a template) and mention the existing one.',
     parameters: {
       type: 'object',
       properties: {

@@ -113,6 +113,22 @@ function resumeCompact(regle: RegleLue, langue: Langue): string {
   ].join('\n');
 }
 
+/**
+ * Une demande de CRÉATION décrit ce que l'automatisation doit faire — avec les mots mêmes du nom
+ * d'une automatisation qui existe (« 7 jours après l'envoi d'une facture, un rappel par
+ * courriel » ≈ « Invoice Reminder — 7 Days »). La prendre pour « citée » faisait répondre à Lumi
+ * « c'est déjà en place », ou MODIFIER l'existante au lieu de créer ce qu'on demandait
+ * (40-iklm : I-008, I-017, I-020). Pour une création, seul un nom entre guillemets désigne.
+ */
+const CREATION = /\b(cree|crees|creer|creons|create|construis|construire|build an?|fais[- ]moi une?|make (?:me )?an? (?:new )?automation|set up an?|mets en place|nouvelle automatisation|new automation|ajoute une automatisation|add an automation)\b/;
+/**
+ * « MA relance de factures en retard », « my quote follow-up », « l'automatisation … » : le signe
+ * qu'on parle d'une automatisation qu'on a déjà. Sans lui, les mots d'un nom dans le désordre ne
+ * suffisent pas : « envoie un courriel de suivi au prospect, 1 jour après » n'est pas
+ * l'automatisation « Suivi prospect — 1 jour ».
+ */
+const DEJA_A_MOI = /\b(ma|mon|mes|notre|nos|my|our|automatisations?|automations?|workflows?)\b/;
+
 type Ligne = { id: string; name: string; trigger_event: string; is_active: boolean; preset_key: string | null };
 // Sous son nom rangé, ou sous le nom que l'écran affiche (un préréglage est rangé en anglais).
 const nomsDe = (r: Ligne): string[] => [r.name, localizeAutomationName(r.name, 'fr'), localizeAutomationName(r.name, 'en')];
@@ -133,6 +149,7 @@ async function trouverParNom(message: string, o: Options): Promise<Ligne[]> {
   //    aussi « Rappel de facture — 7 jours » parce que la phrase contient « rappel » et « 7 jours ».
   const entreGuillemets = [...message.matchAll(/«\s*([^»]{2,120}?)\s*»|"([^"]{2,120})"|“([^”]{2,120})”/g)].map((m) => plat(m[1] ?? m[2] ?? m[3] ?? ''));
   let trouvees = entreGuillemets.length ? toutes.filter((r) => nomsDe(r).some((nom) => entreGuillemets.includes(plat(nom)))) : [];
+  if (!trouvees.length && CREATION.test(e)) return [];
   // 2. Sinon le nom écrit tel quel dans la phrase.
   if (!trouvees.length) {
     trouvees = toutes.filter((r) => nomsDe(r).some((nom) => {
@@ -140,8 +157,9 @@ async function trouverParNom(message: string, o: Options): Promise<Ligne[]> {
       return n.length >= 5 && ` ${e} `.includes(` ${n} `) && (n.includes(' ') || indice);
     }));
   }
-  // 3. Sinon tous les mots utiles du nom, dans le désordre (« ma relance de factures en retard »).
-  if (!trouvees.length) {
+  // 3. Sinon tous les mots utiles du nom, dans le désordre (« ma relance de factures en retard ») —
+  //    seulement quand la phrase parle d'une automatisation qu'on a déjà.
+  if (!trouvees.length && DEJA_A_MOI.test(e)) {
     trouvees = toutes.filter((r) => nomsDe(r).some((nom) => {
       const m = [...new Set(mots(nom))];
       if (!m.length || !m.every((x) => dansLeMessage.has(x))) return false;
