@@ -132,6 +132,85 @@ describe('04-courriel:260 — après « Enregistrer », l’éditeur dit que c�
   });
 });
 
+describe('04-courriel:394 et :410 — ce qu’on n’a pas touché garde sa mise en forme', () => {
+  const corpsEnBase = () => String(enBase().actions[0].config.body);
+  const paragraphe = (rang: number) => champs('Paragraphe')[rang];
+
+  it('corriger un mot d’un paragraphe ne détruit ni le lien « Voir votre soumission » ni le gras d’un autre paragraphe', async () => {
+    const corps = `${ENVELOPPE}${H2('Bonjour [client_first_name],')}${P('On vous a envoyé une soumission hier.')}${P('<strong>Offre valable 30 jours.</strong>')}<p style="color:#333;line-height:1.6;"><a href="[quote_link]">Voir votre soumission</a></p>${P('Merci, [company_name]')}</div>`;
+    const c = { subject: 'Votre soumission', body: corps };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    await saisir(paragraphe(0), 'On vous a envoyé une soumission avant-hier.');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    // Seul le paragraphe corrigé a changé : le reste est le HTML d'origine, au caractère près.
+    expect(corpsEnBase()).toBe(corps.replace('soumission hier.', 'soumission avant-hier.'));
+    expect(corpsEnBase()).toContain('<a href="[quote_link]">Voir votre soumission</a>');
+    expect(corpsEnBase()).toContain('<strong>Offre valable 30 jours.</strong>');
+  });
+
+  it('un courriel qui commence par un paragraphe : ce paragraphe ne devient pas un titre', async () => {
+    const c = { subject: 'Votre facture', body: `${ENVELOPPE}${P('Bonjour [client_first_name],')}${P('Votre facture est prête.')}</div>` };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    expect(champs('Titre')).toHaveLength(0);
+    await saisir(paragraphe(1), 'Votre facture est prête, merci!');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    expect(corpsEnBase()).toBe(`${ENVELOPPE}${P('Bonjour [client_first_name],')}${P('Votre facture est prête, merci!')}</div>`);
+    expect(corpsEnBase()).not.toMatch(/<h2[^>]*>Bonjour/);
+  });
+
+  it('un bloc réécrit est reconstruit dans SON type, avec les styles du générateur ; les puces qui se suivent partagent une liste', async () => {
+    const c = { subject: 'Objet', body: `${ENVELOPPE}${H2('Titre')}${P('Ligne A')}<ul style="padding-left:18px;line-height:1.6;"><li>Un</li><li><strong>Deux</strong></li></ul></div>` };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    await saisir(champs('Titre')[0], 'Titre <corrigé> & co');
+    await saisir(champs('Puce')[0], 'Un, corrigé');
+    await cliquer(bouton('Puce'));
+    await saisir(champs('Puce')[2], 'Trois');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    expect(corpsEnBase()).toBe(
+      `${ENVELOPPE}${H2('Titre &lt;corrigé&gt; &amp; co')}${P('Ligne A')}<ul style="padding-left:18px;line-height:1.6;"><li>Un, corrigé</li><li><strong>Deux</strong></li><li>Trois</li></ul></div>`,
+    );
+  });
+
+  it('un texte remis comme il était retrouve sa mise en forme d’origine, et « Enregistrer » se grise', async () => {
+    const c = { subject: 'Objet', body: `${ENVELOPPE}${H2('Titre')}${P('<strong>Offre valable 30 jours.</strong>')}</div>` };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    await saisir(paragraphe(0), 'Offre valable 60 jours.');
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    await saisir(paragraphe(0), 'Offre valable 30 jours.');
+    expect(bouton('Enregistrer').disabled).toBe(true);
+    expect(texteEcran()).toContain('Aucune modification');
+  });
+
+  it('l’aperçu réel reçoit ce qui sera enregistré : le lien et le gras y sont', async () => {
+    const corps = `${ENVELOPPE}${H2('Bonjour,')}${P('<strong>Offre valable 30 jours.</strong>')}<p><a href="[quote_link]">Voir votre soumission</a></p></div>`;
+    const c = { subject: 'Objet', body: corps };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    await cliquer(bouton('Aperçu réel'));
+    await jusqua(() => apercu.appels.length > 0);
+    expect(apercu.appels.at(-1)?.[0]).toBe(corps);
+  });
+
+  it('un courriel écrit en texte brut (sans balises) : une ligne = un paragraphe, aucune promue en titre', async () => {
+    const c = { subject: 'Objet', body: 'Bonjour Marie,\n\nVotre facture est prête.\nMerci!' };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    expect(champs('Titre')).toHaveLength(0);
+    expect(champs('Paragraphe').map((p) => p.value)).toEqual(['Bonjour Marie,', 'Votre facture est prête.', 'Merci!']);
+    await saisir(paragraphe(2), 'Merci beaucoup!');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    expect(corpsEnBase()).toBe(`${ENVELOPPE}${P('Bonjour Marie,')}${P('Votre facture est prête.')}${P('Merci beaucoup!')}</div>`);
+  });
+});
+
 describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’éditeur montre et modifie le courriel qui part', () => {
   const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
   const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };

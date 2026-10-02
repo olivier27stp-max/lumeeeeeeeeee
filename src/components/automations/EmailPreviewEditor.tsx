@@ -76,6 +76,12 @@ interface Bloc {
   id: number;
   type: 'titre' | 'paragraphe' | 'puce';
   texte: string;
+  /**
+   * Le HTML d'où vient ce bloc, et le texte qu'il donnait à l'ouverture. Tant
+   * que le texte n'a pas changé, c'est CE HTML qui est enregistré : son gras,
+   * son lien, son style. Absent pour un bloc ajouté dans l'éditeur.
+   */
+  origine?: { html: string; texte: string };
 }
 
 /**
@@ -163,6 +169,129 @@ function blocsEnTexte(blocs: Bloc[]): string {
     .join('\n');
 }
 
+/**
+ * Ce que disent des blocs, sans les lignes vides ni les espaces de bord : deux
+ * courriels qui donnent le même HTML se comparent égaux (une ligne ajoutée et
+ * laissée vide n'est pas « une modification »).
+ */
+function texteCompare(blocs: Bloc[]): string {
+  return blocsEnTexte(blocs).split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
+}
+
+/*
+ * CE QU'ON N'A PAS TOUCHÉ GARDE SA MISE EN FORME (triage « modèles »,
+ * 04-courriel:394 et :410).
+ *
+ * L'éditeur montre du TEXTE, et reconstruisait tout le courriel à partir de ce
+ * texte : corriger un mot d'un paragraphe effaçait le gras d'un autre, changeait
+ * le lien « Voir votre soumission » en simple « [quote_link] », et faisait un
+ * TITRE de la première ligne quelle qu'elle soit.
+ *
+ * Chaque bloc garde donc le HTML d'où il vient (`origine`). À l'enregistrement,
+ * un bloc dont le texte n'a pas changé rend CE HTML, tel quel ; seul un bloc
+ * réécrit (ou ajouté) est reconstruit — par le même générateur qu'avant
+ * (`texteVersHtml`), dans son type : un paragraphe reste un paragraphe.
+ */
+
+/** Le courriel (HTML) découpé en blocs : un par titre, paragraphe ou puce. */
+function htmlEnBlocs(body: string): Bloc[] {
+  if (!body.trim()) return [];
+  // Sans DOM (hors navigateur) : l'ancienne découpe, par lignes de texte.
+  if (typeof DOMParser === 'undefined') return texteEnBlocs(htmlVersTexte(body));
+
+  let conteneur: Element = new DOMParser().parseFromString(body, 'text/html').body;
+  // L'enveloppe — un <div> qui contient tout le courriel — n'est pas un bloc.
+  for (;;) {
+    const enfants = Array.from(conteneur.childNodes).filter((n) => n.nodeType === 1 || (n.textContent ?? '').trim());
+    const seul = enfants.length === 1 && enfants[0].nodeType === 1 ? (enfants[0] as Element) : null;
+    if (!seul || seul.tagName !== 'DIV') break;
+    conteneur = seul;
+  }
+
+  const blocs: Bloc[] = [];
+  const bloc = (type: Bloc['type'], html: string, interieur: string) => {
+    const texte = htmlVersTexte(interieur);
+    if (texte.trim()) blocs.push({ id: compteurId++, type, texte, origine: { html, texte } });
+  };
+  /* Du texte posé à même le courriel, hors de tout paragraphe (un courriel
+     écrit en texte brut) : une ligne = un paragraphe. S'il porte du gras ou un
+     lien, la suite reste UN bloc, pour garder cette mise en forme. */
+  let suite: Node[] = [];
+  const viderSuite = () => {
+    if (!suite.length) return;
+    const html = suite.map((n) => (n.nodeType === 1 ? (n as Element).outerHTML : echapperTexte(n.textContent ?? ''))).join('');
+    if (suite.some((n) => n.nodeType === 1 && (n as Element).tagName !== 'BR')) {
+      bloc('paragraphe', `<p style="${STYLE_PARAGRAPHE}">${html.trim()}</p>`, html);
+    } else {
+      for (const ligne of htmlVersTexte(html).split('\n')) {
+        if (ligne.trim()) blocs.push({ id: compteurId++, type: 'paragraphe', texte: ligne.trim() });
+      }
+    }
+    suite = [];
+  };
+  for (const noeud of Array.from(conteneur.childNodes)) {
+    const el = noeud.nodeType === 1 ? (noeud as Element) : null;
+    if (!el || BALISES_EN_LIGNE.has(el.tagName)) {
+      if (el || noeud.nodeType === 3) suite.push(noeud);
+      continue;
+    }
+    viderSuite();
+    if (/^H[1-6]$/.test(el.tagName)) bloc('titre', el.outerHTML, el.innerHTML);
+    else if (el.tagName === 'UL' || el.tagName === 'OL') {
+      for (const li of Array.from(el.children)) bloc('puce', li.tagName === 'LI' ? li.outerHTML : `<li>${li.outerHTML}</li>`, li.innerHTML);
+    } else bloc('paragraphe', el.outerHTML, el.tagName === 'P' ? el.innerHTML : el.outerHTML);
+  }
+  viderSuite();
+  return blocs;
+}
+
+const BALISES_EN_LIGNE = new Set(['A', 'B', 'STRONG', 'I', 'EM', 'U', 'SPAN', 'BR', 'SMALL', 'FONT']);
+const echapperTexte = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/* Les morceaux du générateur (`texteVersHtml`), pris sur ce qu'il produit plutôt
+   que recopiés : l'enveloppe, le style d'un paragraphe, l'ouverture d'une liste.
+   S'il change, l'éditeur suit. */
+const FIN_ENVELOPPE = '</div>';
+const ENVELOPPE_OUVERTE = texteVersHtml('').slice(0, -FIN_ENVELOPPE.length);
+/** Tout ce que le générateur écrit avant le contenu qui suit une première ligne « x » (l'enveloppe et son titre). */
+const AVANT_LA_SUITE = texteVersHtml('x').slice(0, -FIN_ENVELOPPE.length);
+const suiteDe = (texte: string) => texteVersHtml(`x\n${texte}`).slice(AVANT_LA_SUITE.length, -FIN_ENVELOPPE.length);
+const STYLE_PARAGRAPHE = suiteDe('x').match(/^<p style="([^"]*)"/)?.[1] ?? '';
+const LISTE_OUVERTE = suiteDe('- x').match(/^<ul[^>]*>/)?.[0] ?? '<ul>';
+
+/** Le HTML d'un bloc réécrit ou ajouté, dans SON type. */
+function htmlDuBlocReecrit(type: Bloc['type'], texte: string): string {
+  // Pour le générateur, la première ligne d'un texte est un titre.
+  if (type === 'titre') return texteVersHtml(texte).slice(ENVELOPPE_OUVERTE.length, -FIN_ENVELOPPE.length);
+  if (type === 'puce') {
+    const liste = suiteDe(`- ${texte.replace(/\s*\n\s*/g, ' ')}`);
+    return liste.slice(LISTE_OUVERTE.length, liste.lastIndexOf('</ul>'));
+  }
+  return suiteDe(texte);
+}
+
+/**
+ * Blocs → HTML du courriel. Un bloc intact rend son HTML d'origine ; les puces
+ * qui se suivent partagent une liste.
+ */
+function blocsVersHtml(blocs: Bloc[]): string {
+  const morceaux: string[] = [];
+  let puces: string[] = [];
+  const viderPuces = () => {
+    if (puces.length) morceaux.push(`${LISTE_OUVERTE}${puces.join('')}</ul>`);
+    puces = [];
+  };
+  for (const b of blocs) {
+    if (!b.texte.trim()) continue;
+    const html = b.origine && b.origine.texte === b.texte ? b.origine.html : htmlDuBlocReecrit(b.type, b.texte);
+    if (b.type === 'puce') { puces.push(html); continue; }
+    viderPuces();
+    morceaux.push(html);
+  }
+  viderPuces();
+  return `${ENVELOPPE_OUVERTE}${morceaux.join('')}${FIN_ENVELOPPE}`;
+}
+
 export default function EmailPreviewEditor({
   ruleId, ruleName, body, subject, fr, onClose, onSaved, enregistrerTexte, typeCourriel, declencheur,
   revenirAuDefaut,
@@ -181,7 +310,7 @@ export default function EmailPreviewEditor({
    */
   const modeRegle = !!ruleId && !enregistrerTexte;
   const [versions, setVersions] = useState<Record<Langue, Version>>(() => ({
-    fr: { blocs: texteEnBlocs(htmlVersTexte(body)), objet: subject },
+    fr: { blocs: htmlEnBlocs(body), objet: subject },
     en: { blocs: [], objet: '' },
   }));
   const [langue, setLangue] = useState<Langue>('fr');
@@ -229,7 +358,7 @@ export default function EmailPreviewEditor({
   const envoyerEssai = async () => {
     setEssaiEnCours(true);
     try {
-      const adresse = await envoyerEssaiCourriel(texteVersHtml(blocsEnTexte(blocs)), objet, typeCourriel, declencheur);
+      const adresse = await envoyerEssaiCourriel(blocsVersHtml(blocs), objet, typeCourriel, declencheur);
       if (adresse) toast.success(fr ? `Essai envoyé à ${adresse}` : `Test sent to ${adresse}`);
       else toast.error(fr ? 'Envoi impossible' : 'Could not send');
     } finally {
@@ -241,7 +370,7 @@ export default function EmailPreviewEditor({
     if (!ongletApercu) return;
     let vivant = true;
     setChargementApercu(true);
-    void apercuCourriel(texteVersHtml(blocsEnTexte(blocs)), typeCourriel, declencheur)
+    void apercuCourriel(blocsVersHtml(blocs), typeCourriel, declencheur)
       .then((h) => { if (vivant) setHtmlReel(h); })
       .finally(() => { if (vivant) setChargementApercu(false); });
     return () => { vivant = false; };
@@ -402,7 +531,7 @@ export default function EmailPreviewEditor({
       if (!vivant) return;
       if (anglais) {
         const lu = anglais;
-        setVersions((v) => ({ ...v, en: { blocs: texteEnBlocs(htmlVersTexte(lu.body)), objet: lu.subject } }));
+        setVersions((v) => ({ ...v, en: { blocs: htmlEnBlocs(lu.body), objet: lu.subject } }));
         setEnBase((b) => ({ ...b, body_en: lu.body, subject_en: lu.subject }));
         // On ouvre sur la version qui part.
         if (langueBureau === 'en' && lu.body.trim()) setLangue('en');
@@ -414,12 +543,12 @@ export default function EmailPreviewEditor({
   }, []);
 
   const initial = useMemo(() => ({
-    fr: { blocs: blocsEnTexte(texteEnBlocs(htmlVersTexte(enBase.body))), objet: enBase.subject },
-    en: { blocs: blocsEnTexte(texteEnBlocs(htmlVersTexte(enBase.body_en))), objet: enBase.subject_en },
+    fr: { blocs: texteCompare(htmlEnBlocs(enBase.body)), objet: enBase.subject },
+    en: { blocs: texteCompare(htmlEnBlocs(enBase.body_en)), objet: enBase.subject_en },
   }), [enBase]);
-  const modifieFr = blocsEnTexte(versions.fr.blocs) !== initial.fr.blocs || versions.fr.objet !== initial.fr.objet;
+  const modifieFr = texteCompare(versions.fr.blocs) !== initial.fr.blocs || versions.fr.objet !== initial.fr.objet;
   const modifieEn = lecture.aAnglais
-    && (blocsEnTexte(versions.en.blocs) !== initial.en.blocs || versions.en.objet !== initial.en.objet);
+    && (texteCompare(versions.en.blocs) !== initial.en.blocs || versions.en.objet !== initial.en.objet);
   const modifie = modifieFr || modifieEn;
   /**
    * Le français a changé ici, pas l'anglais : il partirait tel quel, périmé,
@@ -511,7 +640,7 @@ export default function EmailPreviewEditor({
     setEnregistrement(true);
     try {
       // Le HTML n'est reconstruit qu'ici : l'utilisateur ne l'a jamais vu.
-      const corpsHtml = texteVersHtml(blocsEnTexte(blocs));
+      const corpsHtml = blocsVersHtml(blocs);
       if (enregistrerTexte) {
         await enregistrerTexte(corpsHtml, objet);
       } else if (ruleId) {
@@ -519,10 +648,9 @@ export default function EmailPreviewEditor({
         // ouvert (désigné par le texte lu), jamais dans « tous les courriels ».
         // Et seulement la ou les versions modifiées : une version anglaise
         // vidée est retirée (le français part alors à tout le monde).
-        const htmlDe = (v: Version) => texteVersHtml(blocsEnTexte(v.blocs));
         const ecriture: EcritureMessage = {
-          ...(modifieFr ? { body: htmlDe(versions.fr), subject: versions.fr.objet } : {}),
-          ...(modifieEn ? { body_en: htmlDe(versions.en), subject_en: versions.en.objet } : {}),
+          ...(modifieFr ? { body: blocsVersHtml(versions.fr.blocs), subject: versions.fr.objet } : {}),
+          ...(modifieEn ? { body_en: blocsVersHtml(versions.en.blocs), subject_en: versions.en.objet } : {}),
         };
         await ecrireMessageDeRegle(ruleId, 'send_email', ecriture, { corpsLu: enBase.body, objetLu: enBase.subject });
         const anglaisVide = modifieEn && !blocsEnTexte(versions.en.blocs).trim();

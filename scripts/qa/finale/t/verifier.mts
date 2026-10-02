@@ -120,6 +120,42 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       await supprimerRegle(r.id);
     }
   },
+
+  /** 04-courriel:394 et :410 — ce qu'on n'a pas touché garde son lien, son gras et son type. */
+  async courriel394() {
+    const corps = `${ENVELOPPE}${H2('Bonjour [client_first_name],')}${P('On vous a envoyé une soumission hier.')}${P('<strong>Offre valable 30 jours.</strong>')}<p style="color:#333;line-height:1.6;"><a href="[quote_link]">Voir votre soumission</a></p>${P('Merci, [company_name]')}</div>`;
+    const r = await regle('lien-gras', [{ type: 'send_email', config: { subject: 'Votre soumission', body: corps } }]);
+    const sansTitre = `${ENVELOPPE}${P('Bonjour [client_first_name],')}${P('Votre facture est prête.')}</div>`;
+    const r2 = await regle('sans-titre', [{ type: 'send_email', config: { subject: 'Votre facture', body: sansTitre } }]);
+    const page = await ouvrirPage();
+    const blocs = () => editeurCourriel(page).getByRole('textbox', { name: /^(Titre|Paragraphe|Puce)$/ });
+    try {
+      await ouvrirListe(page);
+      await deplierMessages(page, r.nom);
+      await page.getByRole('button', { name: 'Modifier', exact: true }).first().click();
+      await blocs().nth(1).fill('On vous a envoyé une soumission avant-hier.');
+      await enregistrerCourriel(page).click();
+      await page.getByText('Courriel enregistré').waitFor();
+      const enBase = String((await actions(r.id))[0].config.body);
+      verifier(enBase.includes('avant-hier'), 'la correction est en base');
+      verifier(enBase.includes('<a href="[quote_link]">Voir votre soumission</a>'), 'le lien « Voir votre soumission » est resté un lien');
+      verifier(enBase.includes('<strong>Offre valable 30 jours.</strong>'), 'le gras est resté');
+      verifier(enBase === corps.replace('soumission hier.', 'soumission avant-hier.'), 'rien d’autre n’a bougé dans le courriel');
+
+      await ouvrirListe(page);
+      await deplierMessages(page, r2.nom);
+      await page.getByRole('button', { name: 'Modifier', exact: true }).first().click();
+      await blocs().nth(1).fill('Votre facture est prête, merci!');
+      await enregistrerCourriel(page).click();
+      await page.getByText('Courriel enregistré').waitFor();
+      const enBase2 = String((await actions(r2.id))[0].config.body);
+      verifier(enBase2.includes('merci!') && !/<h2[^>]*>Bonjour/.test(enBase2), 'le premier paragraphe est resté un paragraphe (pas un titre)');
+    } finally {
+      await page.context().close();
+      await supprimerRegle(r.id);
+      await supprimerRegle(r2.id);
+    }
+  },
 };
 
 const demandes = process.argv.slice(2);
