@@ -230,9 +230,9 @@ const idOuNull = (v: unknown): string | null => (typeof v === 'string' && v ? v 
 // ── Une fonction par type d'entité ───────────────────────────
 
 async function revaliderFacture(c: Ctx): Promise<Revalidation> {
-  const { ligne: f, illisible } = await lire(c, 'invoices', 'status, client_id', c.entityId);
+  const { ligne: f, illisible } = await lire(c, 'invoices', 'status, client_id, deleted_at', c.entityId);
   if (illisible) return {};
-  if (!f) return supprimee('la facture a été supprimée');
+  if (!f || f.deleted_at) return supprimee('la facture a été supprimée');
   const statut = texte(f.status);
   const clientId = idOuNull(f.client_id);
   if (c.cochee && !c.etatsDuDeclencheur.includes(statut)) {
@@ -245,6 +245,9 @@ async function revaliderFacture(c: Ctx): Promise<Revalidation> {
   return { clientId };
 }
 
+/** Déclencheurs qui supposent une soumission ENVOYÉE : revenue en brouillon, la relance n'a plus d'objet. */
+const SUPPOSE_SOUMISSION_ENVOYEE: readonly string[] = ['quote.sent', 'quote.viewed'];
+
 async function revaliderDevis(c: Ctx): Promise<Revalidation> {
   const { ligne: q, illisible } = await lire(c, 'quotes', 'status, deleted_at, client_id, lead_id', c.entityId);
   if (illisible) return {};
@@ -253,6 +256,9 @@ async function revaliderDevis(c: Ctx): Promise<Revalidation> {
   const clientId = idOuNull(q.client_id) ?? idOuNull(q.lead_id);
   if (c.cochee && !c.etatsDuDeclencheur.includes(statut)) {
     if (RESOLUS_SOUMISSION.includes(statut)) return plusValide(MOTIF_SOUMISSION[statut], clientId);
+    if (statut === 'draft' && SUPPOSE_SOUMISSION_ENVOYEE.includes(String(c.declencheur))) {
+      return plusValide('la soumission est revenue en brouillon', clientId);
+    }
   }
   return { clientId };
 }
@@ -269,9 +275,16 @@ async function revaliderRendezVous(c: Ctx): Promise<Revalidation> {
   return { clientId };
 }
 
+async function revaliderJob(c: Ctx): Promise<Revalidation> {
+  const { ligne: j, illisible } = await lire(c, 'jobs', 'status, deleted_at, client_id', c.entityId);
+  if (illisible) return {};
+  if (!j || j.deleted_at) return supprimee('le job a été supprimé');
+  const clientId = idOuNull(j.client_id);
+  if (texte(j.status) === 'cancelled') return plusValide('le job a été annulé', clientId);
+  return { clientId };
+}
+
 async function revaliderOpportunite(c: Ctx): Promise<Revalidation> {
-  // L'opportunité n'avait AUCUNE vérification : hors de la case, rien ne change.
-  if (!(c.caseParDeclencheur && familleSortie(c.declencheur) === 'opportunite' && c.cochee)) return {};
   const { ligne: d, illisible } = await lire(c, 'deals', 'stage_id, deleted_at, client_id', c.entityId);
   if (illisible) return {};
   if (!d || d.deleted_at) return supprimee('l’opportunité a été supprimée');
@@ -324,6 +337,7 @@ const REVALIDATEURS: Readonly<Record<string, (c: Ctx) => Promise<Revalidation>>>
   quote: revaliderDevis,
   schedule_event: revaliderRendezVous,
   appointment: revaliderRendezVous,
+  job: revaliderJob,
   deal: revaliderOpportunite,
   client: revaliderClient,
   lead: revaliderClient,
