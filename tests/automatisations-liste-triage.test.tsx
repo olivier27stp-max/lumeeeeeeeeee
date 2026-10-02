@@ -305,6 +305,52 @@ describe('03-onglets-etats:229 et 10-volume:210 — « À vérifier » ne dit «
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('13-libelles-et-complements:143 — en anglais, une panne sans message du serveur est dite en anglais', () => {
+  const dupliquerEnAnglais = async () => {
+    await cliquer(bouton(/^Actions for Relance 1$/));
+    await cliquer(Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((m) => m.textContent === 'Duplicate'));
+    await laisser();
+  };
+
+  it('le repli du client (« Impossible de dupliquer l’automatisation. ») devient « Could not duplicate the automation. »', async () => {
+    // Ce que `automationBuilderApi` lève quand la passerelle répond du HTML : son message de repli, en français.
+    vi.mocked(builder.dupliquerAutomatisation).mockRejectedValue(new Error('Impossible de dupliquer l\'automatisation.'));
+    await rendre('en');
+    await dupliquerEnAnglais();
+    expect(toast.error).toHaveBeenCalledWith('Could not duplicate the automation.');
+  });
+
+  it('en français, le message est inchangé ; un message précis du serveur est gardé tel quel dans les deux langues', async () => {
+    vi.mocked(builder.dupliquerAutomatisation).mockRejectedValue(new Error('Impossible de dupliquer l\'automatisation.'));
+    await rendre('fr');
+    await cliquer(bouton(/^Actions pour Relance 1$/));
+    await cliquer(Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((m) => m.textContent === 'Dupliquer'));
+    await laisser();
+    expect(toast.error).toHaveBeenCalledWith('Impossible de dupliquer l\'automatisation.');
+  });
+
+  it('aucun repli français du client de l’API utilisé par la liste ne reste sans traduction', async () => {
+    const { readFileSync } = await import('node:fs');
+    const page = readFileSync('src/pages/Automations.tsx', 'utf8');
+    const client = readFileSync('src/lib/automationBuilderApi.ts', 'utf8');
+    // Les fonctions du client que la page appelle, et le repli que chacune lève.
+    const appelees = ['changerPublication', 'changerPublicationEnLot', 'dupliquerAutomatisation', 'supprimerAutomatisation',
+      'restaurerAutomatisation', 'supprimerDefinitivementAutomatisation', 'chargerDossiers', 'creerDossier', 'renommerDossier',
+      'supprimerDossier', 'modifierAutomatisation'];
+    const sansTraduction: string[] = [];
+    for (const f of appelees) {
+      const corps = client.slice(client.indexOf(`export async function ${f}(`));
+      const fin = corps.indexOf('\nexport ', 10);
+      const repli = /erreurDe\(\w+, (['"])(.+?)\1\)/.exec(corps.slice(0, fin < 0 ? undefined : fin));
+      expect(repli, `repli de ${f}`).not.toBeNull();
+      const texte = repli![2].replace(/\\'/g, "'");
+      if (!page.includes(`'${texte.replace(/'/g, "\\'")}': '`)) sansTraduction.push(`${f} : ${texte}`);
+    }
+    expect(sansTraduction).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('06-menu-actions:217 — recliquer « Dupliquer » pendant que la copie se crée n’en crée pas une seconde', () => {
   const choisirDupliquer = async () => {
     await cliquer(bouton(/^Actions pour Relance 1$/));

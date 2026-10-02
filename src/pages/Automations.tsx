@@ -349,6 +349,37 @@ type CleTri = 'nom' | 'statut' | 'declenches' | 'en_cours' | 'modifiee' | 'creee
  *   7. pagination       Précédent · 1 · Suivant · 10 / page
  */
 /**
+ * LE MESSAGE D'UNE ERREUR, dans la langue de l'écran.
+ *
+ * Quand le serveur ne donne aucun message (passerelle en panne, corps illisible), le client de
+ * l'API (`automationBuilderApi`) rend un REPLI écrit en français seulement : en interface anglaise,
+ * « Duplicate » en panne disait « Impossible de dupliquer l'automatisation. » (triage
+ * `13-libelles-et-complements:143`). Ces replis-là sont connus : on les dit en anglais.
+ * Un message précis venu du serveur est gardé tel quel.
+ */
+const REPLIS_EN: Record<string, string> = {
+  'Impossible de charger les automatisations.': 'Could not load the automations.',
+  'Impossible de dupliquer l\'automatisation.': 'Could not duplicate the automation.',
+  'Impossible de supprimer l\'automatisation.': 'Could not delete the automation.',
+  'Impossible de restaurer l\'automatisation.': 'Could not restore the automation.',
+  'Impossible de supprimer définitivement l’automatisation.': 'Could not permanently delete the automation.',
+  'Impossible de changer le statut de l’automatisation.': 'Could not change the automation status.',
+  'Impossible de changer le statut des automatisations.': 'Could not change the status of the automations.',
+  'Impossible de copier l’automatisation.': 'Could not copy the automation.',
+  'Impossible de lister vos bureaux.': 'Could not list your offices.',
+  'Impossible de lire les dossiers.': 'Could not read the folders.',
+  'Impossible de créer le dossier.': 'Could not create the folder.',
+  'Impossible de renommer le dossier.': 'Could not rename the folder.',
+  'Impossible de supprimer le dossier.': 'Could not delete the folder.',
+  // « Déplacer dans un dossier » passe par la modification de l'automatisation.
+  'Impossible de modifier l\'automatisation.': 'Could not update the automation.',
+};
+function messageDErreur(e: unknown, fr: boolean): string {
+  const m = e instanceof Error ? e.message : String(e);
+  return fr ? m : (REPLIS_EN[m] ?? m);
+}
+
+/**
  * LE CLAVIER D'UN MENU (`role="menu"`) — « Créer » et le « ⋮ » d'une ligne.
  *
  * Le menu « ⋮ » est dessiné dans un portail en fin de page (il était coupé par le tableau) : ses
@@ -481,7 +512,7 @@ export default function Automations() {
       // Le message du serveur NOMME ce qui empêche de publier : c'est lui
       // qu'on montre, pas un « impossible » qui n'aide personne.
       toast.error(erreur instanceof Error && erreur.message
-        ? erreur.message
+        ? messageDErreur(erreur, frRef.current)
         : (frRef.current ? 'Impossible de mettre à jour' : 'Could not update'), { id: `bascule-${id}`, duration: 10_000 });
     },
   }));
@@ -760,7 +791,7 @@ export default function Automations() {
       setSaisieDossier(false);
       toast.success(fr ? `Dossier « ${d.name} » créé` : `Folder “${d.name}” created`);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(messageDErreur(e, fr));
     } finally {
       creationDossierEnVol.current = false;
     }
@@ -794,7 +825,7 @@ export default function Automations() {
       await renommerDossier(id, nom);
     } catch (e: unknown) {
       setDossiers(avant);
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(messageDErreur(e, fr));
     }
   };
 
@@ -813,7 +844,7 @@ export default function Automations() {
       if (dossierActif === id) setDossierActif(null);
       await load();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(messageDErreur(e, fr));
     }
   };
 
@@ -826,7 +857,7 @@ export default function Automations() {
         ? (fr ? 'Rangée dans le dossier' : 'Moved to folder')
         : (fr ? 'Remise à la racine' : 'Moved back to root'));
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(messageDErreur(e, fr));
     }
   };
 
@@ -1055,7 +1086,7 @@ export default function Automations() {
       if (ouvrir) { navigate(`/automations/${copie.id}`); return; }
       await load();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(messageDErreur(e, fr));
     } finally {
       duplicationsEnVol.current.delete(regle.id);
       setOccupeId(null);
@@ -1078,7 +1109,7 @@ export default function Automations() {
       toast.success(fr ? 'Automatisation mise à la corbeille' : 'Automation moved to the bin');
       await load();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(messageDErreur(e, fr));
     } finally {
       setOccupeId(null);
     }
@@ -1100,7 +1131,7 @@ export default function Automations() {
         : 'Automation restored — it is a draft');
       await load();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(messageDErreur(e, fr));
     } finally {
       setOccupeId(null);
     }
@@ -1129,7 +1160,7 @@ export default function Automations() {
       toast.success(fr ? 'Automatisation supprimée définitivement' : 'Automation permanently deleted');
       await load();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(messageDErreur(e, fr));
     } finally {
       setOccupeId(null);
     }
@@ -1345,7 +1376,7 @@ export default function Automations() {
       await load();
     } catch (e: unknown) {
       console.error('[automations] publication en lot échouée', e);
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(messageDErreur(e, fr));
     } finally {
       setLotEnCours(false);
     }
