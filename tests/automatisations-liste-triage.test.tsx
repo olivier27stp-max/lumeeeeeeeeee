@@ -1022,6 +1022,42 @@ describe('05-lignes:336 — pendant le décompte des clients inactifs, l’inter
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('06-menu-actions:433 — à la corbeille, les messages ne sont pas modifiables', () => {
+  const jetee = (plus: Partial<api.AutomationRule> = {}) => regle({ name: 'Jetée', deleted_at: '2026-09-30T00:00:00Z', actions: [{ type: 'send_sms', config: { body: 'Texte figé.' } }] as never, ...plus });
+
+  it('le texto se lit dans un champ en LECTURE SEULE, sans « Enregistrer »', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([jetee()]);
+    await rendre('fr', '/automations?onglet=corbeille');
+    await cliquer(bouton(/^Voir les messages de Jetée$/));
+    const champ = conteneur.querySelector('tbody textarea') as HTMLTextAreaElement;
+    expect(champ.value).toBe('Texte figé.');
+    expect(champ.readOnly).toBe(true);
+    expect(bouton(/^Enregistrer$/)).toBeUndefined();
+    expect(texte()).toContain('Cette automatisation est à la corbeille : son message ne se modifie pas. Restaurez-la pour le corriger.');
+    // Le champ a un nom pour un lecteur d'écran.
+    expect(conteneur.querySelector(`label[for="${champ.id}"]`)?.textContent).toBe('Texto — lecture seule');
+  });
+
+  it('un parcours à la corbeille : aperçu seul, sans « Modifier dans l’éditeur » (l’éditeur refuse une automatisation supprimée)', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([jetee({
+      actions: [], steps: [{ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Bonjour.' } } }] as never,
+    })]);
+    await rendre('fr', '/automations?onglet=corbeille');
+    await cliquer(bouton(/^Voir les messages de Jetée$/));
+    expect(texte()).toContain('Bonjour.');
+    expect(bouton(/Modifier dans l’éditeur/)).toBeUndefined();
+  });
+
+  it('une automatisation vivante garde son éditeur de message', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Vivante' })]);
+    await rendre();
+    await cliquer(bouton(/^Voir les messages de Vivante$/));
+    const champ = conteneur.querySelector('tbody textarea') as HTMLTextAreaElement | null;
+    expect(champ?.readOnly).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 

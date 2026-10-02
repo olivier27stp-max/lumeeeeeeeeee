@@ -477,6 +477,38 @@ function ApercuMessage({ type, sujet, corps, fr }: { type: 'send_sms' | 'send_em
   );
 }
 
+/**
+ * Le message d'une automatisation à la CORBEILLE : son texte tel qu'il est enregistré, dans un champ
+ * en LECTURE SEULE. Le texto d'une automatisation supprimée était modifiable et enregistrable
+ * (triage `06-menu-actions:433`) — pour une règle que le moteur ignore.
+ */
+function MessageFige({ type, sujet, corps, fr }: { type: 'send_sms' | 'send_email'; sujet?: string; corps: string; fr: boolean }) {
+  const id = useId();
+  return (
+    <div className="mb-3 last:mb-0">
+      <label htmlFor={id} className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+        {type === 'send_email' ? (fr ? 'Courriel' : 'Email') : (fr ? 'Texto' : 'Text message')}
+        {fr ? ' — lecture seule' : ' — read only'}
+      </label>
+      {type === 'send_email' && sujet ? (
+        <p className="mt-1 text-[12px] font-medium text-text-primary">{sujet}</p>
+      ) : null}
+      <textarea
+        id={id}
+        readOnly
+        rows={3}
+        value={corps.replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' ').trim()}
+        className="glass-input mt-1 w-full resize-none bg-surface-secondary text-[12px] text-text-secondary"
+      />
+      <p className="mt-1 text-[11px] text-text-tertiary">
+        {fr
+          ? 'Cette automatisation est à la corbeille : son message ne se modifie pas. Restaurez-la pour le corriger.'
+          : 'This automation is in the bin: its message cannot be edited. Restore it to change it.'}
+      </p>
+    </div>
+  );
+}
+
 export default function Automations() {
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -2738,7 +2770,7 @@ export default function Automations() {
                                           fr={fr}
                                         />
                                       ))}
-                                      {peutModifier && (
+                                      {peutModifier && !rule.deleted_at && (
                                       <button
                                         type="button"
                                         onClick={() => navigate(`/automations/${rule.id}`)}
@@ -2759,7 +2791,15 @@ export default function Automations() {
                               ) : (
                                 rule.actions
                                   .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
-                                  .map((a, i) => (!peutModifier ? (
+                                  .map((a, i) => (rule.deleted_at ? (
+                                    <MessageFige
+                                      key={`${rule.id}-${a.type}-${i}`}
+                                      type={a.type as 'send_sms' | 'send_email'}
+                                      sujet={a.config?.subject ? String(a.config.subject) : undefined}
+                                      corps={String(a.config?.body ?? '')}
+                                      fr={fr}
+                                    />
+                                  ) : !peutModifier ? (
                                     // Lecture seule : le message tel que le client le lira, sans champ ni « Enregistrer ».
                                     <ApercuMessage
                                       key={`${rule.id}-${a.type}-${i}`}
