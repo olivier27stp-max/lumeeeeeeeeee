@@ -63,9 +63,17 @@ describe('2. completed_at suit le statut, quel que soit le chemin', () => {
   });
 
   it('les automatisations après-job lisent bien completed_at — c est ce qui justifie le trigger', () => {
-    const sched = lire('server/lib/scheduler.ts');
-    expect(sched).toContain(".not('completed_at', 'is', null)");
-    expect(sched).toMatch(/new Date\(job\.completed_at\)/);
+    // Le lecteur d'origine (« N jours après un job terminé », ancienne table
+    // `automations` du planificateur) a été retiré avec ce système (mission
+    // finale, B-20). Ceux qui restent — et qui justifient toujours le trigger :
+    // « Client inactif » (son dernier job TERMINÉ, lu en base) et la variable
+    // de date d'un job terminé dans les messages.
+    const inactif = lire('server/lib/client-inactif.ts');
+    expect(inactif).toContain('dernier_job_at');
+    expect(inactif).toContain('dernier_job_termine_at');
+    expect(lire('server/lib/automations-activation.ts')).toContain('dernier_job_termine_at');
+    // … et c'est bien `jobs.completed_at` que la base lit pour ce dernier job.
+    expect(lire('supabase/migrations/20261001400000_client_inactif_reservation.sql')).toMatch(/completed_at/);
   });
 
   it('le chemin de l interface est un UPDATE direct qui ne pose pas completed_at', () => {

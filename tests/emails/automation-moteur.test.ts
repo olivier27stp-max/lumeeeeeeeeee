@@ -24,35 +24,58 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 // ───────────────────────────────────────────────────────────────────
 
 describe('conditions d’arrêt — une erreur ne conclut rien', () => {
+  /*
+   * Mission finale (point 9) : `checkStopConditions`, dans le moteur, est
+   * devenue `revaliderTache` (server/lib/sortie-parcours.ts) — une fonction
+   * par type d'entité, appelée à un seul endroit pour toute tâche différée.
+   * Les trois garanties de ce bloc n'ont pas changé ; elles se lisent
+   * maintenant là où le code vit. (Elles sont aussi prouvées en exécution :
+   * tests/automations-suite/unitaires/B-03, B-04, B-15.)
+   */
+  const revalidation = read('server/lib/sortie-parcours.ts');
   const engine = read('server/lib/automationEngine.ts');
-  const fn = engine.slice(
-    engine.indexOf('async function checkStopConditions'),
-    engine.indexOf('// ── Public API'),
-  );
 
-  it('les six lectures vérifient leur erreur', () => {
+  it('chaque lecture vérifie son erreur', () => {
     // `supabase-js` ne lève pas : sur erreur, `data` vaut `null` — que le code
     // interprétait comme « entité supprimée » → annulation DÉFINITIVE. Un
     // hoquet de deux secondes suffisait à supprimer des relances en attente.
-    const lectures = (fn.match(/await supabase\s*\n?\s*\.from\(/g) || []).length;
-    const verifs = (fn.match(/if \(\w*[eE]rr\w*\) return illisible\(/g) || []).length;
-    expect(lectures).toBeGreaterThanOrEqual(6);
-    expect(verifs).toBe(lectures);
+    //
+    // Les fiches passent toutes par UNE lecture, `lire`, qui rend `illisible`
+    // sur erreur ; chaque appelant doit regarder ce drapeau avant de conclure.
+    const lecture = revalidation.slice(revalidation.indexOf('async function lire('), revalidation.indexOf('const supprimee ='));
+    expect(lecture).toContain('const { data, error } = await c.supabase.from(table)');
+    expect(lecture).toMatch(/if \(error\) \{[\s\S]*?return \{ ligne: null, illisible: true \};/);
+
+    const appels = (revalidation.match(/= await lire\(c, /g) || []).length;
+    const gardes = (revalidation.match(/if \(illisible\) return \{\};|if \(!jobIllisible && j\)|if \(!illisible && cl\?\.deleted_at\)/g) || []).length;
+    expect(appels).toBeGreaterThanOrEqual(6);
+    expect(gardes).toBe(appels);
+
+    // Les deux lectures hors de `lire` (étiquettes, champs) vérifient aussi la leur.
+    const directes = (revalidation.match(/await c\.supabase\.from\(/g) || []).length;
+    expect(directes).toBe(2); // `lire` + les étiquettes
+    expect(revalidation).toMatch(/from\('client_tags'\)[^\n]*\n\s*if \(error\) \{/);
+    expect(revalidation).toContain('champs personnalisés illisibles — la tâche suit son cours');
   });
 
   it('une lecture illisible conserve la tâche', () => {
-    // `false` = ne pas annuler. Le tick suivant réessaiera.
-    expect(fn).toContain('const illisible =');
-    expect(fn).toContain('return false; // ne PAS annuler');
-    expect(fn).toContain("condition d'arrêt indéterminable");
+    // Illisible = on ne sait pas : aucun arrêt n'est rendu, la tâche suit son cours.
+    expect(revalidation).toContain("lecture impossible — la tâche suit son cours");
+    expect(revalidation).toContain('`illisible` = on ne sait pas : ne rien conclure');
+    // Le moteur n'arrête que sur un arrêt explicite de la revalidation.
+    expect(engine).toContain('const shouldStop = Boolean(revalidation.arret);');
   });
 
   it('les conditions d’arrêt réelles restent intactes', () => {
     // Non-régression : ce sont elles qui empêchent de relancer un client qui a
     // déjà payé ou accepté.
-    expect(fn).toContain("['paid', 'cancelled', 'void'].includes(inv.status)");
-    expect(fn).toContain("'approved', 'declined', 'changes_requested'");
-    expect(fn).toContain("evt.status === 'cancelled'");
+    const motifsFacture = revalidation.slice(revalidation.indexOf('const MOTIF_FACTURE'), revalidation.indexOf('const RESOLUS_SOUMISSION'));
+    for (const statut of ['paid', 'cancelled', 'void']) expect(motifsFacture).toMatch(new RegExp(`\\b${statut}:`));
+    const motifsSoumission = revalidation.slice(revalidation.indexOf('const MOTIF_SOUMISSION'), revalidation.indexOf('const MOTIF_FACTURE'));
+    for (const statut of ['approved', 'declined', 'changes_requested']) expect(motifsSoumission).toMatch(new RegExp(`\\b${statut}:`));
+    expect(revalidation).toContain('if (RESOLUS_FACTURE.includes(statut)) return plusValide(');
+    expect(revalidation).toContain('if (RESOLUS_SOUMISSION.includes(statut)) return plusValide(');
+    expect(revalidation).toContain("texte(v.status) === 'cancelled') return plusValide('le rendez-vous a été annulé')");
   });
 });
 

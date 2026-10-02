@@ -919,25 +919,29 @@ describe('book-demo — la demande survit à une panne de courriel', () => {
 describe('heures calmes — plus de relance courriel à 3h du matin', () => {
   const engine = read('server/lib/automationEngine.ts');
 
-  it('la décision distingue commercial et transactionnel', () => {
-    // Le critère est le délai de la règle, pas une liste de déclencheurs à
-    // maintenir : immédiat = confirmation attendue, différé = relance.
+  /*
+   * Mission finale (point 11, B-08) : la règle d'avant — « un courriel sans
+   * délai est une confirmation, il part à toute heure » — laissait partir
+   * « votre facture est en retard » à 0 h 05 (une facture devient en retard à
+   * minuit). Décision : TOUT message au client respecte la fenêtre, délai ou
+   * non ; elle se règle par automatisation. Les deux tests d'ici figeaient
+   * l'ancienne règle ; ils figent la nouvelle, aussi strictement.
+   */
+  it('tout message au client respecte la fenêtre, que la règle ait un délai ou non', () => {
     expect(engine).toContain('function shouldRespectQuietHours');
-    expect(engine).toContain("if (actionType === 'send_sms' || actionType === 'request_review') return true;");
-    expect(engine).toContain('return delaySeconds !== 0;');
-  });
-
-  it('une confirmation immédiate par courriel n’est retardée QUE si l’entreprise a réglé une fenêtre', () => {
-    // Retarder « rendez-vous confirmé » jusqu'à 8h ferait croire au client que
-    // sa demande n'est pas passée. Exception voulue (audit V2, D-13) : une
-    // fenêtre RÉGLÉE promet « aucun message en dehors de ces heures ».
     const fn = engine.slice(
       engine.indexOf('function shouldRespectQuietHours'),
       engine.indexOf('/** Next moment inside the send window'),
     );
-    expect(fn).toContain('if (!ACTIONS_MESSAGE.has(actionType)) return false;');
-    expect(fn).toContain('if (reglages?.fenetre || reglages?.jours_ouvrables) return true;');
-    expect(fn.indexOf('reglages?.fenetre')).toBeLessThan(fn.indexOf('return delaySeconds !== 0;'));
+    expect(fn).toContain('return ACTIONS_MESSAGE.has(actionType);');
+    // Plus d'exemption par le délai : c'est elle qui laissait partir le courriel de minuit.
+    expect(fn).not.toContain('delaySeconds');
+  });
+
+  it('une action qui n’écrit pas au client n’attend jamais la fenêtre', () => {
+    // Notification interne, tâche, étiquette : elles partent tout de suite.
+    expect(engine).toMatch(/const ACTIONS_MESSAGE = new Set\(\['send_sms', 'send_email', 'request_review', 'envoyer_facture', 'envoyer_soumission'\]\);/);
+    expect(engine).not.toMatch(/ACTIONS_MESSAGE = new Set\(\[[^\]]*(create_task|create_notification|ajouter_etiquette)/);
   });
 
   it('les tâches différées respectent la fenêtre sur les DEUX canaux', () => {
@@ -954,25 +958,32 @@ describe('heures calmes — plus de relance courriel à 3h du matin', () => {
 
   it('le report ne consomme pas de tentative', () => {
     // Sinon une nuit suffirait à épuiser le quota de reprises.
-    // On cherche l'écriture du nouveau créneau, quelle que soit la façon dont
-    // la date est calculée : depuis 2026-09-23 le moteur passe par une variable
-    // (`prochaine`) pour pouvoir d'abord décider si le rappel est périmé.
-    const bloc = engine.slice(engine.indexOf('const taskType = task.action_config?.type;'));
-    const push = Math.max(
-      bloc.indexOf('execute_at: nextSendTime()'),
-      bloc.indexOf('execute_at: prochaine.toISOString()'),
-    );
-    const attempts = bloc.indexOf('attempts:');
-    expect(push, 'aucune écriture de execute_at dans la branche « heures calmes »').toBeGreaterThan(-1);
-    expect(attempts === -1 || attempts > push).toBe(true);
+    // Depuis la mission finale (B-09) le report passe par `reporterTache`, qui
+    // écrit aussi sa ligne au journal. Il est fait AVANT la prise de la tâche
+    // (`prise = false`) : ni le statut ni le compteur de tentatives ne sont écrits.
+    const file = engine.slice(engine.indexOf('const taskType = courante.type;'));
+    const report = file.indexOf('await reporterTache(supabase, task, issueHorsHeures(prochaine, fuseauTache), prochaine, {}, false);');
+    const prise = file.indexOf('// Mark as running.');
+    expect(report, 'aucun report dans la branche « heures calmes »').toBeGreaterThan(-1);
+    expect(prise).toBeGreaterThan(report);
+
+    const reporter = engine.slice(engine.indexOf('async function reporterTache('), engine.indexOf('function issueRendezVousDeplace('));
+    expect(reporter).toContain('execute_at: executeAt.toISOString(),');
+    expect(reporter).toContain("...(prise ? { status: 'pending', attempts: Number(task.attempts || 0) } : {}),");
+    // Hors de ce cas (`prise`), aucune écriture de `attempts`.
+    expect((reporter.match(/attempts:/g) || []).length).toBe(1);
   });
 
   it('un rappel que le report ferait tomber APRÈS son rendez-vous est annulé', () => {
     // « Votre rendez-vous est dans 2 heures » reçu une heure après le passage
     // du technicien est pire qu'un silence : le client doute de ce qu'il lit.
-    const bloc = engine.slice(engine.indexOf('const taskType = task.action_config?.type;'));
-    expect(bloc).toContain('prochaine.getTime() > momentPrevu');
-    expect(bloc).toContain("status: 'cancelled'");
+    const file = engine.slice(engine.indexOf('const taskType = courante.type;'));
+    const branche = file.slice(0, file.indexOf('// Mark as running.'));
+    expect(branche).toContain('prochaine.getTime() > momentPrevu');
+    // L'annulation passe par `arreterTache` (motif sur la tâche + ligne au journal).
+    expect(branche).toMatch(/await arreterTache\(supabase, task, \{\s*code: 'rappel_perime',/);
+    const arreter = engine.slice(engine.indexOf('async function arreterTache('), engine.indexOf('async function reporterTache('));
+    expect(arreter).toContain("status: 'cancelled'");
   });
 
   it('la fenêtre reste 8h–20h, heure du Québec par défaut', () => {
