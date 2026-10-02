@@ -409,6 +409,14 @@ export default function PanneauDeclencheur({
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+        {/* Le refus est AUSSI écrit ici, à côté du bouton : dans le corps du panneau il
+            peut être sous le pli (fenêtre basse, beaucoup de réglages) — on ne le voyait
+            alors qu'après un clic sur « Enregistrer », qui y ramène. */}
+        {fautes.length > 0 && (
+          <span data-testid="refus-pres-du-bouton" className="mr-auto max-w-[60%] text-[11px] leading-tight text-danger">
+            {fautes[0]}
+          </span>
+        )}
         <button
           type="button"
           onClick={onFermer}

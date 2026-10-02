@@ -294,3 +294,32 @@ describe('04:418 — « Filtres », valeur d’un champ nombre : ce qui est tap�
     expect(valeur().value).toBe('');
   });
 });
+
+// ─── Remarque de la session des specs : le refus n'était visible qu'après le clic ───
+
+describe('le refus du panneau du déclencheur est écrit à côté d’« Enregistrer », dès la saisie — pas seulement après un clic', () => {
+  const presDuBouton = () => enregistrer().parentElement?.querySelector('[data-testid="refus-pres-du-bouton"]')?.textContent ?? '';
+
+  it('dès la frappe, sans cliquer : la raison est dans le pied du panneau (toujours visible), et dans le corps', async () => {
+    await monter('client.inactive', { mois: 6, max_par_heure: 25 });
+    expect(presDuBouton()).toBe('');
+    saisir(champ('Aucun job terminé depuis (mois)'), '61');
+    expect(presDuBouton()).toBe('« Aucun job terminé depuis (mois) » doit être un nombre entier, entre 1 et 60.');
+    expect(conteneur.querySelector('[role="alert"]')?.textContent).toContain('« Aucun job terminé depuis (mois) » doit être un nombre entier, entre 1 et 60.');
+    expect(enregistrees).toEqual([]);
+  });
+
+  it('saisie corrigée : plus rien à côté du bouton', async () => {
+    await monter('quote.viewed', {});
+    saisir(champ('Montant minimum ($)'), '-5');
+    expect(presDuBouton()).toBe('« Montant minimum ($) » doit être au moins 0.');
+    saisir(champ('Montant minimum ($)'), '50');
+    expect(presDuBouton()).toBe('');
+  });
+
+  it('en anglais', async () => {
+    await monter('quote.viewed', {}, { fr: false });
+    saisir(champ('Minimum amount ($)'), '-5');
+    expect(presDuBouton()).toBe('“Minimum amount ($)” must be at least 0.');
+  });
+});
