@@ -3695,13 +3695,49 @@
     "valeur": {
      "status": "cancelled",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": "Arrêté : la facture a été payée.",
+     "action_config": {
+      "type": "send_sms",
+      "config": "#a1e2d6f73412",
+      "trigger_event": "invoice.overdue",
+      "event_metadata": {
+       "invoice_number": "INV-000042",
+       "days_overdue": 12,
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001"
+      },
+      "motif_code": "condition_plus_valide"
+     }
+    }
+   },
+   {
+    "moment": "differe:send_sms",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.overdue-send_sms-resolu",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.overdue",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "send_sms",
+     "action_config": {
+      "body": "Bonjour [client_name], c’est [company_name]. Merci !"
+     },
+     "result_success": true,
+     "result_data": {
+      "saute": "Condition plus valide : la facture a été payée",
+      "saute_code": "condition_plus_valide",
+      "changement": "la facture a été payée"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
     }
    }
   ],
   "envois": [],
   "annulees": [
-   "send_sms@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
+   "send_sms@2026-09-14T15:00:00.000Z: Arrêté : la facture a été payée."
   ]
  },
  "send_email@86400+resolu": {
@@ -3793,13 +3829,50 @@
     "valeur": {
      "status": "cancelled",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": "Arrêté : la facture a été payée.",
+     "action_config": {
+      "type": "send_email",
+      "config": "#a3a38c79afb7",
+      "trigger_event": "invoice.overdue",
+      "event_metadata": {
+       "invoice_number": "INV-000042",
+       "days_overdue": 12,
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001"
+      },
+      "motif_code": "condition_plus_valide"
+     }
+    }
+   },
+   {
+    "moment": "differe:send_email",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.overdue-send_email-resolu",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.overdue",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "send_email",
+     "action_config": {
+      "subject": "Un message de [company_name]",
+      "body": "Bonjour [client_name],\n\nMerci de faire affaire avec [company_name].\n\nAu plaisir,\n[company_name]"
+     },
+     "result_success": true,
+     "result_data": {
+      "saute": "Condition plus valide : la facture a été payée",
+      "saute_code": "condition_plus_valide",
+      "changement": "la facture a été payée"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
     }
    }
   ],
   "envois": [],
   "annulees": [
-   "send_email@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
+   "send_email@2026-09-14T15:00:00.000Z: Arrêté : la facture a été payée."
   ]
  },
  "create_task@86400+resolu": {
@@ -3891,13 +3964,49 @@
     "valeur": {
      "status": "cancelled",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
+     "last_error": "Arrêté : la facture a été payée.",
+     "action_config": {
+      "type": "create_task",
+      "config": "#a9b25e94286f",
+      "trigger_event": "invoice.overdue",
+      "event_metadata": {
+       "invoice_number": "INV-000042",
+       "days_overdue": 12,
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001"
+      },
+      "motif_code": "condition_plus_valide"
+     }
+    }
+   },
+   {
+    "moment": "differe:create_task",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-invoice.overdue-create_task-resolu",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "invoice.overdue",
+     "entity_type": "invoice",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "action_type": "create_task",
+     "action_config": {
+      "title": "Rappeler [client_name]"
+     },
+     "result_success": true,
+     "result_data": {
+      "saute": "Condition plus valide : la facture a été payée",
+      "saute_code": "condition_plus_valide",
+      "changement": "la facture a été payée"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
     }
    }
   ],
   "envois": [],
   "annulees": [
-   "create_task@2026-09-14T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
+   "create_task@2026-09-14T15:00:00.000Z: Arrêté : la facture a été payée."
   ]
  },
  "sequence:notification>attendre>sms": {

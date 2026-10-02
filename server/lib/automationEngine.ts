@@ -34,7 +34,7 @@ import { fuseauOrg, FUSEAU_DEFAUT, corrigerChangementDHeure } from './automation
 import { noterRegleTraitee } from './outbox';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
 import { typeEnvoi } from './desabonnement';
-import { verdictSortie, DECLENCHE_PAR_RESOLUTION } from './sortie-parcours';
+import { revaliderTache, motifArret, phraseArret } from './sortie-parcours';
 import { normaliserJoursAvant } from './rappels-dates';
 
 interface AutomationRule {
@@ -2099,6 +2099,20 @@ async function arreterTache(
 }
 
 /**
+ * Les types d'actions que la règle exécute — celles de son parcours si c'en
+ * est un (`estParcours`), sinon ses `actions`. La revalidation s'en sert pour
+ * ne pas rejuger contre la règle ce qu'elle modifie elle-même.
+ */
+export function typesDActionsDeLaRegle(regle: { steps?: unknown; actions?: unknown } | null | undefined): string[] {
+  if (Array.isArray(regle?.steps)) {
+    return (regle!.steps as Etape[])
+      .filter((e): e is Extract<Etape, { type: 'action' }> => e?.type === 'action')
+      .map((e) => String(e.action?.type ?? ''));
+  }
+  return Array.isArray(regle?.actions) ? (regle!.actions as Array<{ type?: unknown }>).map((a) => String(a?.type ?? '')) : [];
+}
+
+/**
  * `orgId` : ne dépiler que la file d'UNE entreprise. Sert à la suite de tests
  * (npm run test:automations), qui fait avancer le temps de son bureau de test
  * sans toucher aux tâches des autres entreprises de staging. Le serveur,
@@ -2177,16 +2191,11 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
      */
     const motifAnnulation = motifAnnulationRegle(task.automation_rules);
     if (motifAnnulation) {
-      const { error: annuleErr } = await supabase
-        .from('automation_scheduled_tasks')
-        .update({
-          status: 'cancelled',
-          completed_at: new Date().toISOString(),
-          last_error: motifAnnulation,
-        })
-        .eq('id', task.id)
-        .eq('status', 'pending');
-      if (annuleErr) console.error(`[automationEngine] annulation (brouillon) impossible pour la tâche ${task.id}:`, annuleErr.message);
+      await arreterTache(supabase, task, {
+        code: 'regle_inactive',
+        motif: motifAnnulation,
+        saute: task.automation_rules?.deleted_at ? 'L’automatisation a été supprimée' : 'L’automatisation a été repassée en brouillon',
+      }, { siPending: true });
       continue;
     }
 
@@ -2199,12 +2208,11 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
     const etapesPlanifiees = (task.automation_rules?.steps ?? null) as Etape[] | null;
     // (Parcours vidé ou redevenu règle simple : même cas, l'étape n'existe plus.)
     if (task.step_id && !(Array.isArray(etapesPlanifiees) && trouverEtape(etapesPlanifiees, task.step_id))) {
-      const { error: annuleErr } = await supabase
-        .from('automation_scheduled_tasks')
-        .update({ status: 'cancelled', completed_at: new Date().toISOString(), last_error: 'Étape supprimée du parcours : envoi annulé.' })
-        .eq('id', task.id)
-        .eq('status', 'pending');
-      if (annuleErr) console.error(`[automationEngine] annulation (étape supprimée) impossible pour la tâche ${task.id}:`, annuleErr.message);
+      await arreterTache(supabase, task, {
+        code: 'etape_retiree',
+        motif: 'Étape supprimée du parcours : envoi annulé.',
+        saute: 'Étape retirée du parcours',
+      }, { siPending: true });
       continue;
     }
 
@@ -2257,18 +2265,16 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         ?? task.action_config?.event_metadata?.start_at;
       const momentPrevu = reference ? new Date(String(reference)).getTime() : NaN;
       if (Number.isFinite(momentPrevu) && prochaine.getTime() > momentPrevu) {
-        const { error: cancelError } = await supabase
-          .from('automation_scheduled_tasks')
-          // `execute_at` est conservé tel quel : il dit QUAND le rappel aurait
-          // dû partir, ce qu'on veut encore savoir en relisant une tâche
-          // annulée. L'écraser avec la fenêtre reportée raconterait l'inverse.
-          .update({ status: 'cancelled', completed_at: new Date().toISOString(), execute_at: task.execute_at, last_error: 'rappel périmé : la fenêtre d\'envoi tombe après le rendez-vous' })
-          .eq('id', task.id);
-        if (cancelError) {
-          console.error(`[automationEngine] failed to cancel stale reminder ${task.id}:`, cancelError.message);
-        } else {
-          logger.info(`[automationEngine] rappel annulé — la prochaine fenêtre d'envoi (${prochaine.toISOString()}) tombe après le rendez-vous`);
-        }
+        // `execute_at` est conservé tel quel : il dit QUAND le rappel aurait
+        // dû partir, ce qu'on veut encore savoir en relisant une tâche
+        // annulée. L'écraser avec la fenêtre reportée raconterait l'inverse.
+        const annulee = await arreterTache(supabase, task, {
+          code: 'rappel_perime',
+          motif: 'rappel périmé : la fenêtre d\'envoi tombe après le rendez-vous',
+          saute: 'Rappel périmé : la prochaine fenêtre d’envoi tombe après le rendez-vous',
+          detail: { prochain_creneau: prochaine.toISOString() },
+        }, { champs: { execute_at: task.execute_at } });
+        if (annulee) logger.info(`[automationEngine] rappel annulé — la prochaine fenêtre d'envoi (${prochaine.toISOString()}) tombe après le rendez-vous`);
         continue;
       }
 
@@ -2315,89 +2321,72 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
       const config = actionConfig.config || {};
 
       /*
-       * Le CLIENT de la tâche a été supprimé (corbeille ou pour de bon) entre
-       * l'événement et l'échéance : rien ne part, quelle que soit l'action.
-       * Avant, seul le prospect était vérifié (checkStopConditions) : une
-       * tâche sur un client à la corbeille ajoutait encore sa note, appelait
-       * son webhook, et — désabonnement par canal actif — lui envoyait un
-       * texto transactionnel (tests C-024, C-025, C-028).
+       * REVALIDATION (mission finale, point 9) — LE seul endroit où une
+       * tâche différée est rejugée avant d'agir, pour toutes les formes de
+       * tâche (règle à délai, étape de parcours, reprise, report) :
+       * l'entité existe-t-elle encore, a-t-elle changé d'état, son client
+       * est-il toujours au carnet, les conditions de la règle tiennent-elles ?
+       * Voir server/lib/sortie-parcours.ts (`revaliderTache`).
+       *
+       * Ce n'est plus vrai → la tâche s'arrête proprement : annulée, avec CE
+       * QUI A CHANGÉ sur la tâche et une ligne au journal. Avant, le motif
+       * était le même pour tout (« la condition d'arrêt de la règle est
+       * remplie ») et l'arrêt n'existait que sur la tâche (B-05).
        */
-      if (await clientDeLaTacheSupprime(supabase, task.org_id, task.entity_type, task.entity_id)) {
-        const { error: cancelError } = await supabase
-          .from('automation_scheduled_tasks')
-          .update({ status: 'cancelled', completed_at: new Date().toISOString(), last_error: 'Annulée : le client a été supprimé.' })
-          .eq('id', task.id);
-        if (cancelError) console.error(`[automationEngine] annulation (client supprimé) impossible pour la tâche ${task.id}:`, cancelError.message);
-        continue;
-      }
-
-      // Sortie automatique du parcours (drapeau par entreprise) : la
-      // vérification connaît le déclencheur, suit la case de la règle et
-      // écrit son motif. Elle ne tranche pas pour un prospect : l'ancienne
-      // vérification s'en charge, comme avant.
       const declencheurTache = actionConfig.trigger_event ?? task.automation_rules?.trigger_event;
-      const verdict = await drapeauActif(supabase, task.org_id, DRAPEAUX_AUTOMATISATIONS.sortieParcours)
-        ? await verdictSortie(supabase, {
-          orgId: task.org_id,
-          entityType: task.entity_type,
-          entityId: task.entity_id,
-          declencheur: declencheurTache,
-          metadonnees: actionConfig.event_metadata ?? task.sequence_context,
-          reglages: reglagesRegle,
-        })
-        : null;
-
-      // Check stop conditions before executing
-      const shouldStop = verdict ? verdict.arreter : await checkStopConditions(
-        supabase,
-        task.entity_type,
-        task.entity_id,
+      const revalidation = await revaliderTache(supabase, {
         // L'org de la TÂCHE, jamais celle de l'entité lue : c'est ce qui
         // empêche une tâche d'une org de conclure sur les données d'une autre.
-        task.org_id,
+        orgId: task.org_id,
+        entityType: task.entity_type,
+        entityId: task.entity_id,
         // Une étape de parcours ne porte pas `trigger_event` dans sa tâche :
-        // sans le déclencheur de la RÈGLE, les exceptions ci-dessous (règle
-        // déclenchée par la résolution, relance de prospect perdu) ne
-        // s'appliquaient à aucun parcours.
-        declencheurTache,
-        actionConfig.event_metadata,
-      );
+        // sans le déclencheur de la RÈGLE, les exceptions (règle déclenchée
+        // par la résolution, relance de prospect perdu) ne s'appliquaient à
+        // aucun parcours.
+        declencheur: declencheurTache,
+        metadonnees: actionConfig.event_metadata ?? task.sequence_context,
+        reglages: reglagesRegle,
+        conditions: (task.automation_rules?.conditions ?? null) as Record<string, unknown> | null,
+        actionsDeLaRegle: typesDActionsDeLaRegle(task.automation_rules),
+        caseParDeclencheur: await drapeauActif(supabase, task.org_id, DRAPEAUX_AUTOMATISATIONS.sortieParcours),
+        // Rappel « X avant le rendez-vous » d'une règle à plat (délai négatif).
+        rappelAvantSecondes: !task.step_id ? Number(task.automation_rules?.delay_seconds ?? 0) : null,
+        fuseau: fuseauTache,
+      });
+
+      const shouldStop = Boolean(revalidation.arret);
 
       /*
        * « Arrêter quand le client répond » — le réglage `arret_sur_reponse`.
        *
-       * Vérifié APRÈS les conditions d'arrêt métier et seulement pour les
-       * actions qui PARLENT au client : annuler une tâche interne (note,
-       * étiquette) parce que le client a écrit n'aurait aucun sens.
-       *
-       * On remonte au client par les variables déjà résolues plus bas —
-       * mais elles ne le sont qu'après ce point, donc on relit l'entité ici,
-       * par le même chemin que les actions (`clientDeLEntite` vit côté
-       * actions ; on refait la résolution minimale nécessaire).
+       * Vérifié APRÈS la revalidation et seulement pour les actions qui
+       * PARLENT au client : annuler une tâche interne (note, étiquette)
+       * parce que le client a écrit n'aurait aucun sens. Le client vient de
+       * la revalidation quand elle l'a trouvé en chemin — sinon on relit
+       * l'entité, par la même carte des liens que les actions.
        */
       let stopReponse = false;
       if (!shouldStop && reglagesRegle?.arret_sur_reponse
           && (taskType === 'send_sms' || taskType === 'send_email' || taskType === 'request_review')) {
-        const clientId = await clientDeLaTache(supabase, task.org_id, task.entity_type, task.entity_id);
+        const clientId = revalidation.clientId !== undefined
+          ? revalidation.clientId
+          : await clientDeLaTache(supabase, task.org_id, task.entity_type, task.entity_id);
         stopReponse = await clientARepondu(supabase, task.org_id, clientId, task.created_at);
       }
 
       if (shouldStop || stopReponse) {
-        const { error: cancelError } = await supabase
-          .from('automation_scheduled_tasks')
-          .update({
-            status: 'cancelled',
-            completed_at: now,
-            // La RAISON, lisible dans l'onglet Journaux : « annulée » sans
-            // explication est la plainte n°1 sur ce genre d'écran.
-            last_error: stopReponse
-              ? 'Annulée : le client a répondu.'
-              : verdict?.motif ?? 'Annulée : la condition d’arrêt de la règle est remplie.',
-          })
-          .eq('id', task.id);
-        if (cancelError) {
-          console.error(`[automationEngine] failed to cancel scheduled task ${task.id}:`, cancelError.message);
-        }
+        // La RAISON, sur la tâche (`last_error`, lisible dans l'onglet
+        // Journaux) ET dans une ligne du journal des exécutions : « annulée »
+        // sans explication est la plainte n°1 sur ce genre d'écran.
+        await arreterTache(supabase, task, revalidation.arret
+          ? {
+            code: revalidation.arret.code,
+            motif: motifArret(revalidation.arret),
+            saute: phraseArret(revalidation.arret),
+            detail: { changement: revalidation.arret.changement },
+          }
+          : { code: 'client_a_repondu', motif: 'Annulée : le client a répondu.', saute: 'Le client a répondu' });
         continue;
       }
 
@@ -2761,24 +2750,8 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
   return tasks.length;
 }
 
-// ── Stop condition checker ──────────────────────────────────
+// ── État actuel de l'entité (branches « si ») ───────────────
 
-/**
- * Faut-il abandonner cette tâche planifiée ?
- *
- * `true` = la relance n'a plus lieu d'être (facture payée, devis accepté,
- * rendez-vous annulé…). La tâche est alors annulée DÉFINITIVEMENT.
- *
- * D'où la précaution centrale de cette fonction : `supabase-js` ne lève jamais
- * d'exception, il retourne `{ data, error }`. Les six lectures ci-dessous ne
- * lisaient que `data` — sur erreur (délai dépassé, incident réseau, RLS),
- * `data` vaut `null`, que le code interprétait comme « entité supprimée » et
- * traduisait par une annulation irrémédiable. Un hoquet de deux secondes
- * suffisait à supprimer des relances en attente, sans log ni reprise.
- *
- * Règle appliquée partout maintenant : une erreur de LECTURE ne conclut rien.
- * On laisse la tâche en place ; le tick suivant réessaiera.
- */
 /**
  * Les métadonnées à jour de l'entité, pour évaluer une branche « si ».
  *
@@ -2942,7 +2915,7 @@ async function clientDeLaTache(
  * une nouvelle relance de partir.
  *
  * En cas de lecture impossible, on renvoie `false` — donc on N'ANNULE PAS.
- * Même prudence que `checkStopConditions` : ne jamais supprimer un envoi sur
+ * Même prudence que `revaliderTache` : ne jamais supprimer un envoi sur
  * une information qu'on n'a pas pu vérifier.
  */
 /**
@@ -3032,167 +3005,6 @@ async function clientARepondu(
     return false;
   }
   return Boolean(courriels && courriels.length > 0);
-}
-
-/**
- * L'entité de la tâche est-elle un client (ou prospect) supprimé — mis à la
- * corbeille, ou effacé ? Lecture en erreur : on ne conclut rien (false), la
- * tâche suit son cours, comme pour `checkStopConditions`.
- */
-async function clientDeLaTacheSupprime(
-  supabase: SupabaseClient,
-  orgId: string,
-  entityType: string,
-  entityId: string,
-): Promise<boolean> {
-  if (entityType !== 'client' && entityType !== 'lead') return false;
-  const { data, error } = await supabase
-    .from('clients')
-    .select('deleted_at')
-    .eq('id', entityId)
-    .eq('org_id', orgId)
-    .maybeSingle();
-  if (error) {
-    console.error(`[automationEngine] client de la tâche illisible (${entityId}) — tâche conservée:`, error.message);
-    return false;
-  }
-  return !data || Boolean((data as { deleted_at: string | null }).deleted_at);
-}
-
-async function checkStopConditions(
-  supabase: SupabaseClient,
-  entityType: string,
-  entityId: string,
-  orgId: string,
-  triggerEvent?: string,
-  eventMetadata?: Record<string, unknown> | null,
-): Promise<boolean> {
-  /** Journalise et signale qu'aucune conclusion ne peut être tirée. */
-  const illisible = (table: string, message: string): boolean => {
-    console.error(
-      `[automationEngine] condition d'arrêt indéterminable (${table}, ${entityType} ${entityId}) — tâche conservée:`,
-      message,
-    );
-    return false; // ne PAS annuler
-  };
-
-  /*
-   * Une règle déclenchée PAR la résolution elle-même trouve, par construction,
-   * son entité dans l'état résolu : « Soumission acceptée » + 1 h → demande de
-   * dépôt, « Facture payée » + délai → remerciement, « Rendez-vous annulé » +
-   * délai. L'arrêter sur cet état, c'est l'annuler au moment où elle devait
-   * servir : le pack « Dépôt — demande et rappel », publié d'office, n'a
-   * jamais envoyé une seule demande (K-012). L'exception existait drapeau
-   * `auto_sortie_parcours` ALLUMÉ (sortie-parcours.ts) ; la voici aussi
-   * drapeau éteint, avec la même table. Les AUTRES états résolus arrêtent
-   * toujours (soumission acceptée puis refusée, facture payée puis annulée),
-   * comme la suppression.
-   */
-  const etatsDuDeclencheur = (triggerEvent && DECLENCHE_PAR_RESOLUTION[triggerEvent]) || [];
-
-  // Invoice reminders: stop if paid, cancelled, disputed, or client archived
-  if (entityType === 'invoice') {
-    const { data: inv, error } = await supabase
-      .from('invoices')
-      .select('status, client_id')
-      .eq('id', entityId)
-      .eq('org_id', orgId)
-      .maybeSingle();
-
-    if (error) return illisible('invoices', error.message);
-    if (!inv) return true; // Invoice deleted
-    if (['paid', 'cancelled', 'void'].includes(inv.status) && !etatsDuDeclencheur.includes(inv.status)) return true;
-    // Check if client is archived/deleted
-    if (inv.client_id) {
-      const { data: cl, error: clErr } = await supabase
-        .from('clients').select('deleted_at').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
-      if (clErr) return illisible('clients', clErr.message);
-      if (cl?.deleted_at) return true;
-    }
-  }
-
-  // Estimate follow-ups: stop if accepted, rejected, or lead archived
-  if (entityType === 'invoice' && triggerEvent === 'estimate.sent') {
-    const { data: inv, error } = await supabase
-      .from('invoices')
-      .select('status')
-      .eq('id', entityId)
-      .eq('org_id', orgId)
-      .maybeSingle();
-
-    if (error) return illisible('invoices', error.message);
-    if (!inv) return true;
-    if (['paid', 'accepted', 'rejected', 'cancelled', 'void'].includes(inv.status)) return true;
-  }
-
-  // Appointment reminders: stop if cancelled
-  if (entityType === 'schedule_event' || entityType === 'appointment') {
-    const { data: evt, error } = await supabase
-      .from('schedule_events')
-      .select('status, deleted_at')
-      .eq('id', entityId)
-      .eq('org_id', orgId)
-      .maybeSingle();
-
-    if (error) return illisible('schedule_events', error.message);
-    if (!evt) return true;
-    if (evt.deleted_at) return true;
-    if (evt.status === 'cancelled' && !etatsDuDeclencheur.includes('cancelled')) return true;
-  }
-
-  // Quote follow-ups: stop once the client responded (approved, declined,
-  // changes requested) or the quote left circulation (expired, converted, archived)
-  if (entityType === 'quote') {
-    const { data: quote, error } = await supabase
-      .from('quotes')
-      .select('status, deleted_at')
-      .eq('id', entityId)
-      .eq('org_id', orgId)
-      .maybeSingle();
-
-    if (error) return illisible('quotes', error.message);
-    if (!quote) return true; // Quote deleted
-    if (quote.deleted_at) return true;
-    if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)
-      && !etatsDuDeclencheur.includes(quote.status)) return true;
-  }
-
-  // Lead: stop if archived or deleted (a lead is a client with status='lead')
-  if (entityType === 'lead') {
-    const { data: lead, error } = await supabase
-      .from('clients')
-      .select('status, lead_status, deleted_at')
-      .eq('id', entityId)
-      .eq('org_id', orgId)
-      .maybeSingle();
-
-    if (error) return illisible('clients', error.message);
-    if (!lead) return true;
-    if (lead.deleted_at) return true;
-    // Stop once it's no longer an open lead (promoted/won/lost) or funnel-closed.
-    if (lead.status !== 'lead') return true;
-
-    /**
-     * Exception : une relance de lead PERDU (`lost_lead_reengagement`, 90 jours
-     * après le passage à « perdu ») s'annulait elle-même — la tâche était
-     * planifiée parce que le lead venait d'être marqué perdu, puis supprimée
-     * parce que le lead ÉTAIT perdu. Le preset n'a jamais pu s'exécuter une
-     * seule fois depuis sa création.
-     *
-     * On n'assouplit la règle que pour ce cas précis : le déclencheur était un
-     * passage à « perdu ». Les autres presets gardent la garde intacte — une
-     * relance de soumission doit bien s'arrêter quand le lead devient perdu.
-     */
-    const relanceDeLeadPerdu =
-      triggerEvent === 'lead.status_changed' &&
-      (eventMetadata as { new_status?: unknown } | null)?.new_status === 'lost';
-    const arretsLead = relanceDeLeadPerdu
-      ? ['closed', 'converted', 'closed_won']
-      : ['lost', 'closed', 'converted', 'closed_won', 'closed_lost'];
-    if (arretsLead.includes(lead.lead_status)) return true;
-  }
-
-  return false;
 }
 
 // ── Public API ──────────────────────────────────────────────

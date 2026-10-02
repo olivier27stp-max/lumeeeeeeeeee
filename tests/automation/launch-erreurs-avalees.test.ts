@@ -82,6 +82,10 @@ describe('étape supprimée après planification', () => {
     const majs = requetes(journal, 'automation_scheduled_tasks', 'update').map((r) => r.valeur as any).filter((v) => v.status && v.status !== 'running' && v.status !== 'pending');
     expect(majs.at(-1)).toMatchObject({ status: 'cancelled', last_error: 'Étape supprimée du parcours : envoi annulé.' });
     expect(requetes(journal, 'notifications', 'insert')).toHaveLength(0);
-    expect(requetes(journal, 'automation_execution_logs', 'insert')).toHaveLength(0);
+    // Aucun ÉCHEC au journal — mais, depuis B-05 (mission finale), l'arrêt y laisse UNE ligne
+    // « saute » qui dit pourquoi (`etape_retiree`) : avant, il n'existait que sur la tâche.
+    const lignes = requetes(journal, 'automation_execution_logs', 'insert').map((r) => r.valeur as any);
+    expect(lignes).toHaveLength(1);
+    expect(lignes[0]).toMatchObject({ result_success: true, result_error: null, scheduled_task_id: 't1', result_data: { saute_code: 'etape_retiree' } });
   });
 });
