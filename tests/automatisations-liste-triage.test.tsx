@@ -1058,6 +1058,32 @@ describe('06-menu-actions:433 — à la corbeille, les messages ne sont pas modi
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('07-lot:179 — « Publier (0) » et « Repasser en brouillon (0) » sont grisés', () => {
+  it('une automatisation déjà publiée cochée : « Publier (0) » grisé avec la raison ; « Repasser en brouillon (1) » actif', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Publiée', is_active: true })]);
+    await rendre();
+    await cliquer(caseDe(/^Cocher Publiée$/));
+    const publier = bouton(/^Publier \(0\)$/) as HTMLButtonElement;
+    expect(publier.disabled).toBe(true);
+    expect(publier.title).toBe('Aucune des automatisations cochées n’est en brouillon.');
+    expect((bouton(/^Repasser en brouillon \(1\)$/) as HTMLButtonElement).disabled).toBe(false);
+    // Avant : le clic vidait la sélection sans un mot.
+    await cliquer(publier);
+    expect(texte()).toContain('1 sélectionnée(s)');
+    expect(builder.changerPublicationEnLot).not.toHaveBeenCalled();
+  });
+
+  it('un brouillon coché : l’inverse', async () => {
+    await rendre();
+    await cliquer(caseDe(/^Cocher Relance 1$/));
+    expect((bouton(/^Publier \(1\)$/) as HTMLButtonElement).disabled).toBe(false);
+    const depublier = bouton(/^Repasser en brouillon \(0\)$/) as HTMLButtonElement;
+    expect(depublier.disabled).toBe(true);
+    expect(depublier.title).toBe('Aucune des automatisations cochées n’est publiée.');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 

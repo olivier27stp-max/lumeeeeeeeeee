@@ -2127,8 +2127,11 @@ export default function Automations() {
                   <button
                     type="button"
                     onClick={() => void publierLot()}
-                    disabled={lotEnCours}
-                    className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
+                    /* « Publier (0) » était actif : son clic vidait la sélection sans un mot
+                       (triage `07-lot:179`). Rien à faire = bouton grisé, avec la raison. */
+                    disabled={lotEnCours || nbAPublier === 0}
+                    title={nbAPublier === 0 ? (fr ? 'Aucune des automatisations cochées n’est en brouillon.' : 'None of the selected automations is a draft.') : undefined}
+                    className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ToggleRight size={13} aria-hidden="true" />
                     {fr ? `Publier (${nbAPublier})` : `Publish (${nbAPublier})`}
@@ -2136,8 +2139,9 @@ export default function Automations() {
                   <button
                     type="button"
                     onClick={() => void depublierLot()}
-                    disabled={lotEnCours}
-                    className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
+                    disabled={lotEnCours || nbADepublier === 0}
+                    title={nbADepublier === 0 ? (fr ? 'Aucune des automatisations cochées n’est publiée.' : 'None of the selected automations is published.') : undefined}
+                    className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ToggleLeft size={13} aria-hidden="true" />
                     {fr ? `Repasser en brouillon (${nbADepublier})` : `Unpublish (${nbADepublier})`}
