@@ -1,0 +1,51 @@
+/**
+ * Repro hors base : la demande à deux sujets qui plante en prod (comm-19).
+ * Vrai modèle, vrais outils et vrai prompt de Lumi, résultats d'outils factices.
+ * Imprime, pour chaque appel : stop_reason et la suite des types de blocs.
+ * Usage : node --env-file=C:/Users/Rafba/lumeeeeeeeeee/.env.local --import tsx .inventaire/repro-recherche-outil.mts [fusionner]
+ */
+import Anthropic from '@anthropic-ai/sdk';
+import { outilsClaude, promptSystemeLumi, parametresReflexion, avecCacheConversation, avecContexteDuTour } from '../../../../server/lib/lumi/orchestrateur';
+import { modeleLumi } from '../../../../server/lib/lumi/tarifs';
+
+const fusionner = process.argv.includes('fusionner');
+const question = process.argv.find((a) => a.startsWith('q='))?.slice(2) ?? "texte à nathalie coté qu'on arrive dans dix minutes pis mets sa job en cours";
+const sujet = (process.argv.find((a) => a.startsWith('sujet='))?.slice(6) ?? 'communications') as Parameters<typeof outilsClaude>[0];
+
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const model = modeleLumi();
+const system = promptSystemeLumi({ companyName: 'Essai', userName: 'Essai', language: 'fr', todayIso: '2026-10-01' });
+const tools = outilsClaude(sujet);
+const messages: Anthropic.Messages.MessageParam[] = [{ role: 'user', content: question }];
+
+const factice = (nom: string): string => {
+  if (nom === 'search_clients') return JSON.stringify({ count: 1, clients: [{ id: 'ref1', name: 'Nathalie Côté', phone: '514-555-0101' }] });
+  if (nom === 'list_jobs') return JSON.stringify({ count: 1, jobs: [{ id: 'ref2', job_number: 7, title: 'Lavage de vitres', status: 'scheduled', client_name: 'Nathalie Côté' }] });
+  return JSON.stringify({ ok: true });
+};
+
+for (let etape = 0; etape < 6; etape++) {
+  let r: Anthropic.Messages.Message;
+  try {
+    r = await client.messages.stream({ model, max_tokens: 2048, system, tools, messages: avecContexteDuTour(avecCacheConversation(messages), 'Heure : 16 h 45. Fiches repérées : aucune.'), ...parametresReflexion(model, 'low'), ...(process.argv.includes('conclure') && etape >= 1 ? { tool_choice: { type: 'none' as const } } : {}) }).finalMessage();
+  } catch (e) {
+    const err = e as { status?: number; message?: string };
+    console.log(`appel ${etape + 1} : ERREUR ${err.status} ${String(err.message).slice(0, 300)}`);
+    console.log('forme envoyée :', messages.map((m, i) => `${i}:${m.role}[${typeof m.content === 'string' ? 'texte' : m.content.map((b) => b.type).join(',')}]`).join(' '));
+    break;
+  }
+  console.log(`appel ${etape + 1} : stop=${r.stop_reason} blocs=[${r.content.map((b) => b.type + (b.type === 'tool_use' || b.type === 'server_tool_use' ? ':' + (b as { name: string }).name : '')).join(', ')}]`);
+  const precedent = messages[messages.length - 1];
+  if (fusionner && precedent.role === 'assistant' && Array.isArray(precedent.content)) {
+    messages[messages.length - 1] = { role: 'assistant', content: [...precedent.content, ...r.content] as Anthropic.Messages.ContentBlockParam[] };
+  } else {
+    messages.push({ role: 'assistant', content: r.content as Anthropic.Messages.ContentBlockParam[] });
+  }
+  if (r.stop_reason === 'pause_turn') continue;
+  if (r.stop_reason !== 'tool_use') break;
+  const appels = r.content.filter((b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use');
+  if (appels.length === 0) continue;
+  messages.push({ role: 'user', content: appels.map((a) => ({ type: 'tool_result' as const, tool_use_id: a.id, content: factice(a.name) })) });
+}
+console.log('forme finale :', messages.map((m, i) => `${i}:${m.role}[${typeof m.content === 'string' ? 'texte' : m.content.map((b) => b.type).join(',')}]`).join(' '));
+process.exit(0);
