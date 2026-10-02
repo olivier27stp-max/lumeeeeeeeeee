@@ -134,14 +134,34 @@ function mesurerAvance(admin: SupabaseClient, orgId: string): Promise<number> {
   return avanceDuPoste;
 }
 
-/** Les envois simulés d'une entreprise depuis un instant donné (heure du poste). */
+/** PostgREST plafonne UNE réponse à ce nombre de lignes (PGRST_DB_MAX_ROWS, comme Supabase), sans erreur. */
+const PAGE_ENVOIS = 1000;
+
+/**
+ * Les envois simulés d'une entreprise depuis un instant donné (heure du poste).
+ *
+ * PAGINÉ (B-21) : la lecture se faisait en une requête, en ordre croissant —
+ * au-delà de 1 000 envois dans la fenêtre (une passe de charge, une suite
+ * longue), les plus RÉCENTS étaient coupés sans erreur, et un test qui
+ * affirmait « aucun envoi » passait au vert à tort (ou ne voyait plus l'envoi
+ * qu'il attendait : D-012 rouge après la charge, le 2026-10-01).
+ */
 export async function envoisSimules(admin: SupabaseClient, orgId: string, depuis: string) {
   const borne = new Date(Date.parse(depuis) - (await mesurerAvance(admin, orgId))).toISOString();
-  const { data, error } = await admin.from('envois_simules')
-    .select('id, canal, destinataire, sujet, corps, meta, created_at')
-    .eq('org_id', orgId).gte('created_at', borne).neq('destinataire', 'horloge://mesure').order('created_at');
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  type Envoi = { id: string; canal: string; destinataire: string; sujet: string | null; corps: string | null; meta: unknown; created_at: string };
+  const lignes: Envoi[] = [];
+  for (let de = 0; ; de += PAGE_ENVOIS) {
+    const { data, error } = await admin.from('envois_simules')
+      .select('id, canal, destinataire, sujet, corps, meta, created_at')
+      .eq('org_id', orgId).gte('created_at', borne).neq('destinataire', 'horloge://mesure')
+      // `id` départage deux envois de la même microseconde : sans lui, une page pouvait en sauter un.
+      .order('created_at').order('id')
+      .range(de, de + PAGE_ENVOIS - 1);
+    if (error) throw new Error(error.message);
+    lignes.push(...((data ?? []) as Envoi[]));
+    if (!data || data.length < PAGE_ENVOIS) break;
+  }
+  return lignes;
 }
 
 /** Fait avancer la file planifiée du bureau de test (et d'aucun autre). */
