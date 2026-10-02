@@ -33,7 +33,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { base, remettre, ligne } from './faux-supabase';
-import { monter, demonter, bouton, boutonPresent, champ, champs, cliquer, saisir, jusqua, texteEcran } from './banc-composants';
+import { monter, demonter, bouton, boutonPresent, champ, champs, choix, cliquer, saisir, jusqua, texteEcran } from './banc-composants';
 import { brancherServeur, arreterServeur } from './serveur-messages';
 import MessageEditor from '../../../src/components/automations/MessageEditor';
 
@@ -102,45 +102,125 @@ describe('03-texto:172 [MSG-010] — modifier un texto ne touche pas à l’autr
   });
 });
 
-describe('03-texto:345 [MSG-001][MSG-010] — bureau qui écrit en ANGLAIS : le champ montre et modifie le texte qui part', () => {
+describe('03-texto:345 [MSG-001][MSG-010] et la règle des deux langues — le champ montre et modifie le texte qui PART ; l’autre langue est dans un bloc replié', () => {
   const FR = 'Bonjour, votre rendez-vous est confirmé.';
   const EN = 'Hi, your appointment is confirmed.';
+  const TITRE_EN = 'Version anglaise — utilisée seulement si vos messages partent en anglais';
+  const TITRE_FR = 'Version française — utilisée seulement si vos messages partent en français';
+  const RETIRER = 'La retirer (vos clients recevront le texte ci-dessus)';
+  const GARDER = 'La garder telle quelle';
+  const PERIMEE = 'Cette version n’est plus à jour.';
+  const enregistrer = async () => {
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.erreurs.length + toasts.succes.length > 0);
+    expect(toasts.erreurs).toEqual([]);
+    expect(toasts.succes).toContain('Message enregistré');
+  };
 
-  it('le champ « Texto envoyé au client » porte l’anglais ; « Enregistrer » écrit `body_en` ; le français, juste en dessous, ne bouge pas', async () => {
+  it('bureau en anglais : le champ « Texto envoyé au client » porte l’anglais, l’écran dit que les messages partent en anglais, le français est dans un bloc REPLIÉ', async () => {
     const actions = [sms(FR, { body_en: EN })];
     poser(actions);
     await deplier(actions, { langueBureau: 'en' });
     expect(zones()).toHaveLength(1);
     expect(zones()[0].value).toBe(EN);
-    expect(champ(`${ZONE} — version française`).value).toBe(FR);
-    expect(texteEcran()).toContain('Version anglaise — celle qui part');
+    expect(texteEcran()).toContain('Vos messages partent en anglais : c’est ce texte que vos clients reçoivent.');
+    expect(bouton(TITRE_FR).getAttribute('aria-expanded')).toBe('false');
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(1);
+    expect(texteEcran()).not.toContain(PERIMEE);
+  });
+
+  it('bureau en anglais : corriger l’anglais sans le français ne bloque pas — le bloc se déplie, « La retirer » est coché d’office, et l’anglais devient le seul texte', async () => {
+    const actions = [sms(FR, { body_en: EN })];
+    poser(actions);
+    await deplier(actions, { langueBureau: 'en' });
     await saisir(zones()[0], 'Hi, see you tomorrow.');
-    await cliquer(bouton('Enregistrer'));
-    await jusqua(() => toasts.succes.includes('Message enregistré'));
+    expect(bouton(TITRE_FR).getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain(PERIMEE);
+    expect(champ(`${ZONE} — Version française`).value).toBe(FR);
+    expect(choix(RETIRER).checked).toBe(true);
+    expect(choix(GARDER).checked).toBe(false);
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    await enregistrer();
+    expect(enBase().actions).toEqual([sms('Hi, see you tomorrow.')]);
+  });
+
+  it('bureau en anglais : « La garder telle quelle » — `body_en` est écrit, le français ne bouge pas', async () => {
+    const actions = [sms(FR, { body_en: EN })];
+    poser(actions);
+    await deplier(actions, { langueBureau: 'en' });
+    await saisir(zones()[0], 'Hi, see you tomorrow.');
+    await cliquer(choix(GARDER));
+    await enregistrer();
     expect(enBase().actions).toEqual([sms(FR, { body_en: 'Hi, see you tomorrow.' })]);
   });
 
-  it('bureau en français, texto qui porte une version anglaise : corriger le français sans l’anglais est signalé, « Enregistrer » attend', async () => {
+  it('bureau en français, texto qui porte une version anglaise : corrigé seul, « Enregistrer » reste actif et la version anglaise est RETIRÉE (choix d’office)', async () => {
     const actions = [sms(FR, { body_en: EN })];
     poser(actions);
     await deplier(actions, { langueBureau: 'fr' });
     expect(zones()[0].value).toBe(FR);
-    expect(champ(`${ZONE} — version anglaise`).value).toBe(EN);
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('false');
     await saisir(zones()[0], 'Bonjour, à demain.');
-    expect(texteEcran()).toContain('Le texte français a changé, pas sa version anglaise.');
-    expect(bouton('Enregistrer').disabled).toBe(true);
-    await cliquer(document.body.querySelector('input[type="checkbox"]'));
-    await cliquer(bouton('Enregistrer'));
-    await jusqua(() => toasts.succes.includes('Message enregistré'));
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain(PERIMEE);
+    expect(champ(`${ZONE} — Version anglaise`).value).toBe(EN);
+    expect(choix(RETIRER).checked).toBe(true);
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    await enregistrer();
+    expect(enBase().actions).toEqual([sms('Bonjour, à demain.')]);
+    expect('body_en' in enBase().actions[0].config).toBe(false);
+  });
+
+  it('bureau en français : « La garder telle quelle » — la version anglaise reste, parce que l’utilisateur l’a choisi', async () => {
+    const actions = [sms(FR, { body_en: EN })];
+    poser(actions);
+    await deplier(actions, { langueBureau: 'fr' });
+    await saisir(zones()[0], 'Bonjour, à demain.');
+    await cliquer(choix(GARDER));
+    await enregistrer();
     expect(enBase().actions).toEqual([sms('Bonjour, à demain.', { body_en: EN })]);
   });
 
-  it('un texto sans version anglaise, bureau en français : un seul champ, rien de plus', async () => {
+  it('le bloc se déplie à la main ; les deux langues corrigées : rien n’est périmé, une seule écriture', async () => {
+    const actions = [sms(FR, { body_en: EN })];
+    poser(actions);
+    await deplier(actions, { langueBureau: 'fr' });
+    await cliquer(bouton(TITRE_EN));
+    await saisir(champ(`${ZONE} — Version anglaise`), 'Hi, see you tomorrow.');
+    expect(texteEcran()).not.toContain(PERIMEE);
+    await saisir(zones()[0], 'Bonjour, à demain.');
+    expect(texteEcran()).not.toContain(PERIMEE);
+    await enregistrer();
+    expect(base.ecritures).toHaveLength(1);
+    expect(enBase().actions).toEqual([sms('Bonjour, à demain.', { body_en: 'Hi, see you tomorrow.' })]);
+  });
+
+  it('vider l’autre langue, c’est la retirer', async () => {
+    const actions = [sms(FR, { body_en: EN })];
+    poser(actions);
+    await deplier(actions, { langueBureau: 'fr' });
+    await cliquer(bouton(TITRE_EN));
+    await saisir(champ(`${ZONE} — Version anglaise`), '');
+    await enregistrer();
+    expect(enBase().actions).toEqual([sms(FR)]);
+  });
+
+  it('un texto sans version anglaise, bureau en français : un seul champ, pas de bloc, rien de plus', async () => {
     const actions = [sms(FR)];
     poser(actions);
     await deplier(actions);
     expect(document.body.querySelectorAll('textarea')).toHaveLength(1);
-    expect(texteEcran()).not.toContain('version anglaise');
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+    expect(texteEcran()).not.toContain('Version anglaise');
+    expect(texteEcran()).not.toContain('Vos messages partent');
+  });
+
+  it('bureau en anglais, texto sans version anglaise : l’écran dit que ce seul texte est celui qui part', async () => {
+    const actions = [sms(FR)];
+    poser(actions);
+    await deplier(actions, { langueBureau: 'en' });
+    expect(texteEcran()).toContain('Vos messages partent en anglais, mais ce texto n’a qu’un texte : c’est lui que vos clients reçoivent.');
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
   });
 });
 
