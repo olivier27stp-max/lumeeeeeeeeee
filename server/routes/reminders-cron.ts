@@ -33,6 +33,7 @@ import { resolvePublicBaseUrl, normalizeE164 } from '../lib/helpers';
 import { createPaymentRequest } from '../lib/stripe-connect';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { evaluateConditions } from '../lib/automationEngine';
+import { estParcours, regleSansRienAFaire } from '../lib/automationSequences';
 import type { CRMEvent } from '../lib/eventBus';
 
 const router = Router();
@@ -192,7 +193,7 @@ export async function couvertureAutomatisations(
 ): Promise<(inv: { id: string; status?: string | null; total_cents?: number | null; balance_cents?: number | null; invoice_number?: string | null; client_id?: string | null; due_date?: string | null }) => Promise<boolean>> {
   const { data: regles, error } = await svc
     .from('automation_rules')
-    .select('id, trigger_event, preset_key, conditions')
+    .select('id, trigger_event, preset_key, conditions, steps, actions')
     .eq('org_id', orgId)
     .eq('is_active', true)
     .is('deleted_at', null)
@@ -201,9 +202,14 @@ export async function couvertureAutomatisations(
     logger.error('[cron/reminders] automatisations de relance illisibles — relance faite par le cron', { orgId, error: error.message });
     return async () => false;
   }
-  type Regle = { id: string; trigger_event: string; preset_key: string | null; conditions: Record<string, unknown> | null };
-  const enRetard = ((regles ?? []) as Regle[]).filter((r) => r.trigger_event === 'invoice.overdue');
-  const pack = ((regles ?? []) as Regle[]).filter((r) => r.preset_key === 'pack_relance_facture').map((r) => r.id);
+  type Regle = { id: string; trigger_event: string; preset_key: string | null; conditions: Record<string, unknown> | null; steps?: unknown; actions?: unknown };
+  // Une automatisation qui n'exécute RIEN ne couvre aucune facture : un
+  // parcours vidé de ses étapes (`steps = []`) garde son ancienne copie
+  // `actions`, que le moteur ne lit pas — la tenir pour une relance ferait
+  // taire le cron sans que personne ne relance.
+  const actives = ((regles ?? []) as Regle[]).filter((r) => !(estParcours(r) && regleSansRienAFaire(r)));
+  const enRetard = actives.filter((r) => r.trigger_event === 'invoice.overdue');
+  const pack = actives.filter((r) => r.preset_key === 'pack_relance_facture').map((r) => r.id);
   if (!enRetard.length && !pack.length) return async () => false;
 
   return async (inv) => {

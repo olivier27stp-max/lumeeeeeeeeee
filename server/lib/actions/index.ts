@@ -3088,9 +3088,10 @@ export async function executeDemarrerAutomatisation(
     // tâches pour une règle que personne n'a publiée.
     return { success: false, error: `« ${regle.name} » est en brouillon : rien à démarrer.` };
   }
-  const aDesActions = Array.isArray(regle.actions) && regle.actions.length > 0;
-  const aDesEtapes = Array.isArray(regle.steps) && regle.steps.length > 0;
-  if (!aDesActions && !aDesEtapes) {
+  // Un parcours VIDÉ (`steps = []`) n'a rien à démarrer, même si son ancienne
+  // copie `actions` est pleine : le moteur ne la lit pas (`estParcours`).
+  const { regleSansRienAFaire } = await import('../automationSequences');
+  if (regleSansRienAFaire(regle)) {
     return { success: false, error: `« ${regle.name} » n'a aucune action.` };
   }
 

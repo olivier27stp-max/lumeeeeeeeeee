@@ -26,6 +26,7 @@ import {
   premiereEtapeSansConfirmation,
   etapesDeConfirmation,
   echeanceAvantDate,
+  estParcours,
 } from './automationSequences';
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
 import { orgEnPause, orgsEnPause } from './automations-pause-org';
@@ -397,6 +398,8 @@ async function journaliserRegleEcartee(
   rule: AutomationRule,
   event: CRMEvent,
   quoi: string | null,
+  /** Une AUTRE raison que les conditions (parcours vide, cas antérieur à l'activation) : sa phrase et son code. */
+  issue?: { saute: string; saute_code: string; detail?: Record<string, unknown> },
 ): Promise<void> {
   const repere = event.outboxId !== undefined ? `e${event.outboxId}` : `t${Math.floor(Date.now() / FENETRE_ANTI_DOUBLON_MS)}`;
   const { error } = await supabase.from('automation_execution_logs').insert({
@@ -408,14 +411,16 @@ async function journaliserRegleEcartee(
     action_type: ACTION_REGLE_ECARTEE,
     action_config: {},
     result_success: true,
-    result_data: {
-      saute: quoi ? `Conditions non remplies : ${quoi}` : 'Conditions non remplies',
-      saute_code: 'conditions',
-      ...(quoi ? { condition: quoi } : {}),
-    },
+    result_data: issue
+      ? { saute: issue.saute, saute_code: issue.saute_code, ...(issue.detail ?? {}) }
+      : {
+        saute: quoi ? `Conditions non remplies : ${quoi}` : 'Conditions non remplies',
+        saute_code: 'conditions',
+        ...(quoi ? { condition: quoi } : {}),
+      },
     result_error: null,
     duration_ms: 0,
-    execution_key: `${rule.id}:${event.entityId}:conditions:${repere}`,
+    execution_key: `${rule.id}:${event.entityId}:${issue ? issue.saute_code : 'conditions'}:${repere}`,
   });
   if (error && error.code !== '23505') {
     console.error(`[automationEngine] règle écartée non journalisée (rule ${rule.id}, org ${event.orgId}):`, error.message);
@@ -695,6 +700,9 @@ export async function rafaleDeTextos(supabase: SupabaseClient, orgId: string): P
     .eq('org_id', orgId)
     .eq('action_type', 'send_sms')
     .eq('result_success', true)
+    // Un texto SAUTÉ, reporté ou annulé (ligne « saute ») n'est pas parti :
+    // le compter retiendrait la file pour des envois qui n'ont pas eu lieu.
+    .is('result_data->saute', null)
     .gte('created_at', new Date(Date.now() - 60_000).toISOString());
   if (error) {
     console.error('[automationEngine] débit de textos illisible — envoi sans étalement:', error.message);
@@ -1607,7 +1615,22 @@ async function lancerRegle(rule: AutomationRule, event: CRMEvent, config: Engine
   // planifié d'avance, pour qu'une branche « si » soit évaluée sur
   // l'état du devis AU MOMENT où on y arrive, pas sur celui d'il y a
   // trois jours.
-  if (Array.isArray(rule.steps) && rule.steps.length > 0) {
+  //
+  // `steps` est un TABLEAU, même VIDE : c'est un parcours, et `actions`
+  // (l'ancienne copie d'une règle convertie) n'est jamais lu. Avant, un
+  // parcours vidé de sa dernière étape retombait sur `actions` et envoyait
+  // le message que l'utilisateur venait de supprimer (voir `estParcours`).
+  if (estParcours(rule) && Array.isArray(rule.steps)) {
+    if (rule.steps.length === 0) {
+      logger.info(`[automationEngine] parcours vide — rien à exécuter, règle "${rule.name}" (son ancienne copie « actions » n'est pas lue)`);
+      // Dit dans le journal de l'automatisation : « publiée mais vide » ne
+      // doit pas ressembler à « l'événement n'est jamais arrivé ».
+      await journaliserRegleEcartee(config.supabase, rule, event, null, {
+        saute: 'Le parcours ne contient aucune étape : rien n’a été exécuté',
+        saute_code: 'parcours_vide',
+      });
+      return;
+    }
     // Visite créée en lot : la confirmation ne part qu'à la première (M6).
     const enLot = event.metadata?.suppress_immediate === true;
     const debut = enLot ? premiereEtapeSansConfirmation(rule.steps) : premiereEtape(rule.steps);
@@ -1991,6 +2014,91 @@ async function recupererTachesFigees(supabase: SupabaseClient, orgId?: string): 
 }
 
 /**
+ * L'issue d'une tâche de la file qui ne s'exécute PAS : arrêtée (annulée) ou
+ * reportée. Le code vient de la liste unique `src/lib/automationMotifs.ts`.
+ */
+export interface IssueTache {
+  /** Code stable (`saute_code` du journal, `motif_code` de la tâche). */
+  code: string;
+  /** Le motif gardé sur la tâche (`last_error`), en français. */
+  motif: string;
+  /** La phrase du journal ; par défaut, le motif. */
+  saute?: string;
+  /** Détail utile au journal (ce qui a changé, l'heure du prochain créneau…). */
+  detail?: Record<string, unknown>;
+}
+
+type TacheDeLaFile = {
+  id: string; org_id: string; automation_rule_id: string; entity_type: string; entity_id: string;
+  action_config?: Record<string, any> | null;
+  automation_rules?: { trigger_event?: string | null } | null;
+};
+
+/**
+ * La ligne de journal d'une tâche arrêtée ou reportée.
+ *
+ * Avant, une annulation ou un report n'existait QUE sur la tâche : l'onglet
+ * Journaux et les statistiques ne pouvaient pas dire « ignorées, et
+ * pourquoi ». Forme commune des sauts : `result_success = true`,
+ * `result_data.saute` (la phrase) et `saute_code` (le code). Ne lève jamais :
+ * une trace perdue ne doit pas retenir la file.
+ */
+async function journaliserIssueTache(supabase: SupabaseClient, task: TacheDeLaFile, issue: IssueTache): Promise<void> {
+  const { error } = await supabase.from('automation_execution_logs').insert({
+    org_id: task.org_id,
+    automation_rule_id: task.automation_rule_id,
+    scheduled_task_id: task.id,
+    trigger_event: task.action_config?.trigger_event || task.automation_rules?.trigger_event || 'scheduled',
+    entity_type: task.entity_type,
+    entity_id: task.entity_id,
+    action_type: String(task.action_config?.type ?? '__sequence__'),
+    action_config: task.action_config?.config ?? {},
+    result_success: true,
+    result_data: { saute: issue.saute ?? issue.motif, saute_code: issue.code, ...(issue.detail ?? {}) },
+    result_error: null,
+    duration_ms: 0,
+  });
+  if (error) console.error(`[automationEngine] issue « ${issue.code} » non journalisée (tâche ${task.id}):`, error.message);
+}
+
+/**
+ * ARRÊTE une tâche sans l'exécuter : `cancelled`, son motif sur la tâche
+ * (`last_error`, `action_config.motif_code`) et UNE ligne au journal.
+ *
+ * `siPending` : la tâche n'a pas encore été prise — l'annulation n'aboutit
+ * que si elle est toujours `pending` (deux instances ne l'annulent pas deux
+ * fois, et la ligne de journal n'est écrite que par celle qui a annulé).
+ *
+ * @returns vrai si la tâche a été annulée par CET appel.
+ */
+async function arreterTache(
+  supabase: SupabaseClient,
+  task: TacheDeLaFile,
+  issue: IssueTache,
+  options: { siPending?: boolean; champs?: Record<string, unknown> } = {},
+): Promise<boolean> {
+  let requete = supabase
+    .from('automation_scheduled_tasks')
+    .update({
+      status: 'cancelled',
+      completed_at: new Date().toISOString(),
+      last_error: issue.motif,
+      action_config: { ...(task.action_config ?? {}), motif_code: issue.code },
+      ...(options.champs ?? {}),
+    })
+    .eq('id', task.id);
+  if (options.siPending) requete = requete.eq('status', 'pending');
+  const { data, error } = await requete.select('id');
+  if (error) {
+    console.error(`[automationEngine] annulation (${issue.code}) impossible pour la tâche ${task.id}:`, error.message);
+    return false;
+  }
+  if (!data || data.length === 0) return false;
+  await journaliserIssueTache(supabase, task, issue);
+  return true;
+}
+
+/**
  * `orgId` : ne dépiler que la file d'UNE entreprise. Sert à la suite de tests
  * (npm run test:automations), qui fait avancer le temps de son bureau de test
  * sans toucher aux tâches des autres entreprises de staging. Le serveur,
@@ -2097,6 +2205,22 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         .eq('id', task.id)
         .eq('status', 'pending');
       if (annuleErr) console.error(`[automationEngine] annulation (étape supprimée) impossible pour la tâche ${task.id}:`, annuleErr.message);
+      continue;
+    }
+
+    /*
+     * Tâche d'une règle « à plat » (sans étape) dont la règle est DEVENUE un
+     * parcours : elle porte une copie de l'ancienne action — celle que
+     * `actions` garde et que le moteur ne lit plus (`estParcours`). La
+     * laisser partir, c'est envoyer un message que l'utilisateur a remplacé
+     * ou supprimé dans l'éditeur.
+     */
+    if (!task.step_id && estParcours(task.automation_rules)) {
+      await arreterTache(supabase, task, {
+        code: 'etape_retiree',
+        motif: 'Automatisation convertie en parcours : cette ancienne action n’existe plus, envoi annulé.',
+        saute: 'Étape retirée du parcours : l’automatisation a été convertie en parcours',
+      }, { siPending: true });
       continue;
     }
 

@@ -122,6 +122,31 @@ export type Etape = EtapeAction | EtapeAttendre | EtapeSi | EtapeArreter;
  */
 export const ETAPES_MAX_PAR_PARCOURS = 50;
 
+/**
+ * CE QU'UNE RÈGLE EXÉCUTE — une seule réponse, pour tout le moteur.
+ *
+ * Une règle convertie en parcours porte DEUX copies de son message : `steps`
+ * (ce que l'éditeur écrit) et une ancienne copie `actions` que plus personne
+ * ne met à jour. La règle :
+ *   · `steps` est un TABLEAU, même VIDE → c'est un parcours ; seul `steps`
+ *     compte, `actions` n'est JAMAIS lu ;
+ *   · `steps` est `null` → règle « à plat », jamais convertie : `actions`.
+ *
+ * Le cas qui a fait écrire cette fonction : l'utilisateur supprime la dernière
+ * étape de son parcours (`steps = []`). Le moteur testait « steps non vide »
+ * et retombait sur `actions` : il envoyait l'ancien message, celui que
+ * l'utilisateur venait de supprimer.
+ */
+export function estParcours(regle: { steps?: unknown } | null | undefined): boolean {
+  return Array.isArray(regle?.steps);
+}
+
+/** La règle n'a rien à exécuter : parcours vide, ou règle à plat sans action. */
+export function regleSansRienAFaire(regle: { steps?: unknown; actions?: unknown } | null | undefined): boolean {
+  if (estParcours(regle)) return (regle!.steps as unknown[]).length === 0;
+  return !(Array.isArray(regle?.actions) && (regle!.actions as unknown[]).length > 0);
+}
+
 /** L'étape par laquelle une séquence commence : la première du tableau. */
 export function premiereEtape(steps: Etape[]): Etape | null {
   return steps[0] ?? null;
