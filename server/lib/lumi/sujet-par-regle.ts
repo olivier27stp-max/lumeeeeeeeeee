@@ -43,6 +43,17 @@ const VOCABULAIRE: Array<[IdTopic, RegExp]> = [
 const AUTOMATISATION = /\b(automatisations?|automations?|parcours automatiques?|(?:rappels?|suivis?|textos?|courriels?|messages?|reponses?) automatiques?|automatic (?:reminders?|follow-?ups?|texts?|emails?|messages?|repl(?:y|ies)))\b/;
 
 /**
+ * Le message parle-t-il d'automatisations ? Sert aussi HORS des ordres reconnus :
+ * « arrête toutes mes automatisations tout de suite » n'était pas vu comme un
+ * ordre, partait sans les outils d'automatisation, et Lumi tentait de les
+ * arrêter une à une jusqu'à épuiser sa sortie (réponse coupée, C18).
+ */
+export function parleDAutomatisations(message: string): boolean {
+  const e = plat(message).trim();
+  return e.length >= 8 && e.length <= 400 && AUTOMATISATION.test(e);
+}
+
+/**
  * Le sujet d'un ordre quand un seul vocabulaire est touché, sinon null.
  * Jamais appelé pour une question : voir la route.
  */

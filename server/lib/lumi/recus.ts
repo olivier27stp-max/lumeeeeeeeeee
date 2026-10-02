@@ -70,6 +70,8 @@ const NOMS_ACTION_EN: Record<string, string> = {
 const OUTILS_AUTOMATISATION: ReadonlySet<string> = new Set([
   'create_automation_from_text', 'create_automation_from_template', 'update_automation_from_text', 'toggle_automation_rule',
   'update_automation_message', 'update_automation_sms_body', 'rename_automation_rule', 'duplicate_automation_rule', 'delete_automation_rule',
+  // « C'est fait : les automatisations. » ne disait pas si tout était ARRÊTÉ ou REPARTI (C18) : la note de l'outil le dit.
+  'pause_all_automations', 'set_automation_language',
 ]);
 
 function nomAction(outil: string, fr: boolean): string {

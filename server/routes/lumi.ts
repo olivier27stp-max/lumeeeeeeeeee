@@ -41,7 +41,7 @@ import { estDemandeDAction } from '../lib/lumi/demande-action';
 import { langueDuMessage } from '../lib/lumi/langue-message';
 import { reponseAidePartageable } from '../lib/lumi/cache-aide-global';
 import { repererFiches } from '../lib/lumi/reperage';
-import { sujetParRegle } from '../lib/lumi/sujet-par-regle';
+import { sujetParRegle, parleDAutomatisations } from '../lib/lumi/sujet-par-regle';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { reponseAideMulti } from '../lib/support/aide-multi';
 import { peutRepondreHorsScope, reponseHorsScope } from '../lib/lumi/hors-scope';
@@ -897,7 +897,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     const sujetPrecedent = sujetDeLaConversation(historique);
     // Le sujet est IMPOSÉ quand on sait qu'il s'agit d'une automatisation : ses outils sont chargés
     // d'office. Avant, « change le message de la relance » partait vers les relances de PAIEMENT.
-    const sujetAuto: IdTopic | null = contexteAutomatisation ? 'rapports' : null;
+    // Pareil quand la phrase PARLE d'automatisations sans en nommer une (« arrête toutes mes automatisations ») :
+    // sans ses outils, Lumi tentait de les arrêter une à une jusqu'à épuiser sa sortie (C18).
+    const sujetAuto: IdTopic | null = contexteAutomatisation || parleDAutomatisations(message) ? 'rapports' : null;
     // « active-la », « celle des devis », « non, plus court » dans une conversation sur une
     // automatisation : le vocabulaire seul tromperait la règle (« devis ») — le routeur, qui voit
     // l'échange précédent, tranche ; et s'il n'est pas sûr, on garde le sujet (plus bas).
