@@ -32,6 +32,8 @@ import { X, Trash2, BarChart3, Pencil } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
   ACTIONS,
+  DELAI_MAX_SECONDES,
+  DELAI_NEGATIF_MAX_SECONDES,
   FAMILLES_ACTIONS,
   actionCompatible,
   champVisible,
@@ -437,6 +439,19 @@ export default function PanneauEtape({
       // Un champ vidé le temps de retaper le nombre : pas « 0 », rien — on le dit.
       if (nombreSaisi(delaiSaisi.texte) === null) {
         out.push(fr ? 'Indiquez combien de temps attendre (0 ou plus).' : 'Enter how long to wait (0 or more).');
+      }
+      /*
+       * Les plafonds du serveur, dits ICI (triage actions, 05-panneau-etape:345 ;
+       * déclencheurs, 05-etapes-controle:338). 900 jours, ou 45 jours avant un
+       * rendez-vous : « Enregistrer » restait offert, et le serveur refusait
+       * ensuite le parcours entier. Mêmes constantes que lui (catalogue).
+       */
+      if (brouillon.mode === 'avant_date') {
+        if ((brouillon.secondes_avant ?? 0) > DELAI_NEGATIF_MAX_SECONDES) {
+          out.push(fr ? 'On peut envoyer au plus 30 jours avant le rendez-vous.' : 'You can send at most 30 days before the appointment.');
+        }
+      } else if ((brouillon.delai_secondes ?? 0) > DELAI_MAX_SECONDES) {
+        out.push(fr ? 'Une attente ne peut pas dépasser 366 jours (un an).' : 'A wait cannot exceed 366 days (one year).');
       }
       return out;
     }

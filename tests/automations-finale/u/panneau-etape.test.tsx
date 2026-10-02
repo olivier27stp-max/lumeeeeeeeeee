@@ -650,3 +650,51 @@ describe('étape « Si… » — ce que la zone « Conditions » ne sait pas lir
     expect(zone().value).toBe('source is one of web, facebook\nstatut is none of perdu');
   });
 });
+
+// ─── Triage « actions », 05-panneau-etape:345 (= déclencheurs 05:338) ──
+
+describe('étape « Attendre » — une attente plus longue que ce que le serveur accepte est refusée DANS le panneau, avec la limite', () => {
+  const attente = (secondes: number, plus: Record<string, unknown> = {}): Etape => ({ id: 'e1', type: 'attendre', delai_secondes: secondes, suivant: 'e2', ...plus } as Etape);
+  const nombre = () => champ('Attendre')!;
+  const unite = () => conteneur.querySelector<HTMLSelectElement>('select[aria-label="Unité de temps"]')!;
+
+  it('900 jours : « Enregistrer » est refusé, la limite (366 jours) est dite, rien ne part', async () => {
+    await monterEtape(attente(86400));
+    saisir(nombre(), '900');
+    expect(unite().value).toBe('jours');
+    expect(enregistrer().disabled).toBe(true);
+    expect(texte()).toContain('Une attente ne peut pas dépasser 366 jours (un an).');
+    cliquer(enregistrer());
+    expect(enregistrees).toEqual([]);
+  });
+
+  it('366 jours passent, 367 non ; 9 000 heures non plus (la limite est en temps, pas en nombre)', async () => {
+    await monterEtape(attente(86400));
+    saisir(nombre(), '366');
+    expect(enregistrer().disabled).toBe(false);
+    saisir(nombre(), '367');
+    expect(enregistrer().disabled).toBe(true);
+    saisir(unite(), 'heures');
+    saisir(nombre(), '9000');
+    expect(enregistrer().disabled).toBe(true);
+    saisir(nombre(), '48');
+    expect(enregistrer().disabled).toBe(false);
+  });
+
+  it('« Ce délai AVANT le rendez-vous » : 45 jours refusés (au plus 30 jours), 30 jours acceptés', async () => {
+    await monterEtape(attente(0, { mode: 'avant_date', secondes_avant: 86400 }), { declencheur: 'appointment.created' });
+    saisir(nombre(), '45');
+    expect(enregistrer().disabled).toBe(true);
+    expect(texte()).toContain('On peut envoyer au plus 30 jours avant le rendez-vous.');
+    saisir(nombre(), '30');
+    expect(enregistrer().disabled).toBe(false);
+    cliquer(enregistrer());
+    expect((enregistrees.at(-1) as { secondes_avant?: number }).secondes_avant).toBe(30 * 86400);
+  });
+
+  it('en anglais', async () => {
+    await monterEtape(attente(86400), { fr: false });
+    saisir(champ('Wait'), '900');
+    expect(texte()).toContain('A wait cannot exceed 366 days (one year).');
+  });
+});
