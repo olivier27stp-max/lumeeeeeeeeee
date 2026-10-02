@@ -329,6 +329,42 @@ describe('04-courriel:620 — une variable inventée est signalée, comme dans l
   });
 });
 
+describe('04-courriel:366 — un objet très long est signalé', () => {
+  const C = { subject: OBJET, body: CORPS };
+  const repere = () => document.body.querySelector('[role="status"]')?.textContent ?? '';
+
+  it('70 caractères : rien ; 71 : la boîte de réception n’en montrera qu’environ 70', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await saisir(objet(), 'o'.repeat(70));
+    expect(repere()).toBe('');
+    await saisir(objet(), 'o'.repeat(71));
+    expect(repere()).toBe('71 caractères : une boîte de réception n’en montre qu’environ 70. Mettez l’essentiel au début.');
+    expect(bouton('Enregistrer').disabled).toBe(false);
+  });
+
+  it('au-delà de 200 (le plafond du serveur) : c’est dit, « Enregistrer » se grise, rien ne part', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await saisir(objet(), `Objet ${'o'.repeat(290)} fin`);
+    expect(repere()).toBe('300 caractères : un objet en fait 200 au plus. Raccourcissez-le pour enregistrer.');
+    expect(bouton('Enregistrer').disabled).toBe(true);
+    await saisir(objet(), 'o'.repeat(200));
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    expect(toasts.erreurs).toEqual([]);
+  });
+
+  it('un modèle de courriel (hors automatisation) n’a pas ce plafond : le repère seul, et on enregistre', async () => {
+    const ecrits: string[] = [];
+    await ouvrir(C, { ruleId: undefined, enregistrerTexte: async (_corps, o) => { ecrits.push(o); }, typeCourriel: 'invoice_sent' });
+    await saisir(objet(), 'o'.repeat(250));
+    expect(repere()).toContain('une boîte de réception n’en montre qu’environ 70');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => ecrits.length === 1);
+    expect(ecrits[0]).toHaveLength(250);
+  });
+});
+
 describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’éditeur montre et modifie le courriel qui part', () => {
   const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
   const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };

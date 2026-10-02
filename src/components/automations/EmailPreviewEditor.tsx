@@ -151,6 +151,11 @@ function ChampBloc({
   );
 }
 
+/** Au-delà, une boîte de réception coupe l'objet : l'essentiel doit tenir avant. */
+const OBJET_REPERE = 70;
+/** Plafond de l'objet d'un courriel d'AUTOMATISATION — celui du serveur (`OBJET_MAX`, server/lib/automation-messages.ts). */
+const OBJET_MAX_AUTOMATISATION = 200;
+
 /** Au-delà de ce nombre de variables, la palette offre une recherche. */
 const SEUIL_RECHERCHE_VARIABLES = 12;
 
@@ -566,6 +571,11 @@ export default function EmailPreviewEditor({
    */
   const anglaisARevoir = lecture.aAnglais && modifieFr && !modifieEn && blocsEnTexte(versions.en.blocs).trim() !== '';
   const anglaisPerime = anglaisARevoir && !anglaisConfirme;
+  /** Un objet qu'on vient d'écrire et que le serveur refusera : dit ici, bouton grisé. */
+  const objetTropLong = modeRegle && (
+    (versions.fr.objet.length > OBJET_MAX_AUTOMATISATION && versions.fr.objet !== enBase.subject)
+    || (lecture.aAnglais && versions.en.objet.length > OBJET_MAX_AUTOMATISATION && versions.en.objet !== enBase.subject_en)
+  );
   /** La version que les clients reçoivent — `null` quand la langue du bureau n'a pas pu être lue. */
   const langueQuiPart: Langue | null = lecture.langueBureau === null
     ? null
@@ -679,7 +689,7 @@ export default function EmailPreviewEditor({
   };
 
   const enregistrer = async () => {
-    if (!modifie || enregistrement || anglaisPerime) return;
+    if (!modifie || enregistrement || anglaisPerime || objetTropLong) return;
     setEnregistrement(true);
     try {
       // Le HTML n'est reconstruit qu'ici : l'utilisateur ne l'a jamais vu.
@@ -890,6 +900,23 @@ export default function EmailPreviewEditor({
                 aria-label={fr ? 'Objet du courriel' : 'Email subject'}
                 className="w-full bg-transparent border border-transparent rounded px-2 py-1 text-[13px] font-semibold text-text-primary hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none transition-colors"
               />
+              {/* Un objet de 300 caractères s'écrivait sans que rien ne dise
+                  qu'une boîte de réception en coupe l'essentiel (04-courriel:366). */}
+              {objet.length > OBJET_REPERE && (
+                <p
+                  role="status"
+                  className={cn('mt-1 px-2 text-[10px] leading-relaxed',
+                    modeRegle && objet.length > OBJET_MAX_AUTOMATISATION ? 'text-danger' : 'text-amber-700 dark:text-amber-400')}
+                >
+                  {modeRegle && objet.length > OBJET_MAX_AUTOMATISATION
+                    ? (fr
+                      ? `${objet.length} caractères : un objet en fait ${OBJET_MAX_AUTOMATISATION} au plus. Raccourcissez-le pour enregistrer.`
+                      : `${objet.length} characters: a subject is ${OBJET_MAX_AUTOMATISATION} at most. Shorten it to save.`)
+                    : (fr
+                      ? `${objet.length} caractères : une boîte de réception n’en montre qu’environ ${OBJET_REPERE}. Mettez l’essentiel au début.`
+                      : `${objet.length} characters: an inbox shows only about ${OBJET_REPERE}. Put what matters first.`)}
+                </p>
+              )}
             </div>
 
             {/* En-tête ajouté par le serveur — non modifiable ici, il vient
@@ -1125,10 +1152,10 @@ export default function EmailPreviewEditor({
               </button>
               <button
                 onClick={enregistrer}
-                disabled={!modifie || enregistrement || anglaisPerime}
+                disabled={!modifie || enregistrement || anglaisPerime || objetTropLong}
                 className={cn(
                   'px-4 py-1.5 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1.5',
-                  modifie && !enregistrement && !anglaisPerime
+                  modifie && !enregistrement && !anglaisPerime && !objetTropLong
                     ? 'bg-primary text-white hover:bg-primary/90'
                     : 'bg-surface-tertiary text-text-tertiary cursor-not-allowed',
                 )}
