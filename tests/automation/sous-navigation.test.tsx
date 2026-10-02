@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 /**
- * La sous-navigation « Automatisations · Vue d'ensemble · Réglages globaux »
- * est la MÊME sur les trois pages.
+ * La sous-navigation « Automatisations · Vue d'ensemble · Activité · Réglages globaux »
+ * est la MÊME sur les quatre pages.
  *
  * Audit du 2026-10-01 (constat liste-03) : des boutons au lieu de liens (pas
  * d'ouverture dans un nouvel onglet), et rien n'annonçait la section courante.
  * La liste a été corrigée ; « Vue d'ensemble » et « Réglages globaux »
  * gardaient leur copie en boutons. Un seul composant sert maintenant les trois.
+ *
+ * 2026-10-01 : une quatrième section, « Activité » — l'Historique et les Journaux de tout le
+ * bureau (constat D-13).
  */
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -33,14 +36,14 @@ afterEach(async () => {
 const liens = () => Array.from(conteneur.querySelectorAll('nav a')) as HTMLAnchorElement[];
 
 describe('sous-navigation des automatisations', () => {
-  it('trois LIENS, vers les trois sections — aucun bouton', async () => {
+  it('quatre LIENS, vers les quatre sections — aucun bouton', async () => {
     await monter('liste');
-    expect(liens().map((a) => a.getAttribute('href'))).toEqual(['/automations', '/automations/apercu', '/automations/reglages']);
+    expect(liens().map((a) => a.getAttribute('href'))).toEqual(['/automations', '/automations/apercu', '/automations/activite', '/automations/reglages']);
     expect(conteneur.querySelectorAll('nav button')).toHaveLength(0);
   });
 
   it.each<[SectionAutomatisations, string]>([
-    ['liste', '/automations'], ['apercu', '/automations/apercu'], ['reglages', '/automations/reglages'],
+    ['liste', '/automations'], ['apercu', '/automations/apercu'], ['activite', '/automations/activite'], ['reglages', '/automations/reglages'],
   ])('sur « %s », seule cette section est annoncée comme courante', async (section, href) => {
     await monter(section);
     const courants = liens().filter((a) => a.getAttribute('aria-current') === 'page');
@@ -49,19 +52,20 @@ describe('sous-navigation des automatisations', () => {
 
   it('les mêmes libellés partout, « Bêta » compris', async () => {
     await monter('reglages');
-    expect(liens().map((a) => a.textContent)).toEqual(['Automatisations', 'Vue d’ensembleBêta', 'Réglages globaux']);
+    expect(liens().map((a) => a.textContent)).toEqual(['Automatisations', 'Vue d’ensembleBêta', 'Activité', 'Réglages globaux']);
   });
 
   it('en anglais', async () => {
     await monter('apercu', false);
-    expect(liens().map((a) => a.textContent)).toEqual(['Workflows', 'OverviewBeta', 'Global settings']);
+    expect(liens().map((a) => a.textContent)).toEqual(['Workflows', 'OverviewBeta', 'Activity', 'Global settings']);
   });
 });
 
-describe('les trois pages utilisent CE composant', () => {
+describe('les quatre pages utilisent CE composant', () => {
   it.each([
     ['src/pages/Automations.tsx', 'liste'],
     ['src/pages/AutomationsApercu.tsx', 'apercu'],
+    ['src/pages/AutomationsActivite.tsx', 'activite'],
     ['src/pages/AutomationsReglages.tsx', 'reglages'],
   ])('%s → courante="%s", sans copie locale de la navigation', (fichier, section) => {
     const source = readFileSync(join(process.cwd(), fichier), 'utf8');

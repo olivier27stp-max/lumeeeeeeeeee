@@ -34,10 +34,16 @@ const INSECABLE = String.fromCharCode(0xa0);
 export default function BandeauPause({
   fr,
   onChange,
+  lectureSeule = false,
 }: {
   fr: boolean;
   /** Prévient la page, pour que chaque ligne affiche « En pause » (P2-9). */
   onChange?: (enPause: boolean) => void;
+  /**
+   * Le rôle voit les automatisations sans pouvoir les modifier : l'état de la pause reste dit,
+   * « Tout arrêter » et « Reprendre » ne sont pas offerts (le serveur les refuserait).
+   */
+  lectureSeule?: boolean;
 }) {
   const [enPause, setEnPauseLocal] = useState<boolean | null>(null);
   const setEnPause = (v: boolean | null) => {
@@ -139,6 +145,7 @@ export default function BandeauPause({
         >
           {fr ? 'Réessayer' : 'Try again'}
         </button>
+        {!lectureSeule && (
         <button
           type="button"
           onClick={() => basculer(true)}
@@ -148,6 +155,7 @@ export default function BandeauPause({
           <PauseCircle size={13} aria-hidden="true" />
           {fr ? 'Tout arrêter' : 'Pause everything'}
         </button>
+        )}
       </div>
     );
   }
@@ -168,6 +176,7 @@ export default function BandeauPause({
               : 'No email or text is going out. What was scheduled is kept.'}
           </span>
         </span>
+        {!lectureSeule && (
         <button
           type="button"
           onClick={() => basculer(false)}
@@ -177,9 +186,13 @@ export default function BandeauPause({
           <PlayCircle size={14} aria-hidden="true" />
           {fr ? 'Reprendre' : 'Resume'}
         </button>
+        )}
       </div>
     );
   }
+
+  // En marche, en lecture seule : rien à dire, et rien à offrir.
+  if (lectureSeule) return null;
 
   return (
     <div className="flex justify-end">

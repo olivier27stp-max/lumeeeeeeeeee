@@ -253,3 +253,98 @@ describe('07-lot:188 — publier « Client inactif » EN LOT pose la même confi
     });
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+describe('12-permissions:86 et :102 — « voir » sans « modifier » : la liste en lecture seule', () => {
+  const lectureSeule = () => { droits.role = 'technician'; droits.permissions = { 'automations.read': true }; };
+  const RAISON = 'Votre rôle permet de voir les automatisations, pas de les modifier.';
+
+  it('la liste s’affiche — pas « Accès restreint » — et dit qu’elle est en lecture seule', async () => {
+    lectureSeule();
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Rappel de rendez-vous', is_active: true })]);
+    await rendre();
+    expect(texte()).not.toContain('Accès restreint');
+    expect(conteneur.querySelector('h1')?.textContent).toBe('Mes automatisations');
+    expect(texte()).toContain('Rappel de rendez-vous');
+    expect(conteneur.querySelector('[role="note"]')?.textContent).toContain(`Lecture seule. ${RAISON}`);
+  });
+
+  it('aucun geste d’écriture n’est offert : ni Créer, ni Lumi, ni dossier, ni menu ⋮, ni « Tout arrêter »', async () => {
+    lectureSeule();
+    vi.mocked(builder.chargerDossiers).mockResolvedValue([{ id: 'd1', name: 'Factures', position: 0, created_at: '' }] as never);
+    await rendre();
+    for (const absent of [/^Créer$/, /^Construire avec Lumi$/, /^Nouveau dossier$/, /^Actions pour /, /^Tout arrêter$/, /^Renommer le dossier/, /^Supprimer le dossier/]) {
+      expect(bouton(absent), String(absent)).toBeUndefined();
+    }
+    // Le dossier, lui, se consulte toujours.
+    expect(bouton(/^Factures/)).toBeDefined();
+  });
+
+  it('l’interrupteur, les cases et la langue des messages restent lisibles, grisés avec la raison', async () => {
+    lectureSeule();
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Rappel', is_active: true })]);
+    await rendre();
+    const interrupteur = conteneur.querySelector('[role="switch"]') as HTMLButtonElement;
+    expect(interrupteur.getAttribute('aria-checked')).toBe('true');
+    expect(interrupteur.disabled).toBe(true);
+    await cliquer(interrupteur);
+    expect(builder.changerPublication).not.toHaveBeenCalled();
+    for (const c of [caseDe(/^Tout cocher$/), caseDe(/^Cocher Rappel$/)]) {
+      expect(c?.disabled).toBe(true);
+      expect(c?.title).toBe(RAISON);
+    }
+    const langues = Array.from(conteneur.querySelectorAll('[role="group"] button')) as HTMLButtonElement[];
+    expect(langues.map((b) => [b.textContent, b.disabled, b.title])).toEqual([['FR', true, RAISON], ['EN', true, RAISON]]);
+    expect(langues[0].getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('le nom n’ouvre pas l’éditeur (il exige le droit de modifier) ; les messages se lisent, sans champ ni « Enregistrer »', async () => {
+    lectureSeule();
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Rappel' })]);
+    await rendre();
+    expect(conteneur.querySelector('tbody tr td:nth-child(2) button')).toBeNull();
+    expect(conteneur.querySelector('tbody tr td:nth-child(2)')?.textContent).toContain('Rappel');
+    await cliquer(bouton(/^Voir les messages de Rappel$/));
+    expect(texte()).toContain('Texto envoyé au client');
+    expect(texte()).toContain('Bonjour, votre rendez-vous est confirmé.');
+    expect(conteneur.querySelector('tbody textarea, tbody input[type="text"]')).toBeNull();
+    expect(bouton(/^Enregistrer$/)).toBeUndefined();
+    expect(bouton(/Modifier dans l’éditeur/)).toBeUndefined();
+  });
+
+  it('la lecture des bureaux cibles (réservée à qui modifie) n’est pas lancée : plus de 403 en arrière-plan', async () => {
+    lectureSeule();
+    await rendre();
+    expect(builder.chargerBureauxCibles).not.toHaveBeenCalled();
+  });
+
+  it('« Réglages globaux » (qui exige « modifier ») n’est pas dans la sous-navigation ; les autres liens y sont', async () => {
+    lectureSeule();
+    await rendre();
+    const liens = Array.from(conteneur.querySelectorAll('nav[aria-label="Sections"] a')).map((a) => a.getAttribute('href'));
+    expect(liens).toEqual(['/automations', '/automations/apercu', '/automations/activite']);
+  });
+
+  it('sans le droit de VOIR : « Accès restreint », et rien d’autre', async () => {
+    droits.role = 'technician';
+    droits.permissions = {};
+    await rendre();
+    expect(texte()).toContain('Accès restreint');
+    expect(conteneur.querySelector('table')).toBeNull();
+  });
+
+  it('avec le droit de modifier, rien ne change : Créer, menu ⋮, interrupteur actif, nom cliquable', async () => {
+    droits.role = 'technician';
+    droits.permissions = { 'automations.read': true, 'automations.update': true };
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Rappel' })]);
+    await rendre();
+    expect(conteneur.querySelector('[role="note"]')).toBeNull();
+    expect(bouton(/^Créer$/)).toBeDefined();
+    expect(bouton(/^Actions pour Rappel$/)).toBeDefined();
+    expect((conteneur.querySelector('[role="switch"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(conteneur.querySelector('tbody tr td:nth-child(2) button')).not.toBeNull();
+    expect(builder.chargerBureauxCibles).toHaveBeenCalled();
+    const liens = Array.from(conteneur.querySelectorAll('nav[aria-label="Sections"] a')).map((a) => a.getAttribute('href'));
+    expect(liens).toContain('/automations/reglages');
+  });
+});

@@ -10,6 +10,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { Link } from 'react-router-dom';
+import { usePermissions } from '../../hooks/usePermissions';
+import { hasPermission } from '../../lib/permissions';
 import { Settings } from 'lucide-react';
 // « Activité » : l'Historique et les Journaux de TOUT le bureau (constat D-13).
 
@@ -20,6 +22,14 @@ const CLASSE_COURANTE = `${CLASSE_BASE} border-primary font-semibold text-primar
 const CLASSE_AUTRE = `${CLASSE_BASE} border-transparent text-text-secondary transition-colors hover:text-text-primary`;
 
 export default function SousNavigation({ courante, fr }: { courante: SectionAutomatisations; fr: boolean }) {
+  /*
+   * « Réglages globaux » exige « modifier les automatisations » (route gardée dans App.tsx) : pour
+   * un rôle qui ne fait que VOIR, le lien menait à « Accès restreint » (triage de la liste,
+   * `12-permissions:102`). On ne montre pas une porte qu'on fermera.
+   */
+  const acces = usePermissions();
+  // Droits pas encore lus : le lien reste (il ne disparaît que pour un rôle CONNU sans le droit).
+  const peutModifier = acces.loading || acces.role === 'owner' || hasPermission(acces.permissions, 'automations.update', acces.role ?? undefined);
   const lien = (section: SectionAutomatisations) => ({
     className: section === courante ? CLASSE_COURANTE : CLASSE_AUTRE,
     'aria-current': section === courante ? ('page' as const) : undefined,
@@ -42,10 +52,12 @@ export default function SousNavigation({ courante, fr }: { courante: SectionAuto
         <Link to="/automations/activite" {...lien('activite')}>
           {fr ? 'Activité' : 'Activity'}
         </Link>
-        <Link to="/automations/reglages" {...lien('reglages')}>
-          <Settings size={13} aria-hidden="true" />
-          {fr ? 'Réglages globaux' : 'Global settings'}
-        </Link>
+        {peutModifier && (
+          <Link to="/automations/reglages" {...lien('reglages')}>
+            <Settings size={13} aria-hidden="true" />
+            {fr ? 'Réglages globaux' : 'Global settings'}
+          </Link>
+        )}
       </nav>
     </div>
   );

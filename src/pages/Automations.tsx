@@ -33,6 +33,8 @@ import { useRafraichissementVisible } from '../hooks/useRafraichissementVisible'
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
+import { usePermissions } from '../hooks/usePermissions';
+import { hasPermission } from '../lib/permissions';
 import BandeauPause from '../components/automations/BandeauPause';
 import SousNavigation from '../components/automations/SousNavigation';
 import BibliothequeModeles from '../components/automations/BibliothequeModeles';
@@ -346,6 +348,45 @@ type CleTri = 'nom' | 'statut' | 'declenches' | 'en_cours' | 'modifiee' | 'creee
  *                       Modifiée le · Créée le · Stats · › · ⋮
  *   7. pagination       Précédent · 1 · Suivant · 10 / page
  */
+/**
+ * Le nom d'une ligne : un bouton qui ouvre l'éditeur — ou, pour un rôle qui ne peut que VOIR,
+ * le même contenu sans rien de cliquable (l'éditeur exige le droit de modifier).
+ */
+function NomDeLigne({ ouvrir, children }: { ouvrir: (() => void) | null; children: React.ReactNode }) {
+  if (!ouvrir) return <div className="flex items-start gap-2.5 text-left">{children}</div>;
+  return (
+    <button
+      type="button"
+      onClick={ouvrir}
+      className="flex items-start gap-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Un message tel que le client le lira, en LECTURE SEULE : variables remplacées par un exemple
+ * (« Jean » plutôt que « [client_first_name] »), comme dans l'éditeur.
+ */
+function ApercuMessage({ type, sujet, corps, fr }: { type: 'send_sms' | 'send_email'; sujet?: string; corps: string; fr: boolean }) {
+  return (
+    <div className="rounded-md border border-outline/40 bg-surface px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+        {type === 'send_email'
+          ? (fr ? 'Courriel envoyé au client' : 'Email sent to client')
+          : (fr ? 'Texto envoyé au client' : 'Text sent to client')}
+      </p>
+      {type === 'send_email' && sujet ? (
+        <p className="mt-1 text-[12px] font-medium text-text-primary">{remplacerVariables(sujet)}</p>
+      ) : null}
+      <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[12px] text-text-secondary">
+        {remplacerVariables(corps.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()) || (fr ? '(vide)' : '(empty)')}
+      </p>
+    </div>
+  );
+}
+
 export default function Automations() {
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -359,6 +400,20 @@ export default function Automations() {
    * croyait ses automatisations supprimées alors qu'elles tournaient.
    */
   const [echecChargement, setEchecChargement] = useState(false);
+  /*
+   * VOIR sans MODIFIER (triage de la liste, `12-permissions:86` et `:102`).
+   *
+   * Le menu et la route demandent « voir les automatisations » ; la page exigeait « modifier » :
+   * on montrait la porte, puis « Accès restreint ». Qui a le droit de voir VOIT la liste, ses
+   * chiffres, ses messages — sans aucun geste d'écriture : ils sont retirés, ou grisés avec la
+   * raison. Le serveur, lui, refuse déjà toute écriture à ce rôle.
+   */
+  const acces = usePermissions();
+  // Droits pas encore lus : rien n'est grisé (la garde de la page n'affiche de toute façon rien d'ici là).
+  const peutModifier = acces.loading || acces.role === 'owner' || hasPermission(acces.permissions, 'automations.update', acces.role ?? undefined);
+  const raisonLectureSeule = fr
+    ? 'Votre rôle permet de voir les automatisations, pas de les modifier.'
+    : 'Your role can view automations, not change them.';
   /*
    * Interrupteur Brouillon / Publiée martelé (Rafba, 2026-09-28) : l'écran
    * suit le dernier clic, le serveur reçoit les changements un à la fois
@@ -915,9 +970,10 @@ export default function Automations() {
         });
     };
 
-    charger(1);
+    // « Copier vers d'autres bureaux » est un geste d'écriture : sans le droit, la lecture répondrait 403.
+    if (peutModifier) charger(1);
     return () => { vivant = false; if (minuterie) clearTimeout(minuterie); };
-  }, []);
+  }, [peutModifier]);
 
   const dupliquer = async (regle: AutomationRule, ouvrir = false) => {
     setOccupeId(regle.id);
@@ -1330,11 +1386,18 @@ export default function Automations() {
   };
 
   return (
-    <PermissionGate permission="automations.update">
+    <PermissionGate permission="automations.read">
       <div className="mx-auto max-w-[1400px] space-y-4">
 
         {/* ══ 1. Sous-navigation ══ */}
         <SousNavigation courante="liste" fr={fr} />
+
+        {!peutModifier && (
+          <p role="note" className="flex items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary">
+            <Eye size={14} className="shrink-0" aria-hidden="true" />
+            {fr ? `Lecture seule. ${raisonLectureSeule}` : `Read only. ${raisonLectureSeule}`}
+          </p>
+        )}
 
         {/*
           L'interrupteur du client, AVANT la liste : on le cherche en
@@ -1343,7 +1406,7 @@ export default function Automations() {
           rouge impossible à manquer — oublier que ses automatisations
           dorment coûte des relances pendant des jours.
         */}
-        <BandeauPause fr={fr} onChange={setToutEnPause} />
+        <BandeauPause fr={fr} onChange={setToutEnPause} lectureSeule={!peutModifier} />
 
         <BibliothequeModeles
           open={bibliotheque}
@@ -1408,7 +1471,8 @@ export default function Automations() {
                     key={l}
                     type="button"
                     onClick={() => changerLangue(l)}
-                    disabled={savingLang}
+                    disabled={savingLang || !peutModifier}
+                    title={peutModifier ? undefined : raisonLectureSeule}
                     aria-pressed={orgLang === l}
                     className={`px-2.5 py-1 font-medium transition-colors pointer-coarse:py-2 ${orgLang === l ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary'}`}
                   >
@@ -1423,7 +1487,7 @@ export default function Automations() {
               )}
             </div>
 
-            {saisieDossier ? (
+            {!peutModifier ? null : saisieDossier ? (
               <span className="inline-flex items-center gap-1.5">
                 <label htmlFor="nouveau-dossier" className="sr-only">
                   {fr ? 'Nom du dossier' : 'Folder name'}
@@ -1468,6 +1532,7 @@ export default function Automations() {
               </button>
             )}
 
+            {peutModifier && (
             <button
               type="button"
               onClick={() => partirDeZero(true)}
@@ -1477,7 +1542,9 @@ export default function Automations() {
               {/* Le même nom que dans le menu « Créer » (c'était « Build using AI »). */}
               {fr ? 'Construire avec Lumi' : 'Build with Lumi'}
             </button>
+            )}
 
+            {peutModifier && (
             <div className="relative">
               <button
                 type="button"
@@ -1524,6 +1591,7 @@ export default function Automations() {
                 </div>
               )}
             </div>
+            )}
           </div>
         </div>
 
@@ -1620,6 +1688,7 @@ export default function Automations() {
                     <span className="ml-1 tabular-nums opacity-60">{compteParDossier(d.id)}</span>
                   </button>
                 )}
+                {peutModifier && (<>
                 <button
                   type="button"
                   onClick={() => { setDossierRenomme(d.id); setNouveauNom(d.name); }}
@@ -1636,6 +1705,7 @@ export default function Automations() {
                 >
                   <Trash2 size={11} aria-hidden="true" />
                 </button>
+                </>)}
               </span>
             ))}
           </div>
@@ -1837,6 +1907,8 @@ export default function Automations() {
                         type="checkbox"
                         checked={toutCoche}
                         onChange={basculerTout}
+                        disabled={!peutModifier}
+                        title={peutModifier ? undefined : raisonLectureSeule}
                         aria-label={fr ? 'Tout cocher' : 'Select all'}
                         className="h-3.5 w-3.5 rounded border-outline"
                       />
@@ -1923,22 +1995,22 @@ export default function Automations() {
                                 if (n.has(rule.id)) n.delete(rule.id); else n.add(rule.id);
                                 return n;
                               })}
+                              disabled={!peutModifier}
+                              title={peutModifier ? undefined : raisonLectureSeule}
                               aria-label={fr ? `Cocher ${localizeAutomationName(rule.name, language)}` : `Select ${localizeAutomationName(rule.name, language)}`}
                               className="h-3.5 w-3.5 rounded border-outline"
                             />
                           </td>
 
                           <td className="px-3 py-3">
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/automations/${rule.id}`)}
-                              className="flex items-start gap-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            <NomDeLigne
+                              ouvrir={peutModifier ? () => navigate(`/automations/${rule.id}`) : null}
                             >
                               <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface-tertiary">
                                 <Icone size={13} className="text-text-secondary" aria-hidden="true" />
                               </span>
                               <span className="min-w-0">
-                                <span className="block font-medium text-primary hover:underline">
+                                <span className={cn('block font-medium text-primary', peutModifier && 'hover:underline')}>
                                   {localizeAutomationName(rule.name, language)}
                                 </span>
                                 <span className="block text-[11px] text-text-tertiary">
@@ -1974,7 +2046,7 @@ export default function Automations() {
                                   </span>
                                 )}
                               </span>
-                            </button>
+                            </NomDeLigne>
                           </td>
 
                           <td className="px-3 py-3">
@@ -2027,7 +2099,7 @@ export default function Automations() {
                                 actif={rule.is_active}
                                 onBascule={() => handleToggle(rule)}
                                 enCours={fileBascule.enCours(rule.id)}
-                                desactive={!!rule.deleted_at}
+                                desactive={!!rule.deleted_at || !peutModifier}
                                 libelle={rule.is_active
                                   ? (fr ? `Repasser ${localizeAutomationName(rule.name, language)} en brouillon` : `Unpublish ${localizeAutomationName(rule.name, language)}`)
                                   : (fr ? `Publier ${localizeAutomationName(rule.name, language)}` : `Publish ${localizeAutomationName(rule.name, language)}`)}
@@ -2048,6 +2120,7 @@ export default function Automations() {
                                 />
                               </button>
 
+                              {peutModifier && (
                               <div className="relative">
                                 <button
                                   type="button"
@@ -2205,6 +2278,7 @@ export default function Automations() {
                                   document.body,
                                 )}
                               </div>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2301,24 +2375,15 @@ export default function Automations() {
                                           {fr ? 'Ce parcours n’envoie ni texto ni courriel.' : 'This journey sends neither text nor email.'}
                                         </p>
                                       ) : envois.map((e, i) => (
-                                        <div key={`${rule.id}-apercu-${i}`} className="rounded-md border border-outline/40 bg-surface px-3 py-2">
-                                          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                                            {e.action?.type === 'send_email'
-                                              ? (fr ? 'Courriel envoyé au client' : 'Email sent to client')
-                                              : (fr ? 'Texto envoyé au client' : 'Text sent to client')}
-                                          </p>
-                                          {/* Variables remplacées par un exemple, comme dans
-                                              l'éditeur de l'ancien format (« Le client lira : … ») :
-                                              on montre ce que le client lira, pas « [client_first_name] ». */}
-                                          {e.action?.type === 'send_email' && e.action.config?.subject ? (
-                                            <p className="mt-1 text-[12px] font-medium text-text-primary">{remplacerVariables(String(e.action.config.subject))}</p>
-                                          ) : null}
-                                          <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[12px] text-text-secondary">
-                                            {remplacerVariables(String(e.action?.config?.body ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
-                                              || (fr ? '(vide)' : '(empty)')}
-                                          </p>
-                                        </div>
+                                        <ApercuMessage
+                                          key={`${rule.id}-apercu-${i}`}
+                                          type={e.action?.type === 'send_email' ? 'send_email' : 'send_sms'}
+                                          sujet={e.action?.config?.subject ? String(e.action.config.subject) : undefined}
+                                          corps={String(e.action?.config?.body ?? '')}
+                                          fr={fr}
+                                        />
                                       ))}
+                                      {peutModifier && (
                                       <button
                                         type="button"
                                         onClick={() => navigate(`/automations/${rule.id}`)}
@@ -2326,6 +2391,7 @@ export default function Automations() {
                                       >
                                         {fr ? 'Modifier dans l’éditeur' : 'Edit in the editor'}
                                       </button>
+                                      )}
                                     </div>
                                   );
                                 })()
@@ -2338,7 +2404,16 @@ export default function Automations() {
                               ) : (
                                 rule.actions
                                   .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
-                                  .map((a, i) => (
+                                  .map((a, i) => (!peutModifier ? (
+                                    // Lecture seule : le message tel que le client le lira, sans champ ni « Enregistrer ».
+                                    <ApercuMessage
+                                      key={`${rule.id}-${a.type}-${i}`}
+                                      type={a.type as 'send_sms' | 'send_email'}
+                                      sujet={a.config?.subject ? String(a.config.subject) : undefined}
+                                      corps={String(a.config?.body ?? '')}
+                                      fr={fr}
+                                    />
+                                  ) : (
                                     <MessageEditor
                                       key={`${rule.id}-${a.type}-${i}`}
                                       ruleId={rule.id}
@@ -2350,7 +2425,7 @@ export default function Automations() {
                                       onSaved={load}
                                       declencheur={rule.trigger_event}
                                     />
-                                  ))
+                                  )))
                               )}
                             </td>
                           </tr>
