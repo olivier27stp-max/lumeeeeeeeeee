@@ -997,12 +997,18 @@ export default function EmailPreviewEditor({
                       prendLeFocus={bloc.id === ligneNeuve}
                     />
                   </div>
+                  {/* Visible au survol — mais aussi quand la ligne ou le bouton a
+                      le focus (clavier) et au doigt (pas de survol) : un bouton
+                      qu'on atteint par Tab sans le voir ne sert à personne
+                      (04-courriel:478). */}
                   <button
+                    type="button"
                     onClick={() => supprimerBloc(bloc.id)}
                     title={fr ? 'Supprimer cette ligne' : 'Remove this line'}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-text-tertiary hover:text-red-500 shrink-0 mt-1"
+                    aria-label={fr ? 'Supprimer cette ligne' : 'Remove this line'}
+                    className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 transition-opacity p-1 rounded text-text-tertiary hover:text-red-500 shrink-0 mt-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                   >
-                    <Trash2 size={12} />
+                    <Trash2 size={12} aria-hidden="true" />
                   </button>
                 </div>
               ))}
