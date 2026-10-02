@@ -212,6 +212,93 @@ describe('A-01 — l’étape ouverte change par ailleurs (Lumi, annuler / réta
   });
 });
 
+// ─── Ligne 4 du triage « actions » (= déclencheurs 05:290 et 05:313) ───
+
+describe('ligne 4 — étape « Attendre » : retaper le nombre garde l’unité choisie (3 jours ne deviennent pas 5 minutes)', () => {
+  const attente = (secondes: number, plus: Record<string, unknown> = {}): Etape => ({ id: 'e1', type: 'attendre', delai_secondes: secondes, suivant: 'e2', ...plus } as Etape);
+  const nombre = () => champ('Attendre')!;
+  const unite = () => conteneur.querySelector<HTMLSelectElement>('select[aria-label="Unité de temps"]')!;
+  const enregistree = () => enregistrees.at(-1) as Extract<Etape, { type: 'attendre' }> | undefined;
+
+  it('3 jours : effacer le nombre puis taper 5 → « 5 » et « jours », et 5 jours sont enregistrés', async () => {
+    await monterEtape(attente(3 * 86400));
+    expect(nombre().value).toBe('3');
+    expect(unite().value).toBe('jours');
+    // Comme au clavier : le champ est vidé, puis on tape 5.
+    saisir(nombre(), '');
+    expect(unite().value).toBe('jours');
+    expect(nombre().value).toBe('');
+    saisir(nombre(), '5');
+    expect(nombre().value).toBe('5');
+    expect(unite().value).toBe('jours');
+    cliquer(enregistrer());
+    expect(enregistree()?.delai_secondes).toBe(5 * 86400);
+  });
+
+  it('un champ laissé vide n’est pas « 0 » : « Enregistrer » est refusé, avec la raison', async () => {
+    await monterEtape(attente(3 * 86400));
+    saisir(nombre(), '');
+    expect(enregistrer().disabled).toBe(true);
+    expect(texte()).toContain('Indiquez combien de temps attendre (0 ou plus).');
+    cliquer(enregistrer());
+    expect(enregistrees).toEqual([]);
+  });
+
+  it('à 0, choisir « jours » garde « jours » ; puis 2 → 2 jours', async () => {
+    await monterEtape(attente(0));
+    expect(unite().value).toBe('minutes');
+    saisir(unite(), 'jours');
+    expect(unite().value).toBe('jours');
+    saisir(nombre(), '2');
+    cliquer(enregistrer());
+    expect(enregistree()?.delai_secondes).toBe(2 * 86400);
+  });
+
+  it('1 heure : taper 24 reste « 24 » « heures » à l’écran (pas « 1 » « jours »)', async () => {
+    await monterEtape(attente(3600));
+    saisir(nombre(), '24');
+    expect(nombre().value).toBe('24');
+    expect(unite().value).toBe('heures');
+    cliquer(enregistrer());
+    expect(enregistree()?.delai_secondes).toBe(86400);
+  });
+
+  it('changer l’unité convertit le nombre affiché, sans le toucher', async () => {
+    await monterEtape(attente(3 * 86400));
+    saisir(unite(), 'heures');
+    expect(nombre().value).toBe('3');
+    cliquer(enregistrer());
+    expect(enregistree()?.delai_secondes).toBe(3 * 3600);
+  });
+
+  it('« Ce délai AVANT le rendez-vous » : le nombre retapé garde son unité, et c’est `secondes_avant` qui suit', async () => {
+    await monterEtape(attente(0, { mode: 'avant_date', secondes_avant: 2 * 86400 }), { declencheur: 'appointment.created' });
+    expect(nombre().value).toBe('2');
+    expect(unite().value).toBe('jours');
+    saisir(nombre(), '');
+    saisir(nombre(), '7');
+    expect(unite().value).toBe('jours');
+    cliquer(enregistrer());
+    expect(enregistree()).toMatchObject({ mode: 'avant_date', secondes_avant: 7 * 86400, delai_secondes: 0 });
+  });
+
+  it('passer à « avant le rendez-vous » reprend le délai À L’ÉCRAN', async () => {
+    await monterEtape(attente(86400), { declencheur: 'appointment.created' });
+    saisir(nombre(), '3');
+    saisir(champ<HTMLSelectElement>('Ce qu’on attend'), 'avant_date');
+    cliquer(enregistrer());
+    expect(enregistree()).toMatchObject({ mode: 'avant_date', secondes_avant: 3 * 86400, delai_secondes: 0 });
+  });
+
+  it('ouvrir sans rien toucher n’est pas une modification', async () => {
+    const onModifie = vi.fn();
+    await monterEtape(attente(3 * 86400), { onModifie });
+    expect(onModifie).toHaveBeenLastCalledWith(false);
+    cliquer(enregistrer());
+    expect(enregistree()?.delai_secondes).toBe(3 * 86400);
+  });
+});
+
 // ─── Ligne 3 du triage « actions » ──────────────────────────────
 
 describe('ligne 3 — le courriel d’une automatisation fournie s’ouvre en texte lisible, pas en balises HTML', () => {

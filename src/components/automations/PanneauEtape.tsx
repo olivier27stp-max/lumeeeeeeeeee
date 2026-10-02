@@ -276,6 +276,28 @@ function decomposer(secondes: number): { valeur: number; unite: string } {
   return { valeur: Math.max(0, Math.round(secondes / 60)), unite: 'minutes' };
 }
 
+/**
+ * Le délai d'une attente TEL QU'ON LE SAISIT — triage actions, ligne 4 : le
+ * nombre, en texte (donc vide le temps de le retaper), et l'unité CHOISIE.
+ *
+ * Les deux étaient recalculés à chaque frappe depuis les secondes : effacer le
+ * « 3 » de « 3 jours » donnait 0 seconde, donc « 0 minutes », et le 5 tapé
+ * ensuite devenait « 05 minutes ». Trois jours étaient devenus cinq minutes.
+ */
+interface SaisieDelai { texte: string; unite: string }
+function saisieDelaiDe(etape: Etape): SaisieDelai {
+  if (etape.type !== 'attendre') return { texte: '', unite: 'minutes' };
+  const d = decomposer((etape.mode === 'avant_date' ? etape.secondes_avant : etape.delai_secondes) ?? 0);
+  return { texte: String(d.valeur), unite: d.unite };
+}
+/** Le nombre saisi, s'il se lit comme une durée (0 ou plus) ; sinon `null`. */
+function nombreSaisi(texte: string): number | null {
+  const t = texte.trim().replace(',', '.');
+  if (t === '') return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 export default function PanneauEtape({
   etape, fr, declencheur, membres, etiquettes, automatisations = [], etapesPipeline = [], champsPerso = [], objetChamps = null, stats,
   nouvelle = false, modifieePar = null, onEnregistrer, onSupprimer, onFermer, onModifie,
@@ -327,6 +349,8 @@ export default function PanneauEtape({
   const [base, setBase] = useState<Etape>(reference.etape);
   /** L'étape a changé ailleurs pendant une saisie : qui l'a changée, tant que le choix n'est pas fait. */
   const [conflit, setConflit] = useState<'lumi' | 'autre' | null>(null);
+  /** Étape « attendre » : le nombre et l'unité tels qu'on les saisit (voir `saisieDelaiDe`). */
+  const [delaiSaisi, setDelaiSaisi] = useState<SaisieDelai>(() => saisieDelaiDe(reference.etape));
   /** Le brouillon et le texte des conditions du dernier rendu, lus par l'effet ci-dessous. */
   const saisie = useRef({ brouillon, conditionsTexte });
   saisie.current = { brouillon, conditionsTexte };
@@ -334,6 +358,7 @@ export default function PanneauEtape({
   const prendre = (version: Etape) => {
     setBase(version);
     setBrouillon(version);
+    setDelaiSaisi(saisieDelaiDe(version));
     setConditionsTexte(texteDesConditions(version));
     setAnglaisConfirme([]);
     setConflit(null);
@@ -435,6 +460,13 @@ export default function PanneauEtape({
   /** Ce qui empêche d'enregistrer, dit avant de cliquer. */
   const problemes = useMemo(() => {
     const out: string[] = [];
+    if (brouillon.type === 'attendre') {
+      // Un champ vidé le temps de retaper le nombre : pas « 0 », rien — on le dit.
+      if (nombreSaisi(delaiSaisi.texte) === null) {
+        out.push(fr ? 'Indiquez combien de temps attendre (0 ou plus).' : 'Enter how long to wait (0 or more).');
+      }
+      return out;
+    }
     if (brouillon.type !== 'action') return out;
     if (!modele) return out;
     const config = brouillon.action.config as Record<string, string | undefined>;
@@ -481,7 +513,7 @@ export default function PanneauEtape({
         : `“${v.champ.en}” changed, not its English version: update it, empty it, or confirm it still holds.`);
     }
     return out;
-  }, [brouillon, modele, fr, declencheur, objetChamps, champsPerso, versionsAnglaises]);
+  }, [brouillon, modele, fr, declencheur, objetChamps, champsPerso, versionsAnglaises, delaiSaisi]);
 
   /** Variables écrites dans les textes de l'action que le serveur ne saura pas remplir. */
   const inconnues = useMemo(() => {
@@ -547,10 +579,14 @@ export default function PanneauEtape({
 
   // « Avant la date » : le délai saisi est « combien avant », pas une durée.
   const avantDate = brouillon.type === 'attendre' && brouillon.mode === 'avant_date';
-  const champDelai: 'delai_secondes' | 'secondes_avant' = avantDate ? 'secondes_avant' : 'delai_secondes';
-  const delai = brouillon.type === 'attendre'
-    ? decomposer((avantDate ? brouillon.secondes_avant : brouillon.delai_secondes) ?? 0)
-    : null;
+  /** Le nombre et l'unité saisis → les secondes de l'attente (un champ vide vaut 0 en attendant). */
+  const poserDelai = (saisie: SaisieDelai) => {
+    setDelaiSaisi(saisie);
+    const u = UNITES.find((x) => x.cle === saisie.unite) ?? UNITES[0];
+    setBrouillon((b) => (b.type === 'attendre'
+      ? { ...b, [b.mode === 'avant_date' ? 'secondes_avant' : 'delai_secondes']: Math.round((nombreSaisi(saisie.texte) ?? 0) * u.secondes) }
+      : b));
+  };
 
   return (
     <aside
@@ -862,7 +898,7 @@ export default function PanneauEtape({
             )}
 
             {/* ── Étape « attendre » ──────────────────────────── */}
-            {brouillon.type === 'attendre' && delai && (
+            {brouillon.type === 'attendre' && (
               <div>
                 <label htmlFor={`${ids}-delai`} className="mb-1 block text-xs font-medium text-text-primary">
                   {fr ? 'Attendre' : 'Wait'}
@@ -874,21 +910,14 @@ export default function PanneauEtape({
                     type="number"
                     min={0}
                     max={365}
-                    value={delai.valeur}
-                    onChange={(e) => {
-                      const n = Math.max(0, Number(e.target.value) || 0);
-                      const u = UNITES.find((x) => x.cle === delai.unite) ?? UNITES[0];
-                      setBrouillon({ ...(brouillon as EtapeAttendre), [champDelai]: n * u.secondes });
-                    }}
+                    value={delaiSaisi.texte}
+                    onChange={(e) => poserDelai({ texte: e.target.value, unite: delaiSaisi.unite })}
                     className="w-24 rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   />
                   <select
                     aria-label={fr ? 'Unité de temps' : 'Time unit'}
-                    value={delai.unite}
-                    onChange={(e) => {
-                      const u = UNITES.find((x) => x.cle === e.target.value) ?? UNITES[0];
-                      setBrouillon({ ...(brouillon as EtapeAttendre), [champDelai]: delai.valeur * u.secondes });
-                    }}
+                    value={delaiSaisi.unite}
+                    onChange={(e) => poserDelai({ texte: delaiSaisi.texte, unite: e.target.value })}
                     className="flex-1 rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
                     {UNITES.map((u) => (
@@ -919,9 +948,12 @@ export default function PanneauEtape({
                       const actuelle = brouillon as EtapeAttendre;
                       // Passer à « avant la date » reprend le délai saisi comme
                       // « combien avant », et la durée propre de l'attente tombe à 0.
+                      // … le délai À L'ÉCRAN (nombre et unité saisis), pas une valeur restée dans l'étape.
+                      const u = UNITES.find((x) => x.cle === delaiSaisi.unite) ?? UNITES[0];
+                      const secondes = Math.round((nombreSaisi(delaiSaisi.texte) ?? 0) * u.secondes);
                       setBrouillon(mode === 'avant_date'
-                        ? { ...actuelle, mode, secondes_avant: actuelle.secondes_avant ?? actuelle.delai_secondes, delai_secondes: 0 }
-                        : { ...actuelle, mode, delai_secondes: actuelle.mode === 'avant_date' ? (actuelle.secondes_avant ?? 86400) : actuelle.delai_secondes });
+                        ? { ...actuelle, mode, secondes_avant: secondes, delai_secondes: 0 }
+                        : { ...actuelle, mode, delai_secondes: secondes });
                     }}
                     className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >

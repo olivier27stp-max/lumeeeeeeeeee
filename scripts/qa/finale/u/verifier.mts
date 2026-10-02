@@ -127,6 +127,29 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await page.context().close();
   },
 
+  /** Ligne 4 (actions) — « Attendre » 3 jours : effacer et taper 5 au clavier donne 5 jours. */
+  async l4() {
+    const regle = await creerRegle({ trigger_event: 'lead.created', steps: [
+      { id: 'e1', type: 'attendre', delai_secondes: 259200, suivant: 'e2' },
+      action('create_task', { title: 'Rappeler [client_name]' }, 'e2', null),
+    ] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    await carte(page, 'Attendre').click();
+    const p = panneau(page);
+    const nombre = p.getByLabel('Attendre *', { exact: true });
+    await nombre.click();
+    await nombre.press('ControlOrMeta+a');
+    await nombre.press('Backspace');
+    await page.keyboard.type('5');
+    verifier(await p.getByLabel('Unité de temps').inputValue() === 'jours', 'l’unité reste « jours »');
+    verifier(await nombre.inputValue() === '5', 'le champ affiche « 5 » (pas « 05 »)');
+    await enregistrer(page).click();
+    await pause(6000);
+    verifier((await etapes(regle.id))[0]?.delai_secondes === 5 * 86400, '5 jours sont en base');
+    await page.context().close();
+  },
+
   /** EDT-166 — « Précédent » du navigateur avec une étape incomplète : on demande avant de perdre le travail. */
   async e166() {
     const regle = await creerRegle({ steps: [action('send_sms', { body: 'Texto ALPHA' }, 'e1', 'e2'), action('create_task', { title: '' }, 'e2', null)] });
