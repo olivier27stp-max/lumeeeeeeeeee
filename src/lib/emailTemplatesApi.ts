@@ -211,9 +211,14 @@ export async function apercuCourriel(corpsHtml: string, type?: string, declenche
  * une vraie facture à un vrai client. L'adresse est TOUJOURS celle du compte
  * connecté, décidée côté serveur : cette route n'est pas un relais d'envoi.
  *
- * Rend l'adresse touchée, ou `null` en cas d'échec (le message est affiché
- * par l'appelant).
+ * Rend l'adresse touchée, ou `null` en cas d'échec sans explication (le
+ * message est affiché par l'appelant). Quand le serveur dit POURQUOI l'essai
+ * n'est pas parti (« Aucun service de courriel n'est configuré… »), lève
+ * `EssaiRefuse` avec cette raison : l'écran la montre, au lieu d'un « Envoi
+ * impossible » muet.
  */
+export class EssaiRefuse extends Error {}
+
 export async function envoyerEssaiCourriel(corpsHtml: string, objet: string, type?: string, declencheur?: string): Promise<string | null> {
   try {
     const { data } = await supabase.auth.getSession();
@@ -232,10 +237,12 @@ export async function envoyerEssaiCourriel(corpsHtml: string, objet: string, typ
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
       console.error('[emailTemplates] envoi d’essai impossible', body?.error || res.status);
+      if (typeof body?.error === 'string' && body.error.trim()) throw new EssaiRefuse(body.error.trim());
       return null;
     }
     return typeof body?.envoye === 'string' ? body.envoye : null;
   } catch (e) {
+    if (e instanceof EssaiRefuse) throw e;
     console.error('[emailTemplates] envoi d’essai impossible', e);
     return null;
   }

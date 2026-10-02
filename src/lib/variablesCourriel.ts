@@ -37,7 +37,9 @@ const COMMUNES: VariableCourriel[] = [
     cle: 'company_name',
     fr: 'Votre entreprise',
     en: 'Your company',
-    exemple: { fr: 'Coquin lavage', en: 'Coquin lavage' },
+    // Jamais le nom d'une vraie entreprise cliente : cet exemple est montré à TOUS les
+    // bureaux (aperçu d'un courriel) quand le nom du bureau courant n'est pas fourni.
+    exemple: { fr: 'Votre entreprise', en: 'Your company' },
   },
 ];
 

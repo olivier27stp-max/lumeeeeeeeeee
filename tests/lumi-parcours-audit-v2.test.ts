@@ -52,7 +52,9 @@ describe('L-1 — budget du mois atteint', () => {
   it('le dit, au lieu de « budget illisible, réessaie »', async () => {
     etat.reservation = { id: null, statut: 'capped' };
     const r = await genererParcours({ ...base, demande: 'relance mes soumissions après 3 jours' });
-    expect(r.erreur).toMatch(/budget Lumi du mois est atteint/);
+    // Les mêmes mots que le reste de Lumi (F-08) : des CRÉDITS, jamais « budget du mois ».
+    expect(r.erreur).toMatch(/crédits Lumi sont épuisés/);
+    expect(r.erreur).not.toMatch(/budget/i);
     expect(appels).toHaveLength(0);
   });
 });

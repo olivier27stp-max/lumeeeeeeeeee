@@ -622,7 +622,7 @@ const listAutomationTemplates: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_automation_templates',
-    description: 'The library of ready-made automation templates (quote follow-ups, reminders, review requests...): key, name, trigger, channels (what each one does: pass category or search). Source of template_key for create_automation_from_template. The company\'s own automations are in list_automations.',
+    description: 'Library of ready-made automation templates: key, name, trigger, channels (what each does: pass category or search). Source of template_key. A vague request like "automate my reminders" names no template: ask ONE question first (which reminders: appointments, invoices, quotes?).',
     parameters: {
       type: 'object',
       properties: {
@@ -682,7 +682,7 @@ const createAutomationFromTemplate: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'create_automation_from_template',
-    description: 'Start a new automation from a library template, as a DRAFT (paused): nothing is sent until the user enables it with toggle_automation_rule. For a custom flow described in words use create_automation_from_text.',
+    description: 'Start an automation from a library template, as a DRAFT (paused): nothing is sent until enabled with toggle_automation_rule. Only when the template does exactly what is asked; if it does more (an extra channel or step) or several could fit, use create_automation_from_text or ask.',
     parameters: {
       type: 'object',
       properties: { template_key: { type: 'string', description: 'Template key from list_automation_templates.' } },

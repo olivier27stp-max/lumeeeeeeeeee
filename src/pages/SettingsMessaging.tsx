@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   MessageSquare,
   Loader2,
@@ -32,11 +33,18 @@ import { getCurrentOrgId } from '../lib/orgApi';
 import {
   getAutomationRules,
   toggleAutomationRule,
-  updateRuleSmsBody,
+  ecrireMessageDeRegle,
+  getAutomationLanguage,
   texteDuMessage,
-  avecTexteDuMessage,
+  messagesDeRegle,
+  versionPrincipale,
+  aAutreVersion,
   type AutomationRule,
+  type EcritureMessage,
 } from '../lib/automationRulesApi';
+import AutreVersionMessage, { nomAutreVersion, phraseLangueDesMessages, type ChoixAutreVersion } from '../components/automations/AutreVersionMessage';
+import { localizeAutomationName } from '../lib/automationNames';
+import { libelleSegments } from '../lib/smsSegments';
 import { ChevronDown, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { captureClientException } from '../lib/sentry';
@@ -425,7 +433,8 @@ const RULE_LABELS_FR: Record<string, string> = {
 const TRIGGER_GROUPS: Array<{ label: { fr: string; en: string }; triggers: string[] }> = [
   { label: { fr: 'Rendez-vous', en: 'Appointments' }, triggers: ['appointment.created', 'appointment.cancelled'] },
   { label: { fr: 'Devis & dépôts', en: 'Quotes & deposits' }, triggers: ['quote.sent', 'quote.approved', 'estimate.sent'] },
-  { label: { fr: 'Factures & paiements', en: 'Invoices & payments' }, triggers: ['invoice.sent', 'invoice.paid'] },
+  // « Facture en retard » manquait : ses relances n'apparaissaient nulle part ici (constat A-19).
+  { label: { fr: 'Factures & paiements', en: 'Invoices & payments' }, triggers: ['invoice.sent', 'invoice.overdue', 'invoice.paid'] },
   { label: { fr: 'Leads', en: 'Leads' }, triggers: ['lead.created', 'lead.status_changed'] },
   { label: { fr: 'Après la job', en: 'After the job' }, triggers: ['job.completed'] },
 ];
@@ -462,22 +471,69 @@ function humanDelay(seconds: number, isFr: boolean): string {
   return isFr ? `${label} après` : `${label} after`;
 }
 
-function AutomationSmsSection({ isFr }: { isFr: boolean }) {
+/**
+ * « Textos automatiques » : ce que Lume texte aux clients, quand, et avec
+ * quels mots — pour TOUTE automatisation du bureau qui envoie un texto.
+ *
+ * La liste se fondait sur `actions` et sur une table de déclencheurs connus :
+ * une automatisation à parcours (celles que Lumi crée) ou une relance de
+ * « Facture en retard » n'y figurait jamais (constat A-19). Elle lit
+ * maintenant les messages par la fonction unique `messagesDeRegle` (le
+ * parcours quand il y en a un), écarte la corbeille, et range ce qu'aucun
+ * groupe ne connaît sous « Autres automatisations ».
+ */
+export function AutomationSmsSection({ isFr }: { isFr: boolean }) {
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [draftBody, setDraftBody] = useState('');
   const [savingBody, setSavingBody] = useState(false);
+  /**
+   * La langue dans laquelle le bureau écrit à ses clients. Un texto peut porter
+   * une version anglaise (`body_en`), qui part À LA PLACE du français quand
+   * cette langue est l'anglais : l'écran montrait et modifiait le français, que
+   * les clients d'un bureau anglophone ne reçoivent pas (même racine que
+   * 03-texto:345). `null` = pas lue : on montre le texte de base, et on le dit.
+   *
+   * LES DEUX LANGUES (règle du 2026-10-01, voir `AutreVersionMessage`) : le
+   * champ principal porte le texte qui PART ; l'autre langue, quand le texto en
+   * a une, est dans un bloc replié juste en dessous. Corriger le texte
+   * principal sans l'autre ne bloque rien : le bloc se déplie et offre de la
+   * retirer (coché d'office) ou de la garder.
+   */
+  const [langueBureau, setLangueBureau] = useState<'fr' | 'en' | null>(null);
+  /** L'autre langue du texto ouvert : son texte, ce qu'on en fait s'il est périmé, et le pli du bloc. */
+  const [draftAutre, setDraftAutre] = useState('');
+  const [choixAutre, setChoixAutre] = useState<ChoixAutreVersion>('retirer');
+  const [autreDeplie, setAutreDeplie] = useState(false);
 
   useEffect(() => {
     getAutomationRules()
-      .then((all) => setRules(all.filter((r) => (r.actions || []).some((a) => a.type === 'send_sms'))))
+      .then((all) => setRules(all.filter((r) => !r.deleted_at && messagesDeRegle(r, 'send_sms').length > 0)))
       .catch(() => setRules([]))
       .finally(() => setRulesLoading(false));
+    getAutomationLanguage()
+      .then(setLangueBureau)
+      .catch((e: unknown) => { console.error('[SettingsMessaging] langue des messages illisible', e); });
   }, []);
 
-  // Le texte qui PART : celui des étapes quand la règle en a (le moteur ne lit alors plus `actions`).
-  const smsBody = (r: AutomationRule) => texteDuMessage(r, 'send_sms');
+  /** Les textos de la règle, dans l'ordre : ceux du parcours quand elle en a un (le moteur ne lit alors plus `actions`). */
+  const textos = (r: AutomationRule) => messagesDeRegle(r, 'send_sms');
+  /** La langue du champ principal : celle qui PART. */
+  const versionQuiPart = (r: AutomationRule): 'fr' | 'en' => versionPrincipale(textos(r)[0]?.config, langueBureau);
+  // Le texte qui PART : le premier texto de la règle, dans la langue du bureau.
+  const smsBody = (r: AutomationRule) => texteDuMessage(r, 'send_sms', versionQuiPart(r));
+  /** L'autre langue du texto, s'il en porte une : laquelle, et son texte. */
+  const autreVersion = (r: AutomationRule): 'fr' | 'en' => (versionQuiPart(r) === 'fr' ? 'en' : 'fr');
+  const porteAutreVersion = (r: AutomationRule) => aAutreVersion(textos(r)[0]?.config, versionQuiPart(r));
+  const texteAutre = (r: AutomationRule) => {
+    if (!porteAutreVersion(r)) return '';
+    const valeur = textos(r)[0]?.config[autreVersion(r) === 'en' ? 'body_en' : 'body'];
+    return typeof valeur === 'string' ? valeur : '';
+  };
+  /** Le texte principal a changé, pas l'autre langue : elle n'est plus à jour. */
+  const autrePerimee = (r: AutomationRule) => porteAutreVersion(r)
+    && draftBody.trim() !== smsBody(r).trim() && draftAutre === texteAutre(r);
 
   async function handleToggle(rule: AutomationRule) {
     const next = !rule.is_active;
@@ -492,8 +548,19 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
   async function handleSaveBody(rule: AutomationRule) {
     setSavingBody(true);
     try {
-      await updateRuleSmsBody(rule.id, draftBody.trim());
-      setRules((prev) => prev.map((r) => (r.id === rule.id ? avecTexteDuMessage(r, 'send_sms', draftBody.trim()) : r)));
+      const champ = (langue: 'fr' | 'en', texte: string): EcritureMessage => (langue === 'en' ? { body_en: texte } : { body: texte });
+      const autre = autreVersion(rule);
+      const autreModifiee = porteAutreVersion(rule) && draftAutre !== texteAutre(rule);
+      // L'autre langue s'en va si on l'a vidée, ou si elle est périmée et qu'on a laissé « La retirer ».
+      const retirer = (autreModifiee && !draftAutre.trim()) || (autrePerimee(rule) && choixAutre === 'retirer');
+      const ecriture: EcritureMessage = {
+        ...champ(versionQuiPart(rule), draftBody.trim()),
+        ...(autreModifiee && !retirer ? champ(autre, draftAutre.trim()) : {}),
+        ...(retirer ? { retirer: autre } : {}),
+      };
+      const { regle } = await ecrireMessageDeRegle(rule.id, 'send_sms', ecriture);
+      // L'état ENREGISTRÉ, relu par le serveur — pas ce que l'écran a envoyé.
+      if (regle) setRules((prev) => prev.map((r) => (r.id === rule.id ? regle : r)));
       setOpenId(null);
     } catch (e: unknown) {
       // L'échec était muet (aucun catch) : le texte semblait enregistré.
@@ -506,6 +573,12 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
   }
 
   const activeCount = rules.filter((r) => r.is_active).length;
+  /** Les groupes connus, puis tout ce qu'aucun ne range (un déclencheur ajouté depuis, une automatisation de Lumi). */
+  const declencheursConnus = new Set(TRIGGER_GROUPS.flatMap((g) => g.triggers));
+  const groupes = [
+    ...TRIGGER_GROUPS.map((g) => ({ label: g.label, regles: rules.filter((r) => g.triggers.includes(r.trigger_event)) })),
+    { label: { fr: 'Autres automatisations', en: 'Other automations' }, regles: rules.filter((r) => !declencheursConnus.has(r.trigger_event)) },
+  ];
 
   return (
     <div className="glass-card rounded-2xl p-6 space-y-4">
@@ -532,8 +605,8 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
         </p>
       )}
 
-      {!rulesLoading && TRIGGER_GROUPS.map((group) => {
-        const groupRules = rules.filter((r) => group.triggers.includes(r.trigger_event));
+      {!rulesLoading && groupes.map((group) => {
+        const groupRules = group.regles;
         if (groupRules.length === 0) return null;
         return (
           <div key={group.label.fr}>
@@ -543,7 +616,12 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
             <div className="divide-y divide-outline/30 rounded-xl border border-outline/50 overflow-hidden">
               {groupRules.map((rule) => {
                 const isOpen = openId === rule.id;
-                const label = (isFr && rule.preset_key && RULE_LABELS_FR[rule.preset_key]) || rule.name;
+                const label = (isFr && rule.preset_key && RULE_LABELS_FR[rule.preset_key]) || localizeAutomationName(rule.name, isFr ? 'fr' : 'en');
+                const nbTextos = textos(rule).length;
+                /** Un parcours a ses propres attentes : le délai de la règle ne dit plus quand le texto part. */
+                const quand = Array.isArray(rule.steps)
+                  ? (isFr ? 'parcours à étapes' : 'step-by-step journey')
+                  : humanDelay(rule.delay_seconds, isFr);
                 return (
                   <div key={rule.id} className="bg-surface-card">
                     <div className="flex items-center gap-3 px-4 py-3">
@@ -551,6 +629,7 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
                         type="button"
                         role="switch"
                         aria-checked={rule.is_active}
+                        aria-label={isFr ? `Activer ${label}` : `Turn on ${label}`}
                         onClick={() => handleToggle(rule)}
                         className={`relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full transition-colors ${rule.is_active ? 'bg-[#1F5F4F]' : 'bg-surface-tertiary'}`}
                       >
@@ -562,13 +641,17 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
                           if (isOpen) { setOpenId(null); return; }
                           setOpenId(rule.id);
                           setDraftBody(smsBody(rule));
+                          setDraftAutre(texteAutre(rule));
+                          setChoixAutre('retirer');
+                          setAutreDeplie(false);
                         }}
                         className="flex flex-1 items-center justify-between gap-2 text-left min-w-0"
                       >
                         <div className="min-w-0">
                           <p className={`text-[13px] font-medium truncate ${rule.is_active ? 'text-text-primary' : 'text-text-tertiary'}`}>{label}</p>
                           <p className="text-[11px] text-text-tertiary truncate">
-                            {humanDelay(rule.delay_seconds, isFr)} · {smsBody(rule) || (isFr ? '(aucun texte)' : '(no text)')}
+                            {quand} · {smsBody(rule) || (isFr ? '(aucun texte)' : '(no text)')}
+                            {nbTextos > 1 && (isFr ? ` · et ${nbTextos - 1} autre${nbTextos > 2 ? 's' : ''} texto${nbTextos > 2 ? 's' : ''}` : ` · and ${nbTextos - 1} more text${nbTextos > 2 ? 's' : ''}`)}
                           </p>
                         </div>
                         <span className="flex items-center gap-1 text-text-tertiary shrink-0">
@@ -577,7 +660,23 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
                         </span>
                       </button>
                     </div>
-                    {isOpen && (
+                    {isOpen && nbTextos > 1 && (
+                      /* Plusieurs textos : ici on ne saurait pas lequel modifier — l'éditeur les distingue. */
+                      <div className="px-4 pb-4 space-y-2">
+                        <p className="text-[12px] text-text-secondary">
+                          {isFr
+                            ? `Cette automatisation envoie ${nbTextos} textos. Chacun se modifie dans son éditeur, étape par étape.`
+                            : `This automation sends ${nbTextos} texts. Each one is edited in its editor, step by step.`}
+                        </p>
+                        <Link
+                          to={`/automations/${rule.id}`}
+                          className="inline-flex text-[12px] font-medium text-[#1F5F4F] underline underline-offset-2 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1F5F4F]"
+                        >
+                          {isFr ? 'Ouvrir dans Automatisations' : 'Open in Automations'}
+                        </Link>
+                      </div>
+                    )}
+                    {isOpen && nbTextos <= 1 && (
                       <div className="px-4 pb-4 space-y-2">
                         <textarea
                           aria-label={isFr ? `Texte du SMS — ${label}` : `SMS text — ${label}`}
@@ -587,12 +686,44 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
                           maxLength={320}
                           className="glass-input w-full resize-none text-[13px]"
                         />
+                        {/* Dans quelle langue les messages partent — donc quel texte est au-dessus. */}
+                        <p className="text-[11px] text-text-secondary leading-relaxed">
+                          {phraseLangueDesMessages(isFr, langueBureau, versionQuiPart(rule), 'texto')}
+                        </p>
+                        {/* L'autre langue : repliée, modifiable ; périmée, elle se déplie et offre le choix. */}
+                        {porteAutreVersion(rule) && (
+                          <AutreVersionMessage
+                            fr={isFr}
+                            langue={autreVersion(rule)}
+                            perimee={autrePerimee(rule)}
+                            choix={choixAutre}
+                            onChoix={setChoixAutre}
+                            deplie={autreDeplie}
+                            onDeplie={setAutreDeplie}
+                          >
+                            <textarea
+                              aria-label={`${isFr ? 'Texte du SMS' : 'SMS text'} — ${label} — ${nomAutreVersion(isFr, autreVersion(rule))}`}
+                              value={draftAutre}
+                              onChange={(e) => setDraftAutre(e.target.value)}
+                              rows={3}
+                              className="glass-input w-full resize-none text-[13px]"
+                            />
+                          </AutreVersionMessage>
+                        )}
                         <p className="text-[10.5px] text-text-tertiary leading-relaxed">
                           {isFr ? 'Variables disponibles : ' : 'Available variables: '}
                           <span className="font-mono">{SMS_VARIABLES}</span>
                         </p>
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-text-tertiary">{draftBody.length} / 320</span>
+                          {/* Le nombre de SMS FACTURÉS, comme dans la liste des
+                              automatisations : « 22 / 320 » ne disait pas qu'un
+                              texte rallongé coûte deux SMS (constat E-64). */}
+                          <span className="text-[11px] text-text-tertiary">
+                            {draftBody.length} / 320
+                            {libelleSegments(draftBody, isFr) && (
+                              <span className="text-amber-600 dark:text-amber-400"> · {libelleSegments(draftBody, isFr)}</span>
+                            )}
+                          </span>
                           <div className="flex gap-2">
                             <button
                               type="button"

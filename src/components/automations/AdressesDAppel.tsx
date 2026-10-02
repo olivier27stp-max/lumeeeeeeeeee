@@ -23,7 +23,7 @@
    régénère (l'ancienne adresse cesse de fonctionner).
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Copy, Check, Eye, EyeOff, Plus, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
@@ -40,36 +40,47 @@ function urlComplete(cle: string): string {
 export default function AdressesDAppel({ fr }: { fr: boolean }) {
   const [adresses, setAdresses] = useState<AdresseDAppel[]>([]);
   const [chargement, setChargement] = useState(true);
+  /** La lecture a échoué : on ne sait PAS s'il y a des adresses — on ne dit donc pas « aucune ». */
+  const [lectureRatee, setLectureRatee] = useState(false);
+  const [essaiLecture, setEssaiLecture] = useState(0);
   const [creation, setCreation] = useState(false);
   const [devoilees, setDevoilees] = useState<Set<string>>(new Set());
   const [copiee, setCopiee] = useState<string | null>(null);
 
   useEffect(() => {
     let vivant = true;
+    setChargement(true);
     listerAdressesDAppel()
-      .then((l) => { if (vivant) setAdresses(l); })
+      .then((l) => { if (vivant) { setAdresses(l); setLectureRatee(false); } })
       .catch(() => {
         if (vivant) {
-          toast.error(fr ? 'Impossible de lire vos adresses d’appel.' : 'Could not load your endpoints.');
+          setLectureRatee(true);
+          toast.error(fr ? 'Impossible de lire vos adresses d’appel.' : 'Could not load your addresses.');
         }
       })
       .finally(() => { if (vivant) setChargement(false); });
     return () => { vivant = false; };
-  }, [fr]);
+  }, [fr, essaiLecture]);
 
   async function creer() {
     setCreation(true);
     try {
-      const nouvelle = await creerAdresseDAppel(
-        fr ? 'Formulaire de mon site' : 'My website form',
-      );
+      /* Trois adresses créées s'appelaient toutes « Formulaire de mon site » :
+         impossible de savoir laquelle est collée chez Zapier
+         (06-reglages-globaux:198). La suivante porte un numéro. */
+      const base = fr ? 'Formulaire de mon site' : 'My website form';
+      const pris = new Set(adresses.map((a) => a.name.trim().toLowerCase()));
+      let nom = base;
+      for (let n = 2; pris.has(nom.toLowerCase()); n += 1) nom = `${base} (${n})`;
+      const nouvelle = await creerAdresseDAppel(nom);
       setAdresses((a) => [...a, nouvelle]);
       // On la dévoile tout de suite : elle vient d'être créée pour être
       // copiée, la masquer obligerait à un clic de plus sans rien protéger.
       setDevoilees((d) => new Set(d).add(nouvelle.id));
-      toast.success(fr ? 'Adresse créée.' : 'Endpoint created.');
-    } catch {
-      toast.error(fr ? 'Impossible de créer l’adresse.' : 'Could not create the endpoint.');
+      toast.success(fr ? 'Adresse créée.' : 'Address created.');
+    } catch (e: unknown) {
+      // La raison du serveur (« Votre rôle ne permet pas… ») : le `catch` la jetait (06-reglages-globaux:183).
+      toast.error(e instanceof Error && e.message ? e.message : (fr ? 'Impossible de créer l’adresse.' : 'Could not create the address.'));
     } finally {
       setCreation(false);
     }
@@ -113,20 +124,67 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
     }
   }
 
+  /*
+   * DEUX CLICS RAPPROCHÉS (triage « modèles », 06-reglages-globaux:299).
+   *
+   * Pause puis reprise, coup sur coup : si le premier appel traîne, le second
+   * passe devant lui, puis le premier arrive et l'écrase. L'écran finissait sur
+   * « Active » pendant que la base contenait `enabled = false` — une adresse en
+   * pause sans que personne le voie, donc un formulaire de site qui ne déclenche
+   * plus rien.
+   *
+   * Tant que des bascules sont en route, l'écran montre le dernier clic. Quand
+   * la dernière est revenue ET que des appels se sont chevauchés, on RELIT la
+   * base : l'écran affiche ce qu'elle contient, et le dit si ce n'est pas ce
+   * qu'on venait de demander.
+   */
+  const bascules = useRef(new Map<string, { enRoute: number; croisees: boolean; voulu: boolean }>());
+
   async function basculer(a: AdresseDAppel) {
     const vise = !a.enabled;
+    const suivi = bascules.current.get(a.id) ?? { enRoute: 0, croisees: false, voulu: vise };
+    if (suivi.enRoute > 0) suivi.croisees = true;
+    suivi.enRoute += 1;
+    suivi.voulu = vise; // le dernier clic : ce que la personne veut
+    bascules.current.set(a.id, suivi);
+
     setAdresses((l) => l.map((x) => (x.id === a.id ? { ...x, enabled: vise } : x)));
+    let echec = false;
     try {
       await basculerAdresseDAppel(a.id, vise);
     } catch {
-      setAdresses((l) => l.map((x) => (x.id === a.id ? { ...x, enabled: a.enabled } : x)));
+      echec = true;
       toast.error(fr ? 'Changement non enregistré.' : 'Change not saved.');
+    }
+
+    suivi.enRoute -= 1;
+    if (suivi.enRoute > 0) return; // un clic plus récent est encore en route : c'est lui qui conclura
+    bascules.current.delete(a.id);
+
+    if (!suivi.croisees) {
+      // Un seul appel : on sait ce que la base contient.
+      if (echec) setAdresses((l) => l.map((x) => (x.id === a.id ? { ...x, enabled: a.enabled } : x)));
+      return;
+    }
+    // Des appels se sont chevauchés : seul le serveur sait lequel est arrivé en dernier.
+    try {
+      const enBase = (await listerAdressesDAppel()).find((x) => x.id === a.id);
+      if (!enBase) return;
+      setAdresses((l) => l.map((x) => (x.id === a.id ? { ...x, enabled: enBase.enabled } : x)));
+      if (enBase.enabled !== suivi.voulu) {
+        toast.error(enBase.enabled
+          ? (fr ? 'Vos clics se sont croisés : l’adresse est restée active. Cliquez de nouveau pour la mettre en pause.' : 'Your clicks crossed: the address is still active. Click again to pause it.')
+          : (fr ? 'Vos clics se sont croisés : l’adresse est en pause. Cliquez de nouveau pour la remettre en service.' : 'Your clicks crossed: the address is paused. Click again to turn it back on.'));
+      }
+    } catch (e: unknown) {
+      console.error('[AdressesDAppel] relecture après bascule', e);
+      toast.error(fr ? 'Impossible de relire l’état de l’adresse : rechargez la page.' : 'Could not re-read the address state: reload the page.');
     }
   }
 
   async function supprimer(a: AdresseDAppel) {
     const ok = await confirmer({
-      title: fr ? 'Supprimer cette adresse ?' : 'Delete this endpoint?',
+      title: fr ? 'Supprimer cette adresse ?' : 'Delete this address?',
       // On dit la CONSÉQUENCE, pas l'action : ce qui compte, c'est que le
       // service branché dessus cessera de fonctionner.
       message: fr
@@ -157,7 +215,27 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
 
   return (
     <div className="space-y-3">
-      {adresses.length === 0 && (
+      {/* Lecture en panne : la carte disait « Aucune adresse pour l'instant »
+          alors qu'il en existait une — on aurait cru devoir en recréer
+          (06-reglages-globaux:467). */}
+      {lectureRatee && (
+        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[12px] text-text-secondary">
+          <span>
+            {fr
+              ? 'Vos adresses d’appel n’ont pas pu être lues pour le moment : celles qui existent fonctionnent toujours.'
+              : 'Your addresses could not be read right now: the existing ones still work.'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setEssaiLecture((n) => n + 1)}
+            className="font-medium text-accent underline underline-offset-2 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Réessayer' : 'Try again'}
+          </button>
+        </div>
+      )}
+
+      {!lectureRatee && adresses.length === 0 && (
         <p className="text-[12px] text-text-secondary">
           {fr
             ? 'Aucune adresse pour l’instant. Créez-en une, puis collez-la dans votre formulaire, Zapier ou Facebook Leads.'
@@ -175,10 +253,17 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
             <div className="flex items-center justify-between gap-3">
               <span className="truncate text-[13px] font-medium text-text-primary">{a.name}</span>
               <div className="flex shrink-0 items-center gap-1">
+                {/* « Active » sur fond vert ressemblait à une étiquette : rien ne
+                    disait qu'un clic met l'adresse en pause. `aria-pressed` dit
+                    l'état, l'info-bulle ce que le clic fera (06-reglages-globaux:329). */}
                 <button
                   type="button"
                   onClick={() => basculer(a)}
-                  className={`rounded px-2 py-1 text-[11px] font-medium transition-colors ${
+                  aria-pressed={a.enabled}
+                  title={a.enabled
+                    ? (fr ? 'Cliquer pour mettre en pause' : 'Click to pause')
+                    : (fr ? 'Cliquer pour remettre en service' : 'Click to turn back on')}
+                  className={`rounded px-2 py-1 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                     a.enabled
                       ? 'bg-success-light text-success'
                       : 'bg-surface-tertiary text-text-tertiary'

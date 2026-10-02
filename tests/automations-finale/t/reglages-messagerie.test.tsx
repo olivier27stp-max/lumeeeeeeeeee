@@ -1,0 +1,309 @@
+// @vitest-environment jsdom
+/**
+ * RÉGLAGES › MESSAGERIE › « Textos automatiques » — constats A-19 et E-64, et
+ * la même racine que 03-texto:345 (bureau dont les messages partent en anglais).
+ *
+ * La VRAIE section `AutomationSmsSection` (src/pages/SettingsMessaging.tsx), la
+ * VRAIE API des messages et la VRAIE route d'écriture, sur une fausse base.
+ */
+import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
+
+const toasts = vi.hoisted(() => ({ succes: [] as string[], erreurs: [] as string[] }));
+vi.mock('../../../src/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabase());
+vi.mock('../../../src/lib/orgApi', () => ({ getCurrentOrgId: async () => 'org-1', getCurrentOrgIdOrThrow: async () => 'org-1' }));
+vi.mock('../../../server/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabaseServeur());
+vi.mock('../../../server/lib/automatisations-bureaux', () => ({ bureauxCibles: async () => [], copierVersBureaux: async () => [], propagerAuxCopies: async () => [] }));
+vi.mock('../../../src/lib/sentry', () => ({ captureClientException: () => {} }));
+vi.mock('../../../src/i18n', () => ({ useTranslation: () => ({ language: 'fr', t: {} }) }));
+vi.mock('sonner', () => ({
+  toast: Object.assign(() => {}, {
+    success: (m: string) => { toasts.succes.push(m); },
+    error: (m: string) => { toasts.erreurs.push(m); },
+  }),
+}));
+
+import { base, remettre, ligne } from './faux-supabase';
+import { brancherServeur, arreterServeur } from './serveur-messages';
+import { monter, demonter, bouton, boutons, champ, champs, choix, cliquer, saisir, jusqua, texteEcran } from './banc-composants';
+import { AutomationSmsSection } from '../../../src/pages/SettingsMessaging';
+
+type Action = { type: string; config: Record<string, unknown> };
+type Regle = { id: string; actions: Action[]; steps: unknown[] | null };
+
+const sms = (body: string, plus: Record<string, unknown> = {}): Action => ({ type: 'send_sms', config: { body, ...plus } });
+let n = 0;
+function regle(sup: Record<string, unknown>): Record<string, unknown> {
+  n += 1;
+  return {
+    id: `r${n}`, org_id: 'org-1', name: `Règle ${n}`, description: '', trigger_event: 'appointment.created', conditions: {},
+    delay_seconds: 0, actions: [], steps: null, is_active: true, is_preset: false, preset_key: null,
+    deleted_at: null, purged_at: null, ...sup,
+  };
+}
+function poser(regles: Array<Record<string, unknown>>, langue: 'fr' | 'en' = 'fr'): void {
+  remettre({
+    automation_rules: regles,
+    company_settings: [{ id: 'cs1', org_id: 'org-1', company_name: 'Nettoyage Test A', default_language: langue }],
+  });
+}
+async function ouvrir(isFr = true) {
+  await monter(<MemoryRouter><AutomationSmsSection isFr={isFr} /></MemoryRouter>);
+  await jusqua(() => !texteEcran().includes('Chargement…'));
+}
+/** Les noms des automatisations listées, dans l'ordre de l'écran. */
+const lignes = () => Array.from(document.body.querySelectorAll('p.truncate.font-medium')).map((p) => p.textContent);
+const enBase = (id: string) => ligne<Regle>('automation_rules', id);
+
+beforeEach(async () => { n = 0; localStorage.setItem('lume-language', 'fr'); toasts.succes.length = 0; toasts.erreurs.length = 0; await brancherServeur(); });
+afterEach(async () => { await demonter(); });
+afterAll(async () => { await arreterServeur(); });
+
+describe('A-19 — « Textos automatiques » liste TOUTES les automatisations qui envoient un texto', () => {
+  it('« Facture en retard » y est, dans « Factures & paiements »', async () => {
+    poser([regle({ name: 'Relance de facture en retard', trigger_event: 'invoice.overdue', actions: [sms('Votre facture est en retard.')] })]);
+    await ouvrir();
+    expect(lignes()).toEqual(['Relance de facture en retard']);
+    expect(texteEcran()).toContain('Factures & paiements');
+  });
+
+  it('une automatisation créée par Lumi (un PARCOURS : `actions` ne porte pas le texto) y est, avec le texte de son étape', async () => {
+    poser([regle({
+      name: 'Suivi après la visite',
+      trigger_event: 'job.completed',
+      actions: [],
+      steps: [{ id: 'e1', type: 'action', action: sms('Merci [client_first_name] !'), suivant: null }],
+    })]);
+    await ouvrir();
+    expect(lignes()).toEqual(['Suivi après la visite']);
+    expect(texteEcran()).toContain('Merci [client_first_name] !');
+    expect(texteEcran()).toContain('parcours à étapes');
+  });
+
+  it('un déclencheur qu’aucun groupe ne connaît : rangé sous « Autres automatisations », pas oublié', async () => {
+    poser([regle({ name: 'Étiquette posée', trigger_event: 'client.tagged', actions: [sms('Bonjour')] })]);
+    await ouvrir();
+    expect(lignes()).toEqual(['Étiquette posée']);
+    expect(texteEcran()).toContain('Autres automatisations');
+  });
+
+  it('ni la corbeille, ni un parcours qui n’envoie plus de texto (le texto resté dans `actions` ne compte pas)', async () => {
+    poser([
+      regle({ name: 'À la corbeille', actions: [sms('Bonjour')], deleted_at: '2026-10-01T12:00:00Z' }),
+      regle({ name: 'Parcours sans texto', steps: [{ id: 'e1', type: 'action', action: { type: 'create_task', config: { title: 'Appeler' } }, suivant: null }], actions: [sms('Vieux texto')] }),
+      regle({ name: 'Vivante', actions: [sms('Bonjour')] }),
+    ]);
+    await ouvrir();
+    expect(lignes()).toEqual(['Vivante']);
+  });
+
+  it('un parcours à DEUX textos : la ligne le dit et renvoie à l’éditeur, au lieu d’offrir un champ qui ne saurait pas lequel écrire', async () => {
+    poser([regle({
+      name: 'Relance en deux temps',
+      trigger_event: 'quote.sent',
+      steps: [
+        { id: 'e1', type: 'action', action: sms('Premier texto.'), suivant: 'e2' },
+        { id: 'e2', type: 'action', action: sms('Second texto.'), suivant: null },
+      ],
+    })]);
+    await ouvrir();
+    expect(texteEcran()).toContain('et 1 autre texto');
+    await cliquer(boutons().find((b) => (b.textContent ?? '').includes('Relance en deux temps')));
+    expect(texteEcran()).toContain('Cette automatisation envoie 2 textos.');
+    expect(document.body.querySelector('a[href="/automations/r1"]')?.textContent).toBe('Ouvrir dans Automatisations');
+    expect(document.body.querySelector('textarea')).toBeNull();
+  });
+
+  it('modifier le texto d’un parcours à un seul texto écrit l’ÉTAPE, et le reflet `actions`', async () => {
+    poser([regle({
+      name: 'Merci après la visite',
+      trigger_event: 'job.completed',
+      actions: [sms('périmé')],
+      steps: [{ id: 'e1', type: 'action', action: sms('Merci !'), suivant: null }],
+    })]);
+    await ouvrir();
+    await cliquer(boutons().find((b) => (b.textContent ?? '').includes('Merci après la visite')));
+    await saisir(champ('Texte du SMS — Merci après la visite'), 'Merci beaucoup !');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => base.ecritures.length === 1);
+    expect((enBase('r1').steps as Array<{ action: Action }>)[0].action).toEqual(sms('Merci beaucoup !'));
+    expect(enBase('r1').actions).toEqual([sms('Merci beaucoup !')]);
+    expect(toasts.erreurs).toEqual([]);
+    expect(champs('Texte du SMS — Merci après la visite')).toHaveLength(0);
+    expect(texteEcran()).toContain('Merci beaucoup !');
+  });
+});
+
+describe('E-64 — le texto qu’on écrit dans les Réglages annonce son nombre de SMS, comme la liste des automatisations', () => {
+  const compteur = () => Array.from(document.body.querySelectorAll('span')).find((s) => /^\d+ \/ 320/.test(s.textContent ?? ''))?.textContent ?? '';
+
+  it('Réglages › Messagerie : rien tant qu’un seul SMS part ; « 2 SMS » dès le deuxième ; la raison quand un accent fait grimper le compte', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms('Bonjour')] })]);
+    await ouvrir();
+    await cliquer(boutons().find((b) => (b.textContent ?? '').includes('Confirmation')));
+    const zone = champ('Texte du SMS — Confirmation');
+    expect(compteur()).toBe('7 / 320');
+    await saisir(zone, 'a'.repeat(161));
+    expect(compteur()).toBe('161 / 320 · 2 SMS');
+    await saisir(zone, `Prêt ${'a'.repeat(66)}`);
+    expect(compteur()).toBe('71 / 320 · 2 SMS (accent spécial ou émoji : 67 caractères par SMS)');
+    await saisir(zone, 'a'.repeat(160));
+    expect(compteur()).toBe('160 / 320');
+  });
+
+  it('Réglages › Avis clients : le texto d’avis ET le texto de rappel portent le même compteur (lecture du code de la page)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const page = readFileSync('src/pages/SettingsReviews.tsx', 'utf8');
+    expect(page).toContain("import { libelleSegments } from '../lib/smsSegments';");
+    expect(page).toContain('libelleSegments(form.review_sms_body, isFr)');
+    expect(page).toContain('libelleSegments(ruleDraft, isFr)');
+    // Le texto de rappel n'avait aucun compteur du tout : il a maintenant sa longueur.
+    expect(page).toContain('{ruleDraft.length}/320');
+  });
+});
+
+describe('03-texto:345 (même racine) et la règle des deux langues — Réglages › Messagerie montre et modifie le texte qui PART ; l’autre langue est dans un bloc replié', () => {
+  const FR = 'Bonjour, votre rendez-vous est confirmé.';
+  const EN = 'Hi, your appointment is confirmed.';
+  const deplier = () => cliquer(boutons().find((b) => (b.textContent ?? '').includes('Confirmation')));
+  const principal = () => champ('Texte du SMS — Confirmation');
+  const TITRE_EN = 'Version anglaise — utilisée seulement si vos messages partent en anglais';
+  const TITRE_FR = 'Version française — utilisée seulement si vos messages partent en français';
+  const RETIRER = 'La retirer (vos clients recevront le texte ci-dessus)';
+  const GARDER = 'La garder telle quelle';
+  const PERIMEE = 'Cette version n’est plus à jour.';
+  const enregistrer = async () => {
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => base.ecritures.length === 1);
+  };
+
+  it('bureau en anglais : la ligne et le champ montrent l’anglais, et l’écran dit dans quelle langue les messages partent ; le français est dans un bloc REPLIÉ', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'en');
+    await ouvrir();
+    await jusqua(() => texteEcran().includes(EN));
+    expect(texteEcran()).not.toContain(FR);
+    await deplier();
+    expect(principal().value).toBe(EN);
+    expect(texteEcran()).toContain('Vos messages partent en anglais : c’est ce texte que vos clients reçoivent.');
+    expect(bouton(TITRE_FR).getAttribute('aria-expanded')).toBe('false');
+    // Replié : le texte français n'est pas à l'écran.
+    expect(texteEcran()).not.toContain(FR);
+    expect(texteEcran()).not.toContain(PERIMEE);
+  });
+
+  it('bureau en anglais : corriger l’anglais sans le français ne bloque pas — le bloc se déplie, « La retirer » est coché d’office, et l’anglais devient le seul texte', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'en');
+    await ouvrir();
+    await deplier();
+    await saisir(principal(), 'Hi, see you tomorrow.');
+    expect(bouton(TITRE_FR).getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain(PERIMEE);
+    expect(champ('Texte du SMS — Confirmation — Version française').value).toBe(FR);
+    expect(choix(RETIRER).checked).toBe(true);
+    expect(choix(GARDER).checked).toBe(false);
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    await enregistrer();
+    // Le message n'a plus qu'un texte — celui que l'écran montrait ; pas de `body_en: ""`.
+    expect(enBase('r1').actions).toEqual([sms('Hi, see you tomorrow.')]);
+    await jusqua(() => texteEcran().includes('Hi, see you tomorrow.'));
+  });
+
+  it('bureau en anglais : « La garder telle quelle » — l’anglais est écrit, le français ne bouge pas', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'en');
+    await ouvrir();
+    await deplier();
+    await saisir(principal(), 'Hi, see you tomorrow.');
+    await cliquer(choix(GARDER));
+    expect(choix(GARDER).checked).toBe(true);
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms(FR, { body_en: 'Hi, see you tomorrow.' })]);
+  });
+
+  it('bureau en français, texto qui porte une version anglaise : le champ porte le français ; corrigé seul, la version anglaise est RETIRÉE (choix d’office)', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
+    await ouvrir();
+    await deplier();
+    expect(principal().value).toBe(FR);
+    expect(texteEcran()).toContain('Vos messages partent en français : c’est ce texte que vos clients reçoivent.');
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('false');
+    expect(texteEcran()).not.toContain(EN);
+    await saisir(principal(), 'Bonjour, à demain.');
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain(PERIMEE);
+    expect(choix(RETIRER).checked).toBe(true);
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms('Bonjour, à demain.')]);
+    expect('body_en' in enBase('r1').actions[0].config).toBe(false);
+  });
+
+  it('bureau en français : « La garder telle quelle » — la version anglaise reste, parce que l’utilisateur l’a choisi', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
+    await ouvrir();
+    await deplier();
+    await saisir(principal(), 'Bonjour, à demain.');
+    await cliquer(choix(GARDER));
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms('Bonjour, à demain.', { body_en: EN })]);
+  });
+
+  it('le bloc se déplie à la main et l’autre langue s’y modifie : les deux corrigées, rien n’est périmé, les deux sont écrites', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
+    await ouvrir();
+    await deplier();
+    await cliquer(bouton(TITRE_EN));
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('true');
+    const autre = () => champ('Texte du SMS — Confirmation — Version anglaise');
+    expect(autre().value).toBe(EN);
+    // L'autre langue seule : rien n'est périmé, et seul `body_en` change.
+    await saisir(autre(), 'Hi, see you tomorrow.');
+    expect(texteEcran()).not.toContain(PERIMEE);
+    await saisir(principal(), 'Bonjour, à demain.');
+    expect(texteEcran()).not.toContain(PERIMEE);
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms('Bonjour, à demain.', { body_en: 'Hi, see you tomorrow.' })]);
+  });
+
+  it('vider l’autre langue, c’est la retirer', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
+    await ouvrir();
+    await deplier();
+    await cliquer(bouton(TITRE_EN));
+    await saisir(champ('Texte du SMS — Confirmation — Version anglaise'), '');
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms(FR)]);
+  });
+
+  it('bureau en anglais, texto sans version anglaise : un seul texte, l’écran dit que c’est lui qui part, pas de bloc', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR)] })], 'en');
+    await ouvrir();
+    await deplier();
+    expect(principal().value).toBe(FR);
+    expect(texteEcran()).toContain('Vos messages partent en anglais, mais ce texto n’a qu’un texte : c’est lui que vos clients reçoivent.');
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+    await saisir(principal(), 'Hi, see you tomorrow.');
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms('Hi, see you tomorrow.')]);
+  });
+
+  it('bureau en français, texto sans version anglaise : pas de bloc', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR)] })], 'fr');
+    await ouvrir();
+    await deplier();
+    expect(texteEcran()).toContain('Vos messages partent en français');
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+    expect(texteEcran()).not.toContain('Version anglaise');
+  });
+
+  it('en interface anglaise, le bloc et ses deux choix sont en anglais', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
+    await ouvrir(false);
+    await deplier();
+    expect(texteEcran()).toContain('Your messages are sent in French: this is the text your clients receive.');
+    await saisir(champ('SMS text — Confirmation'), 'Bonjour, à demain.');
+    expect(bouton('English version — used only if your messages are sent in English').getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain('This version is no longer up to date.');
+    expect(choix('Remove it (your clients will receive the text above)').checked).toBe(true);
+    expect(choix('Keep it as is').checked).toBe(false);
+  });
+});

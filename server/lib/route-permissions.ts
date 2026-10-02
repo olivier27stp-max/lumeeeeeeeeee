@@ -147,6 +147,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/automations/rules/:id/apercu': 'automations.read',
   'POST /api/automations/rules': 'automations.update',
   'PATCH /api/automations/rules/:id': 'automations.update',
+  // Le texte d'un message (texto, courriel) : même droit que modifier la règle.
+  'PATCH /api/automations/rules/:id/messages': 'automations.update',
   'DELETE /api/automations/rules/:id': 'automations.update',
   'POST /api/automations/rules/:id/duplicate': 'automations.update',
   'GET /api/automations/templates': 'automations.read',

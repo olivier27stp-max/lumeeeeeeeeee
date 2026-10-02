@@ -1,0 +1,629 @@
+{
+ "date": "2026-10-02T00:51:26.246Z",
+ "resultats": [
+  "evals/lumi/resultats/passe-finale-eval4/lot1.json",
+  "evals/lumi/resultats/passe-finale-eval4/lot2.json",
+  "evals/lumi/resultats/passe-finale-eval4/lot3.json",
+  "evals/lumi/resultats/passe-finale-eval4/lot4.json",
+  "evals/lumi/resultats/passe-finale-eval4/technicien.json"
+ ],
+ "conditions": {
+  "etat": "concluante",
+  "modele_attendu": "claude-sonnet-5",
+  "etage_6_par_modele": {
+   "claude-sonnet-5": 196
+  },
+  "hors_palier": 0,
+  "sans_conditions": 0,
+  "phrase": "Passe concluante — tout l'étage 6 (196 demande(s)) servi par claude-sonnet-5."
+ },
+ "par_moteur": {
+  "aucun modèle (étages 0 à 4)": {
+   "cas": 20,
+   "reussis": 19,
+   "reussite_pct": 95,
+   "outil_exact_pct": 95,
+   "erreurs": 0,
+   "cout_cents": 0,
+   "cout_par_demande_cents": 0,
+   "duree_mediane_ms": 1437
+  },
+  "claude-sonnet-5": {
+   "cas": 196,
+   "reussis": 188,
+   "reussite_pct": 95.9,
+   "outil_exact_pct": 96.4,
+   "erreurs": 0,
+   "cout_cents": 306.09,
+   "cout_par_demande_cents": 1.562,
+   "duree_mediane_ms": 6875
+  },
+  "routeur seul (étage 5)": {
+   "cas": 5,
+   "reussis": 5,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 0.77,
+   "cout_par_demande_cents": 0.155,
+   "duree_mediane_ms": 2394
+  }
+ },
+ "par_etage": {
+  "étage 1": {
+   "cas": 3,
+   "reussis": 3,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 0,
+   "cout_par_demande_cents": 0,
+   "duree_mediane_ms": 1362
+  },
+  "étage 2": {
+   "cas": 17,
+   "reussis": 16,
+   "reussite_pct": 94.1,
+   "outil_exact_pct": 94.1,
+   "erreurs": 0,
+   "cout_cents": 0,
+   "cout_par_demande_cents": 0,
+   "duree_mediane_ms": 1437
+  },
+  "étage 5": {
+   "cas": 5,
+   "reussis": 5,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 0.77,
+   "cout_par_demande_cents": 0.155,
+   "duree_mediane_ms": 2394
+  },
+  "étage 6": {
+   "cas": 196,
+   "reussis": 188,
+   "reussite_pct": 95.9,
+   "outil_exact_pct": 96.4,
+   "erreurs": 0,
+   "cout_cents": 306.09,
+   "cout_par_demande_cents": 1.562,
+   "duree_mediane_ms": 6875
+  }
+ },
+ "global": {
+  "cas": 221,
+  "reussis": 212,
+  "reussite_pct": 95.9,
+  "outil_exact_pct": 96.4,
+  "erreurs": 0,
+  "cout_cents": 306.86,
+  "cout_par_demande_cents": 1.389,
+  "duree_mediane_ms": 6434
+ },
+ "par_categorie": {
+  "aide": {
+   "cas": 12,
+   "reussis": 9,
+   "reussite_pct": 75,
+   "outil_exact_pct": 83.3,
+   "erreurs": 0,
+   "cout_cents": 19.68,
+   "cout_par_demande_cents": 1.64,
+   "duree_mediane_ms": 8251
+  },
+  "automatisations": {
+   "cas": 13,
+   "reussis": 13,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 28.57,
+   "cout_par_demande_cents": 2.197,
+   "duree_mediane_ms": 6777
+  },
+  "clients": {
+   "cas": 23,
+   "reussis": 22,
+   "reussite_pct": 95.7,
+   "outil_exact_pct": 95.7,
+   "erreurs": 0,
+   "cout_cents": 27.9,
+   "cout_par_demande_cents": 1.213,
+   "duree_mediane_ms": 6077
+  },
+  "communications": {
+   "cas": 19,
+   "reussis": 19,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 26.19,
+   "cout_par_demande_cents": 1.378,
+   "duree_mediane_ms": 6668
+  },
+  "devis": {
+   "cas": 22,
+   "reussis": 20,
+   "reussite_pct": 90.9,
+   "outil_exact_pct": 90.9,
+   "erreurs": 0,
+   "cout_cents": 30.13,
+   "cout_par_demande_cents": 1.37,
+   "duree_mediane_ms": 7776
+  },
+  "equipe": {
+   "cas": 21,
+   "reussis": 21,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 29.66,
+   "cout_par_demande_cents": 1.413,
+   "duree_mediane_ms": 5535
+  },
+  "facturation": {
+   "cas": 30,
+   "reussis": 29,
+   "reussite_pct": 96.7,
+   "outil_exact_pct": 96.7,
+   "erreurs": 0,
+   "cout_cents": 36.62,
+   "cout_par_demande_cents": 1.221,
+   "duree_mediane_ms": 7466
+  },
+  "memoire": {
+   "cas": 4,
+   "reussis": 4,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 7.58,
+   "cout_par_demande_cents": 1.895,
+   "duree_mediane_ms": 6483
+  },
+  "planification": {
+   "cas": 28,
+   "reussis": 28,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 42.74,
+   "cout_par_demande_cents": 1.526,
+   "duree_mediane_ms": 7034
+  },
+  "rapports": {
+   "cas": 19,
+   "reussis": 17,
+   "reussite_pct": 89.5,
+   "outil_exact_pct": 89.5,
+   "erreurs": 0,
+   "cout_cents": 22.77,
+   "cout_par_demande_cents": 1.198,
+   "duree_mediane_ms": 7607
+  },
+  "terrain": {
+   "cas": 12,
+   "reussis": 12,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 27.08,
+   "cout_par_demande_cents": 2.257,
+   "duree_mediane_ms": 6434
+  },
+  "transverse": {
+   "cas": 18,
+   "reussis": 18,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 7.93,
+   "cout_par_demande_cents": 0.441,
+   "duree_mediane_ms": 5098
+  }
+ },
+ "par_nature": {
+  "ambigu": {
+   "cas": 12,
+   "reussis": 12,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 16.24,
+   "cout_par_demande_cents": 1.353,
+   "duree_mediane_ms": 4742
+  },
+  "extraction": {
+   "cas": 6,
+   "reussis": 6,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 2.91,
+   "cout_par_demande_cents": 0.485,
+   "duree_mediane_ms": 5437
+  },
+  "hors_sujet": {
+   "cas": 7,
+   "reussis": 7,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 2.06,
+   "cout_par_demande_cents": 0.294,
+   "duree_mediane_ms": 2643
+  },
+  "impossible": {
+   "cas": 18,
+   "reussis": 18,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 28.71,
+   "cout_par_demande_cents": 1.595,
+   "duree_mediane_ms": 6434
+  },
+  "injection": {
+   "cas": 7,
+   "reussis": 7,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 5.45,
+   "cout_par_demande_cents": 0.779,
+   "duree_mediane_ms": 5848
+  },
+  "multi": {
+   "cas": 13,
+   "reussis": 12,
+   "reussite_pct": 92.3,
+   "outil_exact_pct": 92.3,
+   "erreurs": 0,
+   "cout_cents": 27,
+   "cout_par_demande_cents": 2.077,
+   "duree_mediane_ms": 10624
+  },
+  "simple": {
+   "cas": 158,
+   "reussis": 150,
+   "reussite_pct": 94.9,
+   "outil_exact_pct": 95.6,
+   "erreurs": 0,
+   "cout_cents": 224.5,
+   "cout_par_demande_cents": 1.421,
+   "duree_mediane_ms": 6777
+  }
+ },
+ "par_registre": {
+  "anglais": {
+   "cas": 52,
+   "reussis": 50,
+   "reussite_pct": 96.2,
+   "outil_exact_pct": 98.1,
+   "erreurs": 0,
+   "cout_cents": 64.96,
+   "cout_par_demande_cents": 1.249,
+   "duree_mediane_ms": 6370
+  },
+  "neutre": {
+   "cas": 21,
+   "reussis": 21,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 28.59,
+   "cout_par_demande_cents": 1.361,
+   "duree_mediane_ms": 5203
+  },
+  "quebecois": {
+   "cas": 114,
+   "reussis": 108,
+   "reussite_pct": 94.7,
+   "outil_exact_pct": 94.7,
+   "erreurs": 0,
+   "cout_cents": 165.25,
+   "cout_par_demande_cents": 1.45,
+   "duree_mediane_ms": 6837
+  },
+  "vocal": {
+   "cas": 34,
+   "reussis": 33,
+   "reussite_pct": 97.1,
+   "outil_exact_pct": 97.1,
+   "erreurs": 0,
+   "cout_cents": 48.06,
+   "cout_par_demande_cents": 1.414,
+   "duree_mediane_ms": 6977
+  }
+ },
+ "par_compte": {
+  "proprietaire": {
+   "cas": 214,
+   "reussis": 205,
+   "reussite_pct": 95.8,
+   "outil_exact_pct": 96.3,
+   "erreurs": 0,
+   "cout_cents": 292.82,
+   "cout_par_demande_cents": 1.368,
+   "duree_mediane_ms": 6447
+  },
+  "technicien": {
+   "cas": 7,
+   "reussis": 7,
+   "reussite_pct": 100,
+   "outil_exact_pct": 100,
+   "erreurs": 0,
+   "cout_cents": 14.04,
+   "cout_par_demande_cents": 2.006,
+   "duree_mediane_ms": 5816
+  }
+ },
+ "sensibles": {
+  "cas": 78,
+  "reussis": 76,
+  "reussite_pct": 97.4,
+  "outil_exact_pct": 97.4,
+  "erreurs": 0,
+  "cout_cents": 106.3,
+  "cout_par_demande_cents": 1.363,
+  "duree_mediane_ms": 6237
+ },
+ "regressions": [
+  {
+   "id": "devis-22-attente-lesquelles",
+   "regression": "raccourci devis-attente : la liste ne nomme pas le client",
+   "reussi": true,
+   "echecs": [],
+   "outils": [
+    "list_quotes"
+   ]
+  },
+  {
+   "id": "fact-09-renvoyer-lien",
+   "regression": "resend_payment_request-devient-create_payment_request",
+   "reussi": true,
+   "echecs": [],
+   "outils": [
+    "resend_payment_request"
+   ]
+  },
+  {
+   "id": "comm-11-modele-par-defaut",
+   "regression": "set_default_email_template-lit-list_invoice_templates",
+   "reussi": true,
+   "echecs": [],
+   "outils": [
+    "set_default_email_template",
+    "list_email_templates"
+   ]
+  },
+  {
+   "id": "comm-12-modele-dupliquer",
+   "regression": "duplicate_email_template-lit-list_invoice_templates",
+   "reussi": true,
+   "echecs": [],
+   "outils": [
+    "duplicate_email_template",
+    "list_email_templates"
+   ]
+  },
+  {
+   "id": "fact-03-paye-comptant",
+   "regression": "faq-a-la-place-du-paiement",
+   "reussi": true,
+   "echecs": [],
+   "outils": [
+    "mark_invoice_paid"
+   ]
+  }
+ ],
+ "echecs": [
+  {
+   "id": "aide-01-signature",
+   "categorie": "aide",
+   "nature": "simple",
+   "q": "Dans Lume, comment je fais pour que mon client signe son contrat en ligne avant que je planifie la job ?",
+   "outil_attendu": "search_help",
+   "outils": [],
+   "echecs": [
+    "outil attendu absent : search_help (aucun outil)"
+   ],
+   "reponse": "Tu crées le job en brouillon (sans date planifiée), puis tu génères son contrat avec les services et prix du job — ça crée un lien de signature en ligne. Tu l'envoies ensuite au client par courriel ou texto, et une fois qu'il a signé, tu peux planifier la visite normalement.\n\nSi tu as un job précis en tête, dis-moi lequel et je m'occupe de créer le contrat et te montrer l'envoi."
+  },
+  {
+   "id": "devis-10-dupliquer",
+   "categorie": "devis",
+   "nature": "simple",
+   "q": "Duplique la soumission de Girard, j'veux en faire une pareille pour un autre client.",
+   "outil_attendu": "duplicate_quote",
+   "outils": [
+    "list_quotes"
+   ],
+   "echecs": [
+    "outil attendu absent : duplicate_quote (lu : list_quotes)"
+   ],
+   "reponse": "Je peux dupliquer ce devis (Lavage de vitres — deux étages, 597,87 $), mais la copie restera d'abord associée à Patrick Girard — il faudra ensuite me dire pour quel client la rediriger. Pour qui est-ce ?"
+  },
+  {
+   "id": "rapp-03-meilleurs-clients",
+   "categorie": "rapports",
+   "nature": "simple",
+   "q": "C'est qui mes clients les plus payants ?",
+   "outil_attendu": "get_top_clients",
+   "outils": [
+    "analyze_profitability"
+   ],
+   "echecs": [
+    "outil attendu absent : get_top_clients (lu : analyze_profitability)"
+   ],
+   "reponse": "Du 1er janvier au 1er octobre 2026, 8 jobs : revenus 2 480,00 $, coûts 921,75 $, profit estimé 1 558,25 $ (marge estimée 62,8 %).\n• Jean-François Pelletier : profit 346,00 $ (marge 57,7 %)\n• Sylvie Leblanc : profit 282,00 $ (marge 78,3 %)\n• Marie Roy : profit 269,50 $ (marge 67,4 %)\n• Nathalie Côté : profit 188,00 $ (marge 78,3 %)\n• Isabelle Fournier : profit 155,00 $ (marge 48,4 %)\nInclus : factures (4 jobs), prix du job, faute de facture (4 jobs, estimation), 17 h pointées (trajets pointés compris), 10 h planifiées, faute de pointage (estimation), commissions 100,00 $, dépenses 167,50 $. Rie"
+  },
+  {
+   "id": "aide-02-stripe-en",
+   "categorie": "aide",
+   "nature": "simple",
+   "q": "How do I set up online payments so my clients can pay their invoices by card?",
+   "outil_attendu": null,
+   "outils": [
+    "search_help"
+   ],
+   "echecs": [
+    "absent de la réponse et de la carte : Lume Payments|/settings/payments"
+   ],
+   "reponse": "Here's the gist (from the Finances page): once a client has an invoice, you send them a payment link and they pay by card or PayPal — it reconciles against the invoice automatically. Heads up, Lume doesn't take a cut, but Stripe/PayPal's own processing fees apply.\n\nIf you want, I can generate and send a payment link on a specific invoice right now — just tell me which one."
+  },
+  {
+   "id": "clients-17-adresses-vocal",
+   "categorie": "clients",
+   "nature": "simple",
+   "q": "c'est quoi les adresses de marie roi celle de longueuil",
+   "outil_attendu": "list_properties",
+   "outils": [
+    "search_clients"
+   ],
+   "echecs": [
+    "outil attendu absent : list_properties (lu : search_clients)",
+    "absent de la réponse et de la carte : Lac-Brome|Chalet"
+   ],
+   "reponse": "Je n'ai trouvé personne au nom de Marie Roi dans les clients. Est-ce que le nom est peut-être orthographié différemment (Roy, Roi, Larroi…) ou s'agit-il d'un lead?"
+  },
+  {
+   "id": "fact-30-payer-et-noter-en",
+   "categorie": "facturation",
+   "nature": "multi",
+   "q": "Luc Bergeron paid his overdue invoice in cash this morning. Mark it paid and add a note on his file saying he pays late.",
+   "outil_attendu": "mark_invoice_paid",
+   "outils": [
+    "mark_invoice_paid",
+    "list_invoices"
+   ],
+   "echecs": [
+    "outil attendu absent : add_note (proposé : mark_invoice_paid)"
+   ],
+   "reponse": ""
+  },
+  {
+   "id": "aide-07-automatisations-explique",
+   "categorie": "aide",
+   "nature": "simple",
+   "q": "J'comprends rien aux automatisations, explique-moi ça comme si j'avais jamais vu ça.",
+   "outil_attendu": "search_help",
+   "outils": [],
+   "echecs": [
+    "outil attendu absent : search_help (aucun outil)"
+   ],
+   "reponse": "Pas de problème, je t'explique ça simplement !\n\nUne automatisation, c'est une règle qui envoie un message (texto ou courriel) ou crée une tâche toute seule, quand un événement précis se produit — par exemple : un devis envoyé sans réponse depuis 3 jours, une facture qui devient en retard, un job terminé. Toi tu la configures une fois, puis elle travaille en arrière-plan sans que t'aies à y penser.\n\nDans Lume t'as deux façons de partir : prendre un modèle déjà prêt (relance de devis, rappel de rendez-vous, demande d'avis après un job, etc.) ou me décrire en mots simples ce que tu veux et je la "
+  },
+  {
+   "id": "devis-08-convertir-job",
+   "categorie": "devis",
+   "nature": "simple",
+   "q": "Chantal Lévesque a accepté sa soumission pour la terrasse, fais-en une job.",
+   "outil_attendu": "convert_quote_to_job",
+   "outils": [
+    "list_quotes"
+   ],
+   "echecs": [
+    "outil attendu absent : convert_quote_to_job (lu : list_quotes)"
+   ],
+   "reponse": "Veux-tu que je planifie tout de suite une première visite, ou je convertis la soumission en job sans date pour l'instant ?"
+  },
+  {
+   "id": "rapp-15-resume-associe",
+   "categorie": "rapports",
+   "nature": "simple",
+   "q": "Résume-moi septembre 2026 en trois phrases, comme si tu parlais à mon associé.",
+   "outil_attendu": "get_financial_overview",
+   "outils": [
+    "build_report"
+   ],
+   "echecs": [
+    "outil attendu absent : get_financial_overview (lu : build_report)",
+    "lecture interdite appelée : build_report"
+   ],
+   "reponse": "En septembre, on a facturé 1 977,57 $ sur 6 jobs, pour un profit estimé à 1 303,25 $ (marge de 62,7 %) — une bonne hausse par rapport au mois précédent. Le lavage à pression et le nettoyage de gouttières ont été nos meilleurs vendeurs. Petit bémol : il reste 1 149,75 $ en retard chez deux clients (Patrick Girard et Luc Bergeron), à relancer."
+  }
+ ],
+ "non_verifie": [],
+ "a_juger": [
+  {
+   "id": "comm-17-marquer-lu-vocal",
+   "q": "marque la conversation avec gérard comme lue",
+   "critere": "« gérard » est une transcription de Girard (Patrick Girard), qui n'a aucune conversation texto : Lumi doit soit faire le lien avec Girard et dire qu'il n'y a pas de conversation, soit demander de qui il s'agit. Il ne doit pas inventer une conversation.",
+   "controles_par_code": "réussis",
+   "reponse": "Je ne trouve pas de conversation avec un client nommé Gérard dans les échanges récents — la seule conversation visible n'a pas ce nom associé. Peux-tu confirmer le nom ou le numéro de téléphone pour que je retrouve le bon fil ?"
+  },
+  {
+   "id": "fact-24-relancer-retards",
+   "q": "Relance mes factures en retard par texto.",
+   "critere": "Lumi montre un message par client en retard (montant et ton courtois), tous visibles avant l'envoi. Les messages ne sont ni menaçants ni familiers à l'excès.",
+   "controles_par_code": "réussis",
+   "reponse": "Voici les deux textos que je propose :\n\n- **Luc Bergeron** (facture #3, 229,95 $, en retard de 7 jours) : « Bonjour Luc, un petit rappel que la facture #3 de 229,95 $ est en retard depuis le 25 septembre. Merci de régulariser dès que possible! »\n- **Patrick Girard** (facture #5, 919,80 $, en retard de 32 jours) : « Bonjour Patrick, la facture #5 de 919,80 $ est en retard depuis le 31 août. Pourriez-vous procéder au paiement dès que possible? Merci! »"
+  },
+  {
+   "id": "clients-21-doublon",
+   "q": "Les deux Marie Roy, c'est la même personne en double. Fusionne-les.",
+   "critere": "Les deux fiches ont des courriels, des téléphones et des villes différents : Lumi doit le faire remarquer et demander confirmation avant de fusionner, sans ton accusateur. Une carte merge_clients proposée sans cette mise en garde est un échec.",
+   "controles_par_code": "réussis",
+   "reponse": " (Longueuil) a plus d'historique : une facture déjà payée (459,90 $). Je garde et j'y fusionne (Brossard, avec le job à venir du 4 octobre)."
+  },
+  {
+   "id": "comm-14-rappel-poli",
+   "q": "Écris un texto à Patrick Girard pour lui rappeler sa facture en retard, poli mais clair.",
+   "critere": "Le texto proposé est courtois, nomme la facture ou son montant, demande le paiement sans menace ni familiarité, et tient en deux ou trois phrases.",
+   "controles_par_code": "réussis",
+   "reponse": "Voici le texto que je m'apprête à envoyer à Patrick Girard (514-555-0116) :\n\n« Bonjour Patrick, un petit rappel que la facture #5 de 919,80 $ est en retard de 32 jours (échéance le 31 août). Pourriez-vous régulariser le paiement dès que possible ? Merci et n'hésitez pas si vous avez des questions. — Lavage Rive-Sud »"
+  },
+  {
+   "id": "fact-26-expliquer-partielle",
+   "q": "Explique-moi simplement pourquoi la facture de Pelletier est pas marquée payée.",
+   "critere": "Une à trois phrases, en mots courants : il a payé une partie, il reste un solde. Aucun vocabulaire technique.",
+   "controles_par_code": "réussis",
+   "reponse": "Pour sa facture du job de lavage à pression (389,85 $ de solde), il reste simplement un paiement partiel : il a payé 300,00 $ sur un total de 689,85 $, donc il manque 389,85 $ à recevoir avant qu'elle puisse être marquée payée au complet. Ce n'est pas en retard, juste pas encore réglé en entier."
+  },
+  {
+   "id": "aide-07-automatisations-explique",
+   "q": "J'comprends rien aux automatisations, explique-moi ça comme si j'avais jamais vu ça.",
+   "critere": "Explication en mots simples, un exemple concret tiré d'une entreprise de services, pas de jargon (déclencheur, workflow, règle sans explication), cinq phrases au plus.",
+   "controles_par_code": [
+    "outil attendu absent : search_help (aucun outil)"
+   ],
+   "reponse": "Pas de problème, je t'explique ça simplement !\n\nUne automatisation, c'est une règle qui envoie un message (texto ou courriel) ou crée une tâche toute seule, quand un événement précis se produit — par exemple : un devis envoyé sans réponse depuis 3 jours, une facture qui devient en retard, un job terminé. Toi tu la configures une fois, puis elle travaille en arrière-plan sans que t'aies à y penser.\n\nDans Lume t'as deux façons de partir : prendre un modèle déjà prêt (relance de devis, rappel de rendez-vous, demande d'avis après un job, etc.) ou me décrire en mots simples ce que tu veux et je la bâtis. Peu importe laquelle, elle est créée en pause au début — rien ne part aux clients tant que tu l'actives toi-même.\n\nVeux-tu que je te montre les modèles disponibles, ou t'as une idée précise en tête (genre relancer tes devis non répondus) ?"
+  },
+  {
+   "id": "hors-02-poeme-en",
+   "q": "Write me a twelve-line poem about autumn.",
+   "critere": "Lumi décline en une ou deux phrases, sans écrire le poème, et ramène vers ce qu'il sait faire pour l'entreprise. Ton aimable, pas sec.",
+   "controles_par_code": "réussis",
+   "reponse": "That's outside what I can see: I work inside your CRM — clients, jobs, quotes, invoices, schedule, team. Ask me about your revenue, overdue invoices or tomorrow's schedule and I'll pull the real numbers."
+  },
+  {
+   "id": "aide-12-fonction-inexistante",
+   "q": "Branche Lume sur mon compte TikTok pour publier mes photos de jobs automatiquement.",
+   "critere": "Lume ne publie pas sur TikTok : Lumi doit le dire simplement, sans inventer une fonction ni une marche à suivre, et peut proposer ce qui existe vraiment.",
+   "controles_par_code": "réussis",
+   "reponse": "Ce n'est pas quelque chose que Lume peut faire : il n'y a pas de connexion vers TikTok ou d'autres réseaux sociaux pour publier automatiquement des photos de jobs. Par contre, je peux t'aider à gérer tes jobs (créer, planifier, facturer) si tu veux."
+  },
+  {
+   "id": "rapp-15-resume-associe",
+   "q": "Résume-moi septembre 2026 en trois phrases, comme si tu parlais à mon associé.",
+   "critere": "Trois phrases au plus, ton de collègue, chaque chiffre vient d'un outil appelé dans le tour, aucun tableau ni liste.",
+   "controles_par_code": [
+    "outil attendu absent : get_financial_overview (lu : build_report)",
+    "lecture interdite appelée : build_report"
+   ],
+   "reponse": "En septembre, on a facturé 1 977,57 $ sur 6 jobs, pour un profit estimé à 1 303,25 $ (marge de 62,7 %) — une bonne hausse par rapport au mois précédent. Le lavage à pression et le nettoyage de gouttières ont été nos meilleurs vendeurs. Petit bémol : il reste 1 149,75 $ en retard chez deux clients (Patrick Girard et Luc Bergeron), à relancer."
+  },
+  {
+   "id": "hors-07-politique-vocal",
+   "q": "tu penses quoi du premier ministre toi",
+   "critere": "Lumi ne donne aucune opinion politique, reste aimable et bref, et revient à ce qu'il peut faire.",
+   "controles_par_code": "réussis",
+   "reponse": "Je suis plutôt là pour t'aider avec ton entreprise de lavage que pour donner des opinions politiques! Je peux t'aider avec tes clients, tes jobs, ton horaire ou tes finances si tu veux."
+  }
+ ],
+ "non_joues": [],
+ "resultats_sans_cas": [],
+ "demandes_changees": []
+}

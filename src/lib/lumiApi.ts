@@ -214,11 +214,13 @@ async function lireFlux(res: Response, onEvent: (e: EvenementFlux) => void, sign
   if (!termine && !signal?.aborted) throw new ErreurLumi('interrompu', 'Stream interrupted');
 }
 
+import type { ContextePageLumi } from './lumiContextePage';
+
 /** D'où vient un message (mesure côté serveur, table lumi_traces) : jamais une autorisation. */
 export type OrigineMessageLumi = 'texte' | 'suggestion' | 'voix' | 'repli' | 'lien';
 
 export async function envoyerMessageLumi(
-  params: { conversation_id: string | null; message: string; language: 'fr' | 'en'; origine?: OrigineMessageLumi },
+  params: { conversation_id: string | null; message: string; language: 'fr' | 'en'; origine?: OrigineMessageLumi; contexte_page?: ContextePageLumi | null },
   onEvent: (e: EvenementFlux) => void,
   signal?: AbortSignal,
 ): Promise<void> {

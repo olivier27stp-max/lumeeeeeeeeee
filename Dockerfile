@@ -64,6 +64,8 @@ COPY src/lib/smsSegments.ts ./src/lib/smsSegments.ts
 # routes d'écriture en dérivent les clés acceptées. Sans cette ligne, le
 # serveur ne démarre pas — `validation.ts` l'importe au chargement.
 COPY src/lib/automationCatalogue.ts ./src/lib/automationCatalogue.ts
+# Les issues d'une exécution (codes, catégories, libellés) : écrites par le moteur, lues par les écrans.
+COPY src/lib/automationMotifs.ts ./src/lib/automationMotifs.ts
 # La garde de publication (audit M8) : la route serveur et l'éditeur
 # partagent la même vérification. Elle lit aussi `sequenceTypes.ts`.
 COPY src/lib/publicationAutomatisation.ts ./src/lib/publicationAutomatisation.ts

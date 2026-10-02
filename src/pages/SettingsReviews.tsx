@@ -37,6 +37,7 @@ import { cn } from '../lib/utils';
 import { PageHeader } from '../components/ui';
 import { useTranslation } from '../i18n';
 import { getAutomationRules, toggleAutomationRule, updateRuleSmsBody, texteDuMessage, avecTexteDuMessage, type AutomationRule } from '../lib/automationRulesApi';
+import { libelleSegments } from '../lib/smsSegments';
 
 // Miroir de server/lib/reviews.ts (texte par défaut affiché au client).
 const DEFAULT_INVITE_FR =
@@ -589,7 +590,13 @@ export default function SettingsReviews() {
           />
           <div className="flex items-center justify-between text-[12px] text-text-tertiary">
             <span>{isFr ? 'Le lien [survey_url] est ajouté à la fin s’il manque.' : 'The [survey_url] link is appended if missing.'}</span>
-            <span>{form.review_sms_body.length}/320</span>
+            {/* Le nombre de SMS facturés, comme dans la liste des automatisations (constat E-64). */}
+            <span>
+              {form.review_sms_body.length}/320
+              {libelleSegments(form.review_sms_body, isFr) && (
+                <span className="text-amber-600 dark:text-amber-400"> · {libelleSegments(form.review_sms_body, isFr)}</span>
+              )}
+            </span>
           </div>
           <div className="rounded-2xl border border-outline bg-surface-subtle p-4">
             <p className="text-[11px] uppercase tracking-wider text-text-tertiary mb-2">{isFr ? 'Aperçu' : 'Preview'}</p>
@@ -707,7 +714,16 @@ export default function SettingsReviews() {
                       className="glass-input w-full resize-none"
                     />
                     <div className="flex items-center justify-between gap-2 text-[11px] text-text-tertiary">
-                      <span>{isFr ? 'Variables : [client_first_name] [company_name] [review_page_url]' : 'Variables: [client_first_name] [company_name] [review_page_url]'}</span>
+                      <span>
+                        {isFr ? 'Variables : [client_first_name] [company_name] [review_page_url]' : 'Variables: [client_first_name] [company_name] [review_page_url]'}
+                        {/* Ce texto n'avait AUCUN compteur (constat E-64). */}
+                        <span className="block">
+                          {ruleDraft.length}/320
+                          {libelleSegments(ruleDraft, isFr) && (
+                            <span className="text-amber-600 dark:text-amber-400"> · {libelleSegments(ruleDraft, isFr)}</span>
+                          )}
+                        </span>
+                      </span>
                       <div className="flex gap-2">
                         <button type="button" onClick={() => setEditingRuleId(null)} className="glass-button text-[12px]">{isFr ? 'Annuler' : 'Cancel'}</button>
                         <button type="button" onClick={() => handleSaveRuleSms(rule)} disabled={savingRule || !ruleDraft.trim()} className="glass-button text-[12px] !bg-primary !text-white !border-primary disabled:opacity-50">

@@ -181,15 +181,45 @@ const EXEMPLES: Record<string, string> = {
   client_email: 'marie@exemple.ca',
 };
 
-export function remplacerVariables(s: string): string {
+/**
+ * Les mêmes exemples, tels qu'un lecteur ANGLOPHONE les lirait : « The client
+ * will read: See you on 14 août 2026 at 9 h 00 — Votre entreprise » mêlait un
+ * texte anglais et des exemples français (triage « modèles », 03-texto:438).
+ * Seules les valeurs qui dépendent de la langue diffèrent (dates, heures,
+ * montants, noms communs) : les autres sont reprises telles quelles.
+ */
+const EXEMPLES_EN: Record<string, string> = {
+  ...EXEMPLES,
+  company_name: 'Your company',
+  invoice_total: '$450.00',
+  invoice_amount: '$450.00',
+  amount_due: '$450.00',
+  due_date: 'August 30, 2026',
+  quote_amount: '$1,250.00',
+  valid_until: 'May 2, 2026',
+  invoice_due_date: 'August 30, 2026',
+  quote_total: '$1,250.00',
+  appointment_date: 'August 14, 2026',
+  appointment_time: '9:00 a.m.',
+  appointment_address: '120 Main Street',
+  job_name: 'Window cleaning',
+};
+
+/**
+ * `fr` : la langue de celui qui LIRA le texte — l'interface pour « Le client
+ * lira », la langue des messages du bureau pour un aperçu d'envoi. Français
+ * par défaut (les appelants d'avant ne changent pas).
+ */
+export function remplacerVariables(s: string, fr = true): string {
   // Les deux syntaxes : les automatisations écrivent [cle], les modèles de
   // courriel {cle}. `applyTemplate` côté serveur accepte déjà les deux ; un
   // aperçu qui n'en montre qu'une laisse croire que l'autre est cassée.
   // `{{cle}}` d'abord : le serveur le rend comme `{cle}` ; l'aperçu montrait « {Marie} ».
+  const exemples = fr ? EXEMPLES : EXEMPLES_EN;
   return s
-    .replace(/\{\{\s*(\w+)\s*\}\}/g, (tout, cle) => EXEMPLES[cle] ?? tout)
-    .replace(/\[(\w+)\]/g, (tout, cle) => EXEMPLES[cle] ?? tout)
-    .replace(/\{(\w+)\}/g, (tout, cle) => EXEMPLES[cle] ?? tout);
+    .replace(/\{\{\s*(\w+)\s*\}\}/g, (tout, cle) => exemples[cle] ?? tout)
+    .replace(/\[(\w+)\]/g, (tout, cle) => exemples[cle] ?? tout)
+    .replace(/\{(\w+)\}/g, (tout, cle) => exemples[cle] ?? tout);
 }
 
 /**

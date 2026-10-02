@@ -26,6 +26,7 @@ import {
   ErreurLumi, type EtatCredits, type ConversationLumi, type EvenementFlux, type FicheLumi, type MessageLumi, type PropositionLumi, type RapportLumi,
  type UsageLumi } from '../lib/lumiApi';
 import { CarteAutorisation, FichesLiees, avecLiensFiches } from '../components/lumi/CarteAutorisation';
+import { contextePageDepuisAdresse } from '../lib/lumiContextePage';
 import { AvisCreditsLumi, CompteurCreditsLumi, creditsEpuises, useTextesCredits } from '../components/lumi/CreditsLumi';
 import { remplir } from '../lib/lumiCreditsApi';
 import { usePermissions } from '../hooks/usePermissions';
@@ -261,6 +262,12 @@ export default function Lumi() {
     supabase.auth.getUser().then(({ data }) => setInterne(/@lume-test\.ca$/i.test(data.user?.email || ''))).catch(() => setInterne(false));
   }, []);
   const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
+  /**
+   * L'automatisation d'où l'on vient (`/lumi?automatisation=<id>`, lien de l'éditeur) : envoyée avec
+   * chaque message, pour que « l'automatisation », « elle », « le message » désignent celle-là sans
+   * qu'on la nomme. Lue UNE fois à l'arrivée ; elle reste jusqu'à ce qu'on la retire.
+   */
+  const [contextePage, setContextePage] = useState(() => contextePageDepuisAdresse(params));
   const idRef = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
   /* Vrai si la dernière question a été dite au micro : la réponse est alors lue. */
@@ -285,6 +292,8 @@ export default function Lumi() {
     listerConversationsLumi().then(setConversations).catch(() => setConversations([]));
     listerAutorisationsLumi().then((t) => setAutorisations(new Set(t))).catch(() => {});
     modeLumi().then(setMode).catch(() => {});
+    // /lumi?automatisation=<id> : déjà lu dans l'état (contextePage) — l'adresse redevient propre.
+    if (params.get('automatisation')) setParams({}, { replace: true });
     // /lumi?c=<id> : la notification du briefing du matin ouvre sa conversation.
     const c = params.get('c');
     if (c && /^[0-9a-f-]{36}$/i.test(c)) { void ouvrirConversation(c); setParams({}, { replace: true }); }
@@ -487,7 +496,8 @@ export default function Lumi() {
     ]);
     // L'origine sert la mesure (quelle entrée coûte quoi) — le serveur ne s'en sert pour rien d'autre.
     const origine: OrigineMessageLumi = opts.origine ?? (opts.spoken || pendingSpokenRef.current ? 'voix' : 'texte');
-    await lancer((onEvent, signal) => envoyerMessageLumi({ conversation_id: conversationId, message: t, language: lang, origine }, onEvent, signal));
+    const contexte_page = contextePage ? { type: contextePage.type, rule_id: contextePage.rule_id, ...(contextePage.non_enregistre ? { non_enregistre: true } : {}) } : undefined;
+    await lancer((onEvent, signal) => envoyerMessageLumi({ conversation_id: conversationId, message: t, language: lang, origine, ...(contexte_page ? { contexte_page } : {}) }, onEvent, signal));
   }
 
   /**
@@ -798,6 +808,25 @@ export default function Lumi() {
             );
           })}
         </div>
+
+        {/* D'où l'on vient : Lumi sait de quelle automatisation on parle, et on peut le lui retirer. */}
+        {contextePage && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] text-text-secondary">
+            <span className="min-w-0 flex-1 truncate">
+              {fr ? 'À propos de l’automatisation' : 'About the automation'}
+              {contextePage.nom ? ` « ${contextePage.nom} »` : (fr ? ' ouverte dans l’éditeur' : ' open in the editor')}
+              {contextePage.non_enregistre ? (fr ? ' — des modifications ne sont pas encore enregistrées' : ' — some changes are not saved yet') : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => setContextePage(null)}
+              aria-label={fr ? 'Ne plus parler de cette automatisation' : 'Stop talking about this automation'}
+              className="shrink-0 rounded p-1 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <XCircle size={14} aria-hidden="true" />
+            </button>
+          </div>
+        )}
 
         {/* Avis de crédits (80 % / épuisé) — sauf si le refus quota_epuise le dit déjà. */}
         {erreur?.code !== 'quota_epuise' && <AvisCreditsLumi credits={credits} className="mb-2" />}

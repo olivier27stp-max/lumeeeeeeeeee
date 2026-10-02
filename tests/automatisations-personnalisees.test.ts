@@ -361,9 +361,21 @@ describe('route — les gardes qui demandent de lire le catalogue', () => {
     //     `authenticated` : la régénération écrit la nouvelle clé avec le
     //     service_role, APRÈS que la RLS a accepté la mise à jour de
     //     `updated_at` par l'utilisateur — un appel.
+    //   · (mission finale 2026-10-02, constats F-01 et A-17) le panneau « Construire
+    //     avec Lumi » ne laissait AUCUNE trace : ni `lumi_traces` (durée, coût,
+    //     échec), ni journal d'actions (`agent_actions`). Ces deux tables
+    //     n'acceptent d'écriture que du service_role, comme `ai_usage` — deux
+    //     appels de plus dans la route de génération : la réponse « sans
+    //     changement » (`reponseSansChangement`) et `journaliserProposition`.
+    //     Les deux portent `orgId` et `userId` pris de la session vérifiée.
     const appels = source.match(/getServiceClient\(\)/g) ?? [];
-    expect(appels.length, 'le service_role a un nouvel usage : le justifier ici').toBe(5);
-    const bloc = source.slice(source.indexOf('rules/generer'));
+    expect(appels.length, 'le service_role a un nouvel usage : le justifier ici').toBe(7);
+    // Les deux nouveaux usages restent ceux du journal de Lumi, pas une écriture de règle.
+    expect(source).toMatch(/journaliserProposition\(getServiceClient\(\), \{ orgId: auth\.orgId, userId: auth\.user\.id/);
+    expect(source).toMatch(/admin: getServiceClient\(\), orgId: auth\.orgId, userId: auth\.user\.id/);
+    // Depuis la DÉCLARATION de la route (et non la première mention de son chemin,
+    // qui est dans un commentaire plus haut) : la fenêtre ne dérive plus avec les commentaires.
+    const bloc = source.slice(source.indexOf("router.post('/automations/rules/generer'"));
     // 3000, pas 2000 : le bloc qui prépare le contexte de Lumi (échanges
     // + parcours courant, ajouté le 2026-09-25 pour P1-6/P1-7) s'insère
     // avant l'appel. Ce qui compte reste le COMPTE total ci-dessus — la

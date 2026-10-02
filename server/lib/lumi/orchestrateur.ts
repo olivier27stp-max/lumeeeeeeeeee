@@ -51,6 +51,7 @@ import { signalerAppelLumi } from './cache-chaud';
 import { allegerSchema } from './alleger-outils';
 import { suiteDuMemeTour, sansRechercheOrpheline } from './historique';
 import { ECRITURES_ANODINES, JAMAIS_D_OFFICE } from '../agent/registre';
+import { verifierAvantCarte, texteAvantCarte } from './avant-carte';
 
 const MAX_ETAPES = 8;
 /** Sortie par appel (réflexion incluse) : règle stricte, voir regles-cout.ts. */
@@ -536,6 +537,8 @@ export async function tourLumi(opts: {
   // carte, même en mode « argent » ou « toujours confirmer ». Une consigne glissée
   // dans ce contenu ne peut donc jamais agir sans qu'un humain voie la carte.
   let contenuExterneLu = aLuDuContenuExterne(opts.historique);
+  // Avis déjà rendus au modèle dans ce tour avant une carte (avant-carte.ts) : un avis ne bloque qu'une fois.
+  const avisDejaDonnes = new Set<string>();
 
   // `<=` : après la dernière étape AVEC outils, un appel de CONCLUSION sans outils.
   // Avant (passe de référence du 2026-10-01) : au palier restreint (2 étapes), une
@@ -748,6 +751,28 @@ export async function tourLumi(opts: {
     const resultats: Anthropic.Messages.ToolResultBlockParam[] = [];
     // Toutes les écritures proposées dans cette réponse : une carte, une confirmation.
     const enAttente: Array<{ tool_use_id: string; tool: string; args: Record<string, any>; apercu: Apercu | null }> = [];
+    /**
+     * Ce que le SERVEUR dit juste au-dessus d'une carte (avant-carte.ts) — aujourd'hui, avant
+     * d'activer une automatisation qui écrit aux clients : son déclencheur, chaque message mot
+     * pour mot, la portée. Affiché, et gardé dans la réponse de l'assistant AVANT son appel
+     * d'outil : la conversation relue montre la même chose, et le modèle sait ce qui a été dit.
+     */
+    const direAvantLaCarte = async (idAppel: string, nomOutil: string, argsOutil: Record<string, any>): Promise<void> => {
+      const preambule = await texteAvantCarte(nomOutil, argsOutil, { client: opts.client, orgId: opts.orgId, langue: fr ? 'fr' : 'en' });
+      if (!preambule) return;
+      const delta = `${texteTotal && !texteTotal.endsWith('\n') ? '\n\n' : ''}${preambule}`;
+      texteTotal += delta;
+      opts.emettre({ type: 'text', delta });
+      const tour = messages[messages.length - 1];
+      if (tour?.role !== 'assistant' || !Array.isArray(tour.content)) return;
+      const blocs = [...tour.content];
+      const position = blocs.findIndex((b) => b.type === 'tool_use' && b.id === idAppel);
+      blocs.splice(position === -1 ? blocs.length : position, 0, { type: 'text', text: preambule });
+      const avecPreambule: Anthropic.Messages.MessageParam = { role: 'assistant', content: blocs };
+      const rang = nouveaux.lastIndexOf(tour);
+      messages[messages.length - 1] = avecPreambule;
+      if (rang !== -1) nouveaux[rang] = avecPreambule;
+    };
 
     for (const appel of appels) {
       const outil = TOOLS_BY_NAME[appel.name];
@@ -773,6 +798,19 @@ export async function tourLumi(opts: {
         });
         continue;
       }
+      // ── Avant la carte (ou l'exécution d'office) : ce que la proposition a de faux revient au
+      // modèle, qui corrige dans le même tour — une variable inventée, un « plus court » plus
+      // long, l'activation d'un parcours qui porte encore un texte d'exemple (avant-carte.ts).
+      // Un avis « une fois » ne bloque qu'une fois : la même proposition refaite passe.
+      if (outil.kind === 'write') {
+        const refus = await verifierAvantCarte(appel.name, args, { client: opts.client, orgId: opts.orgId, langue: fr ? 'fr' : 'en' });
+        const cle = refus ? `${appel.name}:${refus.code}` : '';
+        if (refus && (refus.genre === 'ferme' || !avisDejaDonnes.has(cle))) {
+          avisDejaDonnes.add(cle);
+          resultats.push({ type: 'tool_result', tool_use_id: appel.id, is_error: true, content: JSON.stringify({ error: `${refus.message} Rien n'a été proposé ni modifié.` }) });
+          continue;
+        }
+      }
       // Plafond d'écritures atteint : plus rien ne part d'office, tout repasse par la carte.
       const dOffice = !contenuExterneLu && !JAMAIS_D_OFFICE.has(appel.name) && (ECRITURES_ANODINES.has(appel.name) || opts.autorisations?.has(appel.name));
       const sousLePlafond = opts.ecrituresRestantes === undefined || opts.ecrituresRestantes > 0;
@@ -781,6 +819,7 @@ export async function tourLumi(opts: {
         // « Toujours confirmer » : la carte s'affiche déjà confirmée et
         // l'écriture part sur-le-champ, avec la même garde et le même reçu
         // que le bouton Confirmer. Le tour continue (le modèle en rend compte).
+        await direAvantLaCarte(appel.id, appel.name, args);
         const apercu = await apercuProposition(appel.name, args, { client: opts.client, orgId: opts.orgId, userId: opts.userId });
         opts.emettre({ type: 'proposal', tool_use_id: appel.id, tool: appel.name, args, capacite: PERMISSION_PAR_OUTIL[appel.name]?.capacite ?? null, apercu, auto: true });
         const { contenu, recu } = await executerEcriture({ tool: appel.name, toolUseId: appel.id, args, userId: opts.userId, orgId: opts.orgId, client: opts.client, accessToken: opts.accessToken, auto: true });
@@ -834,6 +873,7 @@ export async function tourLumi(opts: {
           });
           continue;
         }
+        await direAvantLaCarte(appel.id, appel.name, argsCarte);
         enAttente.push({ tool_use_id: appel.id, tool: appel.name, args: argsCarte, apercu: apercuCarte });
         continue;
       }

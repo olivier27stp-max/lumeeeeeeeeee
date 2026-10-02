@@ -224,6 +224,38 @@ describe('la carte annonce les automatisations que l’action va déclencher', (
   });
 });
 
+describe('activer une automatisation : la carte dit ce qui va partir (A-13)', () => {
+  const parcours = { id: id(110), trigger_event: 'invoice.overdue', steps: [
+    { type: 'action', action: { type: 'send_sms', config: { body: 'Bonjour [client_name], votre facture est en retard.' } } },
+    { type: 'attente' },
+    { type: 'action', action: { type: 'send_email', config: { subject: 'Rappel de facture', body: '<p>Bonjour,</p><p>Un petit rappel.</p>' } } },
+    { type: 'action', action: { type: 'create_task', config: { title: 'Appeler le client' } } },
+  ], actions: [{ type: 'send_sms', config: { body: 'reflet périmé' } }] };
+
+  it('déclencheur en clair, chaque message exact dans l’ordre du parcours, et à qui', async () => {
+    const t = await texte('toggle_automation_rule', { rule_id: id(110), is_active: true }, base({ automation_rules: [parcours] }));
+    expect(t).toMatch(/^Se déclenche quand : /);
+    expect(t).not.toMatch(/invoice\.overdue/);
+    expect(t).toMatch(/Message 1 \(texto\) : Bonjour \[client_name\], votre facture est en retard\./);
+    expect(t).toMatch(/Message 2 \(courriel\) : Objet : Rappel de facture — Bonjour,/);
+    expect(t).not.toMatch(/reflet périmé|Appeler le client|<p>/);
+    expect(t).toMatch(/Envoyé à : chaque client concerné par l’événement/);
+  });
+
+  it('règle sans parcours : les messages viennent de la liste d’actions', async () => {
+    const simple = { id: id(111), trigger_event: 'job.completed', steps: [], actions: [{ type: 'send_sms', config: { body: 'Merci pour votre confiance !' } }] };
+    expect(await texte('toggle_automation_rule', { rule_id: id(111), is_active: true }, base({ automation_rules: [simple] }))).toMatch(/Message 1 \(texto\) : Merci pour votre confiance !/);
+  });
+
+  it('mettre en pause n’ajoute rien ; une règle sans envoi le dit ; entreprise à l’arrêt signalée', async () => {
+    expect(await texte('toggle_automation_rule', { rule_id: id(110), is_active: false }, base({ automation_rules: [parcours] }))).toBe('');
+    const interne = { id: id(112), trigger_event: 'job.completed', steps: [], actions: [{ type: 'create_task', config: {} }] };
+    expect(await texte('toggle_automation_rule', { rule_id: id(112), is_active: true }, base({ automation_rules: [interne] }))).toMatch(/aucun : cette automatisation n’écrit pas au client/);
+    const arret = base({ automation_rules: [parcours], company_settings: [{ automations_paused: true }] });
+    expect(await texte('toggle_automation_rule', { rule_id: id(110), is_active: true }, arret)).toMatch(/rien ne partira tant qu’elles ne sont pas reprises/);
+  });
+});
+
 describe('cartes des outils ajoutés le 2026-10-01', () => {
   it('une automatisation créée depuis un modèle dit lequel, et qu’elle naît éteinte', async () => {
     const { MODELES_AUTOMATISATION } = await import('../server/lib/automationTemplates');

@@ -47,7 +47,13 @@ export default function ClavardageLumi({
     finDuFil.current?.scrollIntoView?.({ block: 'end' });
   }, [echanges.length, genere]);
 
-  const peutEnvoyer = prompt.trim().length >= 10 && !genere;
+  /*
+   * Dix caractères au moins pour une PREMIÈRE demande (« décris ton
+   * automatisation ») ; dans une conversation en cours, toute réponse non vide
+   * part — « oui », « non », « active-la ». Lumi posait une question à laquelle
+   * le bouton grisé empêchait de répondre (mission finale, A-12).
+   */
+  const peutEnvoyer = prompt.trim().length >= (echanges.length > 0 ? 1 : 10) && !genere;
 
   const fil = (echanges.length > 0 || genere) && (
     /*
