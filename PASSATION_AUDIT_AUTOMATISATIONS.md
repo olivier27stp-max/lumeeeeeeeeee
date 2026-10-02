@@ -350,11 +350,80 @@ Mode d'emploi complet : `e2e/automations/README.md`. Les correctifs en cours de 
 
 ## 11. Message de départ pour la nouvelle session Claude Code
 
-> Tu reprends la mission « audit des écrans Automatisations » de Lume CRM. Lis d'abord `CLAUDE.md`, puis
-> `PASSATION_AUDIT_AUTOMATISATIONS.md` (à la racine du checkout principal), `AUTOMATIONS_UI_AUDIT.md` et
-> `e2e/automations/README.md`. Ton rôle : tenir les tests de bout en bout (`e2e/automations/**`, tu es le seul à y
-> écrire) et revérifier au vrai navigateur, sur la pile locale, les correctifs que la session « correction finale »
-> pousse — tu ne modifies pas les écrans du produit. Ne lance aucun test sur staging ; contre la prod, un seul flux, avec
-> l'accord des autres sessions. Avant toute action : `git fetch`, vérifie quelles branches existent sur GitHub
-> (`git ls-remote --heads origin`), et confirme avec moi quel lot revérifier. N'affaiblis jamais un test ; un test
-> `@defaut` rouge décrit un défaut connu, et sa marque ne se retire que quand il passe.
+À copier tel quel dans la première conversation de la nouvelle session :
+
+````markdown
+Tu reprends le travail de deux sessions Claude Code sur Lume CRM, un SaaS pour entreprises de services (Vite + React 19 + Express + Supabase). Dépôt : https://github.com/olivier27stp-max/lumeeeeeeeeee. Un merge sur `main` redéploie la prod (lumecrm.net) via Railway. Échéance : le launch du 26 octobre 2026.
+
+## 1. Récupère tout (rien n'est perdu, tout est sur GitHub)
+
+```bash
+git clone https://github.com/olivier27stp-max/lumeeeeeeeeee.git   # ou, si tu l'as déjà : git fetch origin
+cd lumeeeeeeeeee
+git fetch origin
+git checkout docs/passation-audit-automatisations
+```
+
+Sur cette branche :
+- `PASSATION_AUDIT_AUTOMATISATIONS.md`, à la racine : la passation complète de la mission « audit des écrans Automatisations ». Lis sa section 0 en premier : elle dit où est chaque morceau.
+- `docs/passation-2026-10-02/correction-finale/PASSATION.md` : la passation de l'AUTRE mission, « correction finale », qui corrige le produit.
+- `docs/passation-2026-10-02/` : copie des notes et des scripts des deux ateliers, qui n'existaient que sur le PC de Rafba.
+
+Les autres branches utiles, toutes sur GitHub :
+- `mission/automatisations-finale` : l'intégration des correctifs du produit. Elle n'est PAS sur `main` et n'est pas entièrement vérifiée.
+- `mission/auto-finale-{a,b,d,e,f,p,t,u}` : les branches des agents de correction.
+- `qa/specs-lot-u` : les tests adaptés au premier lot de correctifs. Ils sont déjà pris dans l'intégration. Ne les merge jamais seuls sur `main` : ils y seraient rouges.
+
+## 2. Lis, dans cet ordre, avant de toucher à quoi que ce soit
+
+1. `CLAUDE.md` : les règles du projet. Elles sont obligatoires.
+2. `PASSATION_AUDIT_AUTOMATISATIONS.md`.
+3. `docs/passation-2026-10-02/correction-finale/PASSATION.md`.
+4. `AUTOMATIONS_UI_AUDIT.md` (le rapport et son verdict) et `e2e/automations/README.md` (comment lancer les tests).
+5. Les fiches de défauts `e2e/automations/_tri/*.md` : un défaut par ligne.
+
+Dans les passations, [V] veut dire vérifié et [R] rapporté. Ne prends pas un [R] pour acquis : revérifie avant d'en dépendre.
+
+## 3. Où on en est
+
+- **En prod**, livrés et vérifiés sur le vrai site : 9 PR de l'audit (#859 → #900), plus une garde en base sur `automation_rules`, migration `20261007300000`, appliquée sur staging et prod.
+- **Les 1 058 tests Playwright** de `e2e/automations/` tournent sur une pile Docker locale : `bash scripts/qa/automations-e2e/pile.sh`, puis `node scripts/qa/automations-e2e/lancer.mjs <dossier>/ --project=bureau`.
+  - Sur `main` : 822 verts, 236 rouges marqués `@defaut`.
+  - Un test `@defaut` affirme le comportement ATTENDU d'un défaut connu. Il reste rouge tant que le défaut existe.
+- **Le verdict actuel est « pas prêt »** : environ 220 défauts sont décrits et sont en cours de correction sur `mission/automatisations-finale`.
+  - Les 30 défauts majeurs de l'éditeur, des actions et des déclencheurs y sont corrigés et revérifiés.
+  - Les correctifs suivants ne sont PAS revérifiés : régression du « Précédent », S-14, mineurs, lot « modèles et messages », liste, rôles.
+
+## 4. Ce qu'il reste à faire, dans l'ordre
+
+1. Créer un arbre de vérification à partir de `origin/main`, puis y fusionner `origin/mission/automatisations-finale`. Ne pousse jamais cette fusion sur `main`.
+2. Revérifier au navigateur, dossier par dossier : éditeur, actions, déclencheurs, puis modèles, liste, rôles. Méthode détaillée : `docs/passation-2026-10-02/atelier-audit-ui/notes/BRIEF-VERIF.md`.
+3. Pour chaque défaut fermé, retirer ` @defaut` du titre du test, rien d'autre.
+4. Adapter les tests aux comportements décidés, listés dans la passation. Ne retire jamais une attente sans la remplacer par celle du nouveau comportement.
+5. Juger chaque passe avec `node scripts/qa/automations-e2e/bilan.mjs <E2E_SORTIES>/resultats.json`. Le mode `--zero-defaut` correspond à « prêt pour le launch ».
+6. Faire passer les correctifs du produit et les tests adaptés ENSEMBLE sur `main`, par PR, quand c'est vert. Avant tout push, vérifie `git diff --stat origin/main...HEAD`.
+7. Après la fermeture des écritures directes en base (prévue dans la passation de « correction finale »), lancer `node --env-file=.env.local scripts/qa/verifier-garde-automatisations.mjs --etendue`. Aujourd'hui : 10/20. Il faut 20/20, sur la pile locale, puis staging, puis prod.
+8. Mettre à jour `AUTOMATIONS_UI_AUDIT.md`, puis lancer `npm run test:automations:e2e` (passe sur le vrai site, un script à la fois).
+
+Trois décisions appartiennent à Rafba. Demande-les-lui, ne les prends pas toi-même :
+- sa propre liste de bugs, jamais reçue ;
+- le texte anglais « New lead… » déjà semé dans les bureaux existants (c'est une migration de données sur de vrais clients) ;
+- le nom « Anniversaire client ».
+
+## 5. Règles à ne jamais enfreindre
+
+- Aucun test sur staging : il est tombé deux fois sous la charge.
+- Contre la prod :
+  - travaille uniquement dans le bureau de test, avec les envois en bac à sable ;
+  - un seul flux à la fois ;
+  - lis `https://lumecrm.net/api/health` avant ; arrête si `db_ms` dépasse 1 500 ms ;
+  - ne redémarre jamais le projet Supabase sans l'accord de Rafba.
+- Toute modification de base passe par un fichier dans `supabase/migrations/`, appliqué sur staging (`npm run db:apply -- <fichier>`) puis sur prod (`npm run db:apply:prod -- <fichier>`). Lance ensuite `npm run check:broken-objects` et `npm run check:db-coherence`.
+- Demande avant : migration destructive, suppression de données, Stripe ou facturation, toute action sur un vrai bureau.
+- N'affaiblis ni ne désactive jamais un test pour le faire passer : `skip`, `fixme` et `retries` sont interdits.
+- Les secrets vont uniquement dans `.env.local`, demandés à Rafba. Jamais dans le chat, jamais dans un commit. Noms des variables : section 6 de la passation.
+- Pas de `git stash` ni de `reset` sur le travail des autres. Crée tes propres branches à partir de `origin/main`.
+- Les sorties de Playwright vont HORS du dépôt (`E2E_SORTIES=...`).
+
+Commence par lire les fichiers de la section 2. Ensuite, résume-moi en dix lignes l'état réel : vérifie les branches avec `git ls-remote --heads origin` et `git log`. Dis-moi aussi quel lot tu proposes de revérifier en premier. N'écris aucun code avant mon accord.
+````
