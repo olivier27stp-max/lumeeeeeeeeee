@@ -55,7 +55,9 @@ const sansBalises = (t: string) => t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' 
 const instantane = (r: LigneRegle | null) => (r ? JSON.stringify({ name: r.name, trigger_event: r.trigger_event, conditions: r.conditions, steps: r.steps, actions: r.actions, settings: r.settings, is_active: r.is_active, deleted_at: !!r.deleted_at }) : 'absente');
 const reglages = async () => (await admin.from('company_settings').select('default_language, automations_paused').eq('org_id', b.orgA).single()).data as { default_language: string; automations_paused: boolean };
 const horsPreset = async () => ((await admin.from('automation_rules').select('id, name, deleted_at').eq('org_id', b.orgA).eq('is_preset', false).is('purged_at', null)).data ?? []) as Array<{ id: string; name: string; deleted_at: string | null }>;
-const IMPOSSIBLE = /ne (peux|peut|sais|sait) pas|pas (possible|disponible|encore|offert|pris en charge)|n.existe pas|impossible|n.est pas (offert|pris en charge|disponible|possible)|ne (fait|font|gère|gèrent|permet|permettent) pas|can.?t|cannot|not (available|possible|supported|able)|isn.?t (available|possible|supported)|don.?t (have|support)|doesn.?t (exist|support)|unable/i;
+// « Non plus, malheureusement — … mais pas déclencher un appel téléphonique » dit bien que c'est impossible :
+// la passe finale l'avait compté comme une faute (C09 T2). Ajoutés : « non plus », « mais pas », « ne peuvent pas ».
+const IMPOSSIBLE = /\bnon plus\b|\bmais pas\b|ne (peuvent|savent) pas|ne (peux|peut|sais|sait) pas|pas (possible|disponible|encore|offert|pris en charge)|n.existe pas|impossible|n.est pas (offert|pris en charge|disponible|possible)|ne (fait|font|gère|gèrent|permet|permettent) pas|can.?t|cannot|not (available|possible|supported|able)|isn.?t (available|possible|supported)|don.?t (have|support)|doesn.?t (exist|support)|unable/i;
 const estAnglais = (t: string) => (t.match(/\b(the|is|are|your|you|it|this|and|of|will|i've|i)\b/gi)?.length ?? 0) > (t.match(/\b(le|la|les|des|est|une|pour|avec|dans|ton|ta|tu|je|j'ai|c'est|ça)\b/gi)?.length ?? 0);
 
 const bilan: Array<Record<string, any>> = [];
