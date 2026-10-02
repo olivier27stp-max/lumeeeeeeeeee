@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { actionsDuParcours } from '../../../src/lib/publicationAutomatisation';
 import { estFormatOrigine } from '../../../src/lib/sequenceTypes';
-import { ACTIONS, actionCompatible, champQuiFixeLEntite, entiteDuChamp, problemesAvantPublication } from '../../../src/lib/automationCatalogue';
+import { ACTIONS, ENTITE_PAR_DECLENCHEUR, actionCompatible, champQuiFixeLEntite, entiteDuChamp, problemesAvantPublication } from '../../../src/lib/automationCatalogue';
 import { objetDeLaRegle } from '../../../src/components/champs/automatisations';
 import type { ChampPerso } from '../../../src/lib/champs/types';
 
@@ -156,5 +156,38 @@ describe('l’entité que fixe le champ surveillé — une seule règle pour le 
     expect(actionCompatible(ACTIONS.find((a) => a.cle === 'envoyer_soumission')!, 'custom_field.changed', 'quote')).toBe(true);
     expect(actionCompatible(ACTIONS.find((a) => a.cle === 'move_deal_stage')!, 'custom_field.changed', 'quote')).toBe(true);
     expect(actionCompatible(ACTIONS.find((a) => a.cle === 'envoyer_facture')!, 'custom_field.changed', 'quote')).toBe(false);
+  });
+});
+
+// ─── Triage « actions », ligne 6 (= déclencheurs 06:191) ────────
+
+describe('ligne 6 — « Appel reçu de l’extérieur » n’apporte ni devis, ni facture, ni rendez-vous, ni opportunité', () => {
+  const SIX = ['envoyer_facture', 'envoyer_soumission', 'modifier_statut_rendezvous', 'move_deal_stage', 'modifier_deal', 'assigner_deal'];
+
+  it('l’entité du déclencheur est celle que le serveur émet (`automation_webhook_receipt`)', () => {
+    expect(ENTITE_PAR_DECLENCHEUR['webhook.received']).toBe('automation_webhook_receipt');
+  });
+
+  it('les six actions liées à une fiche sont incompatibles ; toutes les autres restent offertes', () => {
+    const refusees = ACTIONS.filter((a) => !actionCompatible(a, 'webhook.received')).map((a) => a.cle).sort();
+    expect(refusees).toEqual([...SIX].sort());
+    for (const cle of ['send_sms', 'send_email', 'create_task', 'create_notification', 'ajouter_etiquette', 'webhook', 'ajouter_note']) {
+      expect(actionCompatible(ACTIONS.find((a) => a.cle === cle)!, 'webhook.received'), cle).toBe(true);
+    }
+  });
+
+  it('la publication les refuse, en les nommant', () => {
+    const bloquants = problemesAvantPublication({
+      trigger_event: 'webhook.received', conditions: {},
+      steps: [
+        { id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Bonjour' } }, suivant: 'e2' },
+        { id: 'e2', type: 'action', action: { type: 'envoyer_facture', config: {} }, suivant: 'e3' },
+        { id: 'e3', type: 'action', action: { type: 'assigner_deal', config: {} }, suivant: null },
+      ],
+    }).filter((p) => p.gravite === 'bloquant').map((p) => p.message);
+    expect(bloquants).toEqual([
+      '« Envoyer la facture » ne peut pas suivre ce déclencheur.',
+      '« Assigner l’opportunité » ne peut pas suivre ce déclencheur.',
+    ]);
   });
 });

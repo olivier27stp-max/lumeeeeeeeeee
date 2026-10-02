@@ -171,6 +171,46 @@ describe('lignes 5 et 7 — la publication juge les actions sur l’entité que 
   });
 });
 
+// ─── Triage « actions », ligne 6 ────────────────────────────────
+
+describe('ligne 6 — « Appel reçu de l’extérieur » : la publication refuse les six actions qui échoueraient à chaque passage', () => {
+  const etape = (id: string, type: string, config: Record<string, string>, suivant: string | null) => ({ id, type: 'action', action: { type, config }, suivant });
+
+  it('facture, devis, rendez-vous et opportunité : 422, chacune nommée', async () => {
+    etat.tables.automation_rules = [regle({
+      trigger_event: 'webhook.received', conditions: {},
+      steps: [
+        etape('e1', 'send_sms', { body: 'Bonjour' }, 'e2'),
+        etape('e2', 'envoyer_facture', {}, 'e3'),
+        etape('e3', 'envoyer_soumission', {}, 'e4'),
+        etape('e4', 'modifier_statut_rendezvous', { statut: 'completed' }, 'e5'),
+        etape('e5', 'move_deal_stage', { cible: 'gagne' }, 'e6'),
+        etape('e6', 'modifier_deal', { source: 'Site' }, 'e7'),
+        etape('e7', 'assigner_deal', {}, null),
+      ],
+    })];
+    const r = await appeler('POST', `/automations/rules/${REGLE}/publication`, { actif: true });
+    expect(r.status).toBe(422);
+    expect(r.json.problemes).toEqual([
+      '« Envoyer la facture » ne peut pas suivre ce déclencheur.',
+      '« Envoyer le devis » ne peut pas suivre ce déclencheur.',
+      '« Changer le statut du rendez-vous » ne peut pas suivre ce déclencheur.',
+      '« Déplacer l’opportunité » ne peut pas suivre ce déclencheur.',
+      '« Modifier l’opportunité » ne peut pas suivre ce déclencheur.',
+      '« Assigner l’opportunité » ne peut pas suivre ce déclencheur.',
+    ]);
+    expect(enBase().is_active).toBe(false);
+  });
+
+  it('un parcours qui n’en contient aucune se publie', async () => {
+    etat.tables.automation_rules = [regle({
+      trigger_event: 'webhook.received', conditions: {},
+      steps: [etape('e1', 'send_sms', { body: 'Bonjour' }, 'e2'), etape('e2', 'create_task', { title: 'Rappeler' }, null)],
+    })];
+    expect((await appeler('POST', `/automations/rules/${REGLE}/publication`, { actif: true })).status).toBe(200);
+  });
+});
+
 // ─── Triage « éditeur », 05b-canevas-outils-origine:303 ─────────
 
 describe('05b:303 — une automatisation PUBLIÉE ne se vide pas ; `actions` peut refléter un parcours', () => {

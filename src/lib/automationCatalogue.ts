@@ -1245,6 +1245,16 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   // pipeline (`server/lib/rappels-dates.ts`). L'éditeur, qui connaît le
   // champ choisi, le précise via `actionCompatible(…, entiteConnue)`.
   'date.reached': 'client',
+  /*
+   * Un appel venu de l'EXTÉRIEUR n'apporte aucune fiche du CRM : le serveur
+   * émet l'entité `automation_webhook_receipt` (server/routes/
+   * webhooks-entrants.ts). Sans cette ligne, le déclencheur passait pour
+   * « inconnu » et tout était offert : « Envoyer la facture », « Envoyer le
+   * devis », « Changer le statut du rendez-vous » et les trois actions sur
+   * l'opportunité se laissaient ajouter ET publier, pour échouer à chaque
+   * passage (triage actions, ligne 6).
+   */
+  'webhook.received': 'automation_webhook_receipt',
   'deal.stage_entered': 'deal',
   'deal.stage_idle': 'deal',
 };

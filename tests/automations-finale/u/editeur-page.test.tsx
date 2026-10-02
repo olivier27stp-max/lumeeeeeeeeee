@@ -501,6 +501,26 @@ describe('ligne 5 — « Date atteinte » sur un champ du pipeline : ce que le t
   });
 });
 
+// ─── Triage « actions », ligne 6 (= déclencheurs 06:191) ────────
+
+describe('ligne 6 — tiroir « Actions » d’une automatisation « Appel reçu de l’extérieur »', () => {
+  it('les six actions liées à un devis, une facture, un rendez-vous ou une opportunité sont grisées, avec la raison', async () => {
+    etat.regles = [regle({ trigger_event: 'webhook.received', conditions: {} })];
+    await ouvrir();
+    cliquer(boutonExact('Ajouter'));
+    await attendre(2);
+    const grisees = boutons(tiroirActions() ?? undefined)
+      .filter((b) => b.textContent?.includes('Ne va pas avec ce déclencheur'))
+      .map((b) => b.querySelector('.font-medium')?.textContent);
+    expect(grisees).toEqual([
+      'Changer le statut du rendez-vous', 'Déplacer l’opportunité', 'Modifier l’opportunité', 'Assigner l’opportunité',
+      'Envoyer la facture', 'Envoyer le devis',
+    ]);
+    // Le reste se choisit comme avant.
+    expect(bouton('Envoyer un texto', tiroirActions() ?? undefined)?.textContent).not.toContain('Ne va pas avec ce déclencheur');
+  });
+});
+
 // ─── Triage « éditeur », EDT-166 ────────────────────────────────
 
 describe('EDT-166 — « Précédent » du navigateur : ce qui ne peut pas s’enregistrer en partant se demande AVANT', () => {

@@ -196,6 +196,28 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await page.context().close();
   },
 
+  /** Ligne 6 (actions) — « Appel reçu de l'extérieur » : six actions grisées dans le tiroir, refusées à la publication. */
+  async l6() {
+    const b = await leBureau();
+    const regle = await creerRegle({ trigger_event: 'webhook.received', steps: [
+      action('send_sms', { body: 'Bonjour' }, 'e1', 'e2'), action('envoyer_facture', {}, 'e2', 'e3'), action('assigner_deal', {}, 'e3', null),
+    ] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+    for (const titre of ['Envoyer la facture', 'Envoyer le devis', 'Changer le statut du rendez-vous', 'Déplacer l’opportunité', 'Modifier l’opportunité', 'Assigner l’opportunité']) {
+      const item = tiroir(page).getByRole('button', { name: new RegExp(`^${titre}`) });
+      verifier(((await item.textContent()) ?? '').includes('Ne va pas avec ce déclencheur'), `le tiroir grise « ${titre} », avec la raison`);
+    }
+    const jeton = await page.evaluate(() => JSON.parse(localStorage.getItem('lume-auth-token') ?? '{}').access_token as string);
+    const r = await fetch(`http://127.0.0.1:3497/api/automations/rules/${regle.id}/publication`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}`, 'x-org-id': b.orgA }, body: JSON.stringify({ actif: true }),
+    });
+    const j = await r.json().catch(() => null) as { problemes?: string[] } | null;
+    verifier(r.status === 422 && (j?.problemes ?? []).length === 2, `le serveur refuse la publication (${r.status} : ${(j?.problemes ?? []).join(' · ')})`);
+    await page.context().close();
+  },
+
   /** EDT-166 — « Précédent » du navigateur avec une étape incomplète : on demande avant de perdre le travail. */
   async e166() {
     const regle = await creerRegle({ steps: [action('send_sms', { body: 'Texto ALPHA' }, 'e1', 'e2'), action('create_task', { title: '' }, 'e2', null)] });
