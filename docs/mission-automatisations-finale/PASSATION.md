@@ -1,6 +1,6 @@
 # Passation — mission « correction finale de la page Automatisations » de Lume
 
-Rédigée le 2026-10-02 vers 13:15 UTC par la session Claude Code qui coordonnait la mission (ex-« 98 », puis « bf »),
+Rédigée le 2026-10-02 vers 13:15 UTC, mise à jour jusqu'à 14:00 UTC, par la session Claude Code qui coordonnait la mission (ex-« 98 », puis « bf »),
 au moment où le quota hebdomadaire du compte de Rafba a coupé les quatre agents en plein travail.
 
 Légende : **[V]** vérifié par une commande ou un fichier au moment d'écrire · **[R]** rapporté dans la conversation
@@ -157,7 +157,7 @@ Contient, fusionnés :
 | E — enquête ciblage/doublons/champs | tests rouges + prototypes (pas de correctif) | `notes/E-conception.md` |
 | F — coûts de Lumi | scripts de mesure + tests de constats | `notes/F-constats.md`, `F-mesures.md` |
 | Specs e2e adaptées | commit fd657d81 de la session des specs (28 fichiers sous `e2e/automations/`) | à fusionner sur `main` **avec** les correctifs, jamais avant |
-| `main` | jusqu'à #904 inclus | #905 de la session 86 est arrivé après [R] |
+| `main` | jusqu'à #904 inclus | #905 et #906 sont arrivés après [R] : fusionner `origin/main` avant de reprendre |
 
 Commits du coordinateur sur cette branche (tous [V] dans `git log`) :
 `038d2fe8` droit de la route des messages ; `974b38c0` devis-08 (Lumi convertit sans demander) ;
@@ -182,7 +182,7 @@ langue = toujours une carte ; commit suivant : Lumi n'appelle plus les routes d'
 - **Durcissement des écritures** [P] : plan dans `notes/DURCISSEMENT-ecritures.md` (une seule porte d'écriture en
   rôle de service + `revoke insert, update, delete on automation_rules from authenticated, anon` ; `client_tags` et
   `automation_webhooks` aussi). Inclut le repli `update({ is_active: false })` de
-  `server/lib/agent/tools-lot-entreprise.ts` (≈ l. 456 ; la session 86 a accepté de ne pas y toucher) — c'est noté aussi dans la passation de cette session : `docs/passation/reprise-outils-lumi-2026-10-02.md`, § 9.4, sur `main` après #906.
+  `server/lib/agent/tools-lot-entreprise.ts` (≈ l. 456 ; la session 86 a accepté de ne pas y toucher) — c'est noté aussi dans la passation de cette session : `docs/passation/reprise-outils-lumi-2026-10-02.md`, § 9.4, sur `main` après #906. Après ce changement, rejouer `scripts/qa/executer-outils-staging.mts` pour `create_automation_from_template` et `duplicate_automation_rule` (relecture « créée éteinte », « copie éteinte »).
 - **Aucune migration appliquée** — ni staging ni prod. Aucune n'est encore dans `supabase/migrations/` [V].
 - Unification `steps` / `actions` (P6) : essai à blanc fait, conversion non faite (accord requis).
 - Rejeu de `npm run qa:lumi` (≈ 2,30 $) et du jeu d'évaluation (cas devis-08) avant la prod.
@@ -297,7 +297,7 @@ messages d'entreprises) ; `env.reel` n'est PAS poussé (secret).
 | Session | Rôle | À savoir |
 |---|---|---|
 | lumeeeeeeeeee-9a (ex-« fd ») | tenait les specs Playwright `e2e/automations/**` et la pile `lumeautoe2e` | **arrêtée à 13:20 UTC**, a écrit sa propre passation, copiée dans la branche de passation sous `PASSATION_AUDIT_AUTOMATISATIONS_session-tests.md` (à lire avec celle-ci). Elle n'a PAS revérifié 76afbb79 ni le lot « modèles ». Sa pile `lumeautoe2e-*` tourne encore (`bash scripts/qa/automations-e2e/pile.sh arreter` pour l'arrêter, rien n'est supprimé). `e2e/automations/**` reste réservé à la session de tests qui reprendra |
-| lumeeeeeeeeee-86 (ex-« a1 ») | outils et cartes de Lumi | fusionne sur `main` (#904, #905) ; prévient avant chaque fusion |
+| lumeeeeeeeeee-86 (ex-« a1 ») | outils et cartes de Lumi | **s'arrête aussi** ; sa passation : `docs/passation/reprise-outils-lumi-2026-10-02.md` sur `main` (#906) ; son § 9.4 renvoie au repli `is_active` (§ 5.3) |
 | lumeeeeeeeeee-90 (ex-« f1 ») | mission fiabilité de Lumi | passes en prod dans « ZZ QA Champs » |
 
 Ces sessions sont sur le compte de Rafba et s'arrêteront aussi quand son quota sera épuisé. **Un seul flux contre la
@@ -307,9 +307,9 @@ prod à la fois**, et une seule session qui touche le schéma.
 
 ## 10. Comment reprendre, dans l'ordre
 
-1. Lire `CLAUDE.md`, puis dans la branche de passation : cette passation, `MISSION.md`, la fin de `JOURNAL.md`, et
-   `PASSATION_AUDIT_AUTOMATISATIONS_session-tests.md` (passation de la session des tests e2e).
-2. Récupérer les branches (§ 7) ; relire les quatre commits `wip`.
+1. Lire `CLAUDE.md`, puis dans la branche de passation : cette passation (y compris le § 12), `MISSION.md`, la fin de
+   `JOURNAL.md`, `PASSATION_AUDIT_AUTOMATISATIONS_session-tests.md` ; sur `main` : `docs/passation/reprise-outils-lumi-2026-10-02.md`.
+2. Récupérer les branches (§ 7) ; relire les quatre commits `wip` ; fusionner `origin/main` dans l'intégration.
 3. Monter une pile locale (`bash scripts/qa/automations-e2e/pile.sh`, sans copie de la prod depuis #900) ; lancer la suite complète sur l'intégration (`npx vitest run
    --maxWorkers=2`) et `npm run lint` pour avoir un point de départ vérifié.
 4. Intégrer M (`wt-b`) puis S (`wt-d`) dans `mission/automatisations-finale`, un à la fois, suite verte après chacun.
@@ -317,10 +317,12 @@ prod à la fois**, et une seule session qui touche le schéma.
    `e2e/automations/` sur la nouvelle tête (la session qui les tenait s'est arrêtée).
 5. Lancer la preuve de conversion `m-30-conversion-a-plat` ; si verte, montrer l'essai à blanc à Rafba et demander
    l'accord pour les vraies entreprises.
-6. Migrations M-01..M-05, S-01..S-03 : appliquer les retouches de `notes/REVUE-migrations.md`, les copier dans
+6. Migrations M-01..M-05, S-01..S-03 : les retouches de `notes/REVUE-migrations.md` pour M sont faites par M [R,
+   `notes/M-corrections.md` : `ff0d7bb7`, `6144888d`] — relire les fichiers à jour dans `notes/M-migrations-proposees/`, les copier dans
    `supabase/migrations/` (`202610080000NN_…`), pile locale → staging (`npm run db:apply`) → les trois checks →
    prod (`npm run db:apply:prod`). Montrer à Rafba celles qui touchent de vraies entreprises (M-01, S-03).
-7. Phase 2 de P selon `notes/P-branchements.md` ; plusieurs déclencheurs (B-17) ; durcissement des écritures.
+7. Phase 2 de P selon `notes/P-branchements.md` ; plusieurs déclencheurs (B-17) ; durcissement des écritures (y compris le
+   repli `is_active` de `tools-lot-entreprise.ts`) ; les défauts du § 12.1 encore ouverts.
 8. `test:automations:all` complet sur la pile locale, CI, `qa:lumi`, PR vers `main`, vérification en prod dans le
    bureau de test, `AUTOMATIONS_KB.md`, agent indépendant, `AUTOMATIONS_FINAL_REPORT.md`.
 
@@ -355,3 +357,70 @@ prod à la fois**, et une seule session qui touche le schéma.
 > aucune fusion sur `main` ; aucune migration appliquée, et aucune action sur une vraie entreprise (Coquin lavage,
 > Vision Lavage), sans mon accord ; un commit par correctif, et pousse ta branche de travail régulièrement pour ne
 > rien perdre.
+
+---
+
+## 12. Compléments (ajoutés après relecture : ce qui manquait aux sections précédentes)
+
+### 12.1 Défauts relevés par la carte et pas encore traités [R — rapport de l'agent qui a écrit `AUTOMATIONS_MAP.md` ; cette liste n'est PAS dans le fichier de la carte]
+Lus dans le code à la tête 22b85158, AVANT l'intégration de M et S : plusieurs sont peut-être corrigés sur
+`mission/auto-finale-b` (moteur) ou `-d` — à recouper avec `notes/M-corrections.md` et `notes/S-corrections.md`.
+
+| # | Défaut | Où | Qui / état |
+|---|---|---|---|
+| 1 | « A un parcours » n'a pas le même sens partout (tableau non vide pour le moteur, tableau même vide ailleurs) | `server/lib/automationEngine.ts:1542`, `src/lib/automationRulesApi.ts:208`, `server/lib/automation-messages.ts:133` | règle décidée : un tableau, même vide, est un parcours (`a937f81f` de M va dans ce sens) — à vérifier après intégration |
+| 2 | Lecteurs de `actions` restants | `src/pages/SettingsReviews.tsx:705`, `server/lib/trajets/propositionJournee.ts:239` (cherche aussi un déclencheur `appointment.rescheduled` inexistant) | ouvert |
+| 3 | « Tâche terminée » ne part pas quand la tâche est cochée dans la fiche d'un deal | `src/lib/pipelineVentesApi.ts:548` | M-02 (trigger en base) le couvrirait — à vérifier |
+| 4 | « Nouveau prospect » ne part pas pour le porte-à-porte | `server/routes/field-sales.ts:316`, `server/lib/fieldPinSync.ts:358`, `server/lib/leadClientSync.ts:74` | ouvert |
+| 5 | « Job prêt à facturer » dépend d'un appel du navigateur et du rôle de l'appelant | `server/routes/automation-events.ts:267` | ouvert |
+| 6 | « Date atteinte » : route de cron sans verrou | `server/routes/cron.ts:94` | rattrapage fait par M (B-18) ; verrou à vérifier |
+| 7 | Trois routes d'événements sans appelant (`quote-sent`, `lead-created`, `lead-status-changed`) + `/emails/send-quote` qui émet `estimate.sent` | `server/routes/automation-events.ts`, `server/routes/emails.ts` | code mort (P6) |
+| 8 | « Démarrer une automatisation » ne rejuge pas les conditions de la règle démarrée | `server/lib/automationEngine.ts:1588` | ciblage : branchement prévu par P ; conditions : à vérifier chez M (B-04) |
+| 9 | Une règle à plat sans délai envoie son courriel hors de la fenêtre d'envoi | `server/lib/automationEngine.ts:567` | M (B-08) l'a peut-être couvert — à vérifier |
+| 10 | Validation à 30 étapes, moteur à 50, mission 50+ nœuds | `server/lib/validation.ts:1120` | ouvert |
+| 11 | `OPERATEURS_CONDITIONS` du catalogue en retard sur le moteur | `src/lib/automationCatalogue.ts:1576` | ouvert |
+| 12 | Code mort : `delayToSeconds`, `annulerSequence`, `AutomationBuilder.tsx`, `getChannels` | — | P6 |
+| 13 | `client_tags` écrite et supprimée directement par le navigateur, sans exiger `clients.update` | `src/lib/etiquettesApi.ts:71`, `:80` | durcissement (R-05) |
+| 14 | `automation_webhooks` : DELETE direct permis | politique RLS | durcissement (R-03) |
+| 15 | La garde en base ne contrôle pas le contenu (`trigger_event`, `steps`, `actions`, `settings` écrivables par PostgREST avec `automations.update`) | `trg_automation_rules_garde` | durcissement (revoke) |
+| 16 | `ecrireRegle` ne propage pas aux copies liées et n'envoie pas la garde de version | `server/lib/automations-ecriture.ts` | durcissement |
+| 17 | `get_automation_health` (Lumi) compte les règles écartées parmi les « sautés » | `server/lib/agent/tools-etendus.ts:1067` | à brancher sur les statistiques de S après intégration |
+| 18 | `lienLumiSurAutomatisation` sans appelant | `src/lib/lumiContextePage.ts` | pas de bouton dans l'éditeur (décision) → à retirer ou à brancher ailleurs |
+
+Corrigés depuis (pour mémoire) : reflet `actions` des modèles et des copies (U), `update_automation_from_text` sans
+carte (coordinateur), faux « automatisations non déclenchées » (coordinateur), renommage / `modifie` / `publiee` dans
+l'éditeur (U), nom de copie selon l'interface (U). La liste qui exigeait `automations.update` pour s'afficher a été
+envoyée à S : [À V] sur sa branche.
+
+### 12.2 Coûts de Lumi (P4) — mesures de l'agent F [R, détail dans `notes/F-mesures.md`]
+- Une conversation de six tours sur une automatisation coûte **3,56 ¢ dans le panneau « Construire avec Lumi »** ; le
+  clavardage est mesuré à part (chiffres dans le fichier). Dépense totale des mesures : 1,37 $.
+- Cache : 92 % (clavardage) et 93 % (panneau) de lecture en cache en multi-tours — objectif de 80 % tenu.
+- Débit de crédits exact sur les deux chemins (46 lignes du grand livre recalculées).
+- Panneau : 75 % du coût est la sortie (le parcours entier réécrit à chaque tour, même pour une question) — piste
+  d'optimisation **non faite** (l'effort réduit a été écarté : qualité 118 contre 122).
+- Activer / mettre en pause / renommer : 0 ¢.
+- **Défaut ouvert** : le panneau ne sait pas modifier les deux plus grosses automatisations du pack (17 et 23 étapes)
+  — la demande échoue et coûte 3,4 à 3,6 ¢ à l'entreprise.
+- Usage « automatisations » plausible : 0,7 % à 27 % de l'allocation mensuelle (1 000 crédits = 30 $).
+- Reste pour P4 : le tableau avant/après et la projection du rapport final.
+
+### 12.3 Décisions de produit encore ouvertes, en plus du § 2
+- Texte du serveur au-dessus de la carte d'activation de Lumi + carte d'activation corrigée par la session des
+  outils (#896) : doublon à l'écran ? Garder les deux ou un seul — à trancher au navigateur.
+- Une spec e2e jugée fausse sur le fond par l'agent T (`notes/T-corrections.md`, section « Une spec qui me paraît
+  fausse sur le fond ») : non tranchée.
+- Bouton « Total » (`[invoice_total]`) offert sur « Devis envoyé » où il n'a pas de valeur : à régler par la palette
+  contextuelle de P, pas à la main.
+
+### 12.4 État des tests e2e (dernière passe de la session des tests) [R]
+1 066 specs : 871 vertes, 194 rouges `@defaut` (défauts connus), 1 rouge sans marque (le « Précédent », corrigé
+depuis par c7e282f8, non revérifié). Le lot « modèles » et la tête 76afbb79 n'ont **pas** été revérifiés. Le verdict
+d'une passe se lit avec `node scripts/qa/automations-e2e/bilan.mjs <resultats.json>` (`--zero-defaut` = mode « prêt
+pour le launch »).
+
+### 12.5 Ce que cette passation ne contient pas
+- La conversation elle-même (raisonnements, échanges avec les agents) : seul ce qui est écrit dans `JOURNAL.md`,
+  `notes/` et ce document est transmis.
+- La mémoire Claude du poste de Rafba : propre à son compte, non transmise ; ses règles utiles sont reprises au § 2.
+- `REGISTRE.md` n'est pas à jour depuis le matin du 2026-10-02 : se fier aux `notes/*-corrections.md`.
