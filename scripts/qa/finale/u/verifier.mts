@@ -528,8 +528,8 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       if (error) throw new Error(`langue du bureau : ${error.message}`);
     };
     const configDe = async (id: string) => ((await etapes(id))[0]?.action?.config ?? {}) as Record<string, string>;
-    const TITRE_EN = 'Version anglaise (Texte du message) — utilisée seulement si vos messages partent en anglais';
-    const TITRE_FR = 'Version française (Texte du message) — utilisée seulement si vos messages partent en français';
+    const TITRE_EN = 'Version anglaise — utilisée seulement si vos messages partent en anglais';
+    const TITRE_FR = 'Version française — utilisée seulement si vos messages partent en français';
     try {
       // ── Bureau qui envoie en FRANÇAIS ──
       await mettreLangue('fr');
@@ -805,6 +805,149 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await page.reload();
     await page.getByRole('button', { name: /^Si…/ }).click();
     verifier((await p.getByLabel('Conditions').inputValue()).split('\n').length === 3, 'relu après rechargement : trois lignes');
+    await page.context().close();
+  },
+
+  /** Régression de 6ce9a1cb (editeur/11:125) — saisie, « Enregistrer » du panneau, puis UN seul « Précédent » : retour à la liste. */
+  async e166b() {
+    const regle = await creerRegle({ trigger_event: 'quote.sent', steps: [action('send_sms', { body: 'Texte d’origine' })] });
+    const page = await ouvrirPage();
+    // Un vrai chemin : la liste, puis l'éditeur ouvert depuis elle.
+    await page.goto(`${BASE}/automations`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Mes automatisations' }).waitFor({ timeout: 120_000 });
+    // Ouvrir DEPUIS la liste, sans recharger la page (comme un clic sur une ligne) : c'est ce chemin-là
+    // que « Précédent » remonte. `page.goto` chargerait un autre document, et le retour quitterait l'application.
+    const ouvrirDepuisLaListe = async () => {
+      await page.evaluate((chemin) => {
+        window.history.pushState({}, '', chemin);
+        window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+      }, `/automations/${regle.id}`);
+      await page.getByRole('button', { name: /^(Quand|When)/ }).first().waitFor({ timeout: 120_000 });
+    };
+    await ouvrirDepuisLaListe();
+    const longueurAvant = await page.evaluate(() => window.history.length);
+    await carte(page, 'Envoyer un texto').click();
+    const p = panneau(page);
+    await p.getByLabel('Texte du message *', { exact: true }).fill('Texte réécrit avant de partir');
+    await pause(300);
+    const pendant = await page.evaluate(() => ({ n: window.history.length, garde: (window.history.state as Record<string, unknown> | null)?.lumeGardeEditeur === true }));
+    verifier(pendant.garde && pendant.n === longueurAvant + 1, `saisie en cours : la garde pose UNE entrée d’historique (${longueurAvant} → ${pendant.n}, sur l’entrée de la garde : ${pendant.garde})`);
+    await enregistrer(page).click();
+    await p.waitFor({ state: 'hidden' });
+    await pause(500);
+    verifier(await page.evaluate(() => (window.history.state as Record<string, unknown> | null)?.lumeGardeEditeur !== true), 'panneau enregistré : on n’est plus sur l’entrée de la garde');
+    await page.goBack();
+    await page.waitForURL((url) => url.pathname === '/automations', { timeout: 15_000 }).catch(() => undefined);
+    verifier(new URL(page.url()).pathname === '/automations', `UN seul « Précédent » ramène à la liste (${new URL(page.url()).pathname})`);
+    await pause(4000);
+    const enBase = (await etapes(regle.id))[0]?.action?.config?.body;
+    verifier(enBase === 'Texte réécrit avant de partir', `la modification est enregistrée en partant (en base : ${JSON.stringify(enBase)})`);
+
+    // La garde retient toujours quand il reste quelque chose à perdre.
+    await ouvrirDepuisLaListe();
+    await carte(page, 'Envoyer un texto').click();
+    await p.getByLabel('Texte du message *', { exact: true }).fill('Saisie jamais enregistrée');
+    await pause(300);
+    verifier(await page.evaluate(() => (window.history.state as Record<string, unknown> | null)?.lumeGardeEditeur === true), 'nouvelle saisie : la garde est de nouveau posée');
+    await page.goBack();
+    await pause(500);
+    console.log('  (après « Précédent » :', new URL(page.url()).pathname, '— dialogues :', await page.getByRole('dialog').count(), await page.getByRole('alertdialog').count(), ')');
+    const question = page.getByRole('dialog').filter({ hasText: 'Quitter sans enregistrer ?' });
+    await question.waitFor({ timeout: 10_000 });
+    verifier(new URL(page.url()).pathname.endsWith(regle.id), 'saisie non enregistrée : « Précédent » pose la question, on est toujours dans l’éditeur');
+    await question.getByRole('button', { name: 'Annuler', exact: true }).click();
+    verifier(await p.getByLabel('Texte du message *', { exact: true }).inputValue() === 'Saisie jamais enregistrée', '« Annuler » : la saisie est intacte');
+    // … et quitter par « Mes automatisations » depuis l'entrée de la garde ne la laisse pas sous la liste.
+    await page.getByRole('button', { name: 'Mes automatisations' }).first().click();
+    const quitter = page.getByRole('dialog').getByRole('button', { name: /^(Quitter|Fermer|Abandonner)/ });
+    if (await quitter.first().isVisible().catch(() => false)) await quitter.first().click();
+    await page.waitForURL((url) => url.pathname === '/automations', { timeout: 15_000 }).catch(() => undefined);
+    verifier(new URL(page.url()).pathname === '/automations', 'sortie par « Mes automatisations » : la liste');
+    await page.goBack();
+    await pause(1500);
+    const apres = new URL(page.url()).pathname;
+    await page.goBack();
+    await pause(1500);
+    verifier(apres.endsWith(regle.id) && new URL(page.url()).pathname === '/automations', `depuis la liste, « Précédent » rouvre l’éditeur UNE fois, puis revient à la liste (${apres} → ${new URL(page.url()).pathname})`);
+    await page.context().close();
+  },
+
+  /** Remarque (a) — fenêtre basse (1024 × 768) : ce qu'« Enregistrer » va retirer est écrit dans la zone visible, et le bloc vient dans la vue. */
+  async pli() {
+    const b = await leBureau();
+    await admin.from('company_settings').update({ default_language: 'fr' }).eq('org_id', b.orgA);
+    const long = Array.from({ length: 14 }, (_, i) => `Ligne ${i + 1} du message, assez longue pour occuper la largeur du champ.`).join('\n');
+    const regle = await creerRegle({ trigger_event: 'quote.sent', steps: [action('send_email', {
+      subject: 'Votre devis', subject_en: 'Your quote', body: long, body_en: 'Hello,\nYour quote is ready.',
+    })] });
+    const page = await ouvrirPage();
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await ouvrirEditeur(page, regle.id);
+    await carte(page, 'Envoyer un courriel').click();
+    const p = panneau(page);
+    await p.waitFor();
+    /** L'élément est-il, au moins en partie, dans la fenêtre ET dans la zone défilante du panneau ? */
+    const dansLaVue = (selecteur: string) => page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      let visible = r.bottom > 0 && r.top < window.innerHeight && r.height > 0;
+      for (let parent = el.parentElement; visible && parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        if (!/(auto|scroll|hidden)/.test(style.overflowY)) continue;
+        const cadre = parent.getBoundingClientRect();
+        visible = r.bottom > cadre.top + 4 && r.top < cadre.bottom - 4;
+      }
+      return visible;
+    }, selecteur);
+    const BLOC = '[data-testid="autre-version"]';
+    const AVIS = '[data-testid="avis-retrait-autre-version"]';
+    verifier(!(await dansLaVue(BLOC)), 'à l’ouverture (1024 × 768, message long) : le bloc de la version anglaise est SOUS le pli');
+    await p.getByLabel('Objet *', { exact: true }).fill('Votre soumission');
+    await pause(900);
+    verifier(await dansLaVue(AVIS), '« La version anglaise sera retirée. » est écrit dans la zone visible, à côté d’« Enregistrer »');
+    verifier(((await page.locator(AVIS).textContent()) ?? '').startsWith('La version anglaise sera retirée.'), 'le texte de l’avis');
+    verifier(await dansLaVue(BLOC), 'le bloc qui vient de se déplier est venu dans la vue');
+    // On remonte au début du panneau : le bloc repasse sous le pli, l'avis reste à côté du bouton, « Voir » y ramène.
+    await p.getByLabel('Objet *', { exact: true }).scrollIntoViewIfNeeded();
+    await page.evaluate(() => { document.querySelectorAll('aside').forEach((a) => a.querySelectorAll('*').forEach((el) => { if (el.scrollTop > 0) el.scrollTop = 0; })); });
+    await pause(400);
+    verifier(!(await dansLaVue(BLOC)) && await dansLaVue(AVIS), 'remonté en haut : le bloc est de nouveau sous le pli, l’avis toujours visible');
+    await page.locator(AVIS).getByRole('button', { name: 'Voir' }).click();
+    await pause(900);
+    verifier(await dansLaVue(BLOC), '« Voir » ramène le bloc dans la vue');
+    await p.getByLabel('La garder telle quelle').check();
+    verifier(await page.locator(AVIS).count() === 0, '« La garder telle quelle » : l’avis disparaît');
+    await p.getByLabel('La retirer (vos clients recevront le texte ci-dessus)').check();
+    await enregistrer(page).click();
+    await pause(6000);
+    const config = ((await etapes(regle.id))[0]?.action?.config ?? {}) as Record<string, string>;
+    verifier(config.subject === 'Votre soumission' && !('subject_en' in config) && !('body_en' in config), `enregistré : la version anglaise entière est retirée (${Object.keys(config).join(', ')})`);
+    await page.context().close();
+  },
+
+  /** Remarque (b) — l'étape choisie dans le tiroir, pas encore enregistrée : carte en pointillé, indicateur « Étape non enregistrée ». */
+  async attente() {
+    const regle = await creerRegle({ trigger_event: 'quote.sent', steps: [action('send_sms', { body: 'Bonjour [client_first_name]' })] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    const entete = page.locator('header').filter({ hasText: 'Mes automatisations' }).first();
+    verifier(((await entete.textContent()) ?? '').includes('Enregistré'), 'avant : « Enregistré »');
+    await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+    await tiroir(page).getByRole('button', { name: /^Créer une tâche/ }).click();
+    await panneau(page).waitFor();
+    const enAttente = page.locator('div.border-dashed').filter({ hasText: 'En cours d’ajout — pas encore enregistrée' });
+    verifier(await enAttente.count() === 1 && ((await enAttente.textContent()) ?? '').includes('Créer une tâche'), 'la carte en cours d’ajout est en pointillé, avec sa mention');
+    verifier(await enAttente.evaluate((el) => getComputedStyle(el).borderTopStyle) === 'dashed', 'la bordure est réellement pointillée à l’écran');
+    const pendant = (await entete.textContent()) ?? '';
+    verifier(pendant.includes('Étape non enregistrée') && !pendant.includes('Enregistré'), `l’indicateur dit « Étape non enregistrée » (${pendant.replace(/\s+/g, ' ').slice(-40)})`);
+    await pause(5000);
+    verifier(((await lireRegle(regle.id)).steps as unknown[]).length === 1, 'rien n’est écrit en base pendant l’ajout');
+    await enregistrer(page).click();
+    await pause(500);
+    verifier(await enAttente.count() === 0, 'panneau enregistré : plus de pointillé ni de mention');
+    await pause(5000);
+    verifier(((await lireRegle(regle.id)).steps as unknown[]).length === 2 && ((await entete.textContent()) ?? '').includes('Enregistré'), 'l’étape est en base, l’indicateur dit « Enregistré »');
     await page.context().close();
   },
 };

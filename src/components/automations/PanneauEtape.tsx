@@ -50,6 +50,7 @@ import type { ChampPerso, ObjetChamp } from '../../lib/champs/types';
 import { estCorpsHtml, htmlVersTexte, texteVersHtml, variablesInconnues, variableLisible } from '../../lib/emailBodyText';
 import { confirmer } from '../ui/ConfirmDialog';
 import { analyserConditions, conditionsConservees, texteDesConditions } from '../../lib/conditionsEtapeSi';
+import AutreVersionMessage, { AvisRetraitAutreVersion, type ChoixAutreVersion } from './AutreVersionMessage';
 
 /** Les conditions d'une étape « si », en texte modifiable (règles : src/lib/conditionsEtapeSi.ts). */
 const texteSi = (etape: Etape, fr: boolean): string => (etape.type === 'si' ? texteDesConditions(etape.conditions, fr) : '');
@@ -85,6 +86,11 @@ function champsPersoDe(etape: Etape): Record<string, unknown> {
  *     « Enregistrer » : le bloc se déplie, dit « Cette version n'est plus à
  *     jour. » et offre « La retirer » (coché d'office) ou « La garder ».
  *     Rien n'est retiré en silence, rien de périmé ne reste sans choix.
+ * Le bloc secondaire est le composant PARTAGÉ `AutreVersionMessage` (éditeur
+ * de courriel, texto de la liste, Réglages › Messagerie) : un seul bloc par
+ * étape, qui porte tous ses textes de l'autre langue (objet et message), et
+ * les mêmes mots sur tous les écrans, par construction (décision du
+ * coordinateur, 2026-10-02).
  * Une version retirée disparaît de l'étape : le moteur retombe sur `body`
  * (`champLocalise`). Dans un bureau qui envoie en anglais, « retirer la
  * version française » fait donc du texte anglais le SEUL texte : il passe
@@ -308,9 +314,10 @@ export default function PanneauEtape({
    */
   const [conditionsTexte, setConditionsTexte] = useState(() => texteSi(etape, fr));
   /** Champs dont la version anglaise, inchangée, a été déclarée « toujours valable ». */
-  const [versionsGardees, setVersionsGardees] = useState<string[]>([]);
-  /** Les blocs « autre langue » que l'utilisateur a dépliés lui-même. */
-  const [autresDepliees, setAutresDepliees] = useState<string[]>([]);
+  /** L'autre langue, périmée : « La retirer » (d'office) ou « La garder telle quelle ». */
+  const [choixAutre, setChoixAutre] = useState<ChoixAutreVersion>('retirer');
+  /** Le bloc « autre langue », déplié par l'utilisateur (ou resté ouvert après avoir été périmé). */
+  const [autreDepliee, setAutreDepliee] = useState(false);
 
   /**
    * LA VERSION DE L'ÉTAPE DONT LE BROUILLON EST PARTI (constat A-01, le bug
@@ -343,8 +350,8 @@ export default function PanneauEtape({
     setBrouillon(version);
     setDelaiSaisi(saisieDelaiDe(version));
     setConditionsTexte(texteSi(version, fr));
-    setVersionsGardees([]);
-    setAutresDepliees([]);
+    setChoixAutre('retirer');
+    setAutreDepliee(false);
     setConflit(null);
   };
 
@@ -444,36 +451,39 @@ export default function PanneauEtape({
         const clePrincipale = principalEstAnglais ? cleEn : c.cle;
         const cleAutre = principalEstAnglais ? c.cle : cleEn;
         const autre = config[cleAutre] ?? '';
-        /** Le texte principal a changé ici, l'autre langue non. */
-        const perimee = (config[clePrincipale] ?? '') !== (origine[clePrincipale] ?? '')
-          && autre.trim() !== ''
-          && autre === (origine[cleAutre] ?? '');
+        const origineAutre = origine[cleAutre] ?? '';
         return {
           champ: c, clePrincipale, cleAutre, principalEstAnglais, autreEstAnglais: !principalEstAnglais,
-          modeleAutre: champAutreLangue(c, cleAutre, !principalEstAnglais), perimee,
+          modeleAutre: champAutreLangue(c, cleAutre, !principalEstAnglais),
+          /** Le texte principal a changé dans ce panneau. */
+          principalChange: (config[clePrincipale] ?? '') !== (origine[clePrincipale] ?? ''),
+          /** L'autre langue a été retouchée dans ce panneau : l'utilisateur s'en occupe. */
+          autreChangee: autre !== origineAutre,
           /** L'autre langue a été VIDÉE à la main : c'est la retirer. */
           videe: autre.trim() === '',
         };
       });
   }, [brouillon, base, modele, langueEnvoi]);
+  /**
+   * L'AUTRE VERSION — tous les textes de l'autre langue de l'étape, ensemble —
+   * n'est plus à jour : un texte principal a changé ici, et personne n'a touché
+   * à l'autre langue. (Même règle que le texto de la liste et l'éditeur de
+   * courriel : la version se retire ou se garde EN ENTIER.)
+   */
+  const autrePerimee = versionsLangue.some((v) => v.principalChange && !v.videe)
+    && !versionsLangue.some((v) => v.autreChangee);
   // Un bloc déplié parce que sa version est périmée RESTE déplié ensuite :
   // retaper l'autre langue lève « périmée », et le champ se refermerait sous les doigts.
-  const perimees = versionsLangue.filter((v) => v.perimee).map((v) => v.champ.cle).join(',');
   useEffect(() => {
-    if (!perimees) return;
-    setAutresDepliees((liste) => [...new Set([...liste, ...perimees.split(',')])]);
-  }, [perimees]);
-  /** « Version anglaise (Objet) — utilisée seulement si vos messages partent en anglais ». */
-  const titreAutreLangue = (champ: ModeleChamp, autreEstAnglais: boolean): string => (fr
-    ? `Version ${autreEstAnglais ? 'anglaise' : 'française'} (${champ.fr}) — utilisée seulement si vos messages partent en ${autreEstAnglais ? 'anglais' : 'français'}`
-    : `${autreEstAnglais ? 'English' : 'French'} version (${champ.en}) — only used if your messages go out in ${autreEstAnglais ? 'English' : 'French'}`);
+    if (autrePerimee) setAutreDepliee(true);
+  }, [autrePerimee]);
   /** Le champ principal d'un texte : la clé de la langue que le bureau envoie. */
   const clePrincipaleDe = (cle: string): string => versionsLangue.find((v) => v.champ.cle === cle)?.clePrincipale ?? cle;
   /** L'étape à enregistrer : les versions périmées non gardées, et celles vidées à la main, sont retirées. */
   const pourEnregistrer = (etapeAction: Etape): Etape => sansAnglaisVide(sansVersionsRetirees(
     etapeAction,
     versionsLangue
-      .filter((v) => (v.perimee && !versionsGardees.includes(v.champ.cle)) || (v.videe && v.principalEstAnglais))
+      .filter((v) => (autrePerimee && choixAutre === 'retirer' && !v.videe) || (v.videe && v.principalEstAnglais))
       .map((v) => ({ cle: v.champ.cle, principalEstAnglais: v.principalEstAnglais })),
   ));
 
@@ -862,77 +872,48 @@ export default function PanneauEtape({
                     const config = brouillon.action.config as Record<string, string | undefined>;
                     // Le champ principal montre le texte que le bureau ENVOIE.
                     const clePrincipale = langue?.clePrincipale ?? champ.cle;
-                    const ouvert = langue ? (langue.perimee || autresDepliees.includes(champ.cle)) : false;
-                    const idBloc = `${ids}-autre-${champ.cle}`;
                     return (
-                      <React.Fragment key={champ.cle}>
-                        <ChampActionUI
-                          champ={champ}
-                          valeur={config[clePrincipale] ?? ''}
-                          onChange={(v) => majConfig(clePrincipale, v)}
-                          fr={fr}
-                          membres={membres}
-                          etiquettes={etiquettes}
-                          automatisations={automatisations}
-                          etapesPipeline={etapesPipeline}
-                          sms={modele.cle === 'send_sms' && champ.cle === 'body'}
-                        />
-                        {/* L'autre langue, quand l'étape en porte une : un bloc
-                            secondaire, replié tant qu'il n'y a rien à décider. */}
-                        {langue && (
-                          <div className="rounded-lg border border-border">
-                            <button
-                              type="button"
-                              aria-expanded={ouvert}
-                              aria-controls={idBloc}
-                              onClick={() => setAutresDepliees((liste) => (liste.includes(champ.cle)
-                                ? liste.filter((c) => c !== champ.cle)
-                                : [...liste, champ.cle]))}
-                              className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-[11px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                            >
-                              <span aria-hidden="true" className="mt-px shrink-0">{ouvert ? '▾' : '▸'}</span>
-                              <span>{titreAutreLangue(champ, langue.autreEstAnglais)}</span>
-                            </button>
-                            {ouvert && (
-                              <div id={idBloc} className="space-y-2 border-t border-border px-3 py-2.5">
-                                <ChampActionUI
-                                  champ={langue.modeleAutre}
-                                  valeur={config[langue.cleAutre] ?? ''}
-                                  onChange={(v) => majConfig(langue.cleAutre, v)}
-                                  fr={fr}
-                                  sms={modele.cle === 'send_sms' && champ.cle === 'body'}
-                                />
-                                {langue.perimee && (
-                                  <fieldset className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                                    <legend className="sr-only">{fr ? 'Que faire de cette version' : 'What to do with this version'}</legend>
-                                    <p className="font-medium">{fr ? 'Cette version n’est plus à jour.' : 'This version is out of date.'}</p>
-                                    {([
-                                      ['retirer', fr ? 'La retirer (vos clients recevront le texte ci-dessus)' : 'Remove it (your clients will get the text above)'],
-                                      ['garder', fr ? 'La garder telle quelle' : 'Keep it as it is'],
-                                    ] as const).map(([choix, libelle]) => (
-                                      <label key={choix} htmlFor={`${idBloc}-${choix}`} className="mt-1.5 flex cursor-pointer items-center gap-2">
-                                        <input
-                                          id={`${idBloc}-${choix}`}
-                                          type="radio"
-                                          name={`${idBloc}-choix`}
-                                          checked={(choix === 'garder') === versionsGardees.includes(champ.cle)}
-                                          onChange={() => setVersionsGardees((liste) => (choix === 'garder'
-                                            ? [...liste.filter((c) => c !== champ.cle), champ.cle]
-                                            : liste.filter((c) => c !== champ.cle)))}
-                                          className="h-4 w-4 border-border text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                                        />
-                                        <span>{libelle}</span>
-                                      </label>
-                                    ))}
-                                  </fieldset>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </React.Fragment>
+                      <ChampActionUI
+                        key={champ.cle}
+                        champ={champ}
+                        valeur={config[clePrincipale] ?? ''}
+                        onChange={(v) => majConfig(clePrincipale, v)}
+                        fr={fr}
+                        membres={membres}
+                        etiquettes={etiquettes}
+                        automatisations={automatisations}
+                        etapesPipeline={etapesPipeline}
+                        sms={modele.cle === 'send_sms' && champ.cle === 'body'}
+                      />
                     );
                   })}
+
+                {/* L'autre langue, quand l'étape en porte une : UN bloc secondaire,
+                    replié tant qu'il n'y a rien à décider — le même composant, donc
+                    les mêmes mots, que la liste et l'éditeur de courriel. */}
+                {modele && modele.cle !== 'update_custom_field' && versionsLangue.length > 0 && (
+                  <AutreVersionMessage
+                    id={`${ids}-autre-version`}
+                    fr={fr}
+                    langue={versionsLangue[0].autreEstAnglais ? 'en' : 'fr'}
+                    perimee={autrePerimee}
+                    choix={choixAutre}
+                    onChoix={setChoixAutre}
+                    deplie={autreDepliee}
+                    onDeplie={setAutreDepliee}
+                  >
+                    {versionsLangue.map((v) => (
+                      <ChampActionUI
+                        key={v.cleAutre}
+                        champ={v.modeleAutre}
+                        valeur={(brouillon.action.config as Record<string, string | undefined>)[v.cleAutre] ?? ''}
+                        onChange={(valeur) => majConfig(v.cleAutre, valeur)}
+                        fr={fr}
+                        sms={modele.cle === 'send_sms' && v.champ.cle === 'body'}
+                      />
+                    ))}
+                  </AutreVersionMessage>
+                )}
 
                 {/* Une variable que le serveur ne connaît pas part VIDE :
                     « Bonjour [prenom], » devient « Bonjour , ». La liste le
@@ -1228,6 +1209,16 @@ export default function PanneauEtape({
               ? (fr ? 'Choisissez d’abord quelle version garder.' : 'First choose which version to keep.')
               : problemes[0]}
           </span>
+        )}
+        {/* Ce qu'« Enregistrer » va retirer est écrit ICI, à côté du bouton : le bloc
+            de l'autre langue peut être sous le pli (fenêtre basse, texte long). */}
+        {!conflit && problemes.length === 0 && autrePerimee && choixAutre === 'retirer' && versionsLangue.length > 0 && (
+          <AvisRetraitAutreVersion
+            fr={fr}
+            langue={versionsLangue[0].autreEstAnglais ? 'en' : 'fr'}
+            idBloc={`${ids}-autre-version`}
+            className="max-w-[55%] text-right"
+          />
         )}
         <button
           type="button"

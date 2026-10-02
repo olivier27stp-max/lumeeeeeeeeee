@@ -37,6 +37,8 @@ const etat = vi.hoisted(() => ({
   regles: [] as Array<Record<string, unknown> & { id: string }>,
   champs: [] as unknown[],
   membres: [] as Array<{ user_id: string; nom: string }> | Error,
+  /** Le forfait du bureau inclut-il Lumi (`includes_ai`) ? Sans lui : la carte « inclus dans Autopilot ». */
+  lumi: true,
 }));
 const api = vi.hoisted(() => ({
   editeur: vi.fn(),
@@ -113,7 +115,7 @@ vi.mock('../../../src/lib/supabase', () => {
     },
   };
 });
-vi.mock('../../../src/hooks/usePlanFeature', () => ({ usePlanFeature: () => ({ hasFeature: true, loading: false }) }));
+vi.mock('../../../src/hooks/usePlanFeature', () => ({ usePlanFeature: () => ({ hasFeature: etat.lumi, loading: false }) }));
 vi.mock('../../../src/hooks/useModuleAccess', () => ({ useModuleAccess: () => ({ isEnabled: false, loading: false }) }));
 vi.mock('../../../src/components/champs/automatisations', async (orig) => ({
   ...(await orig<typeof import('../../../src/components/champs/automatisations')>()),
@@ -134,6 +136,7 @@ vi.mock('../../../src/components/automations/OngletJournaux', () => ({
 import AutomationBuilderPage from '../../../src/pages/AutomationBuilderPage';
 import { LanguageProvider } from '../../../src/i18n';
 import { ACTIONS, DECLENCHEURS } from '../../../src/lib/automationCatalogue';
+import { actionsDuParcours } from '../../../src/lib/publicationAutomatisation';
 
 function Lieu() {
   const l = useLocation();
@@ -147,6 +150,7 @@ beforeEach(() => {
   etat.regles = [regle()];
   etat.champs = [];
   etat.membres = [];
+  etat.lumi = true;
   api.editeur.mockReset();
   api.editeur.mockImplementation(async (id: string | null) => ({
     rule: etat.regles.find((r) => r.id === id) ?? null,
@@ -196,6 +200,7 @@ async function ouvrir(chemin = `/automations/${ID}`) {
           <Routes>
             <Route path="/automations/:id" element={<><AutomationBuilderPage /><Lieu /></>} />
             <Route path="/automations" element={<Lieu />} />
+            <Route path="/settings/billing" element={<Lieu />} />
           </Routes>
         </LanguageProvider>
       </MemoryRouter>,
@@ -1451,8 +1456,9 @@ describe('ligne 1 — une étape choisie dans le tiroir n’est écrite qu’une
     await act(async () => { vi.advanceTimersByTime(10_000); });
     await attendre();
     expect(api.modifier).not.toHaveBeenCalled();
-    // Le parcours enregistré n'a pas bougé : l'indicateur ne dit pas « Modifié ».
-    expect(barreDuHaut()).toContain('Enregistré');
+    // Le parcours enregistré n'a pas bougé : l'indicateur ne dit pas « Modifié » — il dit que
+    // l'étape en cours d'ajout n'est pas enregistrée (remarque d'usage (b) : avant, « Enregistré »).
+    expect(barreDuHaut()).toContain('Étape non enregistrée');
     expect(barreDuHaut()).not.toContain('Modifié');
   });
 
@@ -1649,7 +1655,7 @@ describe('ligne 2 (ajustement) — le panneau montre dans son champ principal le
     cliquer(carteEtape('Envoyer un texto'));
     await attendre(2);
     expect(principal()).toBe(FR);
-    expect(panneauEtape()?.textContent).toContain('Version anglaise (Texte du message) — utilisée seulement si vos messages partent en anglais');
+    expect(panneauEtape()?.textContent).toContain('Version anglaise — utilisée seulement si vos messages partent en anglais');
   });
 
   it('bureau qui envoie en ANGLAIS : le champ principal montre l’anglais ; corriger et enregistrer ne laisse qu’un texte, celui qui part', async () => {
@@ -1662,7 +1668,7 @@ describe('ligne 2 (ajustement) — le panneau montre dans son champ principal le
     cliquer(carteEtape('Envoyer un texto'));
     await attendre(2);
     expect(principal()).toBe(EN);
-    expect(panneauEtape()?.textContent).toContain('Version française (Texte du message) — utilisée seulement si vos messages partent en français');
+    expect(panneauEtape()?.textContent).toContain('Version française — utilisée seulement si vos messages partent en français');
     vi.useFakeTimers();
     saisir(panneauEtape()?.querySelector('textarea'), '20% off until June 1st.');
     cliquer(bouton('Enregistrer', panneauEtape() ?? undefined));
@@ -1961,5 +1967,282 @@ describe('Lumi ↔ éditeur — ce que la route de génération répond est appl
       expect(confirmerMock).toHaveBeenCalledTimes(1);
       expect((confirmerMock.mock.calls[0][0] as { title: string }).title).toBe('Appliquer les changements de Lumi ?');
     });
+  });
+});
+
+// ─── Régression de 6ce9a1cb (EDT-166), relevée par la session des specs — editeur/11:125 ───
+
+describe('EDT-166 (régression) — l’entrée d’historique de la garde s’en va avec elle : UN seul « Précédent » ramène à la liste', () => {
+  const marque = () => (window.history.state as Record<string, unknown> | null)?.lumeGardeEditeur === true;
+  const ici = () => (window.history.state as { page?: string } | null)?.page;
+  /** Le « Précédent » du navigateur. */
+  const precedent = async () => {
+    await act(async () => {
+      window.history.back();
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    await attendre();
+  };
+  /** Laisse aboutir un recul que la page a lancé elle-même. */
+  const laisserAboutir = async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+    await attendre();
+  };
+  async function saisirDansLePanneau(texte: string) {
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    saisir(panneauEtape()?.querySelector('textarea'), texte);
+    await attendre(2);
+  }
+  async function enregistrerLePanneau() {
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    await laisserAboutir();
+  }
+
+  // Un vrai chemin d'historique : la liste, puis l'éditeur ouvert depuis elle.
+  beforeEach(() => {
+    window.history.pushState({ page: 'liste' }, '');
+    window.history.pushState({ page: 'editeur' }, '');
+  });
+
+  it('saisie dans un panneau → « Enregistrer » du panneau → UN « Précédent » : on est revenu à la liste', async () => {
+    await ouvrir();
+    await saisirDansLePanneau('Texto réécrit');
+    // La garde est levée : une entrée en double, par-dessus celle de l'éditeur.
+    expect(marque()).toBe(true);
+    expect(ici()).toBe('editeur');
+    await enregistrerLePanneau();
+    // Plus rien à perdre : l'entrée en double est retirée — on est sur l'entrée de l'éditeur, sans marque.
+    expect(marque()).toBe(false);
+    expect(ici()).toBe('editeur');
+    expect(confirmerMock).not.toHaveBeenCalled();
+    await precedent();
+    expect(ici()).toBe('liste');
+    expect(confirmerMock).not.toHaveBeenCalled();
+  });
+
+  it('une étape ajoutée par le tiroir puis enregistrée : même chose', async () => {
+    await ouvrir();
+    await ajouterParLeTiroir('Envoyer un texto');
+    expect(marque()).toBe(true);
+    saisir(panneauEtape()?.querySelector('textarea'), 'Bonjour [client_first_name]');
+    await attendre(2);
+    await enregistrerLePanneau();
+    expect(marque()).toBe(false);
+    await precedent();
+    expect(ici()).toBe('liste');
+  });
+
+  it('une étape incomplète, puis complétée : même chose', async () => {
+    etat.regles = [regle({
+      steps: [
+        { id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Bonjour' } }, suivant: 'e2' },
+        { id: 'e2', type: 'action', nom: null, action: { type: 'create_task', config: { title: '' } }, suivant: null },
+      ],
+    })];
+    await ouvrir();
+    cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v2');
+    await attendre();
+    expect(marque()).toBe(true);
+    cliquer(carteEtape('Créer une tâche'));
+    await attendre(2);
+    saisir(panneauEtape()?.querySelector('input[type="text"]:not([id$="-nom"])'), 'Rappeler [client_name]');
+    await attendre(2);
+    await enregistrerLePanneau();
+    expect(marque()).toBe(false);
+    await precedent();
+    expect(ici()).toBe('liste');
+    expect(confirmerMock).not.toHaveBeenCalled();
+  });
+
+  it('la garde retient toujours tant qu’il reste quelque chose à perdre : « Précédent » pose la question, « Annuler » garde l’éditeur', async () => {
+    await ouvrir();
+    await saisirDansLePanneau('En cours de frappe');
+    confirmerMock.mockImplementationOnce(async () => false);
+    await precedent();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect((confirmerMock.mock.calls[0][0] as { title: string }).title).toBe('Quitter sans enregistrer ?');
+    // Refusé : on est toujours dans l'éditeur, sur l'entrée de la garde, la saisie intacte.
+    expect(marque()).toBe(true);
+    expect(ici()).toBe('editeur');
+    expect(panneauEtape()?.querySelector('textarea')?.value).toBe('En cours de frappe');
+  });
+
+  it('… et « Quitter » ramène à la liste', async () => {
+    await ouvrir();
+    await saisirDansLePanneau('En cours de frappe');
+    await precedent();
+    await laisserAboutir();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(ici()).toBe('liste');
+  });
+
+  it('enregistrer, puis retaper aussitôt (avant que le retrait ait abouti) : la garde est de nouveau là, et retient', async () => {
+    await ouvrir();
+    await saisirDansLePanneau('Texto réécrit');
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    // Sans attendre : une nouvelle saisie dans la foulée.
+    await saisirDansLePanneau('Deuxième saisie');
+    await laisserAboutir();
+    expect(marque()).toBe(true);
+    confirmerMock.mockImplementationOnce(async () => false);
+    await precedent();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(ici()).toBe('editeur');
+  });
+});
+
+// ─── Triage « éditeur », S-14 (07-clavardage-lumi:461) ──────────
+
+describe('S-14 — « Voir Autopilot » passe par la même garde que « Mes automatisations » et « Précédent »', () => {
+  const INCOMPLETE = [
+    { id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Bonjour' } }, suivant: 'e2' },
+    { id: 'e2', type: 'action', nom: null, action: { type: 'create_task', config: { title: '' } }, suivant: null },
+  ];
+  /** Forfait sans Lumi, parcours qui porte une étape incomplète, et une modification : « 1 étape(s) à compléter ». */
+  async function ouvrirSansLumiAvecTravailNonEnregistrable() {
+    etat.lumi = false;
+    etat.regles = [regle({ steps: INCOMPLETE })];
+    await ouvrir('/automations/' + ID + '?lumi=1');
+    cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v2');
+    await attendre();
+    expect(barreDuHaut()).toContain('1 étape(s) à compléter');
+    expect(bouton('Voir Autopilot')).toBeDefined();
+  }
+
+  it('une étape incomplète : « Voir Autopilot » pose « Quitter sans enregistrer ? » — « Annuler » garde l’éditeur et le travail', async () => {
+    await ouvrirSansLumiAvecTravailNonEnregistrable();
+    confirmerMock.mockImplementationOnce(async () => false);
+    cliquer(bouton('Voir Autopilot'));
+    await attendre(12);
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    const question = confirmerMock.mock.calls[0][0] as { title: string; message: string };
+    expect(question.title).toBe('Quitter sans enregistrer ?');
+    expect(question.message).toBe('Une étape est incomplète, donc le parcours n’a pas pu être enregistré. Si vous quittez maintenant, ces modifications seront perdues.');
+    expect(lieu()).toContain(`/automations/${ID}`);
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Nom de l’automatisation"]')?.value).toBe('Relance devis v2');
+  });
+
+  it('… « Quitter » : on part vers la facturation, sans toast d’après coup', async () => {
+    await ouvrirSansLumiAvecTravailNonEnregistrable();
+    cliquer(bouton('Voir Autopilot'));
+    await attendre(12);
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(lieu()).toBe('/settings/billing');
+    expect(toasts.erreur.join('\n')).not.toContain('quittée sans enregistrer');
+  });
+
+  it('rien à perdre : « Voir Autopilot » part sans question ; un travail enregistrable est ENREGISTRÉ avant de partir', async () => {
+    etat.lumi = false;
+    await ouvrir('/automations/' + ID + '?lumi=1');
+    cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v2');
+    await attendre();
+    cliquer(bouton('Voir Autopilot'));
+    await attendre(12);
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect((api.modifier.mock.calls[0][1] as { name?: string }).name).toBe('Relance devis v2');
+    expect(lieu()).toBe('/settings/billing');
+  });
+});
+
+// ─── Remarque d'usage (b) de la session des specs : une étape en cours d'ajout se VOIT comme telle ───
+
+describe('étape en cours d’ajout (choisie dans le tiroir, pas encore enregistrée) : la carte et l’indicateur le disent', () => {
+  const MENTION = 'En cours d’ajout — pas encore enregistrée';
+  const carteEnAttente = () => Array.from(container.querySelectorAll('div.border-dashed')).find((d) => d.textContent?.includes(MENTION));
+
+  it('pendant l’ajout : carte en pointillé avec sa mention, et l’indicateur dit « Étape non enregistrée » — pas « Enregistré »', async () => {
+    await ouvrir();
+    expect(barreDuHaut()).toContain('Enregistré');
+    await ajouterParLeTiroir('Envoyer un texto');
+    expect(carteEnAttente()).toBeDefined();
+    expect(carteEnAttente()?.textContent).toContain('Envoyer un texto');
+    // Une seule carte est en attente : les étapes du parcours gardent leur bordure pleine.
+    expect(container.querySelectorAll('div.border-dashed.w-\\[260px\\]')).toHaveLength(1);
+    expect(barreDuHaut()).toContain('Étape non enregistrée');
+    expect(barreDuHaut()).not.toContain('Enregistré');
+  });
+
+  it('« Enregistrer » dans le panneau : c’est une étape comme les autres — plus de pointillé, plus de mention, l’indicateur reprend', async () => {
+    await ouvrir();
+    await ajouterParLeTiroir('Envoyer un texto');
+    saisir(panneauEtape()?.querySelector('textarea'), 'Merci [client_first_name]');
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    expect(container.textContent).not.toContain(MENTION);
+    expect(carteEnAttente()).toBeUndefined();
+    expect(barreDuHaut()).not.toContain('Étape non enregistrée');
+    expect(barreDuHaut()).toContain('Modifié');
+  });
+
+  it('ajout abandonné : la carte disparaît, l’indicateur revient à « Enregistré »', async () => {
+    await ouvrir();
+    await ajouterParLeTiroir('Envoyer un texto');
+    cliquer(boutonExact('Annuler', panneauEtape() ?? undefined));
+    await attendre(12);
+    expect(container.textContent).not.toContain(MENTION);
+    expect(barreDuHaut()).toContain('Enregistré');
+  });
+
+  it('en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    await ouvrir();
+    cliquer(boutonExact('Add'));
+    await attendre(2);
+    cliquer(bouton('Send a text message', container.querySelector('aside[aria-label="Actions"]') ?? undefined));
+    await attendre(2);
+    expect(container.textContent).toContain('Being added — not saved yet');
+    expect(barreDuHaut()).toContain('Step not saved');
+  });
+});
+
+// ─── `actions` = reflet du parcours : la 2e automatisation créée par l'éditeur (carte des automatisations, 2026-10-02) ───
+
+describe('la 2e automatisation que Lumi fait créer par l’éditeur porte dans `actions` le reflet COMPLET de son parcours', () => {
+  const message = (id: string, body: string, suivant: string | null) => ({ id, type: 'action', action: { type: 'send_sms', config: { body } }, suivant });
+  const AUTRE = [
+    message('a1', 'Merci de votre réponse', 'a2'),
+    { id: 'a2', type: 'attendre', delai_secondes: 86400, suivant: 'a3' },
+    message('a3', 'Voici mon lien de réservation', 'a4'),
+    { id: 'a4', type: 'attendre', delai_secondes: 172800, suivant: 'a5' },
+    message('a5', 'Dernier rappel', null),
+  ];
+  const lumiProposeDeux = () => api.lumi.mockImplementation(async () => ({
+    nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Relance.', steps: regle().steps, modifie: true,
+    autre: { nom: 'Quand il répond', trigger_event: 'client.replied', resume: 'Trois messages.', steps: AUTRE },
+  }));
+  async function demander() {
+    saisir(container.querySelector('textarea[id$="-prompt"]'), 'relance mon devis, et crée une autre chaîne quand il répond');
+    cliquer(boutonExact('Construire') ?? boutonExact('Envoyer'));
+    await attendre(12);
+  }
+  const corps = (actions: unknown) => (actions as Array<{ config: { body?: string } }>).map((a) => a.config.body);
+
+  it('création : trois messages dans le parcours → trois dans `actions`, dans l’ordre de `actionsDuParcours` (avant : le premier seulement)', async () => {
+    lumiProposeDeux();
+    await ouvrir();
+    await demander();
+    expect(api.creer).toHaveBeenCalledTimes(1);
+    const envoye = api.creer.mock.calls[0][0] as { actions: unknown; steps: unknown; is_active: boolean };
+    expect(corps(envoye.actions)).toEqual(['Merci de votre réponse', 'Voici mon lien de réservation', 'Dernier rappel']);
+    expect(envoye.actions).toEqual(actionsDuParcours(AUTRE));
+    expect(envoye.steps).toEqual(AUTRE);
+    expect(envoye.is_active).toBe(false);
+  });
+
+  it('mise à jour (Lumi la retouche au tour suivant) : le reflet complet aussi', async () => {
+    lumiProposeDeux();
+    await ouvrir();
+    await demander();
+    await demander();
+    const autreId = (await api.creer.mock.results[0].value as { id: string }).id;
+    const appel = api.modifier.mock.calls.find((c) => c[0] === autreId);
+    expect(appel).toBeDefined();
+    expect((appel?.[1] as { actions: unknown }).actions).toEqual(actionsDuParcours(AUTRE));
   });
 });

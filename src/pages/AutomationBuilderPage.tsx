@@ -187,6 +187,10 @@ const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.6;
 const ZOOM_PAS = 0.1;
 
+/** L'entrée d'historique en double que pose la garde de l'éditeur (« Précédent » du navigateur, EDT-166). */
+const MARQUE_GARDE_EDITEUR = 'lumeGardeEditeur';
+const surEntreeDeGarde = (): boolean => (window.history.state as Record<string, unknown> | null)?.[MARQUE_GARDE_EDITEUR] === true;
+
 export default function AutomationBuilderPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -1035,14 +1039,14 @@ export default function AutomationBuilderPage() {
       let noteAutre = '';
       if (propose.autre) {
         try {
-          const premiere = (propose.autre.steps as Etape[]).find((e) => e.type === 'action');
           const contenu = {
             name: propose.autre.nom,
             trigger_event: propose.autre.trigger_event,
             delay_seconds: 0,
-            // Reflet de la première action : le serveur exige au moins une
-            // action ; le moteur, lui, suit les étapes.
-            actions: premiere && premiere.type === 'action' ? [premiere.action as never] : [],
+            // `actions` = le reflet COMPLET du parcours (`actionsDuParcours`, la
+            // fonction de référence) — avant, seulement sa première action : un
+            // lecteur d'`actions` voyait un message là où le parcours en porte N.
+            actions: actionsDuParcours(propose.autre.steps, fr) as never,
             steps: propose.autre.steps,
             settings: propose.autre.une_fois_par_client_jours
               ? { delai_entre_passages_jours: propose.autre.une_fois_par_client_jours }
@@ -2141,23 +2145,36 @@ export default function AutomationBuilderPage() {
    * chose à perdre, on pose donc une entrée d'historique en double (même
    * adresse) : « Précédent » la consomme sans quitter la page, et c'est là
    * qu'on demande. Oui : on recule pour de bon. Non : on la repose.
+   *
+   * L'ENTRÉE EN DOUBLE S'EN VA AVEC LA GARDE (régression de 6ce9a1cb, relevée
+   * par la session des specs — editeur/11:125). Dès qu'il n'y avait plus rien
+   * à perdre (la saisie enregistrée dans son panneau), l'écouteur était retiré
+   * mais l'entrée restait : le premier « Précédent » la consommait sans rien
+   * faire — adresse inchangée, aucune question, « Enregistré » — et il en
+   * fallait un deuxième pour revenir à la liste. Quand la garde tombe alors
+   * qu'on est sur son entrée, on la retire donc (un recul, sans question).
+   * Si la garde se relève avant que ce recul ait abouti, elle attend qu'il
+   * soit fait pour reposer son entrée.
    */
+  const retraitDeGarde = useRef(false);
   const aPerdreEnPartant = !!regle && !disparue && !modifieeAilleurs
     && (etatSauvegarde === 'incomplet' || etatSauvegarde === 'refuse' || !!etapeEnAttente || saisieEnCours);
   const raisonDePerte = useRef<'incomplet' | 'refuse' | 'saisie'>('saisie');
   raisonDePerte.current = etatSauvegarde === 'incomplet' ? 'incomplet' : etatSauvegarde === 'refuse' ? 'refuse' : 'saisie';
   useEffect(() => {
     if (!aPerdreEnPartant) return;
-    const MARQUE = 'lumeGardeEditeur';
-    const poser = () => window.history.pushState({ ...(window.history.state ?? {}), [MARQUE]: true }, '');
-    if (!(window.history.state as Record<string, unknown> | null)?.[MARQUE]) poser();
+    const poser = () => window.history.pushState({ ...(window.history.state ?? {}), [MARQUE_GARDE_EDITEUR]: true }, '');
+    const armer = () => { if (!surEntreeDeGarde()) poser(); };
+    // Un retrait de l'entrée précédente est encore en route : on repose la nôtre une fois qu'il a abouti.
+    if (retraitDeGarde.current) window.addEventListener('popstate', armer, { once: true });
+    else armer();
     let enSortie = false;
     let questionOuverte = false;
     const surRetour = () => {
-      // Notre propre recul, ou une question déjà à l'écran : rien à refaire.
-      if (enSortie || questionOuverte) return;
+      // Notre propre recul (sortie confirmée, ou retrait de l'entrée en double), ou une question déjà à l'écran : rien à refaire.
+      if (enSortie || questionOuverte || retraitDeGarde.current) return;
       // Encore sur l'entrée en double (un « Suivant ») : rien n'est quitté.
-      if ((window.history.state as Record<string, unknown> | null)?.[MARQUE]) return;
+      if (surEntreeDeGarde()) return;
       questionOuverte = true;
       const enFrancais = frBascule.current;
       const raison = raisonDePerte.current;
@@ -2189,7 +2206,17 @@ export default function AutomationBuilderPage() {
       });
     };
     window.addEventListener('popstate', surRetour);
-    return () => window.removeEventListener('popstate', surRetour);
+    return () => {
+      window.removeEventListener('popstate', surRetour);
+      window.removeEventListener('popstate', armer);
+      // La garde tombe et on est encore sur SON entrée : elle s'en va avec elle.
+      // (Une sortie confirmée a déjà reculé ; une navigation de l'app a déjà changé d'entrée.)
+      if (!enSortie && surEntreeDeGarde()) {
+        retraitDeGarde.current = true;
+        window.addEventListener('popstate', () => { retraitDeGarde.current = false; }, { once: true });
+        window.history.back();
+      }
+    };
   }, [aPerdreEnPartant]);
 
   // Une règle disparue (404) n'a plus rien à enregistrer au départ.
@@ -2215,7 +2242,14 @@ export default function AutomationBuilderPage() {
   }, []);
 
   /** Quitter l'éditeur — en demandant d'abord si du travail se perdrait. */
-  const quitterEditeur = useCallback(async () => {
+  /**
+   * Quitter l'éditeur — vers la liste, ou vers une autre page de l'app
+   * (`destination`). TOUTES les sorties offertes par l'éditeur passent ici :
+   * « Voir Autopilot » partait par un `navigate` nu, et quittait donc sans
+   * question quand une étape était incomplète, là où « Mes automatisations »
+   * et « Précédent » demandent (triage éditeur, S-14).
+   */
+  const quitterEditeur = useCallback(async (destination = '/automations') => {
     /*
      * ENREGISTRER AVANT DE PARTIR, plutôt qu'avertir.
      *
@@ -2257,7 +2291,8 @@ export default function AutomationBuilderPage() {
     }
     // Déjà enregistré (ou abandon confirmé) : le départ n'a rien à refaire.
     sortieGeree.current = true;
-    navigate('/automations');
+    // Sur l'entrée en double de la garde : la liste la REMPLACE (sinon « Précédent », depuis la liste, la retrouverait).
+    navigate(destination, surEntreeDeGarde() ? { replace: true } : undefined);
   }, [regle, etapesIncompletes, etatSauvegarde, nom, steps, fr, navigate, ecrire]);
 
   const declencheurLabel = useMemo(() => {
@@ -2659,6 +2694,16 @@ export default function AutomationBuilderPage() {
                   ? `${etapesIncompletes} étape(s) à compléter`
                   : `${etapesIncompletes} step(s) to complete`}
               </span>
+            ) : ajoutEnAttente ? (
+              /*
+                UNE ÉTAPE EN COURS D'AJOUT n'existe pas dans le parcours tant que
+                son panneau n'est pas enregistré : « Enregistré » à côté d'elle
+                laissait croire le contraire (remarque d'usage (b), 2026-10-02).
+              */
+              <span className="inline-flex items-center gap-1.5 text-warning">
+                <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
+                {fr ? 'Étape non enregistrée' : 'Step not saved'}
+              </span>
             ) : etatSauvegarde === 'en_cours' || declencheurEnVol ? (
               // Le changement de déclencheur compte aussi : « Enregistré »
               // pendant que son PATCH était en vol mentait (audit 2026-10-01).
@@ -2962,7 +3007,9 @@ export default function AutomationBuilderPage() {
                       </p>
                       <button
                         type="button"
-                        onClick={() => navigate('/settings/billing')}
+                        onClick={() => (ajoutEnAttente
+                          ? quandPanneauLibre(() => void quitterEditeur('/settings/billing'))
+                          : void quitterEditeur('/settings/billing'))}
                         className="glass-button mt-3 inline-flex items-center gap-1.5 text-[12px]"
                       >
                         {fr ? 'Voir Autopilot' : 'See Autopilot'}
@@ -3138,6 +3185,7 @@ export default function AutomationBuilderPage() {
                       onDeclencheur={ouvrirDeclencheur}
                       declencheurDetail={declencheurDetail}
                       etapesEnErreur={etapesEnErreur}
+                      etapeEnAttenteId={ajoutEnAttente?.etape?.id ?? null}
                     />
                   )
                 )}

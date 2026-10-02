@@ -183,3 +183,35 @@ describe('03:727 — la carte d’une action sans message dit ce qu’elle fera 
     expect(carte('Move the deal')).toContain('The “Won” stage');
   });
 });
+
+// ─── Remarque d'usage (b) : la carte d'une étape en cours d'ajout ───
+
+describe('la carte de l’étape en cours d’ajout se distingue des étapes du parcours', () => {
+  const parcours = [action('send_sms', { body: 'Bonjour' }, 'e1', 'e2'), action('send_sms', { body: 'Merci' }, 'e2', null)];
+  const cadre = (texte: string) => Array.from(conteneur.querySelectorAll('div.w-\\[260px\\]')).find((d) => d.textContent?.includes(texte));
+
+  it('bordure pointillée et mention sur elle seule', () => {
+    monter(parcours, { etapeEnAttenteId: 'e2' });
+    expect(cadre('Merci')?.className).toContain('border-dashed');
+    expect(cadre('Merci')?.textContent).toContain('En cours d’ajout — pas encore enregistrée');
+    expect(cadre('Bonjour')?.className).not.toContain('border-dashed');
+    expect(cadre('Bonjour')?.textContent).not.toContain('En cours d’ajout');
+  });
+
+  it('aucune étape en attente : aucune carte en pointillé', () => {
+    monter(parcours);
+    expect(conteneur.querySelector('div.border-dashed.w-\\[260px\\]')).toBeNull();
+    expect(conteneur.textContent).not.toContain('En cours d’ajout');
+  });
+
+  it('une étape en attente ET en erreur : l’erreur prime sur la bordure, la mention reste', () => {
+    monter(parcours, { etapeEnAttenteId: 'e2', etapesEnErreur: new Set(['e2']) });
+    expect(cadre('Merci')?.className).toContain('border-danger');
+    expect(cadre('Merci')?.textContent).toContain('En cours d’ajout — pas encore enregistrée');
+  });
+
+  it('en anglais', () => {
+    monter(parcours, { etapeEnAttenteId: 'e2', fr: false });
+    expect(cadre('Merci')?.textContent).toContain('Being added — not saved yet');
+  });
+});

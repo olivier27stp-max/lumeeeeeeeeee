@@ -7,7 +7,7 @@
    client recevra réellement — variables remplacées par un exemple.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useId } from 'react';
 import { Mail, MessageSquare, Loader2, Check, Eye, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -16,7 +16,7 @@ import { trouverAction } from '../../lib/automationCatalogue';
 import { htmlVersTexte, texteVersHtml, remplacerVariables, variablesInconnues, variableLisible, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
 import { libelleSegments } from '../../lib/smsSegments';
 import EmailPreviewEditor from './EmailPreviewEditor';
-import AutreVersionMessage, { nomAutreVersion, phraseLangueDesMessages, type ChoixAutreVersion } from './AutreVersionMessage';
+import AutreVersionMessage, { AvisRetraitAutreVersion, nomAutreVersion, phraseLangueDesMessages, type ChoixAutreVersion } from './AutreVersionMessage';
 
 interface Props {
   ruleId: string;
@@ -107,6 +107,7 @@ export default function MessageEditor({
   const setTexte = (maj: string | ((t: string) => string)) => setTextes((t) => ({ ...t, [principale]: typeof maj === 'function' ? maj(t[principale]) : maj }));
   /** L'autre langue, périmée : « La retirer » (d'office) ou « La garder telle quelle ». */
   const [choixAutre, setChoixAutre] = useState<ChoixAutreVersion>('retirer');
+  const idAutreVersion = useId();
   /** Le bloc de l'autre langue, déplié par l'utilisateur (périmée, elle l'est toujours). */
   const [autreDeplie, setAutreDeplie] = useState(false);
 
@@ -359,6 +360,7 @@ export default function MessageEditor({
           offre le choix — « Enregistrer » n'attend rien. */}
       {aAnglais && (
         <AutreVersionMessage
+          id={idAutreVersion}
           fr={fr}
           langue={autre}
           perimee={autrePerimee && !lectureSeule}
@@ -415,6 +417,10 @@ export default function MessageEditor({
             >
               {fr ? 'Annuler' : 'Cancel'}
             </button>
+          )}
+          {/* Ce qu'« Enregistrer » va retirer, écrit à côté du bouton (même règle que le panneau d'étape). */}
+          {autrePerimee && choixAutre === 'retirer' && (
+            <AvisRetraitAutreVersion fr={fr} langue={autre} idBloc={idAutreVersion} />
           )}
         </div>
       )}
