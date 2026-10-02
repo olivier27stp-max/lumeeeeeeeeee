@@ -245,6 +245,8 @@ export async function createDestinationPaymentIntent(params: {
   connectedAccountId: string;
   metadata: Record<string, string>;
   idempotencyKey?: string;
+  /** Carte seule (saisie manuelle par l'entreprise) : pas de portefeuille ni de Link. */
+  cardOnly?: boolean;
 }) {
   const stripe = getPlatformStripe();
   const applicationFee = calculateApplicationFee(params.amountCents);
@@ -276,7 +278,9 @@ export async function createDestinationPaymentIntent(params: {
   const intent = await stripe.paymentIntents.create({
     amount: params.amountCents,
     currency: params.currency.toLowerCase(),
-    automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+    ...(params.cardOnly
+      ? { payment_method_types: ['card'] }
+      : { automatic_payment_methods: { enabled: true, allow_redirects: 'never' as const } }),
     application_fee_amount: applicationFee,
     transfer_data: {
       destination: params.connectedAccountId,

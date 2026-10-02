@@ -101,6 +101,12 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
 
   const [paypalBusy, setPaypalBusy] = useState(false);
 
+  // Saisie manuelle via Stripe Connect : l'entreprise choisit le montant
+  // (solde complet par défaut, ou un versement) avant d'ouvrir le formulaire carte.
+  const [montantSaisi, setMontantSaisi] = useState('');
+  const [montantConfirmeCents, setMontantConfirmeCents] = useState<number | null>(null);
+  const viaConnect = Boolean(settingsPayload?.connect?.charges_enabled);
+
   useEffect(() => {
     if (!open) return;
 
@@ -123,7 +129,10 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
     if (!settingsPayload?.settings) return [] as EnabledProvider[];
     const next: EnabledProvider[] = [];
 
-    if (settingsPayload.settings.stripe_enabled && settingsPayload.settings.stripe_keys_present) next.push('stripe');
+    if (
+      settingsPayload.connect?.charges_enabled
+      || (settingsPayload.settings.stripe_enabled && settingsPayload.settings.stripe_keys_present)
+    ) next.push('stripe');
     if (settingsPayload.settings.paypal_enabled && settingsPayload.settings.paypal_keys_present) next.push('paypal');
 
     return next;
@@ -145,11 +154,12 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
     if (selectedProvider !== 'stripe') return;
     if (!invoiceId) return;
     if (stripeClientSecret) return;
+    if (viaConnect && montantConfirmeCents == null) return;
 
     setStripeLoading(true);
     setStripeError(null);
 
-    createStripeIntent(invoiceId)
+    createStripeIntent(invoiceId, viaConnect ? montantConfirmeCents ?? undefined : undefined)
       .then((payload) => {
         setStripeClientSecret(payload.client_secret);
         setStripePublishableKey(payload.publishable_key);
@@ -160,7 +170,7 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
       .finally(() => {
         setStripeLoading(false);
       });
-  }, [open, selectedProvider, invoiceId, stripeClientSecret]);
+  }, [open, selectedProvider, invoiceId, stripeClientSecret, viaConnect, montantConfirmeCents]);
 
   useEffect(() => {
     if (!open) {
@@ -172,6 +182,8 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
       setStripeError(null);
       setStripeLoading(false);
       setPaypalBusy(false);
+      setMontantSaisi('');
+      setMontantConfirmeCents(null);
     }
   }, [open]);
 
@@ -181,7 +193,22 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
   }, [stripePublishableKey]);
 
   const amountLabel = formatMoneyFromCents(balanceCents, currency || 'CAD');
+  const montantPayeLabel = formatMoneyFromCents(montantConfirmeCents ?? balanceCents, currency || 'CAD');
   if (!open) return null;
+
+  function confirmerMontant() {
+    const brut = montantSaisi.trim() === '' ? balanceCents / 100 : Number(montantSaisi.replace(',', '.').replace(/[$\s]/g, ''));
+    const cents = Math.round(brut * 100);
+    if (!Number.isFinite(cents) || cents < 50 || cents > balanceCents) {
+      setStripeError(language === 'fr'
+        ? `Montant invalide : entre 0,50 $ et ${amountLabel}.`
+        : `Invalid amount: between $0.50 and ${amountLabel}.`);
+      return;
+    }
+    setStripeError(null);
+    setStripeClientSecret(null);
+    setMontantConfirmeCents(cents);
+  }
 
   async function handlePayPalCapture(orderId: string) {
     setPaypalBusy(true);
@@ -266,18 +293,61 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
 
                 {selectedProvider === 'stripe' ? (
                   <div className="space-y-3 rounded-xl border border-white/25 bg-surface/55 p-4">
+                    {viaConnect && montantConfirmeCents == null ? (
+                      <div className="space-y-2">
+                        <label className="block text-xs font-medium text-text-secondary" htmlFor="montant-carte">
+                          {language === 'fr' ? 'Montant à débiter' : 'Amount to charge'}
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            id="montant-carte"
+                            inputMode="decimal"
+                            className="glass-input flex-1"
+                            placeholder={(balanceCents / 100).toFixed(2)}
+                            value={montantSaisi}
+                            onChange={(e) => setMontantSaisi(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') confirmerMontant(); }}
+                          />
+                          <button type="button" className="glass-button-primary" onClick={confirmerMontant}>
+                            {language === 'fr' ? 'Saisir la carte' : 'Enter card'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-text-tertiary">
+                          {language === 'fr'
+                            ? 'Laissez vide pour le solde complet. Entrez un montant plus petit pour un versement.'
+                            : 'Leave empty for the full balance. Enter a smaller amount for a partial payment.'}
+                        </p>
+                      </div>
+                    ) : null}
+                    {viaConnect && montantConfirmeCents != null ? (
+                      <div className="flex items-center justify-between text-sm text-text-secondary">
+                        <span>{`${language === 'fr' ? 'Montant' : 'Amount'} : ${montantPayeLabel}`}</span>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-primary hover:underline"
+                          onClick={() => { setMontantConfirmeCents(null); setStripeClientSecret(null); }}
+                        >
+                          {language === 'fr' ? 'Modifier' : 'Change'}
+                        </button>
+                      </div>
+                    ) : null}
                     {stripeLoading ? <p className="text-sm text-text-secondary">{t.modals.preparingCardForm}</p> : null}
                     {stripeError ? (
                       <p className="rounded-lg border border-danger bg-danger-light px-3 py-2 text-sm text-danger">{stripeError}</p>
                     ) : null}
 
                     {stripeClientSecret && stripePromise ? (
-                      <Elements stripe={stripePromise} options={{ clientSecret: stripeClientSecret }}>
+                      <Elements key={stripeClientSecret} stripe={stripePromise} options={{ clientSecret: stripeClientSecret }}>
                         <StripePaymentForm
-                          amountLabel={amountLabel}
+                          amountLabel={montantPayeLabel}
                           onSuccess={() => {
                             onPaid();
                             onClose();
+                            // Le paiement est enregistré par le webhook Stripe,
+                            // quelques secondes après la confirmation : on relit
+                            // la facture encore deux fois pour qu'elle passe à jour.
+                            window.setTimeout(onPaid, 3000);
+                            window.setTimeout(onPaid, 8000);
                           }}
                         />
                       </Elements>

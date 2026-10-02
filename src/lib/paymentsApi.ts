@@ -29,6 +29,10 @@ export interface PaymentSettingsResponse {
   permissions: {
     can_manage: boolean;
   };
+  /** Compte Stripe Connect du bureau (absent sur un serveur plus ancien). */
+  connect?: {
+    charges_enabled: boolean;
+  };
 }
 
 export interface PaymentsOverview {
@@ -358,10 +362,10 @@ export async function setDefaultProvider(input: {
   });
 }
 
-export async function createStripeIntent(invoiceId: string) {
+export async function createStripeIntent(invoiceId: string, amountCents?: number) {
   return fetchApiJson<StripeIntentResponse>('/api/payments/stripe/create-intent', {
     method: 'POST',
-    body: JSON.stringify({ invoiceId }),
+    body: JSON.stringify(amountCents == null ? { invoiceId } : { invoiceId, amountCents }),
   });
 }
 

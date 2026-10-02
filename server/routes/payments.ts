@@ -63,6 +63,8 @@ import {
   saveCardOnFileFromIntent,
   chargeInvoiceOnFile,
   getPlatformStripe,
+  getConnectedAccount,
+  createDestinationPaymentIntent,
 } from '../lib/stripe-connect';
 import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
@@ -1039,10 +1041,12 @@ router.get('/payments/settings', async (req, res) => {
     await ensurePaymentSettingsRow(auth.client, requestedOrgId);
     const settings = await getPaymentProviderSettings(auth.client, requestedOrgId);
     const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, requestedOrgId);
+    const connect = await etatConnect(requestedOrgId);
 
     return res.json({
       settings,
       permissions: { can_manage: canManage },
+      connect,
     });
   } catch (error: any) {
     const message = String(error?.message || '').toLowerCase();
@@ -1555,6 +1559,18 @@ router.post('/payments/providers/settings', validate(providerSettingsSchema), as
 
 // ── Stripe create intent ──
 
+// Compte Stripe Connect du bureau : seul « charges_enabled » compte pour
+// encaisser. Une erreur de lecture vaut « pas prêt » plutôt qu'un 500.
+async function etatConnect(orgId: string): Promise<{ charges_enabled: boolean }> {
+  try {
+    const compte = await getConnectedAccount(orgId);
+    return { charges_enabled: Boolean(compte?.charges_enabled) };
+  } catch (err: any) {
+    console.error('[payments] compte Connect illisible', err?.message || err);
+    return { charges_enabled: false };
+  }
+}
+
 router.post('/payments/stripe/create-intent', validate(stripeCreateIntentSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
@@ -1563,6 +1579,48 @@ router.post('/payments/stripe/create-intent', validate(stripeCreateIntentSchema)
     const { client, orgId } = auth;
     const invoiceId = String(req.body?.invoiceId || '').trim();
     if (!invoiceId) return res.status(400).json({ error: 'Missing invoiceId.' });
+
+    // ── Saisie manuelle d'une carte par l'entreprise, via Stripe Connect ──
+    // Même destination charge que la page publique /pay : le paiement est
+    // enregistré par le webhook payment_intent.succeeded (metadata
+    // org_id/invoice_id), la facture se recalcule par trigger. Les clés
+    // Stripe propres au bureau ne servent plus que de repli.
+    const compteConnect = await getConnectedAccount(orgId).catch(() => null);
+    if (compteConnect?.charges_enabled) {
+      const facture = await getInvoiceForOrg(client, orgId, invoiceId);
+      if (!facture) return res.status(404).json({ error: 'Invoice not found.' });
+      const soldeCents = Number(facture.balance_cents || 0);
+      if (soldeCents <= 0) return res.status(400).json({ error: 'Invoice has no balance to pay.' });
+
+      // Montant partiel permis (dépôt, versement), jamais au-delà du solde.
+      const demandeCents = req.body?.amountCents == null ? soldeCents : Math.round(Number(req.body.amountCents));
+      if (!Number.isFinite(demandeCents) || demandeCents < 50 || demandeCents > soldeCents) {
+        return res.status(400).json({ error: 'Invalid amount.' });
+      }
+
+      const devise = String(facture.currency || 'CAD');
+      const resultat = await createDestinationPaymentIntent({
+        amountCents: demandeCents,
+        currency: devise,
+        connectedAccountId: compteConnect.stripe_account_id,
+        cardOnly: true,
+        metadata: {
+          org_id: orgId,
+          invoice_id: invoiceId,
+          client_id: facture.client_id || '',
+          source: 'saisie_manuelle',
+          saisi_par: auth.user.id,
+          tip_cents: '0',
+        },
+      });
+      return res.json({
+        payment_intent_id: resultat.paymentIntentId,
+        client_secret: resultat.clientSecret,
+        amount_cents: demandeCents,
+        currency: devise.toUpperCase(),
+        publishable_key: process.env.STRIPE_PUBLISHABLE_KEY || '',
+      });
+    }
 
     const settings = await getPaymentProviderSettings(client, orgId);
     if (!settings.stripe_enabled || !settings.stripe_keys_present) {

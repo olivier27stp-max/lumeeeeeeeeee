@@ -215,6 +215,8 @@ export const providerSettingsSchema = z.object({
 
 export const stripeCreateIntentSchema = z.object({
   invoiceId: z.string().trim().min(1, 'Missing invoiceId.'),
+  // Montant partiel en cents (saisie manuelle) ; absent = solde complet.
+  amountCents: z.number().int().positive().optional(),
 });
 
 // ─── Payments: PayPal create order ────────────────────────────────────────────
