@@ -32,6 +32,10 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './logger';
+import { FUSEAU_DEFAUT } from './automations-fuseau-org';
+import { CLE_CONDITIONS_CHAMPS, objetDeLEntite } from './champs/automatisations';
+import { listerChamps, lireValeursLot } from './champs/service';
+import { evaluerCondition, type Condition } from '../../src/lib/champs/filtres';
 
 export type FamilleSortie = 'soumission' | 'facture' | 'rendezvous' | 'opportunite';
 
@@ -297,6 +301,9 @@ async function revaliderJob(c: Ctx): Promise<Revalidation> {
   return { clientId };
 }
 
+/** Actions par lesquelles la règle déplace ELLE-MÊME l'opportunité. */
+const ACTIONS_QUI_DEPLACENT: readonly string[] = ['move_deal_stage', 'modifier_deal'];
+
 async function revaliderOpportunite(c: Ctx): Promise<Revalidation> {
   const { ligne: d, illisible } = await lire(c, 'deals', 'stage_id, deleted_at, client_id', c.entityId);
   if (illisible) return {};
@@ -305,10 +312,12 @@ async function revaliderOpportunite(c: Ctx): Promise<Revalidation> {
   const etapeAttendue = idOuNull(c.metadonnees?.stage_id);
   const deplacee = etapeAttendue !== null && idOuNull(d.stage_id) !== etapeAttendue;
   if (deplacee) {
+    // « Opportunité qui dort » : elle a bougé, elle ne dort plus — pour tous.
+    const dort = c.declencheur === 'deal.stage_idle' && !c.actionsDeLaRegle.some((a) => ACTIONS_QUI_DEPLACENT.includes(a));
     // « Entrée dans une étape » : la case « Arrêter si l'opportunité change
     // d'étape » (drapeau) — hors de la case, rien ne change.
     const entree = c.caseParDeclencheur && familleSortie(c.declencheur) === 'opportunite' && c.cochee;
-    if (entree) return plusValide('l’opportunité a changé d’étape', clientId);
+    if (dort || entree) return plusValide('l’opportunité a changé d’étape', clientId);
   }
   return { clientId };
 }
@@ -356,6 +365,63 @@ const REVALIDATEURS: Readonly<Record<string, (c: Ctx) => Promise<Revalidation>>>
   lead: revaliderClient,
 };
 
+// ── Les conditions de la règle, sur l'état actuel ────────────
+
+const ACTIONS_QUI_ETIQUETTENT: readonly string[] = ['ajouter_etiquette', 'retirer_etiquette'];
+const ACTIONS_QUI_ECRIVENT_DES_CHAMPS: readonly string[] = ['update_custom_field', 'modifier_client', 'modifier_deal'];
+
+async function revaliderEtiquettes(c: Ctx, clientId: string | null | undefined): Promise<Arret | null> {
+  if (c.actionsDeLaRegle.some((a) => ACTIONS_QUI_ETIQUETTENT.includes(a))) return null;
+  const norme = (v: unknown) => texte(v).trim().toLowerCase();
+  const doitAvoir: string[] = [];
+  const doitNePasAvoir: string[] = [];
+  if (norme(c.conditions?.client_a_etiquette)) doitAvoir.push(norme(c.conditions?.client_a_etiquette));
+  if (norme(c.conditions?.client_sans_etiquette)) doitNePasAvoir.push(norme(c.conditions?.client_sans_etiquette));
+  // « Étiquette ajoutée / retirée » : l'étiquette de l'ÉVÉNEMENT doit toujours y être (ou n'y être toujours pas).
+  const duDeclencheur = norme(c.metadonnees?.tag);
+  if (duDeclencheur && c.declencheur === 'client.tagged') doitAvoir.push(duDeclencheur);
+  if (duDeclencheur && c.declencheur === 'client.untagged') doitNePasAvoir.push(duDeclencheur);
+  if (!doitAvoir.length && !doitNePasAvoir.length) return null;
+  if (!clientId) return null; // pas de client connu : on ne conclut pas
+
+  const { data, error } = await c.supabase.from('client_tags').select('tag').eq('client_id', clientId);
+  if (error) {
+    logger.error('[revalidation] étiquettes illisibles — la tâche suit son cours', { clientId, message: error.message });
+    return null;
+  }
+  const posees = new Set(((data ?? []) as Array<{ tag: string }>).map((r) => String(r.tag).toLowerCase()));
+  const manquante = doitAvoir.find((t) => !posees.has(t));
+  if (manquante) return { code: 'condition_plus_valide', changement: `le client n’a plus l’étiquette « ${manquante} »` };
+  const enTrop = doitNePasAvoir.find((t) => posees.has(t));
+  if (enTrop) return { code: 'condition_plus_valide', changement: `le client a maintenant l’étiquette « ${enTrop} »` };
+  return null;
+}
+
+async function revaliderChamps(c: Ctx): Promise<Arret | null> {
+  const conditions = c.conditions?.[CLE_CONDITIONS_CHAMPS];
+  if (!Array.isArray(conditions) || conditions.length === 0) return null;
+  if (c.actionsDeLaRegle.some((a) => ACTIONS_QUI_ECRIVENT_DES_CHAMPS.includes(a))) return null;
+  const objet = objetDeLEntite(c.entityType);
+  if (!objet) return null;
+  try {
+    const { champs } = await listerChamps(c.supabase, c.orgId, { objet, inclureArchives: true });
+    const valeurs = (await lireValeursLot(c.supabase, c.orgId, objet, [c.entityId], champs))[c.entityId] ?? {};
+    for (const condition of conditions as Condition[]) {
+      const champ = champs.find((x) => x.id === condition.field_id);
+      // Champ disparu : on ne sait plus juger — on ne conclut pas.
+      if (!champ) continue;
+      const tient = evaluerCondition(champ.field_type, valeurs[champ.id]?.value ?? null, condition,
+        { fuseau: c.fuseau || FUSEAU_DEFAUT, avecHeure: !!champ.config.include_time });
+      if (!tient) return { code: 'condition_plus_valide', changement: `le champ « ${champ.label} » ne remplit plus la condition` };
+    }
+  } catch (e) {
+    logger.error('[revalidation] champs personnalisés illisibles — la tâche suit son cours', {
+      entity_type: c.entityType, entity_id: c.entityId, message: e instanceof Error ? e.message : String(e),
+    });
+  }
+  return null;
+}
+
 /**
  * La situation de cette tâche différée est-elle toujours vraie ?
  *
@@ -385,6 +451,12 @@ export async function revaliderTache(supabase: SupabaseClient, tache: TacheAReva
         return { arret: { code: 'entite_supprimee', changement: 'le client a été supprimé', motif: MOTIF_CLIENT_SUPPRIME }, clientId: r.clientId };
       }
     }
+
+    // 3. Les conditions de la règle sur l'état actuel.
+    const etiquette = await revaliderEtiquettes(c, r.clientId);
+    if (etiquette) return { arret: etiquette, clientId: r.clientId };
+    const champ = await revaliderChamps(c);
+    if (champ) return { arret: champ, clientId: r.clientId };
 
     return r;
   } catch (e) {

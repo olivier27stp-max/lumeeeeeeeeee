@@ -171,6 +171,13 @@ export function etatApres(cle: string): Record<string, unknown> {
     case 'appointment.cancelled': return avec('schedule_events', { status: 'cancelled' });
     case 'lead.status_changed': return avec('clients', { status: 'lead', lead_status: 'contacted' });
     case 'lead.created': return avec('clients', { status: 'lead', lead_status: 'new' });
+    // L'étiquette vient d'être posée : une LECTURE des étiquettes de la fiche la
+    // trouve. Sans elle, la revalidation (B-04) arrêtait à raison les tâches
+    // différées de « Étiquette ajoutée » : le client « n'avait plus » l'étiquette.
+    // (Lecture seulement : les écritures des actions d'étiquettes ne changent pas.)
+    case 'client.tagged': return {
+      client_tags: (req: { op: string }) => (req.op === 'select' ? { data: [{ client_id: IDS.client, tag: 'vip' }] } : { data: [] }),
+    };
     default: return {};
   }
 }
