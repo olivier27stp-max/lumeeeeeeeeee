@@ -10,7 +10,7 @@
    Aucune balise n'est jamais visible.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useState, useMemo, useEffect, useCallback, useId } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useId, useRef } from 'react';
 import { X, Loader2, Check, Plus, Trash2, Type, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
@@ -121,7 +121,8 @@ function ChampBloc({
   bloc: Bloc;
   fr: boolean;
   onChange: (texte: string) => void;
-  onFocus: () => void;
+  /** Le champ qui reçoit le curseur : « Insérer » écrira là où il est. */
+  onFocus: (champ: HTMLTextAreaElement) => void;
 }) {
   const ajuster = (el: HTMLTextAreaElement | null) => {
     if (!el) return;
@@ -133,7 +134,7 @@ function ChampBloc({
     <textarea
       value={bloc.texte}
       onChange={(e) => { onChange(e.target.value); ajuster(e.currentTarget); }}
-      onFocus={onFocus}
+      onFocus={(e) => onFocus(e.currentTarget)}
       rows={1}
       placeholder={fr ? 'Écrivez ici…' : 'Type here…'}
       aria-label={bloc.type === 'titre' ? (fr ? 'Titre' : 'Title') : bloc.type === 'puce' ? (fr ? 'Puce' : 'Bullet') : (fr ? 'Paragraphe' : 'Paragraph')}
@@ -620,19 +621,54 @@ export default function EmailPreviewEditor({
   const ajouterBloc = (type: Bloc['type']) =>
     setBlocs((bs) => [...bs, { id: compteurId++, type, texte: '' }]);
 
+  /*
+   * « INSÉRER » ÉCRIT LÀ OÙ EST LE CURSEUR (triage « modèles », 04-courriel:538
+   * et :547). La variable partait toujours en FIN de ligne — « Bonjour , à
+   * demain.[client_first_name] » — et, sur un courriel vidé de ses lignes, le
+   * clic ne faisait rien, sans rien dire.
+   *
+   * Le champ qui a eu le curseur en dernier (l'objet ou une ligne) le garde en
+   * mémoire même quand le clic sur le bouton lui prend le focus ; sans champ
+   * cliqué, la variable va à la fin de la dernière ligne, comme avant.
+   */
+  const champActif = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  /** Où remettre le curseur une fois la variable posée : juste après elle. */
+  const curseurVoulu = useRef<{ champ: HTMLTextAreaElement | HTMLInputElement; position: number } | null>(null);
+  useEffect(() => {
+    const voulu = curseurVoulu.current;
+    if (!voulu) return;
+    curseurVoulu.current = null;
+    voulu.champ.focus();
+    voulu.champ.setSelectionRange(voulu.position, voulu.position);
+  });
+
   const insererVariable = (cle: string, jeton?: string) => {
     // Un champ personnalisé apporte son écriture complète ({{client.cle}}) ;
     // les variables classiques prennent les crochets historiques.
     const ecriture = jeton ?? `[${cle}]`;
+    const champ = champActif.current;
+    const auCurseur = (texte: string): string => {
+      // Le champ mémorisé n'est pas (ou plus) celui de ce texte : à la fin.
+      if (!champ || champ.value !== texte) return `${texte}${ecriture}`;
+      const debut = champ.selectionStart ?? texte.length;
+      const fin = champ.selectionEnd ?? debut;
+      curseurVoulu.current = { champ, position: debut + ecriture.length };
+      return `${texte.slice(0, debut)}${ecriture}${texte.slice(fin)}`;
+    };
     // L'objet décide de l'ouverture : il doit pouvoir porter le montant ou le
     // numéro, pas seulement le corps.
     if (cibleObjet) {
-      setObjet((o) => `${o}${ecriture}`);
+      setObjet(auCurseur(objet));
       return;
     }
-    const cible = actif ?? blocs[blocs.length - 1]?.id;
-    if (cible === undefined) return;
-    setBlocs((bs) => bs.map((b) => (b.id === cible ? { ...b, texte: `${b.texte}${ecriture}` } : b)));
+    // Aucune ligne : la variable en ouvre une.
+    if (blocs.length === 0) {
+      setBlocs(() => [{ id: compteurId++, type: 'paragraphe', texte: ecriture }]);
+      return;
+    }
+    const ligne = blocs.find((b) => b.id === actif) ?? blocs[blocs.length - 1];
+    const texte = ligne.id === actif ? auCurseur(ligne.texte) : `${ligne.texte}${ecriture}`;
+    setBlocs((bs) => bs.map((b) => (b.id === ligne.id ? { ...b, texte } : b)));
   };
 
   const enregistrer = async () => {
@@ -852,7 +888,7 @@ export default function EmailPreviewEditor({
               <input
                 value={objet}
                 onChange={(e) => setObjet(e.target.value)}
-                onFocus={() => { setActif(null); setCibleObjet(true); }}
+                onFocus={(e) => { setActif(null); setCibleObjet(true); champActif.current = e.currentTarget; }}
                 placeholder={fr ? 'Objet du courriel' : 'Email subject'}
                 aria-label={fr ? 'Objet du courriel' : 'Email subject'}
                 className="w-full bg-transparent border border-transparent rounded px-2 py-1 text-[13px] font-semibold text-text-primary hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none transition-colors"
@@ -888,7 +924,7 @@ export default function EmailPreviewEditor({
                       bloc={bloc}
                       fr={fr}
                       onChange={(t) => majBloc(bloc.id, t)}
-                      onFocus={() => { setActif(bloc.id); setCibleObjet(false); }}
+                      onFocus={(champ) => { setActif(bloc.id); setCibleObjet(false); champActif.current = champ; }}
                     />
                   </div>
                   <button

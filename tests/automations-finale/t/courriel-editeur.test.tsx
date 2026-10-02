@@ -216,6 +216,58 @@ describe('04-courriel:394 et :410 — ce qu’on n’a pas touché garde sa mise
   });
 });
 
+describe('04-courriel:538 et :547 — « Insérer » écrit là où est le curseur', () => {
+  const C = { subject: 'Objet', body: `${ENVELOPPE}${H2('Titre')}${P('Bonjour , à demain.')}${P('Dernière ligne')}</div>` };
+  /** Met le curseur dans un champ, comme un clic puis une flèche. */
+  async function curseur(el: HTMLInputElement | HTMLTextAreaElement, position: number) {
+    await saisir(el, el.value); // lui donne le focus, sans changer son texte
+    el.setSelectionRange(position, position);
+  }
+
+  it('dans une ligne : la variable va au curseur, pas en fin de ligne', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    const ligne = champs('Paragraphe')[0];
+    await curseur(ligne, 8);
+    await cliquer(bouton('Prénom du client'));
+    expect(ligne.value).toBe('Bonjour [client_first_name], à demain.');
+    // Le curseur reste juste après la variable : une seconde insertion s'enchaîne.
+    expect(ligne.selectionStart).toBe(8 + '[client_first_name]'.length);
+    await cliquer(bouton('Nom complet'));
+    expect(ligne.value).toBe('Bonjour [client_first_name][client_name], à demain.');
+    // Les autres lignes et l'objet n'ont rien reçu.
+    expect(champs('Paragraphe')[1].value).toBe('Dernière ligne');
+    expect(objet().value).toBe('Objet');
+  });
+
+  it('dans l’objet : au curseur aussi ; un texte sélectionné est remplacé', async () => {
+    poser([{ type: 'send_email', config: { ...C, subject: 'Rappel pour XXX demain' } }]);
+    await ouvrir({ ...C, subject: 'Rappel pour XXX demain' });
+    await saisir(objet(), objet().value);
+    objet().setSelectionRange(12, 15);
+    await cliquer(bouton('Prénom du client'));
+    expect(objet().value).toBe('Rappel pour [client_first_name] demain');
+  });
+
+  it('sans champ cliqué : à la fin de la dernière ligne, comme avant', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await cliquer(bouton('Prénom du client'));
+    expect(champs('Paragraphe')[1].value).toBe('Dernière ligne[client_first_name]');
+    expect(objet().value).toBe('Objet');
+  });
+
+  it('courriel vidé de toutes ses lignes : la variable ouvre une ligne, au lieu d’un clic sans effet', async () => {
+    const seule = { subject: 'Objet', body: `${ENVELOPPE}${H2('Seule ligne')}</div>` };
+    poser([{ type: 'send_email', config: seule }]);
+    await ouvrir(seule);
+    await cliquer(bouton('Supprimer cette ligne'));
+    expect(champs('Titre').length + champs('Paragraphe').length).toBe(0);
+    await cliquer(bouton('Prénom du client'));
+    expect(champs('Paragraphe').map((p) => p.value)).toEqual(['[client_first_name]']);
+  });
+});
+
 describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’éditeur montre et modifie le courriel qui part', () => {
   const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
   const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };
