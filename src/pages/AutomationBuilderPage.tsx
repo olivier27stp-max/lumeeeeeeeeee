@@ -657,7 +657,8 @@ export default function AutomationBuilderPage() {
    */
   const construireAvecLumi = async () => {
     const demande = prompt.trim();
-    if (demande.length < 10 || genere) return;
+    // Dix caractères pour une première demande ; ensuite « oui », « non », « active-la » sont des réponses (A-12).
+    if (demande.length < (echangesLumi.length > 0 ? 1 : 10) || genere) return;
     setGenere(true);
     try {
       /*
