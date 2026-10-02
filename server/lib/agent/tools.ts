@@ -10,7 +10,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { motifSansAccent, contientSansAccent } from './sans-accent';
+import { motifSansAccent, contientSansAccent, motProche } from './sans-accent';
 import type { FunctionDeclaration } from './gemini';
 import {
   OUTILS_LECTURE_ETENDUS, OUTILS_ECRITURE_ETENDUS, ETIQUETTES_DERIVED,
@@ -220,8 +220,38 @@ const searchClients: AgentTool = {
         if (retenus.length) { lignes = retenus.slice(0, limit); count = retenus.length; }
       }
     }
+    // Toujours rien : le nom a peut-être été dicté à une lettre près (« Marie Roi » pour « Marie Roy »,
+    // éval du 2026-10-02, clients-17). Troisième passage : les fiches dont un mot du NOM est proche,
+    // les autres mots (ville, adresse…) devant se retrouver tels quels. Le résultat est marqué
+    // « approchant » : Lumi le dit, il ne fait pas comme si le nom était exact.
+    let approchant = false;
+    if (term && !lignes.length && !etiquette) {
+      const mots = motsDeRecherche(term);
+      if (mots.length) {
+        // Candidats : même initiale qu'un des mots, dans le prénom, le nom ou l'entreprise.
+        const initiales = [...new Set(mots.map((m) => motifSansAccent(m.slice(0, 1))).filter((m) => m && m !== ' '))];
+        const { data: candidats } = await ctx.client.from('clients')
+          .select('id, first_name, last_name, company, email, phone, address, city, status')
+          .eq('org_id', ctx.orgId).is('deleted_at', null)
+          .or(initiales.flatMap((i) => [`first_name.ilike.${i}%`, `last_name.ilike.${i}%`, `company.ilike.${i}%`]).join(','))
+          .limit(400);
+        const morceaux = (c: LigneClient) => [c.first_name, c.last_name, c.company].flatMap((v) => String(v ?? '').split(/[\s\-']+/)).filter(Boolean);
+        const retenus = ((candidats ?? []) as unknown as LigneClient[]).filter((c) => {
+          const nom = morceaux(c);
+          let parNom = 0;
+          for (const mot of mots) {
+            if (nom.some((m) => motProche(m, mot))) { parNom += 1; continue; }
+            if (!contientSansAccent([c.city, c.address, c.company], mot)) return false;
+          }
+          // Au moins un mot doit désigner la PERSONNE : « longueuil » seul ne nomme personne.
+          return parNom > 0;
+        });
+        if (retenus.length) { lignes = retenus.slice(0, limit); count = retenus.length; approchant = true; }
+      }
+    }
     return {
       ...enTeteListe(count, lignes),
+      ...(approchant ? { approchant: true, note: 'Aucune fiche à ce nom exact : voici les noms PROCHES (une lettre d’écart, comme après une dictée). Dis à l’utilisateur le nom que tu as retenu ; s’il y en a plusieurs, demande lequel.' } : {}),
       // Audit 2026-09-30 : 0 résultat ne veut pas dire « n'existe pas » — la recherche
       // porte sur le bureau actif seulement. Sans cette note, Lumi retirait des mots
       // (« de Lévis ») et agissait sur un homonyme d'un autre endroit.

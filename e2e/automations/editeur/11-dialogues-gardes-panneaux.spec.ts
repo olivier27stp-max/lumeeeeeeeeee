@@ -13,23 +13,26 @@ import {
   test, expect, DELAI_TEST,
   CAPTURES, creerParcours, troisTextos, ouvrirEditeur, cartes, carte, barre, indicateur, attendreEnregistre,
   corpsDuFil, dialogue, panneauEtape, panneauDeclencheur, tiroirActions, tiroirDeclencheurs, toasts,
+  rendreIncomplet, troisTextosEtUneIncomplete,
 } from './_aides';
 
 test.describe.configure({ timeout: DELAI_TEST });
 
 const texte = (page: import('@playwright/test').Page) => panneauEtape(page).getByLabel(/Texte du message/);
 
-/** Ajoute une étape incomplète (« Ajouter une étiquette » sans étiquette) et referme son panneau. */
-async function rendreIncomplet(page: import('@playwright/test').Page): Promise<void> {
-  await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
-  await tiroirActions(page).getByRole('button', { name: /^Ajouter une étiquette/ }).click();
-  await panneauEtape(page).getByRole('button', { name: 'Fermer le panneau' }).click();
-  await expect(indicateur(page)).toHaveText('1 étape(s) à compléter');
-}
+/*
+ * L'ÉTAT « ÉTAPE INCOMPLÈTE » (du travail qui ne peut pas s'enregistrer) — `rendreIncomplet` vit maintenant
+ * dans `_aides.ts`. L'ancienne aide de ce fichier ajoutait « Ajouter une étiquette » par le tiroir et
+ * refermait son panneau : depuis 3b739958 une étape du tiroir n'entre dans le parcours qu'à « Enregistrer »
+ * de son panneau (qui refuse un champ obligatoire vide), et la refermer l'abandonne. Les tests partent donc
+ * d'un parcours qui PORTE déjà une étape incomplète (`troisTextosEtUneIncomplete`, posé AVANT d'ouvrir
+ * l'éditeur) et y réécrivent un texto : la modification ne peut pas s'enregistrer, l'éditeur le dit.
+ */
+const AVEC_INCOMPLETE = ['Texto ALPHA', 'Texto BRAVO', 'Texto CHARLIE', ''];
 
 test.describe('gardes de sortie', () => {
   test('[EDT-163][EDT-154][EDT-155] « Mes automatisations » avec une étape incomplète : « Quitter sans enregistrer ? » — Annuler reste, Quitter part', async ({ page, bureau, marque }) => {
-    const r = await creerParcours(bureau, `${marque} quitter incomplet`, troisTextos());
+    const r = await creerParcours(bureau, `${marque} quitter incomplet`, troisTextosEtUneIncomplete());
     await ouvrirEditeur(page, r.id);
     await rendreIncomplet(page);
     await barre(page).getByRole('button', { name: 'Mes automatisations' }).click();
@@ -39,13 +42,46 @@ test.describe('gardes de sortie', () => {
     await dialogue(page).getByRole('button', { name: 'Annuler' }).click();
     await expect(page).toHaveURL(new RegExp(`/automations/${r.id}$`));
     expect((await cartes(page)).length).toBe(4);
+    // Le travail est toujours à l'écran.
+    await expect(carte(page, 'Texto BRAVO réécrit')).toBeVisible();
 
     await barre(page).getByRole('button', { name: 'Mes automatisations' }).click();
     await dialogue(page).getByRole('button', { name: 'Quitter' }).click();
     await expect(page).toHaveURL(/\/automations$/);
-    // Ce qui était annoncé comme perdu l'est : la base a toujours les 3 étapes d'origine.
+    // Ce qui était annoncé comme perdu l'est : la base a toujours le parcours d'origine, jamais réécrit.
+    expect(await corpsDuFil(bureau, r.id)).toEqual(AVEC_INCOMPLETE);
+    expect((await lireRegle(bureau, r.id))?.updated_at).toBe(r.updated_at);
+  });
+
+  test('[EDT-163][EDT-059] « Mes automatisations » avec une étape EN COURS D’AJOUT (panneau ouvert, pas enregistré) : on demande, « Annuler » la garde, « Ne pas l’ajouter » part sans rien écrire', async ({ page, bureau, marque }) => {
+    // Le geste de l'ancienne aide `rendreIncomplet` (étape choisie dans le tiroir, pas enregistrée), jugé sur le comportement décidé.
+    const r = await creerParcours(bureau, `${marque} quitter ajout en cours`, troisTextos());
+    await ouvrirEditeur(page, r.id);
+    await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+    await tiroirActions(page).getByRole('button', { name: /^Ajouter une étiquette/ }).click();
+    await expect(panneauEtape(page).getByRole('heading', { name: 'Ajouter une étiquette' })).toBeVisible();
+    expect((await cartes(page)).length).toBe(4);
+    // Fermer le panneau : la question, et « Annuler » garde l'étape en cours d'ajout.
+    await panneauEtape(page).getByRole('button', { name: 'Fermer le panneau' }).click();
+    await expect(dialogue(page).getByRole('heading', { name: 'Fermer sans ajouter cette étape ?' })).toBeVisible();
+    await expect(dialogue(page)).toContainText('Cette étape n’a pas été enregistrée : elle ne sera pas ajoutée au parcours.');
+    await dialogue(page).getByRole('button', { name: 'Annuler' }).click();
+    await expect(panneauEtape(page)).toBeVisible();
+    expect((await cartes(page)).length).toBe(4);
+    // Quitter l'éditeur : la question est posée AVANT de partir.
+    await barre(page).getByRole('button', { name: 'Mes automatisations' }).click();
+    await expect(dialogue(page).getByRole('heading', { name: 'Abandonner l’étape en cours d’ajout ?' })).toBeVisible();
+    await expect(dialogue(page)).toContainText('L’étape ouverte n’a pas été enregistrée : elle ne sera pas ajoutée au parcours.');
+    await page.screenshot({ path: `${CAPTURES}/edt-163-quitter-ajout-en-cours.png` });
+    await dialogue(page).getByRole('button', { name: 'Annuler' }).click();
+    await expect(page).toHaveURL(new RegExp(`/automations/${r.id}$`));
+    await expect(panneauEtape(page)).toBeVisible();
+    await barre(page).getByRole('button', { name: 'Mes automatisations' }).click();
+    await dialogue(page).getByRole('button', { name: 'Ne pas l’ajouter' }).click();
+    await expect(page).toHaveURL(/\/automations$/);
+    // Rien n'a jamais été écrit : la base a ses 3 étapes d'origine, intactes.
     expect(await corpsDuFil(bureau, r.id)).toEqual(['Texto ALPHA', 'Texto BRAVO', 'Texto CHARLIE']);
-    expect((await lireRegle(bureau, r.id))?.steps?.length).toBe(3);
+    expect((await lireRegle(bureau, r.id))?.updated_at).toBe(r.updated_at);
   });
 
   test('[EDT-163] « Mes automatisations » quand le serveur refuse l’enregistrement : on prévient avant de partir', async ({ page, bureau, marque, moniteur }) => {
@@ -68,7 +104,7 @@ test.describe('gardes de sortie', () => {
   });
 
   test('[EDT-165] recharger / fermer l’onglet avec une modification en attente : le navigateur demande confirmation', async ({ page, bureau, marque }) => {
-    const r = await creerParcours(bureau, `${marque} beforeunload`, troisTextos());
+    const r = await creerParcours(bureau, `${marque} beforeunload`, troisTextosEtUneIncomplete());
     await ouvrirEditeur(page, r.id);
     // Sans modification : aucune question.
     const vus: string[] = [];
@@ -81,7 +117,9 @@ test.describe('gardes de sortie', () => {
     await page.reload();
     await expect(page.getByRole('tablist', { name: 'Sections' })).toBeVisible({ timeout: 90_000 });
     expect(vus).toEqual(['beforeunload']);
-    expect((await lireRegle(bureau, r.id))?.steps?.length).toBe(3);
+    // Rien n'a pu être écrit : le parcours de départ, jamais réécrit.
+    expect(await corpsDuFil(bureau, r.id)).toEqual(AVEC_INCOMPLETE);
+    expect((await lireRegle(bureau, r.id))?.updated_at).toBe(r.updated_at);
   });
 
   test('[EDT-166] bouton « Précédent » du navigateur juste après une modification : elle est enregistrée en partant', async ({ page, bureau, marque }) => {
@@ -98,34 +136,51 @@ test.describe('gardes de sortie', () => {
     await expect.poll(() => corpsDuFil(bureau, r.id), { timeout: 60_000 }).toEqual(['Texto ALPHA', 'Texto BRAVO avant de reculer', 'Texto CHARLIE']);
   });
 
-  test('[EDT-166] bouton « Précédent » avec une étape incomplète : le travail perdu est DIT (toast), la base est intacte', async ({ page, bureau, marque }) => {
-    const r = await creerParcours(bureau, `${marque} précédent incomplet`, troisTextos());
+  /* Réécrit le 2026-10-02 (6ce9a1cb, EDT-166). Ce test fixait l'ancien comportement — « Précédent » quittait
+     l'éditeur et un toast disait la perte APRÈS coup. Le comportement décidé est la question AVANT (test
+     suivant) : ici, la branche « Quitter » — on part pour de bon, la perte ayant été annoncée et acceptée il
+     n'y a plus de toast d'après coup, et la base est intacte (l'attente d'origine, gardée). */
+  test('[EDT-166] bouton « Précédent » avec une étape incomplète : après la question, « Quitter » ramène à la liste sans toast d’après coup, la base est intacte', async ({ page, bureau, marque }) => {
+    const r = await creerParcours(bureau, `${marque} précédent incomplet`, troisTextosEtUneIncomplete());
     await ouvrirListe(page);
     await page.getByText(`${marque} précédent incomplet`).first().click();
     await expect(page.getByRole('tablist', { name: 'Sections' })).toBeVisible({ timeout: 90_000 });
     await rendreIncomplet(page);
     await page.goBack();
+    await expect(dialogue(page).getByRole('heading', { name: 'Quitter sans enregistrer ?' })).toBeVisible();
+    await expect(dialogue(page)).toContainText('Une étape est incomplète, donc le parcours n’a pas pu être enregistré. Si vous quittez maintenant, ces modifications seront perdues.');
+    await expect(page).toHaveURL(new RegExp(`/automations/${r.id}$`));
+    await dialogue(page).getByRole('button', { name: 'Quitter' }).click();
     await expect(page).toHaveURL(/\/automations$/);
-    await expect(toasts(page).filter({ hasText: 'Automatisation quittée sans enregistrer : une étape était incomplète.' })).toBeVisible();
-    expect((await lireRegle(bureau, r.id))?.steps?.length).toBe(3);
+    await expect(page.getByRole('heading', { name: 'Mes automatisations' })).toBeVisible({ timeout: 60_000 });
+    await expect(toasts(page).filter({ hasText: /quittée sans enregistrer/ })).toHaveCount(0);
+    expect(await corpsDuFil(bureau, r.id)).toEqual(AVEC_INCOMPLETE);
+    expect((await lireRegle(bureau, r.id))?.updated_at).toBe(r.updated_at);
   });
 
-  test('[EDT-166] bouton « Précédent » avec une étape incomplète : on demande AVANT de perdre le travail @defaut', async ({ page, bureau, marque }) => {
-    const r = await creerParcours(bureau, `${marque} précédent question`, troisTextos());
+  test('[EDT-166] bouton « Précédent » avec une étape incomplète : on demande AVANT de perdre le travail', async ({ page, bureau, marque }) => {
+    const r = await creerParcours(bureau, `${marque} précédent question`, troisTextosEtUneIncomplete());
     await ouvrirListe(page);
     await page.getByText(`${marque} précédent question`).first().click();
     await expect(page.getByRole('tablist', { name: 'Sections' })).toBeVisible({ timeout: 90_000 });
-    // Du vrai travail : un texto réécrit, puis une étape laissée incomplète.
-    await carte(page, 'Texto BRAVO').click();
-    await texte(page).fill('Texto BRAVO réécrit longuement');
-    await panneauEtape(page).getByRole('button', { name: 'Enregistrer' }).click();
-    await rendreIncomplet(page);
+    // Du vrai travail : un texto réécrit, que l'étape incomplète du parcours empêche d'enregistrer.
+    await rendreIncomplet(page, 'Texto BRAVO', 'Texto BRAVO réécrit longuement');
     await page.goBack();
-    await page.screenshot({ path: `${CAPTURES}/edt-166-precedent-incomplet.png` });
     const question = dialogue(page).getByRole('heading', { name: 'Quitter sans enregistrer ?' });
+    // Soit la question, soit la liste (l'éditeur a été quitté) : on attend l'un des deux avant de juger.
+    await expect(question.or(page.getByRole('heading', { name: 'Mes automatisations' })).first()).toBeVisible({ timeout: 60_000 });
+    await page.screenshot({ path: `${CAPTURES}/edt-166-precedent-incomplet.png` });
     const sauve = (await corpsDuFil(bureau, r.id)).includes('Texto BRAVO réécrit longuement');
     expect((await question.isVisible()) || sauve,
       'le bouton « Précédent » a quitté l’éditeur : le texto réécrit ET l’étape ajoutée sont perdus, un toast le dit après coup').toBe(true);
+    // « Annuler » : on reste dans l'éditeur, le travail est toujours à l'écran, et « Précédent » redemande.
+    await dialogue(page).getByRole('button', { name: 'Annuler' }).click();
+    await expect(page).toHaveURL(new RegExp(`/automations/${r.id}$`));
+    await expect(carte(page, 'Texto BRAVO réécrit longuement')).toBeVisible();
+    await expect(indicateur(page)).toHaveText('1 étape(s) à compléter');
+    await page.goBack();
+    await expect(question).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/automations/${r.id}$`));
   });
 });
 

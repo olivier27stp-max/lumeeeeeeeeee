@@ -13,6 +13,7 @@ import {
   test, expect, DELAI_TEST,
   CAPTURES, creerParcours, troisTextos, ouvrirEditeur, cartes, barre, carte, menuDeCarte, indicateur,
   attendreEnregistre, attendreRegle, corpsDuFil, dialogue, panneauEtape, tiroirActions,
+  aucuneEcriture, enregistrerPanneau, rendreIncomplet, troisTextosEtUneIncomplete,
 } from './_aides';
 
 test.describe.configure({ timeout: DELAI_TEST });
@@ -244,24 +245,53 @@ test.describe('barre du haut — indicateur d’enregistrement', () => {
     expect(await corpsDuFil(bureau, r.id)).toEqual(['Texto ALPHA v2', 'Texto BRAVO', 'Texto CHARLIE']);
   });
 
-  test('[EDT-012] une étape née incomplète : « 1 étape(s) à compléter », rien n’est écrit en base, le bandeau désigne l’étape', async ({ page, bureau, marque }) => {
-    const r = await creerParcours(bureau, `${marque} incomplet`, troisTextos());
+  /* Réécrit le 2026-10-02 (3b739958, triage actions ligne 1) : une étape choisie dans le tiroir n'entre plus
+     dans le parcours avant « Enregistrer » de son panneau, et le panneau refuse un champ obligatoire vide.
+     Une étape ne peut donc plus NAÎTRE incomplète dans le parcours : la première moitié du test le prouve.
+     L'état « N étape(s) à compléter » existe toujours pour un parcours qui porte déjà une étape incomplète
+     (donnée d'avant, Lumi, modèle) : la seconde moitié garde, sur ce cas, toutes les attentes d'origine. */
+  test('[EDT-012] étape incomplète : depuis le tiroir elle n’entre pas dans le parcours (« Enregistrer » grisé, raison écrite) ; déjà dans le parcours : « 1 étape(s) à compléter », rien n’est écrit en base, le bandeau désigne l’étape', async ({ page, bureau, marque }) => {
+    // ── 1. Depuis le tiroir : rien n'entre dans le parcours tant que le panneau n'est pas enregistré.
+    const r = await creerParcours(bureau, `${marque} incomplet tiroir`, troisTextos());
     await ouvrirEditeur(page, r.id);
     await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
     await tiroirActions(page).getByRole('button', { name: /^Ajouter une étiquette/ }).click();
-    await expect(indicateur(page)).toHaveText('1 étape(s) à compléter');
+    await expect(panneauEtape(page).getByRole('heading', { name: 'Ajouter une étiquette' })).toBeVisible();
+    // Le canevas la montre à sa place, mais elle n'est pas dans le parcours : l'indicateur ne bouge pas.
+    expect((await cartes(page)).length).toBe(4);
+    await expect(panneauEtape(page).getByRole('button', { name: 'Enregistrer' })).toBeDisabled();
+    await expect(panneauEtape(page).getByText('« L’étiquette » est vide.').first()).toBeVisible();
     await page.screenshot({ path: `${CAPTURES}/edt-012-incomplet.png` });
-    // Le bandeau rouge nomme l'étape fautive (lien cliquable).
-    await expect(page.getByRole('button', { name: /Ajouter une étiquette.*est vide/ })).toBeVisible();
-    // Rien n'est parti en base tant que l'étape est incomplète — et l'écran ne dit pas « Enregistré ».
-    await expect(indicateur(page)).not.toHaveText('Enregistré');
-    const enBase = await lireRegle(bureau, r.id);
-    expect((enBase?.steps ?? []).length).toBe(3);
-    // Compléter l'étape relance l'enregistrement.
+    await aucuneEcriture(page);
+    await expect(indicateur(page)).toHaveText('Enregistré');
+    expect((await lireRegle(bureau, r.id))?.updated_at, 'rien n’est écrit tant que le panneau n’est pas enregistré').toBe(r.updated_at);
+    // Compléter l'étape rend « Enregistrer » cliquable ; c'est là qu'elle entre dans le parcours, et en base.
     await panneauEtape(page).getByLabel(/L’étiquette/).fill('vip');
-    await panneauEtape(page).getByRole('button', { name: 'Enregistrer' }).click();
+    await enregistrerPanneau(page);
     await attendreEnregistre(page);
     const apres = await attendreRegle(bureau, r.id, (x) => (x.steps ?? []).length === 4);
     expect(JSON.stringify(apres.steps)).toContain('"etiquette":"vip"');
+
+    // ── 2. Un parcours qui PORTE une étape incomplète : une modification ne peut pas s'enregistrer, et c'est dit.
+    const i = await creerParcours(bureau, `${marque} incomplet`, troisTextosEtUneIncomplete());
+    await ouvrirEditeur(page, i.id);
+    await rendreIncomplet(page, 'Texto ALPHA', 'Texto ALPHA v2');
+    // Le bandeau rouge nomme l'étape fautive (lien cliquable).
+    const lien = page.getByRole('button', { name: /Ajouter une étiquette.*est vide/ });
+    await expect(lien).toBeVisible();
+    // Rien n'est parti en base tant que l'étape est incomplète — et l'écran ne dit pas « Enregistré ».
+    await aucuneEcriture(page);
+    await expect(indicateur(page)).toHaveText('1 étape(s) à compléter');
+    const enBase = await lireRegle(bureau, i.id);
+    expect(enBase?.updated_at).toBe(i.updated_at);
+    expect(await corpsDuFil(bureau, i.id)).toEqual(['Texto ALPHA', 'Texto BRAVO', 'Texto CHARLIE', '']);
+    // Compléter l'étape relance l'enregistrement : la modification retenue part avec elle.
+    await lien.click();
+    await panneauEtape(page).getByLabel(/L’étiquette/).fill('vip');
+    await enregistrerPanneau(page);
+    await attendreEnregistre(page);
+    const complete = await attendreRegle(bureau, i.id, (x) => JSON.stringify(x.steps).includes('"etiquette":"vip"'));
+    expect((complete.steps ?? []).length).toBe(4);
+    expect((await corpsDuFil(bureau, i.id))[0]).toBe('Texto ALPHA v2');
   });
 });

@@ -287,7 +287,7 @@ test.describe('étape « Attendre »', () => {
     await expect(carte).toHaveText(/^Attendre\s*45 minute\(s\) avant le rendez-vous$/);
   });
 
-  test('[EDT-118][EDT-119] effacer le nombre puis en taper un autre garde l’unité choisie (3 jours → 5 jours, pas 5 minutes) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-118][EDT-119] effacer le nombre puis en taper un autre garde l’unité choisie (3 jours → 5 jours, pas 5 minutes)', async ({ page, bureau, marque }) => {
     await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, {
       name: `${marque} S-18 effacer`, trigger_event: 'lead.created', conditions: {},
@@ -310,7 +310,7 @@ test.describe('étape « Attendre »', () => {
     expect(steps[0]?.delai_secondes, '5 jours = 432 000 s (5 minutes = 300 s)').toBe(432000);
   });
 
-  test('[EDT-119] l’unité choisie reste celle qu’on a choisie : à 0, « jours » reste « jours » ; « 24 heures » ne devient pas « 1 jours » @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-119] l’unité choisie reste celle qu’on a choisie : à 0, « jours » reste « jours » ; « 24 heures » ne devient pas « 1 jours »', async ({ page, bureau, marque }) => {
     await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, {
       name: `${marque} S-18 unité`, trigger_event: 'lead.created', conditions: {},
@@ -335,7 +335,7 @@ test.describe('étape « Attendre »', () => {
     expect.soft(await valeurAffichee(unite), 'l’unité après avoir tapé 24 (heures)').toBe('heures');
   });
 
-  test('[EDT-118] une attente plus longue que ce que le serveur accepte (366 jours ; 30 jours avant un rendez-vous) est refusée DANS le panneau, avec la limite @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-118] une attente plus longue que ce que le serveur accepte (366 jours ; 30 jours avant un rendez-vous) est refusée DANS le panneau, avec la limite', async ({ page, bureau, marque }) => {
     await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, {
       name: `${marque} trop long`, trigger_event: 'appointment.created', conditions: {},
@@ -344,13 +344,36 @@ test.describe('étape « Attendre »', () => {
     await ouvrirEditeur(page, regle.id);
     await page.getByRole('button', { name: 'Attendre 1 jour(s)', exact: true }).click();
     const panneau = panneauEtape(page);
+    const bouton = panneau.getByRole('button', { name: 'Enregistrer', exact: true });
+    // La limite est écrite DEUX fois dans le panneau (59ed48b5) : dans la liste des choses à corriger, et à côté
+    // du bouton. L'attente d'origine cherchait « un » texte par un motif large : avec deux, le localisateur strict
+    // tombait alors que le panneau fait ce qu'on lui demande. On exige maintenant la phrase EXACTE, visible.
+    const limiteDite = async (phrase: string) => {
+      await expect.soft(panneau.getByText(phrase, { exact: true }).first(), `le panneau dit la limite : « ${phrase} »`).toBeVisible({ timeout: 3_000 });
+    };
+    const UN_AN = 'Une attente ne peut pas dépasser 366 jours (un an).';
+    const TRENTE_JOURS = 'On peut envoyer au plus 30 jours avant le rendez-vous.';
     await panneau.getByLabel('Attendre *').fill('400');
     // 400 jours : le serveur refusera le parcours entier. Le panneau doit l'empêcher ici, et dire la limite.
-    expect.soft(await panneau.getByRole('button', { name: 'Enregistrer', exact: true }).isDisabled(), '« Enregistrer » avec 400 jours').toBe(true);
+    expect.soft(await bouton.isDisabled(), '« Enregistrer » avec 400 jours').toBe(true);
+    await limiteDite(UN_AN);
+    // La borne elle-même : 366 jours passent, 367 non.
+    await panneau.getByLabel('Attendre *').fill('366');
+    await expect.soft(bouton, '« Enregistrer » avec 366 jours (la limite)').toBeEnabled();
+    await expect.soft(panneau.getByText(UN_AN, { exact: true })).toHaveCount(0);
+    await panneau.getByLabel('Attendre *').fill('367');
+    await expect.soft(bouton, '« Enregistrer » avec 367 jours').toBeDisabled();
     await panneau.getByLabel('Ce qu’on attend').selectOption({ label: 'Ce délai AVANT le rendez-vous' });
     await panneau.getByLabel('Attendre *').fill('45');
-    expect.soft(await panneau.getByRole('button', { name: 'Enregistrer', exact: true }).isDisabled(), '« Enregistrer » avec 45 jours avant le rendez-vous').toBe(true);
-    await expect.soft(panneau.getByText(/au plus 30 jours|30 jours (au plus|maximum)|un an|366 jours|365 jours/i)).toBeVisible({ timeout: 3_000 });
+    expect.soft(await bouton.isDisabled(), '« Enregistrer » avec 45 jours avant le rendez-vous').toBe(true);
+    await limiteDite(TRENTE_JOURS);
+    await panneau.getByLabel('Attendre *').fill('30');
+    await expect.soft(bouton, '« Enregistrer » avec 30 jours avant le rendez-vous (la limite)').toBeEnabled();
+    await expect.soft(panneau.getByText(TRENTE_JOURS, { exact: true })).toHaveCount(0);
+    await panneau.getByLabel('Attendre *').fill('31');
+    await expect.soft(bouton, '« Enregistrer » avec 31 jours avant le rendez-vous').toBeDisabled();
+    // Rien n'a été écrit pendant ces refus : l'étape en base est celle d'origine.
+    expect((await lireRegle(bureau, regle.id))?.steps).toEqual([{ id: 'a1', type: 'attendre', delai_secondes: 86400, suivant: 'e1' }, NOTIF]);
   });
 
   test('[EDT-118] le refus du serveur pour une attente trop longue est écrit en français', async ({ bureau, marque, jetonDe }) => {
@@ -410,11 +433,31 @@ test.describe('étape « Si… » — conditions en texte', () => {
     await panneau.getByRole('button', { name: 'source =', exact: true }).click();
     await panneau.getByRole('button', { name: 'created_at >=', exact: true }).click();
     await expect(zone).toHaveValue('statut = envoye\ntotal_cents > 500000\nsource = \ncreated_at >= ');
-    // Les deux dernières lignes n'ont pas de valeur : elles ne sont pas enregistrées.
+    // Les deux dernières lignes n'ont pas encore de valeur. Depuis df770cbc elles ne sont plus jetées en silence à
+    // l'enregistrement (c'était le défaut 05:470) : chacune est SIGNALÉE, et « Enregistrer » est retenu.
+    const bouton = panneau.getByRole('button', { name: 'Enregistrer', exact: true });
+    const alerte = panneau.getByRole('alert');
+    await expect(alerte).toContainText('Ligne illisible « source = » : il manque la valeur.');
+    await expect(alerte).toContainText('Ligne illisible « created_at >= » : il manque la valeur.');
+    await expect(alerte, 'les deux lignes complètes ne sont pas signalées').not.toContainText(/statut|total_cents/);
+    await expect(bouton).toBeDisabled();
+    expect((await lireRegle(bureau, regle.id))?.steps, 'rien n’est écrit tant que des lignes sont illisibles').toEqual(REGLE_SI());
+    // On complète, comme un utilisateur : la dernière ligne d'abord (le curseur est à la fin de la zone)…
+    await zone.pressSequentially('2026-06-01');
+    await expect(zone).toHaveValue('statut = envoye\ntotal_cents > 500000\nsource = \ncreated_at >= 2026-06-01');
+    await expect(alerte).not.toContainText('created_at');
+    await expect(bouton, 'une ligne reste sans valeur : toujours retenu').toBeDisabled();
+    // … puis la troisième : flèche vers le haut, fin de ligne.
+    await zone.press('ArrowUp');
+    await zone.press('End');
+    await zone.pressSequentially('web');
+    await expect(zone).toHaveValue('statut = envoye\ntotal_cents > 500000\nsource = web\ncreated_at >= 2026-06-01');
+    await expect(alerte).toHaveCount(0);
+    await expect(bouton).toBeEnabled();
     await enregistrerEtape(page);
     const steps = await etapesEnBase(bureau, regle.id, (s) => Object.keys((s[0]?.conditions ?? {}) as object).length > 0);
-    expect(steps[0]?.conditions).toEqual({ statut: 'envoye', total_cents: { gt: 500000 } });
-    await expect(page.getByRole('button', { name: 'Si… 2 condition(s)', exact: true })).toBeVisible();
+    expect(steps[0]?.conditions).toEqual({ statut: 'envoye', total_cents: { gt: 500000 }, source: 'web', created_at: { gte: '2026-06-01' } });
+    await expect(page.getByRole('button', { name: 'Si… 4 condition(s)', exact: true })).toBeVisible();
   });
 
   test('[EDT-125] les six signes ( =  !=  >  >=  <  <= ) et l’intervalle : enregistrés dans la forme que le moteur évalue, relus ligne pour ligne', async ({ page, bureau, marque }) => {
@@ -467,7 +510,7 @@ test.describe('étape « Si… » — conditions en texte', () => {
     await expect.poll(async () => lignes(await panneauEtape(page).getByLabel('Conditions').inputValue())).toEqual(lignes(saisie));
   });
 
-  test('[EDT-125] une ligne mal écrite (sans signe, sans valeur) est SIGNALÉE — pas jetée en silence @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-125] une ligne mal écrite (sans signe, sans valeur) est SIGNALÉE — pas jetée en silence', async ({ page, bureau, marque }) => {
     await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, { name: `${marque} S-20`, trigger_event: 'quote.sent', conditions: {}, steps: REGLE_SI() });
     await ouvrirEditeur(page, regle.id);
@@ -498,7 +541,7 @@ test.describe('étape « Si… » — conditions en texte', () => {
     expect.soft(await bouton.isDisabled(), '« Enregistrer » avec une valeur de 300 caractères').toBe(true);
   });
 
-  test('[EDT-125] une condition « est l’un de » (in / not_in) posée par Lumi ou un modèle s’affiche dans le panneau, et survit à une modification @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-125] une condition « est l’un de » (in / not_in) posée par Lumi ou un modèle s’affiche dans le panneau, et survit à une modification', async ({ page, bureau, marque }) => {
     await donnees(bureau);
     const conditions = { source: { in: ['web', 'facebook'] }, statut: { not_in: ['perdu'] } };
     // Le serveur ACCEPTE cette forme, et le moteur la juge.
@@ -512,11 +555,39 @@ test.describe('étape « Si… » — conditions en texte', () => {
     const zone = panneau.getByLabel('Conditions');
     // La carte annonce 2 conditions ; le panneau doit les montrer.
     expect.soft(await zone.inputValue(), 'la zone « Conditions » montre les conditions existantes').toMatch(/source/);
-    // Ajouter une condition ne doit pas effacer celles qu'on ne voit pas.
+    // … chacune sur sa ligne, écrite en clair (l'ordre des lignes est celui des clés en base).
+    expect.soft(lignes(await zone.inputValue())).toEqual(['source est l’un de web, facebook', 'statut n’est aucun de perdu']);
+    // Ajouter une condition ne doit pas effacer celles d'origine. Le geste d'un utilisateur qui AJOUTE : cliquer dans
+    // la zone, aller à la fin, passer à la ligne, taper. (Avant : le test tapait sans se placer — le curseur d'une zone
+    // jamais cliquée est au DÉBUT, le texte se collait devant « source est l'un de… » et donnait une ligne illisible.)
+    await zone.click();
+    await zone.press('ControlOrMeta+End');
+    await zone.press('Enter');
     await zone.pressSequentially('montant > 100');
+    expect(lignes(await zone.inputValue())).toEqual(['montant > 100', 'source est l’un de web, facebook', 'statut n’est aucun de perdu']);
+    await expect(panneau.getByRole('alert'), 'aucune ligne n’est signalée illisible').toHaveCount(0);
     await enregistrerEtape(page);
     const steps = await etapesEnBase(bureau, regle.id, (s) => 'montant' in ((s[0]?.conditions ?? {}) as object) || !('source' in ((s[0]?.conditions ?? {}) as object)));
     expect(steps[0]?.conditions).toMatchObject(conditions);
+    // Champ par champ (l'ordre des clés d'un jsonb ne compte pas) : les deux conditions d'origine sont INTACTES —
+    // mêmes opérateurs, mêmes valeurs, dans le même ordre, toujours des listes — et la troisième est ajoutée, en nombre.
+    const apres = (steps[0]?.conditions ?? {}) as Record<string, unknown>;
+    expect(Object.keys(apres).sort()).toEqual(['montant', 'source', 'statut']);
+    expect(apres.source).toEqual({ in: ['web', 'facebook'] });
+    expect(apres.statut).toEqual({ not_in: ['perdu'] });
+    expect(apres.montant).toEqual({ gt: 100 });
+    // Le reste de l'étape n'a pas bougé, et le moteur juge toujours les conditions d'origine.
+    expect(steps[0]).toEqual({ id: 's1', type: 'si', conditions: apres, alors: 'e1', sinon: null });
+    expect(evaluateConditions(apres, evenement({ source: 'facebook', statut: 'envoye', montant: 101 }))).toBe(true);
+    expect(evaluateConditions(apres, evenement({ source: 'appel', statut: 'envoye', montant: 101 }))).toBe(false);
+    expect(evaluateConditions(apres, evenement({ source: 'web', statut: 'perdu', montant: 101 }))).toBe(false);
+    await expect(page.getByRole('button', { name: 'Si… 3 condition(s)', exact: true })).toBeVisible();
+    // Rechargé : les trois lignes se relisent.
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Si… 3 condition(s)', exact: true })).toBeVisible({ timeout: 90_000 });
+    await page.getByRole('button', { name: /^Si…/ }).click();
+    await expect.poll(async () => lignes(await panneauEtape(page).getByLabel('Conditions').inputValue()))
+      .toEqual(['montant > 100', 'source est l’un de web, facebook', 'statut n’est aucun de perdu']);
   });
 });
 

@@ -100,6 +100,10 @@ const ARGENT_ET_DROITS = [
   'update_time_entry', 'mark_commission_paid', 'approve_commission',
   'set_client_consent', 'set_quote_status', 'set_quote_discount_deposit',
   'pause_all_automations', 'create_automation_from_template', 'delete_automation_rule',
+  // Mission finale (2026-10-02). Modifier une automatisation PUBLIÉE change ce que ses clients
+  // recevront dès le prochain envoi ; changer la langue des messages aussi. « Sensible » ne
+  // suffisait pas : en mode « tout », ces deux outils s'exécutaient sans carte.
+  'update_automation_from_text', 'set_automation_language',
 ];
 export const JAMAIS_D_OFFICE: ReadonlySet<string> = new Set([
   ...Object.entries(REGISTRE_ECRITURES).filter(([, a]) => a.vers_client || !a.reversible).map(([n]) => n),

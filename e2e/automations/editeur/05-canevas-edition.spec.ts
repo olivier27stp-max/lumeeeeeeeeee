@@ -14,6 +14,7 @@ import {
   test, expect, DELAI_TEST,
   CAPTURES, creerParcours, troisTextos, texto, attente, ouvrirEditeur, cartes, carte, menuDeCarte,
   attendreEnregistre, corpsDuFil, filEnBase, dialogue, panneauEtape, tiroirActions, toasts, indicateur, type EtapeBase,
+  ajouterParLeTiroir, enregistrerPanneau,
 } from './_aides';
 
 test.describe.configure({ timeout: DELAI_TEST });
@@ -334,7 +335,22 @@ test.describe('canevas — conditions, branches, arrêt', () => {
     await ouvrirEditeur(page, r.id);
     await plus(page).nth(1).click();
     await tiroirActions(page).getByRole('button', { name: /^Condition/ }).click();
+    // Le canevas montre la condition à sa place dès le choix, la suite déjà sous « si oui »…
+    await expect(panneauEtape(page).getByLabel('Conditions')).toBeVisible();
+    expect(await cartes(page)).toEqual([TROIS[0], 'Si… | 0 condition(s)', TROIS[1], TROIS[2]]);
+    /* … mais elle n'entre dans le parcours qu'à « Enregistrer » de son panneau (3b739958). Avant, le test
+       refermait le panneau par « Annuler » et l'étape restait ; « Annuler » demande maintenant « Fermer sans
+       ajouter cette étape ? » et l'abandonne — vérifié d'abord, base intacte, puis l'ajout est refait et enregistré. */
     await panneauEtape(page).getByRole('button', { name: 'Annuler' }).click();
+    await expect(dialogue(page).getByRole('heading', { name: 'Fermer sans ajouter cette étape ?' })).toBeVisible();
+    await expect(dialogue(page)).toContainText('Cette étape n’a pas été enregistrée : elle ne sera pas ajoutée au parcours.');
+    await dialogue(page).getByRole('button', { name: 'Ne pas l’ajouter' }).click();
+    await expect(panneauEtape(page)).toHaveCount(0);
+    expect(await cartes(page)).toEqual(TROIS);
+    await expect(indicateur(page)).toHaveText('Enregistré');
+    expect((await lireRegle(bureau, r.id))?.updated_at).toBe(r.updated_at);
+
+    await ajouterParLeTiroir(page, 1, /^Condition/);
     expect(await cartes(page)).toEqual([TROIS[0], 'Si… | 0 condition(s)', TROIS[1], TROIS[2]]);
     await attendreEnregistre(page);
     const etapes = ((await lireRegle(bureau, r.id))?.steps ?? []) as Array<Record<string, unknown>>;
@@ -344,25 +360,37 @@ test.describe('canevas — conditions, branches, arrêt', () => {
     expect(etapes.length).toBe(4);
   });
 
-  test('[EDT-047] supprimer une condition dont la branche « si non » contient une étape : aucune étape ne reste cachée en base (S-12) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-047] supprimer une condition dont la branche « si non » contient une étape : aucune étape ne reste cachée en base (S-12)', async ({ page, bureau, marque }) => {
     const r = await creerParcours(bureau, `${marque} condition supprimée`, parcoursAvecBranches());
     await ouvrirEditeur(page, r.id);
     await menuDeCarte(page, 'Si…').click();
     await page.getByRole('button', { name: 'Supprimer l’étape', exact: true }).click();
-    await expect(dialogue(page)).toContainText('Ce qui venait après reste dans le parcours et se rebranche tout seul.');
+    /* Le dialogue ne promet plus « Ce qui venait après reste dans le parcours et se rebranche tout seul. »
+       (c'était la moitié fausse du défaut) : depuis 0db8ce18 il dit ce qui part — vérifié ici mot pour mot —
+       et la suite du test vérifie que c'est VRAI en base. */
+    await expect(dialogue(page).getByRole('heading', { name: 'Supprimer cette étape ?' })).toBeVisible();
+    await expect(dialogue(page)).toContainText('La branche « si oui » reste dans le parcours et se rebranche. La branche « si non » (1 étape) sera retirée avec la condition.');
+    await expect(dialogue(page)).not.toContainText('se rebranche tout seul');
     await dialogue(page).getByRole('button', { name: 'Supprimer' }).click();
     await page.screenshot({ path: `${CAPTURES}/edt-s12-condition-supprimee.png` });
     const vues = await cartes(page);
+    // La branche « si oui » est rebranchée à la place de la condition ; « si non » n'est plus à l'écran.
+    expect(vues).toEqual(['Envoyer un texto | Texto ALPHA', 'Attendre | 2 jour(s)', 'Envoyer un texto | Texto OUI', 'Arrêter ici']);
     await attendreEnregistre(page);
     const etapes = ((await lireRegle(bureau, r.id))?.steps ?? []) as Array<Record<string, unknown>>;
     const fil = await filEnBase(bureau, r.id);
-    // Le dialogue promet que « ce qui venait après reste et se rebranche » : toute étape gardée en base doit être à l'écran.
+    // Ce que le dialogue a annoncé est vrai en base : toute étape gardée en base est à l'écran, rien d'orphelin.
     expect(vues.some((v) => v.includes('Texto NON')) || !JSON.stringify(etapes).includes('Texto NON'),
       `« Texto NON » (branche si non) n’est plus à l’écran (${vues.join(' / ')}) mais reste dans steps en base`).toBe(true);
     expect(etapes.length, 'des étapes existent en base sans être reliées au parcours').toBe(fil.length);
+    expect(etapes.map((e) => e.id).sort()).toEqual(['e1', 'e2', 'e4', 'e6']);
+    // Relu après rechargement : le même parcours, sans la branche « si non ».
+    await page.reload();
+    await expect(carte(page, 'Texto ALPHA')).toBeVisible({ timeout: 90_000 });
+    expect(await cartes(page)).toEqual(vues);
   });
 
-  test('[EDT-062] insérer « Arrêter ici » au milieu : la suite ne disparaît pas sans prévenir (S-12) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-062] insérer « Arrêter ici » au milieu : la suite ne disparaît pas sans prévenir (S-12)', async ({ page, bureau, marque }) => {
     const r = await creerParcours(bureau, `${marque} arrêt milieu`, troisTextos());
     await ouvrirEditeur(page, r.id);
     await plus(page).nth(1).click();
@@ -372,6 +400,27 @@ test.describe('canevas — conditions, branches, arrêt', () => {
     const prevenu = await dialogue(page).or(toasts(page).filter({ hasText: /suite|après|disparaî|retir/i })).first().isVisible();
     expect(prevenu || vues.some((v) => v.includes('Texto BRAVO')),
       `« Texto BRAVO » et « Texto CHARLIE » ont disparu du canevas (${vues.join(' / ')}) sans question ni message`).toBe(true);
+
+    /* AJOUTÉ à la revérification du 2026-10-02 (0db8ce18) — l'attente ci-dessus est celle d'origine. La question
+       dit combien d'étapes partent ; « Annuler » ne retire rien ; confirmer puis enregistrer l'arrêt retire
+       VRAIMENT la suite, à l'écran comme en base (avant : elle restait en base, reliée à rien). */
+    await expect(dialogue(page).getByRole('heading', { name: 'Arrêter ici et retirer la suite ?' })).toBeVisible();
+    await expect(dialogue(page)).toContainText('Le parcours s’arrêtera à cet endroit : les 2 étapes qui suivent ne seront plus jamais atteintes et seront retirées du parcours.');
+    await dialogue(page).getByRole('button', { name: 'Annuler' }).click();
+    await expect(tiroirActions(page)).toBeVisible();
+    expect(await cartes(page)).toEqual(TROIS);
+    expect((await lireRegle(bureau, r.id))?.updated_at).toBe(r.updated_at);
+
+    await tiroirActions(page).getByRole('button', { name: /^Arrêter ici/ }).click();
+    await dialogue(page).getByRole('button', { name: 'Arrêter ici', exact: true }).click();
+    await enregistrerPanneau(page);
+    expect(await cartes(page)).toEqual([TROIS[0], 'Arrêter ici']);
+    await attendreEnregistre(page);
+    const etapes = ((await lireRegle(bureau, r.id))?.steps ?? []) as Array<Record<string, unknown>>;
+    expect(etapes.map((e) => e.type)).toEqual(['action', 'arreter']);
+    expect(JSON.stringify(etapes)).not.toContain('Texto BRAVO');
+    expect(JSON.stringify(etapes)).not.toContain('Texto CHARLIE');
+    expect(etapes.length, 'des étapes existent en base sans être reliées au parcours').toBe((await filEnBase(bureau, r.id)).length);
   });
 
   test('[EDT-037][EDT-038] chaque carte dit ce qu’elle fera, même sans texte de message (S-38) @defaut', async ({ page, bureau, marque }) => {

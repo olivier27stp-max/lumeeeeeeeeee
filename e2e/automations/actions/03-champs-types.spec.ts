@@ -15,12 +15,15 @@
  *  · accents, émojis, caractères spéciaux : gardés au caractère près.
  */
 import { test, expect } from './_aides';
-import { creerRegle } from '../_outils/banc';
+import { creerRegle, appelApi } from '../_outils/banc';
 import {
   CAPTURES, donnees, creerBrouillon, creerBrouillonAvecAction, ouvrirEditeur, panneauEtape, champ, boutonEnregistrer,
-  attendreConfig, attendreEnregistre, finStable, quitterSansEnregistrer, carte, optionChoisie, etapesEnBase, configDe,
+  attendreConfig, attendreEnregistre, finStable, carte, optionChoisie, etapesEnBase, configDe,
+  enregistrerEtape, ecrituresVers, laisserPasserLEnregistrementAuto,
 } from './_aides';
 import type { Locator, Page } from '@playwright/test';
+
+const BASE = process.env.E2E_BASE || 'http://127.0.0.1:5191';
 
 const SPECIAUX = 'Été à Québec — 50 % & "guillemets" <script>alert(1)</script> 😀 l’apostrophe';
 
@@ -211,7 +214,7 @@ test.describe('champ « nombre »', () => {
     await expect(champ(panneauEtape(page), 'À faire dans (jours)', false)).toHaveValue('365');
   });
 
-  test('[EDT-077][CHA-29][CHA-20][EDT-126] hors bornes (999 jours, -5 jours, 10 000 001 $) : refusé dans le panneau, avec la borne @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-077][CHA-29][CHA-20][EDT-126] hors bornes (999 jours, -5 jours, 10 000 001 $) : refusé dans le panneau, avec la borne', async ({ page, bureau, marque }) => {
     const fautes: string[] = [];
     const tache = await creerBrouillonAvecAction(bureau, marque, 'lead.created', 'create_task', { title: 'Rappeler [client_name]' }, { name: `${marque} bornes tâche` });
     let p = await ouvrirEtape(page, tache.id, 'Créer une tâche');
@@ -226,26 +229,58 @@ test.describe('champ « nombre »', () => {
     expect(fautes, 'valeurs hors bornes acceptées par le panneau').toEqual([]);
   });
 
-  test('[EDT-077][CHA-29][EDT-130] un nombre hors bornes enregistré dans l’étape : le refus du serveur est expliqué clairement, sans boucle de « nouvel essai » @defaut', async ({ page, bureau, marque, moniteur }) => {
-    moniteur.attendu(/400 PATCH .*\/api\/automations\/rules\//, 'le serveur refuse 999 jours (maximum 365)');
+  /*
+   * Avant 71d2b5e9, le panneau laissait passer 999 jours : « Enregistrer » se cliquait, puis l'enregistrement
+   * automatique était refusé par le serveur (« … doit etre au plus 365. », « nouvel essai automatique » en boucle,
+   * indicateur bloqué sur « Modifié »). Le comportement décidé : le panneau refuse LUI-MÊME, avec la borne, et
+   * rien ne part. Le geste a donc changé (on ne peut plus cliquer « Enregistrer ») ; les attentes d'origine sont
+   * gardées — le message nomme le champ et la borne, en français accentué, sans « nouvel essai », l'indicateur ne
+   * reste pas sur « Modifié » — et le refus du SERVEUR est toujours éprouvé, par un appel direct à côté de l'écran.
+   */
+  test('[EDT-077][CHA-29][EDT-130] un nombre hors bornes : le panneau le refuse avec la borne et RIEN ne part au serveur ; le serveur, appelé à côté de l’écran, refuse en nommant l’étape et la borne, sans « nouvel essai »', async ({ page, bureau, marque, jetonDe, baseURL }) => {
     const regle = await creerBrouillonAvecAction(bureau, marque, 'lead.created', 'create_task', { title: 'Rappeler [client_name]' });
+    const ecritures = ecrituresVers(page, regle.id);
     const p = await ouvrirEtape(page, regle.id, 'Créer une tâche');
-    await champ(p, 'À faire dans (jours)', false).fill('999');
-    await boutonEnregistrer(p).click();
-    // Le panneau l'a laissé passer (voir le test précédent) : 3 s plus tard, l'enregistrement automatique part.
-    const toast = page.getByRole('region', { name: /Notifications/ }).getByRole('listitem').filter({ hasText: /jours|Enregistrement/ }).first();
-    await expect(toast).toBeVisible({ timeout: 120_000 });
-    const texte = await toast.innerText();
-    await page.screenshot({ path: `${CAPTURES}/nombre-hors-bornes-toast.png` });
-    // La base n'a pas pris la valeur refusée.
+    const jours = champ(p, 'À faire dans (jours)', false);
+
+    // 1. Le panneau : la borne est écrite (dans l'encadré, et à côté du bouton), « Enregistrer » ne se clique pas.
+    await jours.fill('999');
+    await expect(boutonEnregistrer(p)).toBeDisabled();
+    await expect(p.getByText('« À faire dans (jours) » doit être au plus 365.', { exact: true })).toHaveCount(2);
+    await page.screenshot({ path: `${CAPTURES}/nombre-hors-bornes-panneau.png` });
+    await jours.fill('-5');
+    await expect(boutonEnregistrer(p)).toBeDisabled();
+    await expect(p.getByText('« À faire dans (jours) » doit être au moins 0.', { exact: true })).toHaveCount(2);
+    // Un clic forcé (l'utilisateur têtu) ne passe pas non plus.
+    await boutonEnregistrer(p).click({ force: true });
+    await expect(p).toBeVisible();
+
+    // 2. Rien ne part : ni enregistrement automatique, ni message de refus, ni indicateur bloqué sur « Modifié ».
+    await laisserPasserLEnregistrementAuto(page);
+    expect(ecritures, 'requêtes d’écriture parties pendant que le panneau refusait la saisie').toEqual([]);
+    await expect(page.getByRole('region', { name: /Notifications/ }).getByRole('listitem')).toHaveCount(0);
+    await expect(page.getByText('Modifié', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Enregistré', { exact: true })).toBeVisible();
     expect(configDe(await etapesEnBase(bureau, regle.id))).toEqual({ title: 'Rappeler [client_name]' });
-    // Attendu : un message qui nomme le champ et la borne, en bon français, et qui ne promet pas un « nouvel essai » voué à échouer.
-    expect.soft(texte, 'le message nomme le champ et la borne').toMatch(/À faire dans \(jours\).*365/);
+
+    // 3. Une valeur dans les bornes : l'étape redevient enregistrable, et la base suit.
+    await jours.fill('30');
+    await expect(p.getByText(/doit être au (plus|moins)/)).toHaveCount(0);
+    await enregistrerEtape(p);
+    await attendreConfig(bureau, regle.id, { title: 'Rappeler [client_name]', echeance_jours: '30' });
+    await attendreEnregistre(page);
+
+    // 4. Le serveur, pour qui passerait à côté de l'écran : même refus, qui nomme l'étape, le champ et la borne.
+    const refus = await appelApi(baseURL ?? BASE, await jetonDe('proprioA'), bureau.orgA, 'PATCH', `/api/automations/rules/${regle.id}`, {
+      steps: [{ id: 'e1', type: 'action', action: { type: 'create_task', config: { title: 'Rappeler [client_name]', echeance_jours: '999' } }, suivant: null }],
+    });
+    expect(refus.status, JSON.stringify(refus.json)).toBe(400);
+    const texte = String((refus.json as { error?: string }).error ?? '');
+    expect.soft(texte, 'le message nomme l’étape, le champ et la borne').toContain('Étape 1 (« Créer une tâche ») : « À faire dans (jours) » doit être au plus 365.');
     expect.soft(texte, 'en français accentué').not.toMatch(/doit etre/);
-    expect.soft(texte, 'pas de « nouvel essai automatique » pour une saisie refusée').not.toMatch(/nouvel essai automatique/);
-    // Et l'étape fautive est désignée : l'indicateur ne reste pas sur « Modifié » sans issue.
-    await expect.soft(page.getByText('Modifié', { exact: true })).toBeHidden({ timeout: 10_000 });
-    await quitterSansEnregistrer(page);
+    expect.soft(texte, 'pas de « nouvel essai automatique » pour une saisie refusée').not.toMatch(/nouvel essai/);
+    // La base n'a pas pris la valeur refusée.
+    expect(configDe(await etapesEnBase(bureau, regle.id))).toEqual({ title: 'Rappeler [client_name]', echeance_jours: '30' });
   });
 });
 
@@ -421,7 +456,7 @@ test.describe('champ « adresse »', () => {
     await expect(p.getByText('« L’adresse » est vide.')).toHaveCount(2);
   });
 
-  test('[EDT-085][CHA-38][EDT-126] adresse en http://, malformée ou interne : refusée dans le panneau, avec la raison @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-085][CHA-38][EDT-126] adresse en http://, malformée ou interne : refusée dans le panneau, avec la raison', async ({ page, bureau, marque }) => {
     const regle = await creerBrouillonAvecAction(bureau, marque, 'lead.created', 'webhook', {});
     const p = await ouvrirEtape(page, regle.id, 'Appeler un webhook');
     const fautes: string[] = [];
@@ -433,21 +468,57 @@ test.describe('champ « adresse »', () => {
     expect(fautes, 'adresses que le serveur refusera, acceptées par le panneau').toEqual([]);
   });
 
-  test('[EDT-085][CHA-38][EDT-130] une adresse en http:// enregistrée dans l’étape : le refus du serveur est expliqué clairement, sans boucle de « nouvel essai » @defaut', async ({ page, bureau, marque, moniteur }) => {
-    moniteur.attendu(/400 PATCH .*\/api\/automations\/rules\//, 'le serveur refuse une adresse en http://');
+  /*
+   * Même changement de geste que pour le nombre hors bornes (71d2b5e9) : le panneau refuse lui-même, la raison est
+   * écrite, rien ne part. Les attentes d'origine sont gardées (le message parle de https://, pas de « nouvel
+   * essai », pas d'indicateur bloqué sur « Modifié », la base garde l'adresse valide) ; le refus du serveur est
+   * éprouvé par un appel direct.
+   */
+  test('[EDT-085][CHA-38][EDT-130] une adresse en http://, qui n’en est pas une, ou interne : le panneau dit laquelle des trois fautes, RIEN ne part au serveur ; le serveur, appelé à côté de l’écran, refuse avec la même raison', async ({ page, bureau, marque, jetonDe, baseURL }) => {
     const regle = await creerBrouillonAvecAction(bureau, marque, 'lead.created', 'webhook', { url: 'https://crochets.lume-qa.test/avant' });
+    const ecritures = ecrituresVers(page, regle.id);
     const p = await ouvrirEtape(page, regle.id, 'Appeler un webhook');
-    await champ(p, 'L’adresse', true).fill('http://crochets.lume-qa.test/entrant');
-    await boutonEnregistrer(p).click();
-    const toast = page.getByRole('region', { name: /Notifications/ }).getByRole('listitem').filter({ hasText: /adresse|Enregistrement/i }).first();
-    await expect(toast).toBeVisible({ timeout: 120_000 });
-    const texte = await toast.innerText();
-    await page.screenshot({ path: `${CAPTURES}/url-http-toast.png` });
+    const adresse = champ(p, 'L’adresse', true);
+
+    // 1. Le panneau : chaque saisie refusée a SA raison, écrite deux fois (encadré, et à côté du bouton).
+    const essais: Array<[string, string]> = [
+      ['http://crochets.lume-qa.test/entrant', '« L’adresse » doit commencer par https://.'],
+      ['pas une adresse', '« L’adresse » doit commencer par https://.'],
+      ['ftp://crochets.lume-qa.test', '« L’adresse » doit commencer par https://.'],
+      ['https://localhost/interne', '« L’adresse » ne peut pas viser une adresse interne.'],
+      ['https://192.168.1.10/crochet', '« L’adresse » ne peut pas viser une adresse interne.'],
+      ['https://', '« L’adresse » n’est pas une adresse valide.'],
+    ];
+    for (const [saisie, raison] of essais) {
+      await adresse.fill(saisie);
+      await expect(boutonEnregistrer(p), `« ${saisie} » : « Enregistrer »`).toBeDisabled();
+      await expect(p.getByText(raison, { exact: true }), `« ${saisie} » : la raison écrite`).toHaveCount(2);
+    }
+    await page.screenshot({ path: `${CAPTURES}/url-refusee-panneau.png` });
+    await adresse.fill('http://crochets.lume-qa.test/entrant');
+    await boutonEnregistrer(p).click({ force: true });
+    await expect(p).toBeVisible();
+
+    // 2. Rien ne part : ni enregistrement automatique, ni message de refus, ni indicateur bloqué sur « Modifié ».
+    await laisserPasserLEnregistrementAuto(page);
+    expect(ecritures, 'requêtes d’écriture parties pendant que le panneau refusait la saisie').toEqual([]);
+    await expect(page.getByRole('region', { name: /Notifications/ }).getByRole('listitem')).toHaveCount(0);
+    await expect(page.getByText('Modifié', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Enregistré', { exact: true })).toBeVisible();
     expect(configDe(await etapesEnBase(bureau, regle.id))).toEqual({ url: 'https://crochets.lume-qa.test/avant' });
-    expect.soft(texte, 'le message dit que l’adresse doit commencer par https://').toMatch(/https:\/\//);
-    expect.soft(texte, 'pas de « nouvel essai automatique » pour une saisie refusée').not.toMatch(/nouvel essai automatique/);
-    await expect.soft(page.getByText('Modifié', { exact: true })).toBeHidden({ timeout: 10_000 });
-    await quitterSansEnregistrer(page);
+
+    // 3. Le serveur, pour qui passerait à côté de l'écran : même refus, qui nomme l'étape et le champ.
+    const jeton = await jetonDe('proprioA');
+    for (const [saisie, raison] of [essais[0], essais[3]]) {
+      const refus = await appelApi(baseURL ?? BASE, jeton, bureau.orgA, 'PATCH', `/api/automations/rules/${regle.id}`, {
+        steps: [{ id: 'e1', type: 'action', action: { type: 'webhook', config: { url: saisie } }, suivant: null }],
+      });
+      expect(refus.status, JSON.stringify(refus.json)).toBe(400);
+      const texte = String((refus.json as { error?: string }).error ?? '');
+      expect.soft(texte, `« ${saisie} » : le serveur nomme l’étape et donne la raison`).toContain(`Étape 1 (« Appeler un webhook ») : ${raison}`);
+      expect.soft(texte, 'pas de « nouvel essai automatique » pour une saisie refusée').not.toMatch(/nouvel essai/);
+    }
+    expect(configDe(await etapesEnBase(bureau, regle.id))).toEqual({ url: 'https://crochets.lume-qa.test/avant' });
   });
 });
 

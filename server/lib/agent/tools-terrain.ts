@@ -26,6 +26,7 @@
 import type { PermissionKey } from '../../../src/lib/permissions';
 import type { IdTopic } from '../lumi/topics';
 import type { AgentTool, ToolContext } from './tools';
+import { EVENEMENTS_NES_EN_BASE } from './evenements-nes-en-base';
 import {
   executerIdempotent, champRequis, appelInterne, AppelInterneIncertain, traduireStatut,
 } from './tools-etendus';
@@ -131,6 +132,7 @@ async function jobDeLOrg(ctx: ToolContext, jobId: string, colonnes = 'id, job_nu
  * avertissement, jamais une erreur — l'écriture est faite, retenter = doublon.
  */
 async function signalerTerrain(ctx: ToolContext, chemin: string, corps: Record<string, any>, quoi: string): Promise<string | null> {
+  if (EVENEMENTS_NES_EN_BASE.has(chemin)) return null; // la base a déjà émis l'événement
   try {
     const { ok, status, json } = await appelInterne(ctx, chemin, corps);
     if (!ok) return `${quoi} (${json?.error || status}) — l'écriture est faite, mais ce suivi n'a pas tourné.`;

@@ -155,3 +155,17 @@ describe('pointer sur un job : l’outil de pointage est chargé avec les jobs',
     expect(outilsDuSousAgent('equipe')).toEqual(expect.arrayContaining(['punch_in', 'punch_out']));
   });
 });
+
+describe('un outil chargé là où la question arrive (passe en prod du 2026-10-02)', () => {
+  it('« qui travaille demain » : l’horaire des employés est chargé avec les jobs', () => {
+    expect(outilsDuSousAgent('planification')).toEqual(expect.arrayContaining(['query_schedule', 'get_team_schedule']));
+  });
+
+  it('« quelle équipe a rapporté le plus » : la performance par équipe est chargée avec la facturation', () => {
+    expect(outilsDuSousAgent('facturation')).toEqual(expect.arrayContaining(['analyze_profitability', 'get_team_performance']));
+  });
+
+  it('ils restent des outils du sujet « equipe »', () => {
+    expect(outilsDuSousAgent('equipe')).toEqual(expect.arrayContaining(['get_team_schedule', 'get_team_performance']));
+  });
+});

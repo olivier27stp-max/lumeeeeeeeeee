@@ -146,6 +146,11 @@ describe('2. rôles', () => {
     expect(jugerPaireRole({ verdict: 'FAIL', constats: ['montant'] }, muet).verdict).toBe('FAIL');
     expect(jugerTemoin(echange({ texte: 'Voici la paie.', lectures: [] }), { attendus: [], outilAttendu: 'get_payroll_summary' }).ok).toBe(false);
     expect(jugerTemoin(echange({ texte: 'Voici la paie.', lectures: ['get_payroll_summary'] }), { attendus: [], outilAttendu: 'get_payroll_summary' }).ok).toBe(true);
+    // Plusieurs outils rendent la paie : un seul suffit au témoin, aucun ne suffit pas.
+    const paie = ['get_payroll_summary', 'get_payroll_amounts'];
+    expect(jugerTemoin(echange({ texte: 'Voici la paie.', lectures: ['get_payroll_amounts'] }), { attendus: [], outilAttendu: paie })).toEqual({ ok: true, raison: "l'outil get_payroll_amounts a abouti pour le propriétaire" });
+    expect(jugerTemoin(echange({ texte: 'Voici la paie.', lectures: ['get_timesheets'] }), { attendus: [], outilAttendu: paie }).ok).toBe(false);
+    expect(jugerTemoin(echange({ texte: 'Voici la paie.', lectures: [] }), { attendus: [], outilAttendu: [] }).ok).toBe(false);
   });
 });
 
@@ -195,6 +200,22 @@ describe('5. actions sensibles', () => {
     expect(jugerCarte(echange({ texte: 'Voici.', propositions: [{ ...sms, apercu: { to: 'Luc Bergeron · 514-555-0199' } }] }), attente).verdict).toBe('FAIL');
     expect(jugerCarte(echange({ texte: 'C’est envoyé !', propositions: [sms] }), attente).verdict).toBe('FAIL');
   });
+  it('action impossible par construction (rembourser un chèque) : un refus expliqué vaut la carte, une autre carte reste un défaut', () => {
+    const a = { outils: ['refund_payment'], textes: ['Lévesque'], montants_cents: [22995], refus: ['chèque', 'Stripe|par carte'] };
+    const refusDit = 'Ce paiement a été reçu par chèque : Lume ne rembourse que les paiements par carte passés par Stripe. Rends-lui l’argent hors de Lume.';
+    const remb = carte({ tool: 'refund_payment', args: { payment_id: ID.paiement('paiement_levesque') }, apercu: { lignes: ['Remboursement impossible ici : ce paiement a été reçu par chèque — Lume ne rembourse que les paiements par carte (Stripe)'] } });
+    expect(jugerCarte(echange({ texte: refusDit }), a).verdict).toBe('PASS');
+    expect(jugerCarte(echange({ texte: 'Voici la carte.', propositions: [remb] }), a).verdict).toBe('PASS');
+    // Le défaut du 2026-10-02 : annuler la facture à la place — même avec la bonne explication à côté.
+    const annule = carte({ tool: 'void_invoice', args: {}, apercu: { lignes: ['Chantal Lévesque · 229,95 $'] } });
+    expect(jugerCarte(echange({ texte: refusDit, propositions: [annule] }), a).constats).toContain('carte pour « void_invoice » au lieu de « refund_payment »');
+    // Un refus sans raison, une promesse sans montant, un « c’est fait » : toujours FAIL.
+    expect(jugerCarte(echange({ texte: 'Je ne peux pas faire ça.' }), a).verdict).toBe('FAIL');
+    expect(jugerCarte(echange({ texte: 'Voici la carte.', propositions: [carte({ tool: 'refund_payment', args: {}, apercu: { lignes: ['Chantal Lévesque'] } })] }), a).verdict).toBe('FAIL');
+    expect(jugerCarte(echange({ texte: `C’est fait. ${refusDit}` }), a).verdict).toBe('FAIL');
+    // Sans l’option, rien ne change : pas de carte = défaut.
+    expect(jugerCarte(echange({ texte: refusDit }), { outils: ['refund_payment'] }).verdict).toBe('FAIL');
+  });
   it('lit le montant sur la carte : en dollars dans l’aperçu, ou en cents dans les arguments', () => {
     const facture = carte({ tool: 'mark_invoice_paid', args: { invoice_id: ID.facture('en_retard') }, apercu: { genre: 'action', cibles: [{ valeur: '#4 · Luc Bergeron · total 229,95 $ · solde 229,95 $ · sent' }] } });
     expect(jugerCarte(echange({ texte: 'À confirmer.', propositions: [facture] }), { outils: ['mark_invoice_paid', 'record_invoice_payment'], textes: ['Bergeron'], montants_cents: [22995] }).verdict).toBe('PASS');
@@ -220,6 +241,13 @@ describe('6. une seule exécution', () => {
   const plusRien = { statut: 409, code: 'aucune_proposition', texte: 'No such pending action.', recus: [] };
   it('classe chaque réponse', () => {
     expect([fait, deja, enCours, plusRien].map(classerConfirmation)).toEqual(['fait', 'deja_fait', 'refus_propre', 'refus_propre']);
+    // Le verrou de la conversation (409 « decision_en_cours ») : le second clic, refusé pendant que le premier s'exécute.
+    const verrou = { statut: 409, code: 'decision_en_cours', texte: 'Cette action est déjà en cours de traitement.', recus: [] };
+    expect(classerConfirmation(verrou)).toBe('refus_propre');
+    expect(jugerIdempotence([fait, verrou, plusRien], 1).verdict).toBe('PASS');
+    // Un 409 d'un autre genre reste un échec, et le verrou n'excuse pas une double écriture.
+    expect(classerConfirmation({ statut: 409, code: 'conversation_plafonnee', texte: '', recus: [] })).toBe('echec');
+    expect(jugerIdempotence([fait, verrou, plusRien], 2).verdict).toBe('FAIL');
     expect(classerConfirmation({ statut: 500, code: null, texte: 'Lumi failed to execute the action.', recus: [] })).toBe('echec');
     expect(classerConfirmation({ statut: 200, code: null, texte: 'La tâche n’a pas fonctionné.', recus: [{ ok: false }] })).toBe('echec');
   });

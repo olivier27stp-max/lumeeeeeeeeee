@@ -16,6 +16,7 @@ import {
   test, expect, DELAI_TEST,
   CAPTURES, creerParcours, troisTextos, ouvrirEditeur, cartes, carte, menuDeCarte, indicateur, attendreEnregistre,
   corpsDuFil, dialogue, panneauEtape, tiroirActions, toasts,
+  ajouterParLeTiroir, aucuneEcriture, bandeauModifieeAilleurs,
 } from './_aides';
 
 test.describe.configure({ timeout: DELAI_TEST });
@@ -79,11 +80,10 @@ test.describe('enregistrement automatique', () => {
     expect(await corpsDuFil(bureau, r.id)).toEqual(['Texto ALPHA', 'Texto BRAVO pendant la panne', 'Texto CHARLIE']);
   });
 
-  /* @defaut depuis le tri du 2026-10-01 : après le 429, l'éditeur n'envoie PAS le deuxième essai (un seul PATCH
-     dans la trace) et l'indicateur reste sur « Enregistrement… » pour de bon — la reprise prévue dans
-     AutomationBuilderPage.tsx (`attentes = [1500, 4000]`) retombe sur `if (annule) return;`, vrai dès que
-     l'effet s'est relancé en posant « en cours ». La modification n'atteint jamais la base. */
-  test('[EDT-012] débit dépassé (429) : jamais « Too many requests » à l’écran, et l’enregistrement finit par passer @defaut', async ({ page, bureau, marque, moniteur }) => {
+  /* Défaut du tri du 2026-10-01 (après le 429, aucun deuxième essai ne partait : l'indicateur restait sur
+     « Enregistrement… » et la modification n'atteignait jamais la base), CORRIGÉ par dbc83989 — revérifié le
+     2026-10-02 : vert tel quel, marqueur retiré. */
+  test('[EDT-012] débit dépassé (429) : jamais « Too many requests » à l’écran, et l’enregistrement finit par passer', async ({ page, bureau, marque, moniteur }) => {
     const r = await creerParcours(bureau, `${marque} débit`, troisTextos());
     await ouvrirEditeur(page, r.id);
     moniteur.attendu(/429 PATCH .*\/api\/automations\/rules\//, 'plafond de débit simulé');
@@ -119,9 +119,12 @@ test.describe('enregistrement automatique', () => {
 });
 
 test.describe('refus de validation du serveur (S-04)', () => {
-  test('[EDT-060][EDT-012] ajouter « Attendre » en dernière étape (geste normal) : pas de message de panne, pas d’essais en boucle @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-060][EDT-012] ajouter « Attendre » en dernière étape (geste normal) : pas de message de panne, pas d’essais en boucle', async ({ page, bureau, marque, moniteur }) => {
     const r = await creerParcours(bureau, `${marque} attente finale`, troisTextos());
     await ouvrirEditeur(page, r.id);
+    // Le refus du serveur existe toujours (une attente en fin de parcours ne s'enregistre pas) : il est attendu,
+    // UNE fois — le test compte lui-même les réponses plus bas — et l'écran doit le dire comme un refus.
+    moniteur.attendu(/400 PATCH .*\/api\/automations\/rules\//, 'le serveur refuse un parcours qui finit par une attente');
     const reponses: number[] = [];
     page.on('response', (resp) => {
       if (resp.request().method() === 'PATCH' && resp.url().includes(`/api/automations/rules/${r.id}`)) reponses.push(resp.status());
@@ -133,32 +136,66 @@ test.describe('refus de validation du serveur (S-04)', () => {
     // On laisse le temps de deux essais (3 s puis 6 s).
     await expect.poll(() => reponses.length, { timeout: 40_000 }).toBeGreaterThanOrEqual(1);
     const premier = toasts(page).first();
+    // Le message arrive un instant après la réponse : on l'attend, pour juger un texte et non un écran vide.
+    await expect(premier).toBeVisible();
     const message = (await premier.isVisible()) ? await premier.innerText() : '';
     await page.screenshot({ path: `${CAPTURES}/edt-s04-attente-finale.png` });
     await page.waitForResponse((resp) => resp.request().method() === 'PATCH' && resp.url().includes(`/api/automations/rules/${r.id}`), { timeout: 20_000 }).catch(() => undefined);
     const refus = reponses.filter((s) => s >= 400).length;
     expect(message, `toast affiché : « ${message} »`).not.toContain('nouvel essai automatique');
     expect(refus, `le serveur a refusé ${refus} fois le même parcours (réponses : ${reponses.join(', ')}) : l’éditeur le renvoie en boucle`).toBeLessThanOrEqual(1);
+
+    /* AJOUTÉ à la revérification du 2026-10-02 (27939ff8) — les attentes ci-dessus sont celles d'origine.
+       Le refus est DIT comme un refus : l'indicateur, un message, et un bandeau qui reste avec la raison. */
+    await expect(indicateur(page)).toHaveText('Refusé — à corriger');
+    const bandeau = page.getByRole('alert').filter({ hasText: 'Enregistrement refusé : rien n’est enregistré tant que ce n’est pas corrigé.' });
+    await expect(bandeau).toBeVisible();
+    await expect(bandeau).toContainText(/se termine par une attente/);
+    expect(message.replace(/\s+/g, ' ')).toMatch(/Enregistrement refusé — .*se termine par une attente/);
+    await expect(page.getByText(/nouvel essai automatique/)).toHaveCount(0);
+    expect(reponses, 'le parcours refusé n’est envoyé qu’UNE fois').toEqual([400]);
+    // Rien n'est en base tant que ce n'est pas corrigé…
+    expect(await corpsDuFil(bureau, r.id)).toEqual(['Texto ALPHA', 'Texto BRAVO', 'Texto CHARLIE']);
+    // … et corriger (une étape après l'attente) fait tout enregistrer, sans autre refus.
+    await ajouterParLeTiroir(page, 'Ajouter', /^Envoyer un texto/, async (p) => { await p.getByLabel(/Texte du message/).fill('Texto DELTA'); });
+    await attendreEnregistre(page, 60_000);
+    await expect(bandeau).toHaveCount(0);
+    expect(await corpsDuFil(bureau, r.id)).toEqual(['Texto ALPHA', 'Texto BRAVO', 'Texto CHARLIE', '(attendre)', 'Texto DELTA']);
+    expect(reponses.filter((s) => s >= 400).length).toBe(1);
   });
 
-  test('[EDT-012] pendant qu’un refus de validation dure, les AUTRES modifications ne sont pas perdues en silence @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-012] pendant qu’un refus de validation dure, les AUTRES modifications ne sont pas perdues en silence', async ({ page, bureau, marque, moniteur }) => {
     const r = await creerParcours(bureau, `${marque} refus bloque tout`, troisTextos());
     await ouvrirEditeur(page, r.id);
+    moniteur.attendu(/400 PATCH .*\/api\/automations\/rules\//, 'le serveur refuse un parcours qui finit par une attente');
     await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
     await tiroirActions(page).getByRole('button', { name: /^Attendre/ }).click();
     await panneauEtape(page).getByRole('button', { name: 'Enregistrer' }).click();
     await modifier(page, 'Texto ALPHA', 'Texto ALPHA réécrit');
     // L'utilisateur voit-il un indicateur qui dit la vérité ? « Modifié » en boucle ne dit pas que RIEN ne s'enregistre.
     await page.waitForResponse((resp) => resp.request().method() === 'PATCH' && resp.url().includes(`/api/automations/rules/${r.id}`), { timeout: 30_000 });
+    // La réponse reçue, l'écran quitte « Enregistrement… » (état de passage) : c'est l'état d'APRÈS qu'on juge.
+    await expect(indicateur(page)).not.toHaveText('Enregistrement…', { timeout: 30_000 });
     await page.screenshot({ path: `${CAPTURES}/edt-s04-autres-modifs.png` });
     const sauve = (await corpsDuFil(bureau, r.id)).includes('Texto ALPHA réécrit');
     const dit = await page.getByText(/attente.*(rien ne se passera|fin)|se termine par une attente/i).first().isVisible();
     const indic = await indicateur(page).innerText();
     expect(sauve || (dit && !/^(Modifié|Enregistré|Enregistrement…)$/.test(indic)),
       `le texto réécrit n’est pas en base, et l’indicateur dit « ${indic} » comme si l’enregistrement allait venir`).toBe(true);
+
+    /* AJOUTÉ à la revérification du 2026-10-02 (27939ff8). L'écran dit clairement que RIEN ne s'enregistre tant
+       que l'attente finale est là ; et une fois l'attente retirée, la modification retenue arrive en base. */
+    await expect(indicateur(page)).toHaveText('Refusé — à corriger');
+    await expect(page.getByRole('alert').filter({ hasText: 'Enregistrement refusé : rien n’est enregistré tant que ce n’est pas corrigé.' })).toBeVisible();
+    await expect(carte(page, 'Texto ALPHA réécrit')).toBeVisible();
+    await menuDeCarte(page, 'Attendre').click();
+    await page.getByRole('button', { name: 'Supprimer l’étape', exact: true }).click();
+    await dialogue(page).getByRole('button', { name: 'Supprimer' }).click();
+    await attendreEnregistre(page, 60_000);
+    expect(await corpsDuFil(bureau, r.id)).toEqual(['Texto ALPHA réécrit', 'Texto BRAVO', 'Texto CHARLIE']);
   });
 
-  test('[EDT-047][EDT-012] casser une automatisation PUBLIÉE (supprimer sa seule étape) : refus expliqué, pas « pour le moment — nouvel essai automatique » @defaut', async ({ page, bureau, marque, moniteur }) => {
+  test('[EDT-047][EDT-012] casser une automatisation PUBLIÉE (supprimer sa seule étape) : refus expliqué, pas « pour le moment — nouvel essai automatique »', async ({ page, bureau, marque, moniteur }) => {
     /* Une règle NÉE DANS L'ÉDITEUR : son champ `actions` porte l'action provisoire « À compléter », que le
        serveur compte pour un parcours vide. (Avec `actions` = le vrai texto — ce que posait `creerParcours` —
        le serveur accepte `steps: []` : la règle retombe au « format d'origine » et le refus attendu ici
@@ -183,11 +220,19 @@ test.describe('refus de validation du serveur (S-04)', () => {
 });
 
 test.describe('deux onglets sur la même automatisation (S-13)', () => {
-  test('[EDT-012] le second onglet n’écrase pas en silence ce que le premier vient d’enregistrer @defaut', async ({ page, bureau, marque, autreOnglet }) => {
+  test('[EDT-012] le second onglet n’écrase pas en silence ce que le premier vient d’enregistrer : « modifiée ailleurs », « Recharger »', async ({ page, bureau, marque, autreOnglet }) => {
     const r = await creerParcours(bureau, `${marque} deux onglets`, troisTextos());
     await ouvrirEditeur(page, r.id);
     const autre = await autreOnglet();
     await ouvrirEditeur(autre.page, r.id);
+    /* Le conflit est PROVOQUÉ EXPRÈS : l'onglet 2 écrit sur une version que l'onglet 1 a remplacée. Depuis
+       f01f2393 (A-09) le serveur refuse cette écriture périmée (409 `modifiee_ailleurs`) : le refus est donc
+       déclaré, sur l'onglet 2 seulement — et le test vérifie plus bas ce que l'écran en dit. */
+    autre.moniteur.attendu(/409 PATCH .*\/api\/automations\/rules\//, 'écriture périmée de l’onglet 2, refusée par la garde de version (A-09)');
+    const refusOnglet2: number[] = [];
+    autre.page.on('response', (resp) => {
+      if (resp.request().method() === 'PATCH' && resp.url().includes(`/api/automations/rules/${r.id}`)) refusOnglet2.push(resp.status());
+    });
     await modifier(page, 'Texto ALPHA', 'ALPHA modifié dans l’onglet 1');
     await attendreEnregistre(page, 60_000);
     expect(await corpsDuFil(bureau, r.id)).toEqual(['ALPHA modifié dans l’onglet 1', 'Texto BRAVO', 'Texto CHARLIE']);
@@ -201,5 +246,41 @@ test.describe('deux onglets sur la même automatisation (S-13)', () => {
     await autre.page.screenshot({ path: `${CAPTURES}/edt-s13-deux-onglets.png` });
     expect(fil.includes('ALPHA modifié dans l’onglet 1') || await averti.isVisible(),
       `la modification de l’onglet 1 a disparu de la base sans avertissement (base : ${fil.join(' / ')})`).toBe(true);
+
+    /* AJOUTÉ à la revérification du 2026-10-02 (f01f2393, A-09 = S-13) — l'attente ci-dessus est celle d'origine.
+       Le comportement décidé, vérifié mot pour mot : le message, « Recharger », rien d'écrasé ni de renvoyé. */
+    const o2 = autre.page;
+    await expect(bandeauModifieeAilleurs(o2)).toBeVisible();
+    await expect(bandeauModifieeAilleurs(o2)).toContainText('Pour ne rien écraser, vos dernières modifications n’ont pas été enregistrées. Rechargez pour repartir de la version à jour.');
+    await expect(indicateur(o2)).toHaveText('Modifiée ailleurs');
+    await expect(o2.getByText(/nouvel essai automatique/)).toHaveCount(0);
+    // Rien n'a été écrasé, et l'écriture périmée n'a PAS été écrite : la base est celle de l'onglet 1.
+    expect(await corpsDuFil(bureau, r.id)).toEqual(['ALPHA modifié dans l’onglet 1', 'Texto BRAVO', 'Texto CHARLIE']);
+    // Pas de nouvel essai : 8 s plus tard, toujours un seul envoi de l'onglet 2, refusé.
+    await aucuneEcriture(o2, 8000);
+    expect(refusOnglet2).toEqual([409]);
+    expect(await corpsDuFil(bureau, r.id)).toEqual(['ALPHA modifié dans l’onglet 1', 'Texto BRAVO', 'Texto CHARLIE']);
+
+    // « Recharger » : l'onglet 2 repart de la version à jour (celle de l'onglet 1) ; sa saisie refusée n'y est plus.
+    await bandeauModifieeAilleurs(o2).getByRole('button', { name: 'Recharger', exact: true }).click();
+    await expect(bandeauModifieeAilleurs(o2)).toHaveCount(0);
+    await expect(carte(o2, 'ALPHA modifié dans l’onglet 1')).toBeVisible({ timeout: 60_000 });
+    expect(await cartes(o2)).toEqual(['Envoyer un texto | ALPHA modifié dans l’onglet 1', 'Envoyer un texto | Texto BRAVO', 'Envoyer un texto | Texto CHARLIE']);
+    await expect(indicateur(o2)).toHaveText('Enregistré');
+    // Rechargé, l'onglet 2 enregistre de nouveau normalement : les DEUX modifications sont en base.
+    await carte(o2, 'Texto CHARLIE').click();
+    await panneauEtape(o2).getByLabel(/Texte du message/).fill('CHARLIE modifié dans l’onglet 2');
+    await panneauEtape(o2).getByRole('button', { name: 'Enregistrer' }).click();
+    await attendreEnregistre(o2, 60_000);
+    expect(await corpsDuFil(bureau, r.id)).toEqual(['ALPHA modifié dans l’onglet 1', 'Texto BRAVO', 'CHARLIE modifié dans l’onglet 2']);
+    expect(refusOnglet2.filter((s) => s === 409).length, 'un seul refus : après « Recharger », aucun faux conflit').toBe(1);
+
+    /* Et l'onglet 1, resté ouvert sans rien d'en attente : au retour sur sa fenêtre il relit la version et se
+       recharge sans question (le retour est simulé par l'événement « focus », comme le fait le navigateur). */
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(carte(page, 'CHARLIE modifié dans l’onglet 2')).toBeVisible({ timeout: 30_000 });
+    await expect(bandeauModifieeAilleurs(page)).toHaveCount(0);
+    await expect(dialogue(page)).toHaveCount(0);
+    await expect(indicateur(page)).toHaveText('Enregistré');
   });
 });

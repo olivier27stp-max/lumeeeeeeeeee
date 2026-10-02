@@ -125,7 +125,11 @@ if [ -n "${E2E_SAUVEGARDE:-}" ] && [ -f "$E2E_SAUVEGARDE" ]; then
   docker exec -u root $DB rm -f /tmp/ref.dump
   sql -tA -c "select 'plans ' || count(*) from plans union all select 'role_permission_defaults ' || count(*) from role_permission_defaults union all select 'orgs (doit rester 0) ' || count(*) from orgs"
 else
-  echo "── tables de référence NON chargées : E2E_SAUVEGARDE=<fichier .dump de sauvegarde> pour les forfaits et les permissions par défaut"
+  # Sans sauvegarde sous la main (CI, autre poste) : la semence du dépôt — mêmes deux tables, sans identifiant Stripe.
+  echo "── tables de référence (plans, role_permission_defaults) depuis scripts/qa/automations-e2e/reference.sql"
+  sql -qc "truncate role_permission_defaults; delete from plans;"
+  sql -q -f - < "$HERE/reference.sql" 2>&1 | grep -oE 'ERROR:.*' | head -3
+  sql -tA -c "select 'plans ' || count(*) from plans union all select 'role_permission_defaults ' || count(*) from role_permission_defaults union all select 'orgs (doit rester 0) ' || count(*) from orgs"
 fi
 
 echo "── PostgREST (max_rows=1000 comme la prod)"

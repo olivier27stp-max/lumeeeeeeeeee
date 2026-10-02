@@ -122,8 +122,83 @@ export function barre(page: Page): Locator {
  * avant sa première vraie sauvegarde (constat EDITEUR-02, corrigé par #859).
  */
 export function indicateur(page: Page): Locator {
-  return barre(page).getByText(/^(Enregistré|Modifié|Enregistrement…|Pas encore enregistrée|\d+ étape\(s\) à compléter|Saved|Edited|Saving…|Not saved yet|\d+ step\(s\) to complete)$/);
+  /* « Refusé — à corriger » (le serveur a refusé le parcours : rien ne s'enregistre tant que ce n'est pas
+     corrigé — S-04, 27939ff8) et « Modifiée ailleurs » (écriture périmée refusée, 409 — A-09, f01f2393)
+     sont deux états ajoutés par les correctifs de la branche `mission/auto-finale-u`. */
+  return barre(page).getByText(/^(Enregistré|Modifié|Enregistrement…|Pas encore enregistrée|\d+ étape\(s\) à compléter|Refusé — à corriger|Modifiée ailleurs|Saved|Edited|Saving…|Not saved yet|\d+ step\(s\) to complete|Refused — to fix|Changed elsewhere)$/);
 }
+
+/**
+ * AJOUTER UNE ÉTAPE PAR LE TIROIR — depuis 3b739958 (triage actions, ligne 1), une étape choisie dans le
+ * tiroir n'entre dans le parcours qu'au clic sur « Enregistrer » de SON panneau : avant, elle y entrait au
+ * clic dans le tiroir et l'enregistrement automatique l'écrivait 3 s plus tard. Tant que le panneau n'est
+ * pas enregistré, le canevas la montre à sa place mais ni `steps` ni la base ne la portent ; fermer le
+ * panneau l'abandonne (après la question « Fermer sans ajouter cette étape ? »).
+ *
+ * `ou` : 'Ajouter' (bouton en haut à droite : fin du chemin principal) ou le rang d'un « + » du canevas.
+ * `remplir` : ce qu'on saisit dans le panneau avant d'enregistrer (facultatif).
+ * Rend la main panneau FERMÉ : l'étape est dans le parcours, l'enregistrement automatique peut partir.
+ */
+export async function ajouterParLeTiroir(
+  page: Page, ou: 'Ajouter' | number, action: RegExp, remplir?: (panneau: Locator) => Promise<void>,
+): Promise<void> {
+  if (ou === 'Ajouter') await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+  else await page.getByRole('button', { name: 'Ajouter une étape ici' }).nth(ou).click();
+  await tiroirActions(page).getByRole('button', { name: action }).click();
+  await expect(panneauEtape(page)).toBeVisible();
+  if (remplir) await remplir(panneauEtape(page));
+  await enregistrerPanneau(page);
+}
+
+/** « Enregistrer » du panneau d'étape : cliquable (sinon la raison est écrite dans le panneau), puis le panneau se ferme. */
+export async function enregistrerPanneau(page: Page): Promise<void> {
+  const bouton = panneauEtape(page).getByRole('button', { name: 'Enregistrer' });
+  await expect(bouton).toBeEnabled();
+  await bouton.click();
+  await expect(panneauEtape(page)).toHaveCount(0);
+}
+
+/**
+ * Preuve qu'AUCUNE écriture de règle ne part pendant `ms` (défaut : 6 s, deux fois le délai de
+ * l'enregistrement automatique). Écoute les POST / PATCH / PUT / DELETE vers `/api/automations/rules`.
+ */
+export async function aucuneEcriture(page: Page, ms = 6000): Promise<void> {
+  const partie = await page.waitForRequest(
+    (req) => ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method()) && /\/api\/automations\/rules(\/|$|\?)/.test(new URL(req.url()).pathname),
+    { timeout: ms },
+  ).then((req) => `${req.method()} ${new URL(req.url()).pathname}`, () => null);
+  expect(partie, 'une écriture est partie au serveur alors que rien n’a été enregistré dans le panneau').toBeNull();
+}
+
+/** Une étape INCOMPLÈTE (« Ajouter une étiquette » sans étiquette), à poser dans la règle de départ. */
+export const etiquetteVide = (id: string, suivant: string | null = null): EtapeBase =>
+  ({ id, type: 'action', action: { type: 'ajouter_etiquette', config: {} }, suivant });
+
+/** Trois textos suivis d'une étape incomplète : le parcours de départ des tests « étape incomplète ». */
+export function troisTextosEtUneIncomplete(): EtapeBase[] {
+  return [texto('e1', 'Texto ALPHA', 'e2'), texto('e2', 'Texto BRAVO', 'e3'), texto('e3', 'Texto CHARLIE', 'e4'), etiquetteVide('e4')];
+}
+
+/**
+ * Met l'éditeur dans l'état « 1 étape(s) à compléter » : du travail qui NE PEUT PAS s'enregistrer.
+ *
+ * Avant 3b739958 on y arrivait par le tiroir (« Ajouter une étiquette », panneau refermé sans la remplir).
+ * Ce chemin n'existe plus : une étape du tiroir n'entre dans le parcours qu'enregistrée, et le panneau
+ * refuse d'enregistrer un champ obligatoire vide. L'état, lui, existe toujours pour un parcours qui PORTE
+ * déjà une étape incomplète (donnée d'avant, proposition de Lumi, modèle) : la règle de départ doit donc
+ * en contenir une (`troisTextosEtUneIncomplete`), posée AVANT d'ouvrir l'éditeur, et on fait ici une vraie
+ * modification — un texto réécrit et enregistré dans son panneau — que l'étape incomplète empêche d'écrire.
+ */
+export async function rendreIncomplet(page: Page, cible = 'Texto BRAVO', nouveau = 'Texto BRAVO réécrit'): Promise<void> {
+  await carte(page, cible).click();
+  await panneauEtape(page).getByLabel(/Texte du message/).fill(nouveau);
+  await enregistrerPanneau(page);
+  await expect(indicateur(page)).toHaveText('1 étape(s) à compléter');
+}
+
+/** Le bandeau « modifiée ailleurs » (A-09) : écriture périmée refusée par le serveur (409 `modifiee_ailleurs`). */
+export const bandeauModifieeAilleurs = (page: Page): Locator =>
+  page.getByRole('alert').filter({ hasText: 'Cette automatisation a été modifiée ailleurs (par Lumi ou dans un autre onglet).' });
 
 /**
  * La carte en pointillés du déclencheur, sur un canevas VIDE. Depuis #859 (constat EDITEUR-03) elle

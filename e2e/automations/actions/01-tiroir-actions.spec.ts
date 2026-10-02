@@ -14,7 +14,7 @@ import { test, expect } from './_aides';
 import { appelApi } from '../_outils/banc';
 import {
   CAPTURES, donnees, creerBrouillon, creerBrouillonAvecAction, ouvrirEditeur, ouvrirTiroir, tiroirActions, itemTiroir, panneauEtape, carte, finStable,
-  attendreEtapes, type Donnees,
+  attendreEtapes, etapesEnBase, enregistrerEtape, type Donnees,
 } from './_aides';
 import { ACTIONS_ATTENDUES, ACTIONS_DISPONIBLES } from './_catalogue';
 import type { Page } from '@playwright/test';
@@ -132,6 +132,11 @@ test.describe('tiroir Actions — contenu', () => {
     await expect(p.getByLabel('Attendre *', { exact: true })).toHaveValue('1');
     await expect(p.getByLabel('Unité de temps')).toHaveValue('jours');
     await expect(carte(page, 'Attendre')).toContainText('1 jour(s)');
+    // Choisie dans le tiroir, l'étape est montrée sur le canevas mais n'est pas encore dans le parcours (3b739958).
+    expect(await etapesEnBase(bureau, regle.id)).toHaveLength(1);
+    // « Enregistrer » dans son panneau l'y fait entrer, à sa place : en tête, avant l'action.
+    await enregistrerEtape(p);
+    await expect(carte(page, 'Attendre')).toContainText('1 jour(s)');
     const etapes = await attendreEtapes(bureau, regle.id, (e) => e.length === 2);
     expect(etapes[0]).toEqual({ id: 'e2', type: 'attendre', delai_secondes: 86400, suivant: 'e1' });
     await finStable(page);
@@ -144,6 +149,11 @@ test.describe('tiroir Actions — contenu', () => {
     await itemTiroir(page, 'Condition').click();
     const p = panneauEtape(page);
     await expect(p.getByRole('heading', { level: 2 })).toHaveText('Condition');
+    await expect(page.getByText('si oui', { exact: true })).toBeVisible();
+    await expect(page.getByText('si non', { exact: true })).toBeVisible();
+    // Pas encore dans le parcours : elle y entre à « Enregistrer » de son panneau (3b739958).
+    expect(await etapesEnBase(bureau, regle.id)).toHaveLength(1);
+    await enregistrerEtape(p);
     await expect(page.getByText('si oui', { exact: true })).toBeVisible();
     await expect(page.getByText('si non', { exact: true })).toBeVisible();
     const etapes = await attendreEtapes(bureau, regle.id, (e) => e.length === 2);
@@ -159,6 +169,10 @@ test.describe('tiroir Actions — contenu', () => {
     const p = panneauEtape(page);
     await expect(p.getByRole('heading', { level: 2 })).toHaveText('Arrêter ici');
     await expect(p.getByText('Rien à configurer. Le client sort du parcours en arrivant ici.')).toBeVisible();
+    await expect(carte(page, 'Arrêter ici')).toBeVisible();
+    // Pas encore dans le parcours : elle y entre à « Enregistrer » de son panneau (3b739958).
+    expect(await etapesEnBase(bureau, regle.id)).toHaveLength(1);
+    await enregistrerEtape(p);
     await expect(carte(page, 'Arrêter ici')).toBeVisible();
     const etapes = await attendreEtapes(bureau, regle.id, (e) => e.length === 2);
     expect(etapes[1]).toEqual({ id: 'e2', type: 'arreter' });
@@ -249,13 +263,13 @@ const CAS: CasCompat[] = [
   { cle: 'note.added', fr: 'Note ajoutée', entite: 'client' },
   // Le serveur émet l'entité `automation_webhook_receipt` (server/routes/webhooks-entrants.ts) :
   // ni devis, ni facture, ni rendez-vous, ni opportunité n'arrive jamais par ce déclencheur.
-  { cle: 'webhook.received', fr: 'Appel reçu de l’extérieur', entite: 'automation_webhook_receipt', defaut: true },
+  { cle: 'webhook.received', fr: 'Appel reçu de l’extérieur', entite: 'automation_webhook_receipt' },
   { cle: 'date.reached', fr: 'Date atteinte', entite: 'client', variante: 'sur un champ date du client', conditions: (d) => ({ champ_id: d.champs.qa_fin_garantie.id, jours_avant: 7 }) },
-  { cle: 'date.reached', fr: 'Date atteinte', entite: 'deal', variante: 'sur un champ date du pipeline', conditions: (d) => ({ champ_id: d.champs.qa_fermeture.id, jours_avant: 7 }), defaut: true },
+  { cle: 'date.reached', fr: 'Date atteinte', entite: 'deal', variante: 'sur un champ date du pipeline', conditions: (d) => ({ champ_id: d.champs.qa_fermeture.id, jours_avant: 7 }) },
   { cle: 'deal.stage_entered', fr: 'Opportunité entre dans une étape', entite: 'deal' },
   { cle: 'deal.stage_idle', fr: 'Opportunité qui dort', entite: 'deal' },
   { cle: 'custom_field.changed', fr: 'Champ personnalisé modifié', entite: '*', variante: 'sans champ choisi' },
-  { cle: 'custom_field.changed', fr: 'Champ personnalisé modifié', entite: 'client', variante: 'sur un champ du client', conditions: (d) => ({ field_id: { eq: d.champs.qa_surnom.id } }), defaut: true },
+  { cle: 'custom_field.changed', fr: 'Champ personnalisé modifié', entite: 'client', variante: 'sur un champ du client', conditions: (d) => ({ field_id: { eq: d.champs.qa_surnom.id } }) },
 ];
 
 test.describe('tiroir Actions — compatibilité avec le déclencheur, à l’écran et à la publication', () => {

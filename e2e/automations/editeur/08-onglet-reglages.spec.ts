@@ -171,7 +171,7 @@ test.describe('onglet Réglages', () => {
     expect(await reglages(bureau, r.id)).toBeNull();
   });
 
-  test('[EDT-147] changer un réglage ne détruit pas `arreter_si_resolu: false` posé par le panneau du déclencheur (S-08) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-147] changer un réglage ne détruit pas `arreter_si_resolu: false` posé par le panneau du déclencheur (S-08)', async ({ page, bureau, marque }) => {
     // « Ne PAS arrêter quand le devis est accepté » : choix explicite de l'utilisateur, stocké à `false`.
     const r = await creerParcours(bureau, `${marque} s08`, troisTextos(), { settings: { arreter_si_resolu: false } });
     await ouvrirReglages(page, r.id);

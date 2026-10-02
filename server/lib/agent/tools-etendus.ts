@@ -41,6 +41,7 @@ import { adresseInjoignable } from '../mailer';
 import { estPrereglageRetire } from '../../../src/lib/automationCatalogue';
 import { declencheurEnClair } from '../automations-etapes';
 import { langueDuTour } from '../lumi/contexte-appel';
+import { EVENEMENTS_NES_EN_BASE } from './evenements-nes-en-base';
 import type { AgentTool, ToolContext } from './tools';
 
 interface TaxLine { code: string; label: string; rate: number; enabled: boolean }
@@ -2209,6 +2210,7 @@ const assignJobTool: AgentTool = {
  * une erreur (sinon retentative = doublon).
  */
 async function signalerEvenement(ctx: ToolContext, chemin: string, corps: Record<string, any>): Promise<string | null> {
+  if (EVENEMENTS_NES_EN_BASE.has(chemin)) return null; // la base a déjà émis l'événement
   try {
     const { ok, status, json } = await appelInterne(ctx, chemin, corps);
     if (!ok) return `automatisations non déclenchées (${json?.error || status}) — l'écriture est faite, mais les règles (avis, factures, rappels) n'ont pas tourné.`;
@@ -3888,7 +3890,8 @@ const convertQuoteToJobTool: AgentTool = {
       "The client accepted a quote → turn it into a job, through the app's own conversion route "
       + '(line items carried, quote marked converted). Get the quote id from the quotes list. '
       + 'Pass scheduled_at (and optionally end_at) to put the first visit on the calendar IN THE SAME STEP — '
-      + 'always do that when the date is known instead of converting first and scheduling after (one confirmation, not two).',
+      + 'always do that when the date is known instead of converting first and scheduling after (one confirmation, not two). '
+      + 'No date in the request → convert WITHOUT scheduling, right away: never ask whether to schedule first.',
     parameters: {
       type: 'object',
       properties: {
