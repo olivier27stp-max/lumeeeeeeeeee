@@ -166,7 +166,9 @@ Petite passe en prod (5 à 10 demandes réalistes, en joual aussi) → lire chaq
 
 ### 9.4 À coordonner
 
-- Une autre session (Automatisations) devait remplacer elle-même, dans `tools-lot-entreprise.ts` (≈ ligne 456, `create_automation_from_template`/`duplicate`), le repli `update({ is_active: false })` par sa garde `ecrireRegle` (`server/lib/automations-ecriture.ts`) [R ; à vérifier sur `main`]. Elle détenait aussi `registre.ts`, `outils-domaines.ts`, `topics.ts`, `sujet-par-regle.ts`, `libelles-cartes.ts`, `apercu-action.ts`, `lumiVerbes.ts`, `tools-reglages.ts`, `tools-etendus.ts`. Demander à Rafba si elle tourne encore avant d'y toucher.
+- **Repli d'écriture des automatisations, PAS fait** (confirmé par la session Automatisations le 2026-10-02, qui s'arrête elle aussi) : dans `tools-lot-entreprise.ts` (≈ ligne 456, `create_automation_from_template` / `duplicate_automation_rule`), le repli `update({ is_active: false })` doit être remplacé par la porte d'écriture `ecrireRegle`. **`ecrireRegle` n'existe que sur la branche `mission/automatisations-finale` (poussée), pas sur `main`.** Ce remplacement fait partie du durcissement des écritures de cette mission ; sa passation est sur la branche `mission/automatisations-finale-passation`, fichier `docs/mission-automatisations-finale/PASSATION.md`, § 5.3. À faire seulement après le merge de cette branche, et coordonné avec la personne qui reprend les Automatisations.
+- Cette même session détenait `registre.ts`, `outils-domaines.ts`, `topics.ts`, `sujet-par-regle.ts`, `libelles-cartes.ts`, `apercu-action.ts`, `lumiVerbes.ts`, `tools-reglages.ts`, `tools-etendus.ts`, et les routes et le moteur des automatisations. Vérifier avec Rafba qui les reprend avant de les modifier.
+- La session « fiabilité de Lumi » s'arrête aussi : sa passation est dans `PASSATION_LUMI_2026-10-02.md` à la racine et `docs/lumi/mission/` (branche `docs/passation-lumi-2026-10-02`, mergée juste après celle-ci si sa CI passe) [R].
 - PR ouvertes hors de ce chantier, à ne pas merger sans Rafba [V] : #823, #796, #762, #526, #375, #282, #187.
 
 ---
