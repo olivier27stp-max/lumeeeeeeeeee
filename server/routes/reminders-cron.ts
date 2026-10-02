@@ -458,6 +458,9 @@ export async function executerRelancesPaiement(opts: {
           .select('id, org_id, client_id, invoice_number, total_cents, balance_cents, currency, due_date, status, subject')
           .eq('org_id', orgId)
           .in('status', ['sent', 'partial'])
+          // Une facture à la CORBEILLE garde son statut « envoyée » : sans ce
+          // filtre, son client recevait quand même le rappel (M-25).
+          .is('deleted_at', null)
           .lte('due_date', fenetre.max)
           .gt('balance_cents', 0);
         // Borne basse : au-delà du plafond, on ne relance plus (voir
