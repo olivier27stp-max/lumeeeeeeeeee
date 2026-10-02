@@ -53,7 +53,8 @@ describe('F11 — étalement des textos', () => {
     await laisserTravailler();
     expect(twilio.messages.create).not.toHaveBeenCalled();
     const report = requetes(journal, 'automation_scheduled_tasks', 'insert').map((r) => r.valeur as any).find((v) => v.action_config?.report_rafale);
-    expect(report?.execute_at).toBe('2026-09-15T18:01:00.000Z');
+    // Une minute, plus une seconde de marge : l'instant où une place se libère (B-10).
+    expect(report?.execute_at).toBe('2026-09-15T18:01:01.000Z');
     expect(requetes(journal, 'automation_execution_logs', 'update').some((r) => (r.valeur as any)?.result_success === true)).toBe(true); // le courriel
   });
 
@@ -80,6 +81,6 @@ describe('F11 — étalement des textos', () => {
     await processScheduledTasks(client);
     expect(twilio.messages.create).not.toHaveBeenCalled();
     const report = requetes(journal, 'automation_scheduled_tasks', 'update').map((r) => r.valeur as any).find((v) => /Rafale/.test(v?.last_error ?? ''));
-    expect(report).toMatchObject({ status: 'pending', execute_at: '2026-09-15T18:01:00.000Z', attempts: 2 });
+    expect(report).toMatchObject({ status: 'pending', execute_at: '2026-09-15T18:01:01.000Z', attempts: 2 });
   });
 });

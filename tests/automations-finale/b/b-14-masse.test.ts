@@ -8,9 +8,11 @@
  *  B. Courriel immédiat : débit de pointe (aucun étalement), échecs, et
  *     latence d'une lecture ordinaire de l'app pendant la rafale.
  *
- * « 5 minutes plus tard » est simulé en vieillissant les lignes de NOTRE
- * bureau (journaux et échéances reculés de 5 min), puis en appelant le vrai
- * `viderFile` — la boucle du tick du serveur.
+ * Depuis le correctif B-10 (agent M), la file est écoulée EN TEMPS RÉEL par
+ * `ecoulerRafale` — ce que fait la minuterie du planificateur quand le moteur
+ * lui dit qu'une place se libère. (L'enquête simulait « 5 minutes plus tard »
+ * en vieillissant les lignes : c'était mesurer le tick, qui n'est plus la
+ * cadence.) La mesure du volet A dure donc une dizaine de vraies minutes.
  *
  * Sortie : D:/lume-final/sorties/b/b-14-masse.json
  */
@@ -79,19 +81,6 @@ async function stabiliser(m: string): Promise<number> {
   return avant;
 }
 
-/** Recule de `minutes` les journaux de textos et les échéances en attente de NOTRE bureau : le temps a passé. */
-async function vieillir(ruleId: string, minutes: number): Promise<void> {
-  const sql = async (table: string, colonne: string, filtre: (q: any) => any) => {
-    const lignes = await ok<Array<Record<string, string>>>(filtre(b.admin.from(table).select(`id, ${colonne}`).eq('org_id', b.orgA).eq('automation_rule_id', ruleId)).limit(2000), `lecture ${table}`);
-    for (let i = 0; i < lignes.length; i += 50) {
-      await Promise.all(lignes.slice(i, i + 50).map((l) =>
-        b.admin.from(table).update({ [colonne]: new Date(Date.parse(l[colonne]) - minutes * 60_000).toISOString() }).eq('id', l.id)));
-    }
-  };
-  await sql('automation_execution_logs', 'created_at', (q) => q.eq('action_type', 'send_sms').gte('created_at', new Date(Date.now() - 2 * 60_000).toISOString()));
-  await sql('automation_scheduled_tasks', 'execute_at', (q) => q.eq('status', 'pending'));
-}
-
 beforeAll(async () => { b = await preparerBureau(); });
 
 describe(`point 14 — A. ${N} factures en retard la même nuit, automatisation « texto immédiat »`, () => {
@@ -99,7 +88,7 @@ describe(`point 14 — A. ${N} factures en retard la même nuit, automatisation 
   let ruleId = '';
 
   beforeAll(async () => {
-    const { detectOverdueInvoices, viderFile } = await import('../../../server/lib/scheduler');
+    const { detectOverdueInvoices } = await import('../../../server/lib/scheduler');
     await semer(m, N);
     ruleId = await regle(b, m, { trigger_event: 'invoice.overdue', conditions: { days_overdue: 1 }, actions: [texto(m, 'Votre facture est en retard')] });
 
@@ -113,27 +102,34 @@ describe(`point 14 — A. ${N} factures en retard la même nuit, automatisation 
     const enFile = await ok<Array<{ id: string }>>(b.admin.from('automation_scheduled_tasks').select('id').eq('automation_rule_id', ruleId).eq('status', 'pending').limit(2000), 'file');
     Object.assign(mesures, { textos: { factures: N, emission_ms: emission, partis_sans_passer_par_la_file: immediats, partis_dans_la_premiere_minute: dansLaPremiereMinute, en_file_apres_emission: enFile.length } });
 
-    // Les ticks de 5 minutes, jusqu'à vider la file (borne : 40 ticks = 3 h 20).
-    const parTick: number[] = [];
-    let partis = immediats;
-    for (let tick = 1; tick <= 40 && partis < N; tick++) {
-      await vieillir(ruleId, 5);
-      const debut = Date.now();
-      await viderFile(b.admin, { orgId: b.orgA });
-      const duree = Date.now() - debut;
-      const maintenant = (await envoisDe(m)).length;
-      parTick.push(maintenant - partis);
-      partis = maintenant;
-      mesures.textos[`tick_${tick}_ms`] = duree;
-      if (parTick.slice(-3).every((x) => x === 0) && parTick.length >= 3) break;
+    /*
+     * La CADENCE RÉELLE (agent M, correctif B-10). L'enquête simulait « 5 minutes plus tard » en vieillissant
+     * les lignes, puis appelait `viderFile` : c'était mesurer le tick. Le moteur réveille maintenant le
+     * planificateur à l'instant où une place se libère ; `ecoulerRafale` fait ce que fait sa minuterie, en temps
+     * réel — la mesure dure donc une dizaine de minutes, et les minutes ci-dessous sont de VRAIES minutes.
+     */
+    const { ecoulerRafale } = await import('../../../server/lib/scheduler');
+    const passes = await ecoulerRafale(b.admin, { orgId: b.orgA }, { budgetMs: 25 * 60_000 });
+    const tous = await envoisDe(m);
+    const partis = tous.length;
+    const instants = tous.map((l) => Date.parse(l.created_at)).sort((x, y) => x - y);
+    const minutesReelles = instants.length ? (instants[instants.length - 1] - instants[0]) / 60_000 : -1;
+    // Le plus grand nombre de textos dans une même fenêtre GLISSANTE de 60 secondes.
+    let pointe = 0;
+    for (let i = 0, j = 0; i < instants.length; i++) {
+      while (instants[i] - instants[j] >= 60_000) j++;
+      pointe = Math.max(pointe, i - j + 1);
     }
+    const parMinute: number[] = [];
+    for (const t of instants) { const k = Math.floor((t - instants[0]) / 60_000); parMinute[k] = (parMinute[k] ?? 0) + 1; }
     const notif = await ok<Array<{ body: string }>>(b.admin.from('notifications').select('body').eq('org_id', b.orgA).eq('type', 'automation_burst').order('created_at', { ascending: false }).limit(1), 'notification');
     const etats = await ok<Array<{ status: string }>>(b.admin.from('automation_scheduled_tasks').select('status').eq('automation_rule_id', ruleId).limit(2000), 'états');
     Object.assign(mesures.textos, {
-      textos_par_tick_de_5_min: parTick,
+      textos_par_minute_reelle: Array.from(parMinute, (x) => x ?? 0),
+      pointe_sur_60_secondes_glissantes: pointe,
       total_partis: partis,
-      ticks_pour_tout_envoyer: parTick.length,
-      minutes_avant_le_dernier_texto: parTick.length * 5,
+      passes_de_la_file: passes,
+      minutes_avant_le_dernier_texto: Math.round(minutesReelles * 10) / 10,
       taches_par_etat: etats.reduce<Record<string, number>>((a, t) => { a[t.status] = (a[t.status] ?? 0) + 1; return a; }, {}),
       notification_rafale: notif[0]?.body ?? null,
     });
@@ -147,10 +143,14 @@ describe(`point 14 — A. ${N} factures en retard la même nuit, automatisation 
     expect(mesures.textos.partis_dans_la_premiere_minute, `${mesures.textos.partis_dans_la_premiere_minute} textos partis dans la première minute`).toBeLessThanOrEqual(30);
   });
 
+  it('[B14-02b] … et dans TOUTE minute de la rafale : jamais plus de 30 textos en 60 secondes glissantes (ajouté avec le correctif B-10)', () => {
+    expect(mesures.textos.pointe_sur_60_secondes_glissantes).toBeLessThanOrEqual(30);
+  });
+
   it(`[B14-03] « 30 par minute » : le ${N}e texto part en ${Math.ceil(N / 30)} minutes environ (pas en heures)`, () => {
     // La notification envoyée au propriétaire annonce « au rythme de 30 par minute ».
     expect(String(mesures.textos.notification_rafale)).toMatch(/30 par minute/);
-    expect(mesures.textos.minutes_avant_le_dernier_texto, `rythme réel : ${JSON.stringify(mesures.textos.textos_par_tick_de_5_min)} par tick de 5 min`).toBeLessThanOrEqual(Math.ceil(N / 30) + 5);
+    expect(mesures.textos.minutes_avant_le_dernier_texto, `rythme réel : ${JSON.stringify(mesures.textos.textos_par_minute_reelle)} par minute`).toBeLessThanOrEqual(Math.ceil(N / 30) + 5);
   });
 });
 

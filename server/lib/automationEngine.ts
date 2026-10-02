@@ -701,13 +701,65 @@ type LigneJournal = {
  * l'audit V2) : on ne PLAFONNE pas les messages d'une entreprise à ses
  * clients — tout part —, mais au-delà de DEBIT_SMS_PAR_MINUTE textos
  * d'automatisation dans la dernière minute pour un bureau, les suivants
- * sont reportés d'une minute. Une rafale (webhook entrant, synchro) devient
- * un flux qu'un humain a le temps de voir et d'arrêter (« Tout arrêter »).
+ * sont reportés. Une rafale (webhook entrant, synchro) devient un flux qu'un
+ * humain a le temps de voir et d'arrêter (« Tout arrêter »).
  * Lecture ratée = on envoie.
+ *
+ * ── Tenir « 30 par minute », ni plus ni moins (mission finale, point 14) ──
+ * Mesuré : 300 factures en retard la même nuit → 37 textos dans la première
+ * minute, puis 30 par TICK de 5 minutes ; le 300e partait après 45 minutes,
+ * alors que la notification annonce « au rythme de 30 par minute » (B-10).
+ *   · PAS PLUS : les événements d'une rafale sont traités en parallèle, et
+ *     chacun comptait les textos DÉJÀ journalisés — plusieurs passaient avant
+ *     que le compte ne monte. Chaque texto RÉSERVE maintenant sa place, en
+ *     mémoire et de façon atomique, avant de partir ; la base reste lue pour
+ *     les autres instances et pour ce qui précède un redémarrage.
+ *   · PAS MOINS : un texto reporté l'est jusqu'à l'instant où une place se
+ *     libère (la fenêtre glissante d'une minute), et le planificateur y est
+ *     réveillé (`ecouterRafales`) au lieu d'attendre le tick suivant.
  */
 export const DEBIT_SMS_PAR_MINUTE = 30;
+const FENETRE_DEBIT_MS = 60_000;
+/** Marge après la libération d'une place : les horloges du poste et de la base diffèrent. */
+const MARGE_DEBIT_MS = 1_000;
 
+/** Les places prises (instant de la réservation) dans la dernière minute, par entreprise. */
+const placesTextos = new Map<string, number[]>();
+
+/** Pour les tests : oublier les places réservées en mémoire. */
+export function oublierPlacesTextos(): void { placesTextos.clear(); }
+
+function placesRecentes(orgId: string, maintenant: number): number[] {
+  const prises = (placesTextos.get(orgId) ?? []).filter((t) => maintenant - t < FENETRE_DEBIT_MS);
+  placesTextos.set(orgId, prises);
+  return prises;
+}
+
+/**
+ * Quand la prochaine place se libère pour cette entreprise : l'instant où le
+ * plus ancien des DEBIT_SMS_PAR_MINUTE derniers textos sort de la fenêtre.
+ * Sans réservation connue ici (la limite vient d'une autre instance) : dans
+ * une minute.
+ */
+export function prochainePlaceTexto(orgId: string, maintenant: number = Date.now()): Date {
+  const prises = placesRecentes(orgId, maintenant);
+  const reference = prises.length >= DEBIT_SMS_PAR_MINUTE ? prises[prises.length - DEBIT_SMS_PAR_MINUTE] : maintenant;
+  return new Date(reference + FENETRE_DEBIT_MS + MARGE_DEBIT_MS);
+}
+
+/**
+ * Ce texto doit-il attendre ? `false` = il peut partir, et sa place est
+ * RÉSERVÉE (appeler cette fonction, c'est s'engager à envoyer).
+ */
 export async function rafaleDeTextos(supabase: SupabaseClient, orgId: string): Promise<boolean> {
+  // 1. La réservation locale — synchrone, donc atomique entre les événements
+  //    traités en parallèle dans ce processus.
+  const maintenant = Date.now();
+  const prises = placesRecentes(orgId, maintenant);
+  if (prises.length >= DEBIT_SMS_PAR_MINUTE) return true;
+  prises.push(maintenant);
+
+  // 2. La base : les textos partis d'une autre instance, ou avant un redémarrage.
   const { count, error } = await supabase
     .from('automation_execution_logs')
     .select('id', { count: 'exact', head: true })
@@ -717,12 +769,94 @@ export async function rafaleDeTextos(supabase: SupabaseClient, orgId: string): P
     // Un texto SAUTÉ, reporté ou annulé (ligne « saute ») n'est pas parti :
     // le compter retiendrait la file pour des envois qui n'ont pas eu lieu.
     .is('result_data->saute', null)
-    .gte('created_at', new Date(Date.now() - 60_000).toISOString());
+    .gte('created_at', new Date(maintenant - FENETRE_DEBIT_MS).toISOString());
   if (error) {
     console.error('[automationEngine] débit de textos illisible — envoi sans étalement:', error.message);
     return false;
   }
-  return (count ?? 0) >= DEBIT_SMS_PAR_MINUTE;
+  if ((count ?? 0) >= DEBIT_SMS_PAR_MINUTE) {
+    // Pas de place : la réservation est rendue.
+    const i = prises.indexOf(maintenant);
+    if (i >= 0) prises.splice(i, 1);
+    return true;
+  }
+  return false;
+}
+
+/** L'issue « envoi étalé » d'un texto reporté par une rafale. */
+function issueRafale(prochain: Date): IssueTache {
+  return {
+    code: 'rafale',
+    motif: `Rafale de textos (> ${DEBIT_SMS_PAR_MINUTE}/min) : reporté d'une minute`,
+    saute: `Envoi étalé : plus de ${DEBIT_SMS_PAR_MINUTE} textos en une minute, celui-ci part au prochain créneau`,
+    detail: { prochain_envoi: prochain.toISOString() },
+  };
+}
+
+/**
+ * Le planificateur s'abonne ici : dès qu'un texto est reporté par une rafale,
+ * il sait QUAND repasser sur la file, sans attendre son tick de 5 minutes.
+ */
+let auReportDeRafale: ((quand: Date) => void) | null = null;
+export function ecouterRafales(ecouteur: ((quand: Date) => void) | null): void { auReportDeRafale = ecouteur; }
+
+function signalerReportDeRafale(quand: Date): void {
+  try {
+    auReportDeRafale?.(quand);
+  } catch (e) {
+    console.error('[automationEngine] réveil du planificateur impossible — les textos reportés attendront le tick:', e instanceof Error ? e.message : String(e));
+  }
+}
+
+/**
+ * Reporte d'UN coup les textos de la file d'une entreprise en rafale : tous
+ * ceux qui sont dus, jusqu'à l'instant où une place se libère. Une écriture
+ * par minute au lieu d'une par texto et par passage ; une ligne au journal
+ * au PREMIER report de chaque texto.
+ */
+async function reporterTextosDus(supabase: SupabaseClient, orgId: string, prochain: Date, maintenant: number): Promise<void> {
+  const { data, error } = await supabase
+    .from('automation_scheduled_tasks')
+    .select('id, org_id, automation_rule_id, entity_type, entity_id, action_config, last_error')
+    .eq('org_id', orgId)
+    .eq('status', 'pending')
+    .eq('action_config->>type', 'send_sms')
+    .lte('execute_at', new Date(maintenant).toISOString())
+    .limit(1000);
+  if (error) {
+    console.error(`[automationEngine] textos dus illisibles (org ${orgId}) — ils seront reportés un à un:`, error.message);
+    return;
+  }
+  const dus = (data ?? []) as Array<TacheDeLaFile & { id: string; last_error?: string | null }>;
+  if (!dus.length) return;
+  const issue = issueRafale(prochain);
+  for (let i = 0; i < dus.length; i += 200) {
+    const { error: errMaj } = await supabase
+      .from('automation_scheduled_tasks')
+      .update({ execute_at: prochain.toISOString(), last_error: issue.motif })
+      .eq('org_id', orgId)
+      .eq('status', 'pending')
+      .in('id', dus.slice(i, i + 200).map((t) => t.id));
+    if (errMaj) console.error(`[automationEngine] report groupé des textos impossible (org ${orgId}):`, errMaj.message);
+  }
+  // Premier report : la tâche ne portait pas encore le motif de rafale.
+  const premiers = dus.filter((t) => t.action_config?.report_rafale !== true && !String(t.last_error ?? '').startsWith('Rafale de textos'));
+  if (!premiers.length) return;
+  const { error: errJournal } = await supabase.from('automation_execution_logs').insert(premiers.map((t) => ({
+    org_id: t.org_id,
+    automation_rule_id: t.automation_rule_id,
+    scheduled_task_id: t.id,
+    trigger_event: t.action_config?.trigger_event || 'scheduled',
+    entity_type: t.entity_type,
+    entity_id: t.entity_id,
+    action_type: 'send_sms',
+    action_config: t.action_config?.config ?? {},
+    result_success: true,
+    result_data: { saute: issue.saute, saute_code: issue.code, ...(issue.detail ?? {}) },
+    result_error: null,
+    duration_ms: 0,
+  })));
+  if (errJournal) console.error(`[automationEngine] reports de rafale non journalisés (org ${orgId}):`, errJournal.message);
 }
 
 /**
@@ -1130,22 +1264,37 @@ async function executeRuleActions(
     }
 
     if (action.type === 'send_sms' && await rafaleDeTextos(config.supabase, event.orgId)) {
-      const { error: etaleError } = await config.supabase.from('automation_scheduled_tasks').insert({
+      // Reporté jusqu'à l'instant où une place se libère (pas « une minute »
+      // à l'aveugle), et le planificateur y est réveillé : la file avance au
+      // rythme annoncé, sans attendre le tick de 5 minutes (B-10).
+      const prochain = prochainePlaceTexto(event.orgId);
+      const issue = issueRafale(prochain);
+      // Même traitement que le report d'heures calmes : une confirmation
+      // reportée reste transactionnelle.
+      const actionReportee = { ...action, action_index: i, trigger_event: event.type, event_metadata: event.metadata, report_heures_calmes: true, report_rafale: true, motif_code: issue.code };
+      const { data: reportee, error: etaleError } = await config.supabase.from('automation_scheduled_tasks').insert({
         org_id: event.orgId,
         automation_rule_id: rule.id,
         entity_type: event.entityType,
         entity_id: event.entityId,
-        // Même traitement que le report d'heures calmes : une confirmation
-        // reportée reste transactionnelle.
-        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata, report_heures_calmes: true, report_rafale: true },
-        execute_at: new Date(Date.now() + 60_000).toISOString(),
+        action_config: actionReportee,
+        execute_at: prochain.toISOString(),
         status: 'pending',
+        last_error: issue.motif,
         execution_key: executionKey,
-      });
+      }).select('id').maybeSingle();
       if (etaleError && etaleError.code !== '23505') {
         console.error(`[automationEngine] texto de rafale non reporté (rule ${rule.id}, org ${event.orgId}):`, etaleError.message);
       } else {
-        logger.info(`[automationEngine] texto reporté d'une minute (rafale > ${DEBIT_SMS_PAR_MINUTE}/min) — règle "${rule.name}"`);
+        logger.info(`[automationEngine] texto reporté (rafale > ${DEBIT_SMS_PAR_MINUTE}/min) — règle "${rule.name}"`);
+        if (!etaleError) {
+          await journaliserIssueTache(config.supabase, {
+            id: (reportee as { id?: string } | null)?.id ?? null,
+            org_id: event.orgId, automation_rule_id: rule.id, entity_type: event.entityType, entity_id: event.entityId,
+            action_config: actionReportee,
+          }, issue);
+          signalerReportDeRafale(prochain);
+        }
       }
       await prevenirRafale(config.supabase, event.orgId, rule);
       continue;
@@ -2388,7 +2537,14 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
   }
   if (!tasks || tasks.length === 0) return 0;
 
+  /** Entreprises dont les textos viennent d'être reportés d'un coup (rafale) pendant CE passage. */
+  const orgsEnRafale = new Set<string>();
+
   for (const task of tasks as any[]) {
+    // Texto d'une entreprise en rafale : il vient d'être reporté avec les
+    // autres (`reporterTextosDus`) — la copie lue au début du passage est périmée.
+    if (task.action_config?.type === 'send_sms' && orgsEnRafale.has(task.org_id)) continue;
+
     /*
      * Pause PAR ENTREPRISE. Le filtre est ici, pas dans la requête : la
      * file dépile TOUTES les organisations d'un coup, et une entreprise
@@ -2770,12 +2926,17 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         }
       }
 
-      // Étalement (F11) : repoussé d'une minute, sans consommer de tentative
-      // (la prise avait incrémenté `attempts` en base ; on remet la valeur lue).
+      // Étalement (F11) : le texto est rendu à la file jusqu'à l'instant où
+      // une place se libère, sans consommer de tentative ; les AUTRES textos
+      // dus de l'entreprise le sont avec lui, d'un coup, et le planificateur
+      // est réveillé à cet instant (B-10) — la file avance à 30 par minute,
+      // pas à 30 par tick.
       if (actionType === 'send_sms' && await rafaleDeTextos(supabase, task.org_id)) {
-        await supabase.from('automation_scheduled_tasks')
-          .update({ status: 'pending', execute_at: new Date(Date.now() + 60_000).toISOString(), attempts: Number(task.attempts || 0), last_error: `Rafale de textos (> ${DEBIT_SMS_PAR_MINUTE}/min) : reporté d'une minute` })
-          .eq('id', task.id);
+        const prochain = prochainePlaceTexto(task.org_id);
+        await reporterTache(supabase, task, issueRafale(prochain), prochain);
+        await reporterTextosDus(supabase, task.org_id, prochain, Date.now());
+        orgsEnRafale.add(task.org_id);
+        signalerReportDeRafale(prochain);
         await prevenirRafale(supabase, task.org_id, { id: task.automation_rule_id, name: task.automation_rules?.name });
         continue;
       }
@@ -3260,6 +3421,9 @@ async function clientARepondu(
 
 export function initAutomationEngine(config: EngineConfig) {
   engineConfig = config;
+  // Un moteur qui démarre ne connaît aucun texto « en vol » : les places
+  // réservées en mémoire repartent de zéro (la base, elle, garde le compte).
+  placesTextos.clear();
 
   // Initialize event bus with supabase
   eventBus.init(config.supabase);

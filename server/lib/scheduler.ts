@@ -853,6 +853,11 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
     // (le tick fait d'autres choses, et le verrou dure 10 min) et 20 lots.
     try {
       await viderFile(supabase);
+      // Des textos reportés par une rafale attendent encore (reportés avant un
+      // redémarrage, ou par une autre instance) : la cadence est réarmée sur
+      // le plus proche, sans attendre le tick suivant.
+      const reporte = await prochainTextoReporte(supabase, {});
+      if (reporte !== null) armerCadence(supabase, twilio, reporte);
     } catch (err: any) {
       console.error('[scheduler] scheduled tasks processing failed:', err.message);
     }
@@ -1023,9 +1028,123 @@ export function startScheduler(
   void import('./evenementsBase').then(({ demarrerEvenementsBase }) => demarrerEvenementsBase(supabase))
     .catch((e: unknown) => logger.error('[scheduler] file des événements de la base non démarrée', { message: e instanceof Error ? e.message : String(e) }));
 
+  // Textos reportés par une rafale : le moteur dit quand repasser sur la file
+  // (30 par minute, pas 30 par tick — voir « Cadence » plus bas).
+  void import('./automationEngine').then(({ ecouterRafales }) => ecouterRafales((quand) => armerCadence(supabase, twilioConfig, quand.getTime())))
+    .catch((e: unknown) => logger.error('[scheduler] cadence des textos non branchée', { message: e instanceof Error ? e.message : String(e) }));
+
   // Run once immediately, then every 5 minutes
   void tickProtege(supabase, twilioConfig);
   intervalHandle = setInterval(() => void tickProtege(supabase, twilioConfig), INTERVAL_MS);
+}
+
+// ---------------------------------------------------------------------------
+// Cadence des textos reportés par une rafale (mission finale, point 14 — B-10)
+// ---------------------------------------------------------------------------
+//
+// Le moteur reporte un texto en rafale jusqu'à l'instant où une place se
+// libère (30 par minute et par entreprise). Mais la file n'était relue qu'au
+// tick suivant : 30 textos par tick de CINQ minutes, alors que la
+// notification annonce « 30 par minute » — le 300e partait après 45 minutes.
+//
+// Le moteur prévient maintenant le planificateur de l'instant où repasser
+// (`ecouterRafales`). Une seule minuterie, la plus proche ; quand elle sonne,
+// la file est dépilée comme au tick (`viderFile`), sous le MÊME verrou — donc
+// jamais en même temps que lui, ni que le tick d'une autre instance. Après un
+// redémarrage, c'est le tick (au démarrage, puis toutes les 5 min) qui relance
+// la cadence. Le débit lui-même reste jugé par le moteur, à chaque texto.
+
+/** La minuterie de la prochaine passe de cadence, et l'instant qu'elle vise. */
+let cadence: { minuterie: ReturnType<typeof setTimeout>; quand: number } | null = null;
+/** Un tick a été ignoré parce qu'une passe de cadence tournait : il passe juste après. */
+let tickEnAttente = false;
+/** Marge après l'instant annoncé par le moteur (l'horloge de la base peut retarder). */
+const MARGE_CADENCE_MS = 500;
+
+function armerCadence(supabase: SupabaseClient, twilio: TwilioConfig | null, quand: number): void {
+  if (cadence && cadence.quand <= quand) return; // une passe plus proche est déjà prévue
+  if (cadence) clearTimeout(cadence.minuterie);
+  const minuterie = setTimeout(() => void passeDeCadence(supabase, twilio), Math.max(0, quand - Date.now()) + MARGE_CADENCE_MS);
+  minuterie.unref?.();
+  cadence = { minuterie, quand };
+}
+
+async function passeDeCadence(supabase: SupabaseClient, twilio: TwilioConfig | null): Promise<void> {
+  cadence = null;
+  if (tickEnCours) {
+    // Le tick dépile déjà la file : on revient juste après lui.
+    armerCadence(supabase, twilio, Date.now() + 5_000);
+    return;
+  }
+  tickEnCours = true;
+  try {
+    const { withAdvisoryLock } = await import('./advisory-lock');
+    const { acquired } = await withAdvisoryLock('automation-scheduler', () => viderFile(supabase));
+    // Une autre instance tient le verrou (son tick) : elle dépile la file elle-même.
+    if (!acquired) armerCadence(supabase, twilio, Date.now() + 10_000);
+  } catch (err: any) {
+    console.error('[scheduler] passe de cadence des textos échouée:', err?.message);
+  } finally {
+    tickEnCours = false;
+  }
+  if (tickEnAttente) {
+    tickEnAttente = false;
+    void tickProtege(supabase, twilio);
+  }
+}
+
+/** L'échéance (ms) du plus proche texto reporté par une rafale et encore en file, ou null. */
+async function prochainTextoReporte(supabase: SupabaseClient, filtre: { orgId?: string; orgIds?: string[] }): Promise<number | null> {
+  let requete = supabase
+    .from('automation_scheduled_tasks')
+    .select('execute_at')
+    .eq('status', 'pending')
+    .like('last_error', 'Rafale de textos%');
+  if (filtre.orgId) requete = requete.eq('org_id', filtre.orgId);
+  if (filtre.orgIds) requete = requete.in('org_id', filtre.orgIds);
+  const { data, error } = await requete.order('execute_at', { ascending: true }).limit(1).maybeSingle();
+  if (error) {
+    logger.error('[scheduler] textos reportés illisibles', { message: error.message });
+    return null;
+  }
+  const t = Date.parse(String((data as { execute_at?: string } | null)?.execute_at ?? ''));
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Écoule une rafale de textos EN TEMPS RÉEL, comme le fait la minuterie du
+ * planificateur : dépile la file, attend l'instant annoncé par le moteur,
+ * recommence — jusqu'à ce que plus aucun texto ne soit reporté, ou que le
+ * budget soit épuisé. Sert à la mesure de charge (tests/automations-finale/b)
+ * et à tout script qui veut vider la file d'un bureau sans démarrer le
+ * planificateur. Renvoie le nombre de passes.
+ */
+export async function ecoulerRafale(
+  supabase: SupabaseClient,
+  filtre: { orgId?: string; orgIds?: string[] } = {},
+  options: { budgetMs?: number } = {},
+): Promise<number> {
+  const { ecouterRafales } = await import('./automationEngine');
+  const fin = Date.now() + (options.budgetMs ?? 15 * 60_000);
+  let passes = 0;
+  let prochain: number | null = null;
+  ecouterRafales((quand) => { prochain = prochain === null ? quand.getTime() : Math.min(prochain, quand.getTime()); });
+  try {
+    for (;;) {
+      prochain = null;
+      await viderFile(supabase, filtre);
+      passes++;
+      // L'instant annoncé par le moteur pendant cette passe ; à défaut, celui
+      // des textos DÉJÀ reportés qui attendent en file (reportés avant qu'on
+      // écoute : par le chemin immédiat, ou avant un redémarrage).
+      const quand: number | null = prochain ?? await prochainTextoReporte(supabase, filtre);
+      if (quand === null || quand > fin) break;
+      await new Promise((r) => setTimeout(r, Math.max(0, quand - Date.now()) + MARGE_CADENCE_MS));
+    }
+  } finally {
+    ecouterRafales(null);
+  }
+  return passes;
 }
 
 // ---------------------------------------------------------------------------
@@ -1132,9 +1251,13 @@ let tickEnCours = false;
 async function tickProtege(supabase: SupabaseClient, twilio: TwilioConfig | null) {
   if (tickEnCours) {
     console.warn('[scheduler] tick précédent encore en cours — passage ignoré');
+    // Si c'est une passe de cadence (quelques secondes) qui tient la place,
+    // le tick passera dès qu'elle aura fini, pas dans cinq minutes.
+    tickEnAttente = true;
     return;
   }
   tickEnCours = true;
+  tickEnAttente = false;
   const debut = Date.now();
   // Le tick qui ne finit pas : on le dit pendant qu'il dure, pas seulement après.
   const alarme = setTimeout(() => signalerTickTropLong(Date.now() - debut, true), BAIL_TICK_MS);
@@ -1165,6 +1288,10 @@ async function tickProtege(supabase: SupabaseClient, twilio: TwilioConfig | null
 }
 
 export function stopScheduler() {
+  if (cadence) {
+    clearTimeout(cadence.minuterie);
+    cadence = null;
+  }
   if (intervalHandle) {
     clearInterval(intervalHandle);
     intervalHandle = null;
