@@ -182,7 +182,7 @@ langue = toujours une carte ; commit suivant : Lumi n'appelle plus les routes d'
 - **Durcissement des écritures** [P] : plan dans `notes/DURCISSEMENT-ecritures.md` (une seule porte d'écriture en
   rôle de service + `revoke insert, update, delete on automation_rules from authenticated, anon` ; `client_tags` et
   `automation_webhooks` aussi). Inclut le repli `update({ is_active: false })` de
-  `server/lib/agent/tools-lot-entreprise.ts` (≈ l. 456 ; la session 86 a accepté de ne pas y toucher).
+  `server/lib/agent/tools-lot-entreprise.ts` (≈ l. 456 ; la session 86 a accepté de ne pas y toucher) — c'est noté aussi dans la passation de cette session : `docs/passation/reprise-outils-lumi-2026-10-02.md`, § 9.4, sur `main` après #906.
 - **Aucune migration appliquée** — ni staging ni prod. Aucune n'est encore dans `supabase/migrations/` [V].
 - Unification `steps` / `actions` (P6) : essai à blanc fait, conversion non faite (accord requis).
 - Rejeu de `npm run qa:lumi` (≈ 2,30 $) et du jeu d'évaluation (cas devis-08) avant la prod.
