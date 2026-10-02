@@ -94,7 +94,7 @@ depuis `origin/main`.
 ### Décisions encore ouvertes, à poser à Rafba
 | Sujet | Question |
 |---|---|
-| Unification (P6) | Convertir les règles à l'ancien format de **Coquin lavage** et **Vision Lavage** (vraies entreprises), ou les bureaux de test d'abord ? Résultat de l'essai à blanc au § 6.4. |
+| Unification (P6) | Convertir les règles à l'ancien format de **Coquin lavage** et **Vision Lavage** (vraies entreprises), ou les bureaux de test d'abord ? Résultat de l'essai à blanc au § 5.4. |
 | E-52 | Langue par client (colonne `clients.langue`, migration) : hors périmètre pour l'instant |
 | F-04 | Une génération Lumi refusée doit-elle être facturée en crédits ? |
 | B-17 | Plusieurs déclencheurs par automatisation (demandé par le point 18) : à construire |
@@ -140,7 +140,7 @@ Sur le PC de Rafba, l'atelier est dans `D:/lume-final/`, hors du dépôt. **Une 
 | `outils/` | pile Docker locale (`pile.sh`), proxy (`proxy.mjs`), démarrage des serveurs d'un arbre (`serveurs.mjs <arbre> <portApi> <portVite>`) |
 | `sorties/` | journaux de tests, essais à blanc (`unification-local/`, `unification-prod/`) |
 | `env.reel` | **copie du vrai `.env.local` — secret, ne jamais l'afficher ni le commiter** |
-| `wt`, `wt-u`, `wt-b`, `wt-d`, `wt-p`, … | worktrees git (§ 8) |
+| `wt`, `wt-u`, `wt-b`, `wt-d`, `wt-p`, … | worktrees git (§ 7) |
 
 ---
 
