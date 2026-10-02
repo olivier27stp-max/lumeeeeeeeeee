@@ -92,9 +92,11 @@ for (const sc of aJouer) {
 
     if (sc.canal === 'panneau') {
       const ouverte = avant[sc.ouverte ?? sc.montage[0]];
-      if (tour.dit.trim().length < 10) {
+      // L'éditeur n'exige 10 caractères que pour la PREMIÈRE demande (ClavardageLumi.tsx, A-12) :
+      // dans une conversation en cours, « oui » ou « active-la » partent.
+      if (tour.dit.trim().length < (echanges.length > 0 ? 1 : 10)) {
         nonEnvoyable = true;
-        reponse = '(NON ENVOYÉ : le bouton « Envoyer » de l’éditeur reste grisé sous 10 caractères)';
+        reponse = '(NON ENVOYÉ : le bouton « Construire » de l’éditeur reste grisé sous 10 caractères pour une première demande)';
       } else {
         const steps = ouverte.steps ?? [];
         const r = await genererParcours(s, { demande: tour.dit, echanges: echanges.slice(-6), parcours_actuel: steps.length ? { trigger_event: ouverte.trigger_event, steps } : null, rule_id: ouverte.id });
@@ -110,7 +112,10 @@ for (const sc of aJouer) {
         }
       }
     } else {
-      const r = await demanderALumi(s, tour.dit, conv);
+      // « ouverte » dans le clavardage : l'utilisateur vient de l'éditeur de cette automatisation
+      // (lien /lumi?automatisation=<id>) — la page Lumi envoie ce repère avec chaque message.
+      const page = sc.ouverte && ids[sc.ouverte] ? { type: 'automatisation' as const, rule_id: ids[sc.ouverte] } : null;
+      const r = await demanderALumi(s, tour.dit, conv, page);
       conv = r.conversation_id ?? conv;
       reponse = r.erreur ? `(ERREUR ${r.statut}) ${JSON.stringify(r.erreur).slice(0, 300)}` : r.texte;
       outils = r.outils;
@@ -201,6 +206,8 @@ for (const sc of aJouer) {
         for (const c of v.ne_contient_pas ?? []) if (norm(reponse).includes(norm(c))) pb.push(`dit « ${c} »`);
         if (v.questions) { const n = (reponse.match(/\?/g) ?? []).length; if (n < v.questions.min || n > v.questions.max) pb.push(`${n} question(s) (attendu ${v.questions.min}–${v.questions.max})`); }
         if (v.dit_impossible && !IMPOSSIBLE.test(reponse)) pb.push('ne dit pas que c’est impossible');
+        // Une fonction pas encore bâtie (cibler un TYPE de client) : UNE question précise, ou un « pas encore possible » honnête.
+        if (v.question_ou_impossible) { const n = (reponse.match(/\?/g) ?? []).length; if (!(n === 1 || IMPOSSIBLE.test(reponse))) pb.push(`ni une question précise (${n} « ? »), ni un « pas possible » clair`); }
         if (v.langue === 'en' && !estAnglais(reponse)) pb.push('réponse pas en anglais');
         if (v.cite_le_texte_enregistre) {
           const m = messages(apres[v.cite_le_texte_enregistre], 'send_sms')[0] ?? messages(apres[v.cite_le_texte_enregistre], 'send_email')[0];

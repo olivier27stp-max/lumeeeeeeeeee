@@ -5,7 +5,10 @@
     "canal « clavardage » = le clavardage général de Lumi (POST /api/lumi/chat puis /api/lumi/execute pour la carte).",
     "montage : les règles créées avant la conversation (clés de la bibliothèque « regles » ci-dessous) ; « ouverte » = l'automatisation à l'écran quand l'utilisateur parle.",
     "Chaque tour : « dit » (ce que tape l'utilisateur), « decision » (confirm | cancel : le bouton de la carte, s'il y en a une), « attend » (vérifications en base et sur la réponse).",
-    "Les attentes décrivent la CIBLE de la mission, pas l'état d'aujourd'hui : un scénario rouge est un constat."
+    "Les attentes décrivent la CIBLE de la mission, pas l'état d'aujourd'hui : un scénario rouge est un constat.",
+    "AJUSTEMENT (agent L, 2026-10-02) — C01 T4, C02 T4, C03 T4 (« juste pour les clients commerciaux ») : le ciblage par TYPE de client n'existe pas encore (point 6 de la mission, bâti plus tard). L'attente « le ciblage en base contient commerc » devient : RIEN n'est écrit, et Lumi pose UNE question précise (« as-tu une étiquette Commercial ? ») ou dit honnêtement que ce n'est pas encore possible — jamais un doublon, jamais un filtre inventé. Le filtre par ÉTIQUETTE, lui, existe et reste exigé (demandes D09 et D23).",
+    "AJUSTEMENT (agent L) — C05 T1 : renommer une automatisation n'affiche PAS de carte dans le mode par défaut (« confirmer l'argent et les envois ») : le geste est sans effet sur les clients et se défait (registre des outils, session a1). Il n'y a donc rien à annuler : l'attente « le nom n'a pas changé après Annuler » devient « le nom est bien celui demandé, le message n'a pas bougé, l'action est au journal ». Le changement d'idée reste éprouvé au tour 2 (« non laisse faire, appelle-la plutôt… ») et, sur une vraie carte, par C06 (suppression annulée).",
+    "AJUSTEMENT (agent L) — canal « clavardage » avec « ouverte » (C02) : le lanceur envoie le contexte de page (contexte_page), comme la page Lumi ouverte depuis l'éditeur."
   ],
   "regles": {
     "retard_exemple": { "nom": "Relance facture en retard", "declencheur": "invoice.overdue", "actions": [{ "type": "send_sms", "config": { "body": "À compléter" } }], "steps": [{ "id": "e1", "type": "action", "action": { "type": "send_sms", "config": { "body": "Bonjour [client_name], c’est [company_name]. Merci !" } }, "suivant": null }] },
@@ -27,7 +30,7 @@
         { "dit": "change le message de l’automatisation", "attend": [{ "type": "texte", "regle": "retard_exemple", "canal": "send_sms", "change": true, "ne_contient_pas": ["c’est [company_name]. Merci !", "À compléter"] }, { "type": "variables_connues", "regle": "retard_exemple" }, { "type": "reflet", "regle": "retard_exemple" }, { "type": "champ", "regle": "retard_exemple", "champ": "name", "inchange": true }] },
         { "dit": "non, plus court", "attend": [{ "type": "texte", "regle": "retard_exemple", "canal": "send_sms", "plus_court": true }, { "type": "reponse", "cite_le_texte_enregistre": "retard_exemple" }] },
         { "dit": "ajoute un délai de 3 jours avant le texto", "attend": [{ "type": "etape", "regle": "retard_exemple", "etape": "attendre", "delai_secondes": 259200 }, { "type": "texte", "regle": "retard_exemple", "canal": "send_sms", "inchange": true }] },
-        { "dit": "juste pour les clients commerciaux", "attend": [{ "type": "ciblage", "regle": "retard_exemple", "contient": "commerc" }, { "type": "texte", "regle": "retard_exemple", "canal": "send_sms", "inchange": true }] },
+        { "dit": "juste pour les clients commerciaux", "attend": [{ "type": "aucune_ecriture" }, { "type": "reponse", "question_ou_impossible": true }] },
         { "dit": "explique-moi ce qu’elle fait", "attend": [{ "type": "aucune_ecriture" }, { "type": "reponse", "contient": ["retard", "3 jours"] }] },
         { "dit": "active-la", "attend": [{ "type": "reponse", "resume_avant_activation": "retard_exemple" }, { "type": "champ", "regle": "retard_exemple", "champ": "is_active", "egal": false }] },
         { "dit": "oui, vas-y", "decision": "confirm", "attend": [{ "type": "champ", "regle": "retard_exemple", "champ": "is_active", "egal": true }, { "type": "journal", "outil": "toggle_automation_rule" }] }
@@ -40,7 +43,7 @@
         { "dit": "change le message de l’automatisation de relance des factures en retard : écris quelque chose de plus chaleureux", "decision": "confirm", "attend": [{ "type": "texte", "regle": "retard_redige", "canal": "send_sms", "change": true }, { "type": "variables_connues", "regle": "retard_redige" }, { "type": "reflet", "regle": "retard_redige" }, { "type": "journal", "outil": "update_automation" }] },
         { "dit": "non, plus court", "decision": "confirm", "attend": [{ "type": "texte", "regle": "retard_redige", "canal": "send_sms", "plus_court": true, "max_caracteres": 160 }, { "type": "reponse", "cite_le_texte_enregistre": "retard_redige" }] },
         { "dit": "ajoute un délai de 3 jours avant le texto", "decision": "confirm", "attend": [{ "type": "etape", "regle": "retard_redige", "etape": "attendre", "delai_secondes": 259200 }] },
-        { "dit": "juste pour les clients commerciaux", "decision": "confirm", "attend": [{ "type": "ciblage", "regle": "retard_redige", "contient": "commerc" }] },
+        { "dit": "juste pour les clients commerciaux", "decision": "confirm", "attend": [{ "type": "aucune_ecriture" }, { "type": "reponse", "question_ou_impossible": true }] },
         { "dit": "explique-moi ce qu’elle fait", "attend": [{ "type": "aucune_ecriture" }, { "type": "reponse", "cite_le_texte_enregistre": "retard_redige" }] },
         { "dit": "active-la", "attend": [{ "type": "reponse", "resume_avant_activation": "retard_redige" }, { "type": "champ", "regle": "retard_redige", "champ": "is_active", "egal": false }] },
         { "dit": "oui", "decision": "confirm", "attend": [{ "type": "champ", "regle": "retard_redige", "champ": "is_active", "egal": true }, { "type": "journal", "outil": "toggle_automation_rule" }] }
@@ -53,7 +56,7 @@
         { "dit": "change the message of this automation", "attend": [{ "type": "texte", "regle": "overdue_en", "canal": "send_sms", "change": true }, { "type": "variables_connues", "regle": "overdue_en" }, { "type": "reponse", "langue": "en" }] },
         { "dit": "no, make it shorter", "attend": [{ "type": "texte", "regle": "overdue_en", "canal": "send_sms", "plus_court": true, "max_caracteres": 160 }] },
         { "dit": "add a 3-day delay before the text", "attend": [{ "type": "etape", "regle": "overdue_en", "etape": "attendre", "delai_secondes": 259200 }] },
-        { "dit": "only for commercial clients", "attend": [{ "type": "ciblage", "regle": "overdue_en", "contient": "commerc" }] },
+        { "dit": "only for commercial clients", "attend": [{ "type": "aucune_ecriture" }, { "type": "reponse", "question_ou_impossible": true, "langue": "en" }] },
         { "dit": "explain what it does", "attend": [{ "type": "aucune_ecriture" }, { "type": "reponse", "contient": ["overdue", "3 day"], "langue": "en" }] },
         { "dit": "turn it on", "attend": [{ "type": "reponse", "resume_avant_activation": "overdue_en" }, { "type": "champ", "regle": "overdue_en", "champ": "is_active", "egal": false }] }
       ]
@@ -73,7 +76,7 @@
       "id": "C05", "langue": "fr", "canal": "clavardage", "titre": "Changement d’idée au milieu d’une carte de confirmation",
       "montage": ["retard_redige"],
       "tours": [
-        { "dit": "renomme l’automatisation « Relance facture en retard » en « Rappel 7 jours »", "decision": "cancel", "attend": [{ "type": "champ", "regle": "retard_redige", "champ": "name", "inchange": true }] },
+        { "dit": "renomme l’automatisation « Relance facture en retard » en « Rappel 7 jours »", "decision": "cancel", "attend": [{ "type": "champ", "regle": "retard_redige", "champ": "name", "contient": "Rappel 7 jours" }, { "type": "texte", "regle": "retard_redige", "canal": "send_sms", "inchange": true }, { "type": "journal", "outil": "rename_automation_rule" }] },
         { "dit": "non laisse faire, appelle-la plutôt « Relance douce »", "decision": "confirm", "attend": [{ "type": "champ", "regle": "retard_redige", "champ": "name", "contient": "Relance douce" }, { "type": "texte", "regle": "retard_redige", "canal": "send_sms", "inchange": true }, { "type": "journal", "outil": "rename_automation_rule" }] },
         { "dit": "c’est quoi son nom maintenant ?", "attend": [{ "type": "aucune_ecriture" }, { "type": "reponse", "contient": ["Relance douce"] }] }
       ]

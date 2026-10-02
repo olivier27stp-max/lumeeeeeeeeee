@@ -238,8 +238,12 @@ async function poster(s: SessionApi, chemin: string, corps: Record<string, unkno
   });
 }
 /** Un message au clavardage général de Lumi (POST /api/lumi/chat), vrai modèle. */
-export async function demanderALumi(s: SessionApi, message: string, conversationId: string | null = null): Promise<ReponseLumi> {
-  const res = await poster(s, '/api/lumi/chat', { message, conversation_id: conversationId, language: s.langue });
+export async function demanderALumi(
+  s: SessionApi, message: string, conversationId: string | null = null,
+  /** L'automatisation ouverte dans l'éditeur d'où l'on vient (`/lumi?automatisation=<id>`) : ce que la page Lumi envoie avec chaque message. */
+  contextePage: { type: 'automatisation'; rule_id: string; non_enregistre?: boolean } | null = null,
+): Promise<ReponseLumi> {
+  const res = await poster(s, '/api/lumi/chat', { message, conversation_id: conversationId, language: s.langue, ...(contextePage ? { contexte_page: contextePage } : {}) });
   return lireSse(res.status, await res.text(), res.ok);
 }
 /** Le bouton « Confirmer » / « Annuler » d'une carte (POST /api/lumi/execute). */
