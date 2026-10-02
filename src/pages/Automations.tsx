@@ -1417,14 +1417,20 @@ export default function Automations() {
     console.error('[automations] départ inconnu :', cle);
   };
 
-  const ONGLETS = [
-    { cle: 'toutes' as const, fr: 'Toutes', en: 'All workflows', n: mesAutos.length },
-    // Chiffres illisibles : « ? », jamais un « 0 » qui dirait que tout va bien.
-    { cle: 'verifier' as const, fr: 'À vérifier', en: 'Needs review', n: statsIllisibles ? '?' : aVerifier.length },
+  /*
+   * Un compteur d'onglet ne s'affiche que s'il est CONNU (triage `03-onglets-etats:184`).
+   * Lecture des automatisations en panne (ou pas encore revenue) : « Corbeille (0) » affirmait une
+   * corbeille vide alors qu'elle ne l'était pas. Chiffres illisibles (ou pas encore lus) : pas de
+   * compteur sur « À vérifier » — jamais un « 0 » qui dirait que tout va bien.
+   */
+  const listeInconnue = echecChargement || (loading && rules.length === 0);
+  const ONGLETS: Array<{ cle: 'toutes' | 'verifier' | 'modeles' | 'corbeille'; fr: string; en: string; n: number | null }> = [
+    { cle: 'toutes', fr: 'Toutes', en: 'All workflows', n: null },
+    { cle: 'verifier', fr: 'À vérifier', en: 'Needs review', n: listeInconnue || stats === null ? null : aVerifier.length },
     // « Prêtes à publier », plus « Modèles » : ce mot désigne la bibliothèque du menu Créer (copies en
     // brouillon). Ici, ce sont les automatisations fournies pas encore publiées, qu'on publie en place.
-    { cle: 'modeles' as const, fr: 'Prêtes à publier', en: 'Ready to publish', n: modeles.length },
-    { cle: 'corbeille' as const, fr: 'Corbeille', en: 'Deleted', n: supprimees.length },
+    { cle: 'modeles', fr: 'Prêtes à publier', en: 'Ready to publish', n: listeInconnue ? null : modeles.length },
+    { cle: 'corbeille', fr: 'Corbeille', en: 'Deleted', n: listeInconnue ? null : supprimees.length },
   ];
 
   const dateCourte = (iso: string | null | undefined) => {
@@ -1668,7 +1674,7 @@ export default function Automations() {
                 )}
               >
                 {fr ? o.fr : o.en}
-                {o.cle !== 'toutes' && ` (${o.n})`}
+                {o.n !== null && ` (${o.n})`}
               </button>
             ))}
             {/* GoHighLevel a ici « Nouvelle liste » (des vues filtrées

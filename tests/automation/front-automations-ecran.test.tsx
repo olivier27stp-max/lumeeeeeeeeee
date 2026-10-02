@@ -318,8 +318,9 @@ describe('T13.3 — erreur de chargement', () => {
     expect(toast.error).not.toHaveBeenCalled();
     // Avant : « À vérifier (0) », comme si rien n'avait échoué.
     expect(texte()).toContain('Les chiffres et les échecs n’ont pas pu être lus');
-    expect(bouton(/^À vérifier \(\?\)$/)).toBeDefined();
-    expect(texte()).not.toContain('À vérifier (0)');
+    // Pas de compteur du tout : il n'est pas connu (triage de la liste, 03-onglets-etats:184).
+    expect(bouton(/^À vérifier$/)).toBeDefined();
+    expect(texte()).not.toContain('À vérifier (');
   });
 
   it('les statistiques illisibles : la liste reste, les colonnes chiffrées montrent « — » au lieu d’un faux 0', async () => {

@@ -557,7 +557,7 @@ describe('D — le panneau d’étape › Statistiques contre le jeu connu', () 
 });
 
 describe('D — états : chargement, erreur', () => {
-  it('[D-17] statistiques illisibles (route en erreur) : la liste le DIT — « — » dans les colonnes, « À vérifier (?) », un bandeau, et « Réessayer » les relit', async () => {
+  it('[D-17] statistiques illisibles (route en erreur) : la liste le DIT — « — » dans les colonnes, « À vérifier » sans compteur, un bandeau, et « Réessayer » les relit', async () => {
     const o = await ouvrirOnglet({ langue: 'fr' });
     try {
       let enPanne = true;
@@ -571,7 +571,8 @@ describe('D — états : chargement, erreur', () => {
       await o.page.locator('#par-page').selectOption('50');
       const E = jeu.regles.E;
       await avecCapture(o, 'd-echecs-illisibles', async () => {
-        await expect.poll(async () => propre(await o.page.getByRole('tab', { name: /^À vérifier/ }).innerText())).toBe('À vérifier (?)');
+        // Sans compteur : il n'est pas connu (c'était « (?) » ; le triage de la liste, 03-onglets-etats:184, demande « pas de compteur »).
+        await expect.poll(async () => propre(await o.page.getByRole('tab', { name: /^À vérifier/ }).innerText())).toBe('À vérifier');
         const c = await cellules(o.page, E);
         expect([c[3], c[4]]).toEqual(['—', '—']);
         expect(propre(await o.page.getByRole('alert').first().innerText())).toContain('Les chiffres et les échecs n’ont pas pu être lus');

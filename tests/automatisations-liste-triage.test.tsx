@@ -256,12 +256,12 @@ describe('07-lot:188 — publier « Client inactif » EN LOT pose la même confi
 
 // ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:229 et 10-volume:210 — « À vérifier » ne dit « tout roule » que s’il le SAIT', () => {
-  it('lecture des échecs en panne : « À vérifier (?) », jamais « (0) » ni « tout roule » — et « Réessayer » relit', async () => {
+  it('lecture des échecs en panne : « À vérifier » sans compteur, jamais « (0) » ni « tout roule » — et « Réessayer » relit', async () => {
     const r = regle({ name: 'En échec', is_active: true });
     vi.mocked(api.getAutomationRules).mockResolvedValue([r]);
     statsMock.mockRejectedValue(new Error('panne simulée'));
     await rendre();
-    expect(onglet(/^À vérifier/)?.textContent).toBe('À vérifier (?)');
+    expect(onglet(/^À vérifier/)?.textContent).toBe('À vérifier');
     await cliquer(onglet(/^À vérifier/));
     expect(texte()).not.toContain('tout roule');
     expect(conteneur.querySelector('tbody')?.textContent).toContain('Les échecs n’ont pas pu être lus : impossible de dire si tout va bien.');
@@ -300,6 +300,34 @@ describe('03-onglets-etats:229 et 10-volume:210 — « À vérifier » ne dit «
     expect(noms).toEqual(['A bruyante', 'B discrète']);
     expect(texte()).toContain('205 échec(s) dans les 7 derniers jours');
     expect(texte()).toContain('1 échec(s) dans les 7 derniers jours');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
+  const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
+
+  it('lecture des automatisations en panne : aucun « (0) » — la corbeille n’est peut-être pas vide', async () => {
+    vi.mocked(api.getAutomationRules).mockRejectedValue(new Error('panne simulée'));
+    await rendre();
+    expect(conteneur.querySelector('[role="alert"]')?.textContent).toContain('Impossible de charger les automatisations pour le moment.');
+    expect(libelles()).toEqual(['Toutes', 'À vérifier', 'Prêtes à publier', 'Corbeille']);
+  });
+
+  it('pendant la première lecture non plus', async () => {
+    vi.mocked(api.getAutomationRules).mockReturnValue(new Promise(() => undefined));
+    await rendre();
+    expect(libelles()).toEqual(['Toutes', 'À vérifier', 'Prêtes à publier', 'Corbeille']);
+  });
+
+  it('lecture réussie : les compteurs sont là, « Réessayer » après une panne les ramène', async () => {
+    const jetee = regle({ name: 'Jetée', deleted_at: '2026-09-30T00:00:00Z' });
+    vi.mocked(api.getAutomationRules).mockRejectedValueOnce(new Error('panne simulée')).mockResolvedValue([regle(), jetee]);
+    await rendre();
+    expect(libelles()).toContain('Corbeille');
+    await cliquer(bouton(/^Réessayer$/));
+    await laisser();
+    expect(libelles()).toEqual(['Toutes', 'À vérifier (0)', 'Prêtes à publier (0)', 'Corbeille (1)']);
   });
 });
 
