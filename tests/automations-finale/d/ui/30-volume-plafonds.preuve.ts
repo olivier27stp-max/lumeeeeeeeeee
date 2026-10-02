@@ -167,8 +167,9 @@ describe('D — volume : les échecs (235 en 7 jours ; l’ancienne lecture s’
     await choisirPeriode(b.page, 7);
     await expect.poll(async () => propre(await b.page.locator('.section-card').last().innerText())).toContain('ont échoué ces 7 derniers jours');
     const texte = propre(await b.page.locator('.section-card').last().innerText());
-    // « action(s) », plus « envoi(s) » : une tâche ou une étiquette en échec n'est pas un envoi (constat D-23).
-    expect(Number(/(\d+) action\(s\) ont échoué/.exec(texte)?.[1])).toBe(235);
+    // « actions », plus « envoi(s) » : une tâche ou une étiquette en échec n'est pas un envoi (constat D-23).
+    // La phrase s'accorde depuis le report de l'agent T (05-vue-ensemble:173) : « 235 actions ont échoué ».
+    expect(Number(/(\d+) actions ont échoué/.exec(texte)?.[1])).toBe(235);
   });
 });
 

@@ -76,9 +76,26 @@ async function panneau(o: Onglet, r: RegleDuJeu, anglais = false): Promise<strin
   return texte;
 }
 
+/*
+ * LA CADENCE DU BANC. Les lectures de `/api/automations/rules/*` sont plafonnées à 300 par minute et par
+ * utilisateur (`regleLectureLimiter`, server/index.ts) ; toutes les preuves parlent sous le même compte, et celles
+ * qui ouvrent l'éditeur de CHAQUE règle du jeu, période après période, dépassaient le plafond : l'éditeur répondait
+ * « Trop de demandes en peu de temps » et la preuve tombait sur un onglet introuvable — un rouge du banc, pas de
+ * l'écran (mesuré : un écran seul fait 2 à 4 lectures à l'ouverture, `97-mesure-appels`). On n'ouvre donc pas plus
+ * de 30 éditeurs par minute glissante.
+ */
+const ouverturesEditeur: number[] = [];
+async function respecterLaCadence(): Promise<void> {
+  const maintenant = Date.now();
+  while (ouverturesEditeur.length && maintenant - ouverturesEditeur[0] > 60_000) ouverturesEditeur.shift();
+  if (ouverturesEditeur.length >= 30) await new Promise((ok) => setTimeout(ok, 60_000 - (maintenant - ouverturesEditeur[0]) + 250));
+  ouverturesEditeur.push(Date.now());
+}
+
 /** Ouvre un onglet de l'éditeur, sur une période, et attend la fin de sa lecture. */
 async function ouvrirOngletEditeur(o: Onglet, ruleId: string, onglet: 'historique' | 'journaux', anglais = false, jours = 90): Promise<void> {
   const nom = onglet === 'historique' ? (anglais ? 'Enrollment history' : 'Historique') : (anglais ? 'Execution logs' : 'Journaux');
+  await respecterLaCadence();
   await o.page.goto(`${o.base}/automations/${ruleId}`);
   await o.page.getByRole('tab', { name: nom, exact: true }).click();
   await o.page.getByRole('heading', { level: 2 }).first().waitFor();
