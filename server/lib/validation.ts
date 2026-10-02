@@ -7,6 +7,7 @@ import {
   CLES_DECLENCHEURS,
   CLES_ACTIONS,
   CLES_CHAMPS_ACTION,
+  fauteDeValeur,
   champVisible,
   trouverAction,
   DELAI_MAX_SECONDES,
@@ -795,63 +796,11 @@ const cleDeclencheur = z.enum(
  * texte evite qu'une bascule arrive en « peut-etre » et qu'une action ecrive
  * n'importe quoi en base.
  */
-function valeurValide(champ: ChampAction, brut: unknown): string | null {
-  if (typeof brut !== 'string') return 'doit etre du texte';
-  const v = brut.trim();
-  if (v === '') return null; // vide = absent, traite plus haut
-
-  switch (champ.type) {
-    case 'bascule':
-      return v === 'true' || v === 'false' ? null : 'doit valoir true ou false';
-
-    case 'nombre': {
-      const n = Number(v);
-      if (!Number.isFinite(n)) return 'doit etre un nombre';
-      if (champ.min_valeur !== undefined && n < champ.min_valeur) {
-        return `doit etre au moins ${champ.min_valeur}`;
-      }
-      if (champ.max_valeur !== undefined && n > champ.max_valeur) {
-        return `doit etre au plus ${champ.max_valeur}`;
-      }
-      return null;
-    }
-
-    case 'choix': {
-      const permis = (champ.options ?? []).map((o) => o.cle);
-      return permis.includes(v) ? null : `doit etre l'un de : ${permis.join(', ')}`;
-    }
-
-    case 'membre':
-      // Un identifiant de membre, pas un nom : la route verifie ensuite qu'il
-      // appartient bien a l'organisation.
-      return /^[0-9a-fA-F-]{36}$/.test(v) ? null : 'doit etre un membre valide';
-
-    case 'url':
-      // https UNIQUEMENT. Un webhook en http laisse passer les donnees du
-      // client en clair, et `file://` ou `http://169.254.169.254` visent des
-      // ressources internes au serveur (SSRF).
-      if (!/^https:\/\//i.test(v)) return 'doit commencer par https://';
-      try {
-        const u = new URL(v);
-        const hote = u.hostname.toLowerCase();
-        const interdit =
-          hote === 'localhost' ||
-          hote === '169.254.169.254' ||
-          /^127\./.test(hote) ||
-          /^10\./.test(hote) ||
-          /^192\.168\./.test(hote) ||
-          /^172\.(1[6-9]|2\d|3[01])\./.test(hote) ||
-          hote.endsWith('.local') ||
-          hote.endsWith('.internal');
-        return interdit ? 'ne peut pas viser une adresse interne' : null;
-      } catch {
-        return 'adresse invalide';
-      }
-
-    default:
-      return null; // texte, zone, etiquette : seule la longueur compte
-  }
-}
+// La règle vit dans le catalogue PARTAGÉ (`fauteDeValeur`) : le panneau de
+// l'éditeur et la publication jugent la saisie avec la MÊME fonction, avant
+// tout envoi (triage actions, lignes 8 et 9). Chaque faute porte sa phrase
+// française et anglaise.
+const valeurValide = fauteDeValeur;
 
 /**
  * Une action, validee CONTRE SON PROPRE type : les champs obligatoires de
@@ -944,7 +893,9 @@ const actionAutomatisation = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['config', champ.cle],
-          message: `« ${modele.fr} » : le champ « ${champ.fr} » est obligatoire.`,
+          // L'action est nommée par le lieu (« Étape 2 (« Créer une tâche ») : … »).
+          message: `le champ « ${champ.fr} » est obligatoire.`,
+          params: { en: `the field “${champ.en}” is required.` },
         });
         continue;
       }
@@ -957,7 +908,8 @@ const actionAutomatisation = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['config', champ.cle],
-          message: `« ${champ.fr} » depasse ${max} caracteres.`,
+          message: `« ${champ.fr} » dépasse ${max} caractères.`,
+          params: { en: `“${champ.en}” is longer than ${max} characters.` },
         });
       }
 
@@ -966,7 +918,8 @@ const actionAutomatisation = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['config', champ.cle],
-          message: `« ${champ.fr} » ${faute}.`,
+          message: `« ${champ.fr} » ${faute.fr}.`,
+          params: { en: `“${champ.en}” ${faute.en}.` },
         });
       }
 
@@ -979,7 +932,8 @@ const actionAutomatisation = z
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ['config', `${champ.cle}_en`],
-            message: `« ${champ.en} » (anglais) depasse ${max} caracteres.`,
+            message: `« ${champ.fr} » (version anglaise) dépasse ${max} caractères.`,
+            params: { en: `“${champ.en}” (English version) is longer than ${max} characters.` },
           });
         }
         const fauteEn = valeurValide(champ, anglais);
@@ -987,7 +941,8 @@ const actionAutomatisation = z
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ['config', `${champ.cle}_en`],
-            message: `« ${champ.en} » (anglais) ${fauteEn}.`,
+            message: `« ${champ.fr} » (version anglaise) ${fauteEn.fr}.`,
+            params: { en: `“${champ.en}” (English version) ${fauteEn.en}.` },
           });
         }
       }
@@ -1005,7 +960,8 @@ const actionAutomatisation = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['config', cle],
-          message: `« ${modele.fr} » n'utilise pas le champ « ${cle} ».`,
+          message: `cette action n’utilise pas le champ « ${cle} ».`,
+          params: { en: `this action does not use the field “${cle}”.` },
         });
       }
     }
@@ -1356,7 +1312,15 @@ export const automationCopieBureauxSchema = z.object({
   lier: z.boolean().optional(),
 });
 
-const majAutomatisation = corpsAutomatisation.partial().superRefine(plafondActions);
+const majAutomatisation = corpsAutomatisation
+  .partial()
+  /*
+   * Garde de version (constat A-09) : le `updated_at` que l'appelant a lu.
+   * La route refuse (409) si la règle a changé depuis. Facultative : sans
+   * elle, la modification s'écrit comme avant.
+   */
+  .extend({ version_lue: z.string().trim().min(1).max(64).optional() })
+  .superRefine(plafondActions);
 export const automationRuleUpdateSchema = z
   .record(z.string(), z.unknown())
   .refine((o) => Object.keys(o).length > 0, { message: 'Rien à modifier.', params: { en: 'Nothing to change.' } })

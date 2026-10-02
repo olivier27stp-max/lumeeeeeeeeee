@@ -92,14 +92,34 @@ async function entetes(): Promise<HeadersInit> {
  */
 async function erreurDe(reponse: Response, repli: string): Promise<Error> {
   let message = repli;
+  /** Le `code` du refus (`modifiee_ailleurs`, `publication_refusee`…), quand le serveur en pose un. */
+  let code: string | undefined;
+  let etapes: number[] = [];
   try {
     const corps = await reponse.json();
     // La phrase lisible (`message`) avant le texte technique (`error`) d'un refus de permission.
     message = messageDuServeur(corps) ?? repli;
+    if (typeof (corps as { code?: unknown } | null)?.code === 'string') code = (corps as { code: string }).code;
+    // Un refus de validation nomme ses champs (`details[].path`) : on en tire
+    // le RANG des étapes fautives (`steps`, n, …), pour les désigner à l'écran.
+    const details = (corps as { details?: unknown } | null)?.details;
+    if (Array.isArray(details)) {
+      etapes = [...new Set(details.flatMap((d) => {
+        const chemin = (d as { path?: unknown } | null)?.path;
+        return Array.isArray(chemin) && chemin[0] === 'steps' && typeof chemin[1] === 'number' ? [chemin[1]] : [];
+      }))];
+    }
   } catch {
     // Corps illisible : le repli dit déjà l'essentiel.
   }
-  return Object.assign(new Error(message), { status: reponse.status });
+  // 429 : le délai que le serveur demande avant un nouvel essai (`Retry-After`, en secondes).
+  const apres = Number(reponse.headers?.get?.('Retry-After'));
+  return Object.assign(new Error(message), {
+    status: reponse.status,
+    ...(code ? { code } : {}),
+    ...(etapes.length ? { etapes } : {}),
+    ...(Number.isFinite(apres) && apres > 0 ? { retryApresMs: apres * 1000 } : {}),
+  });
 }
 
 export async function chargerAutomatisations(): Promise<{
@@ -140,11 +160,19 @@ export async function creerAutomatisation(brouillon: BrouillonAutomatisation): P
 export async function modifierAutomatisation(
   id: string,
   patch: Partial<BrouillonAutomatisation>,
+  /**
+   * GARDE DE VERSION (constat A-09) : le `updated_at` que l'appelant a lu. Le
+   * serveur refuse (409, voir `estModifieeAilleurs`) si la règle a changé
+   * depuis, au lieu de laisser un éditeur resté ouvert réécrire sa version
+   * périmée par-dessus celle de Lumi ou d'un autre onglet. Absente : la
+   * modification s'écrit comme avant.
+   */
+  versionLue?: string | null,
 ): Promise<AutomationRule> {
   const reponse = await appelServeur(`/api/automations/rules/${id}`, {
     method: 'PATCH',
     headers: await entetes(),
-    body: JSON.stringify(patch),
+    body: JSON.stringify(versionLue ? { ...patch, version_lue: versionLue } : patch),
   });
   if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de modifier l\'automatisation.');
   return reponse.json();
@@ -155,13 +183,29 @@ export async function modifierAutomatisation(
  * refuse un parcours cassé et NOMME les problèmes dans le message d'erreur
  * (audit M8). Plus aucune écriture directe du statut depuis le navigateur.
  */
-export async function changerPublication(id: string, actif: boolean): Promise<void> {
+export async function changerPublication(id: string, actif: boolean): Promise<string | void> {
   const reponse = await appelServeur(`/api/automations/rules/${id}/publication`, {
     method: 'POST',
     headers: await entetes(),
     body: JSON.stringify({ actif }),
   });
   if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de changer le statut de l’automatisation.');
+  // La version de la règle après ce changement, pour la garde de l'éditeur
+  // (A-09). Rien à rendre quand le serveur ne la donne pas.
+  const corps = await reponse.json().catch(() => null) as { updated_at?: unknown } | null;
+  if (typeof corps?.updated_at === 'string') return corps.updated_at;
+}
+
+/**
+ * La version (`updated_at`) de l'automatisation EN BASE — une lecture légère,
+ * protégée par la RLS, faite quand la fenêtre reprend le focus : l'éditeur
+ * sait ainsi qu'elle a changé ailleurs sans tout recharger. `null` =
+ * illisible (on ne conclut rien).
+ */
+export async function lireVersionAutomatisation(id: string): Promise<string | null> {
+  const { data, error } = await supabase.from('automation_rules').select('updated_at').eq('id', id).maybeSingle();
+  if (error || !data?.updated_at) return null;
+  return String(data.updated_at);
 }
 
 export interface ResultatPublicationLot {
@@ -335,6 +379,8 @@ export interface ParcoursPropose {
   steps: unknown[];
   /** Coût de CETTE génération, en cents (null si inconnu). */
   cout_cents?: number | null;
+  /** La version de la règle après que le serveur y a gardé la conversation (garde A-09). */
+  updated_at?: string | null;
   /**
    * Une deuxième automatisation sur un AUTRE déclencheur (ex. « quand le
    * client répond, envoie mon lien Calendly »). L'éditeur la crée à part,

@@ -33,7 +33,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import type { AutomationRule } from '../lib/automationRulesApi';
+import { getAutomationLanguage, type AutomationRule } from '../lib/automationRulesApi';
 import {
   chargerEditeur,
   creerAutomatisation,
@@ -43,6 +43,7 @@ import {
   chargerEtiquettes,
   apercuAutomatisation,
   changerPublication,
+  lireVersionAutomatisation,
   chargerStatistiques,
   restaurerAutomatisation,
   type StatsEtape,
@@ -83,13 +84,14 @@ import {
   FAMILLES_ACTIONS,
   FAMILLES_DECLENCHEURS,
   actionCompatible,
+  champQuiFixeLEntite,
   champVisible,
   configParDefaut,
   declencheurOffert,
   trouverAction,
   trouverDeclencheur,
 } from '../lib/automationCatalogue';
-import { problemesPublication } from '../lib/publicationAutomatisation';
+import { actionsDuParcours, problemesPublication } from '../lib/publicationAutomatisation';
 import { useModuleAccess } from '../hooks/useModuleAccess';
 import { apercuClientsInactifs } from '../lib/reservationApi';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
@@ -97,6 +99,7 @@ import OngletReglages, { type ReglagesAutomatisation } from '../components/autom
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { creerFileBascule } from '../lib/fileBascule';
 import { captureClientException } from '../lib/sentry';
+import { lireEtatPause } from '../lib/automationWebhooksApi';
 
 type Onglet = 'parcours' | 'reglages' | 'historique' | 'journaux';
 
@@ -110,6 +113,73 @@ interface ChoixDeclencheur { trigger_event: string; conditions: Record<string, u
  */
 function estIntrouvable(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { status?: unknown }).status === 404;
+}
+
+/**
+ * Le serveur a-t-il refusé une écriture PÉRIMÉE (409 `modifiee_ailleurs`,
+ * constat A-09) ? La règle a changé depuis que l'éditeur l'a lue — par Lumi
+ * ou dans un autre onglet. Réessayer ne servira à rien : il faut recharger.
+ */
+function estModifieeAilleurs(e: unknown): boolean {
+  return typeof e === 'object' && e !== null
+    && (e as { status?: unknown }).status === 409
+    && (e as { code?: unknown }).code === 'modifiee_ailleurs';
+}
+
+/**
+ * Le serveur a-t-il REFUSÉ l'écriture (400, 403, 409, 422…) ? Ce n'est pas une
+ * panne : la demande elle-même ne passe pas (une valeur hors bornes, un
+ * parcours qui finit par une attente, une automatisation publiée qu'on
+ * casserait). La renvoyer telle quelle sera refusé pareil — on ne réessaie
+ * JAMAIS un refus (triage éditeur, S-04).
+ */
+function estRefus(e: unknown): boolean {
+  const statut = typeof e === 'object' && e !== null ? (e as { status?: unknown }).status : undefined;
+  return typeof statut === 'number' && [400, 403, 409, 410, 413, 422].includes(statut);
+}
+
+/**
+ * Les étapes que le parcours ATTEINT, en partant de sa tête (`steps[0]`) : par
+ * la suite, les deux branches d'une condition, la réponse du client et le
+ * moment dépassé d'une attente. Ce que le moteur exécute, et ce que le canevas
+ * dessine — une étape hors de cet ensemble existe en base sans jamais servir.
+ */
+function etapesAtteintes(steps: Etape[]): Set<string> {
+  const parId = new Map(steps.map((e) => [e.id, e]));
+  const vues = new Set<string>();
+  const pile: string[] = steps[0] ? [steps[0].id] : [];
+  while (pile.length) {
+    const id = pile.pop() as string;
+    const e = parId.get(id);
+    if (!e || vues.has(id)) continue;
+    vues.add(id);
+    const suites = e.type === 'si' ? [e.alors, e.sinon]
+      : e.type === 'arreter' ? []
+      : e.type === 'attendre' ? [e.suivant, e.si_reponse, e.si_depasse]
+      : [e.suivant];
+    for (const s of suites) if (s) pile.push(s);
+  }
+  return vues;
+}
+
+/**
+ * Ce qu'une modification du parcours laisserait ORPHELIN (triage éditeur,
+ * S-12) : les étapes qu'on atteignait `avant` et qu'on n'atteint plus `apres`.
+ * « Arrêter ici » posé au milieu coupe la suite ; supprimer une condition ne
+ * rebranche que sa branche « si oui ». Ces étapes disparaissaient de l'écran
+ * et restaient en base, reliées à rien.
+ */
+function etapesPerdues(avant: Etape[], apres: Etape[]): Etape[] {
+  const avantAtteintes = etapesAtteintes(avant);
+  const apresAtteintes = etapesAtteintes(apres);
+  return apres.filter((e) => avantAtteintes.has(e.id) && !apresAtteintes.has(e.id));
+}
+
+/** Le parcours sans ces étapes — ce qui n'est plus à l'écran n'est plus en base. */
+function sansEtapes(steps: Etape[], retirees: Etape[]): Etape[] {
+  if (retirees.length === 0) return steps;
+  const ids = new Set(retirees.map((e) => e.id));
+  return steps.filter((e) => !ids.has(e.id));
 }
 
 /** Bornes du zoom. Au-delà, on ne lit plus rien ; en deçà, on se perd. */
@@ -157,17 +227,72 @@ export default function AutomationBuilderPage() {
    * et s'arrête.
    */
   const [disparue, setDisparue] = useState(false);
+  /*
+   * ELLE A ÉTÉ MODIFIÉE AILLEURS (constat A-09). L'éditeur envoie son parcours
+   * en entier : resté ouvert pendant que Lumi (clavardage général) ou un autre
+   * onglet changeait la même automatisation, il réécrivait sa version périmée
+   * par-dessus, sans un mot. Il envoie donc la version qu'il a LUE
+   * (`versionLue`, le `updated_at` de la règle) ; le serveur refuse si elle a
+   * changé (409), et l'éditeur le dit et propose de recharger — ni écrasement
+   * silencieux, ni boucle de nouveaux essais.
+   */
+  const [modifieeAilleurs, setModifieeAilleurs] = useState(false);
+  /** La version lue, PAR règle : l'éditeur peut passer d'une automatisation à une autre sans se démonter. */
+  const versionsLues = useRef(new Map<string, string>());
+  const versionLue = useCallback((idRegle: string | null | undefined): string | null => (
+    idRegle ? versionsLues.current.get(idRegle) ?? null : null
+  ), []);
+  const noterVersion = useCallback((idRegle: string | null | undefined, version: unknown) => {
+    if (idRegle && typeof version === 'string' && version) versionsLues.current.set(idRegle, version);
+  }, []);
+  /*
+   * UNE écriture à la fois : chacune part avec la version rendue par la
+   * précédente. Deux écritures parties en parallèle (l'enregistrement
+   * automatique et un changement de déclencheur) porteraient la même version,
+   * et la seconde se ferait refuser par notre propre garde.
+   */
+  const fileEcritures = useRef<Promise<unknown>>(Promise.resolve());
+  const enFile = useCallback(<T,>(tache: () => Promise<T>): Promise<T> => {
+    const suite = fileEcritures.current.then(tache, tache);
+    fileEcritures.current = suite.catch(() => undefined);
+    return suite;
+  }, []);
 
   /**
    * Toute écriture de la règle passe par ici. Brouillon jamais enregistré :
    * la PREMIÈRE écriture le crée (avec le contenu demandé), les suivantes
    * attendent cette création puis modifient.
    */
-  const ecrire = useCallback(async (patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => {
-    const modifier = (idRegle: string) => modifierAutomatisation(idRegle, patch).catch((e: unknown) => {
-      if (estIntrouvable(e)) setDisparue(true);
+  /** Écrit dans UNE règle, nommée : à sa place dans la file, avec SA version lue. */
+  const ecrireRegle = useCallback((idRegle: string, patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => (
+    enFile(() => modifierAutomatisation(idRegle, patch, versionLue(idRegle)).then((maj) => {
+      noterVersion(idRegle, maj?.updated_at);
+      return maj;
+    }, (e: unknown) => {
+      // Seulement si c'est encore la règle à l'écran (une écriture de départ vise l'ancienne).
+      if (idRegle === idReel.current) {
+        if (estIntrouvable(e)) setDisparue(true);
+        if (estModifieeAilleurs(e)) setModifieeAilleurs(true);
+      }
       throw e;
-    });
+    }))
+  ), [enFile, versionLue, noterVersion]);
+
+  const ecrire = useCallback(async (patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => {
+    const modifier = (idRegle: string) => ecrireRegle(idRegle, patch);
+    /*
+     * CE QUI EST À L'ÉCRAN NE S'ÉCRIT QUE DANS SA RÈGLE (triage éditeur, S-01).
+     * L'éditeur passe d'une automatisation à une autre sans se démonter (le
+     * lien « Ouvrir » d'un toast) : pendant que la 2e charge, l'état à l'écran
+     * est encore celui de la 1re. Une écriture née de cet état ne doit JAMAIS
+     * partir vers la 2e — elle y écrivait le nom et le parcours de la 1re.
+     */
+    const aLEcran = regleCourante.current?.id;
+    if (idReel.current && aLEcran && aLEcran !== idReel.current) {
+      throw new Error(fr
+        ? 'Écriture annulée : l’éditeur est en train de changer d’automatisation.'
+        : 'Write cancelled: the editor is switching to another automation.');
+    }
     if (idReel.current) return modifier(idReel.current);
     if (creationEnVol.current) {
       const creee = await creationEnVol.current;
@@ -190,6 +315,7 @@ export default function AutomationBuilderPage() {
       is_active: false,
     }).then((creee) => {
       idReel.current = creee.id;
+      noterVersion(creee.id, creee.updated_at);
       passageALaRegleCreee.current = true;
       setRegle((r) => (r ? { ...r, id: creee.id, org_id: creee.org_id, created_at: creee.created_at, updated_at: creee.updated_at } : creee));
       navigate(`/automations/${creee.id}${parametres.get('lumi') === '1' ? '?lumi=1' : ''}`, { replace: true });
@@ -200,7 +326,7 @@ export default function AutomationBuilderPage() {
     });
     creationEnVol.current = enCreation;
     return enCreation;
-  }, [fr, navigate, parametres, sortieALaCreation]);
+  }, [fr, navigate, parametres, sortieALaCreation, ecrireRegle, noterVersion]);
   /*
    * Interrupteur martelé (Rafba, 2026-09-28) : chaque clic envoyait sa
    * requête calculée sur un état périmé, et la dernière réponse ARRIVÉE
@@ -212,8 +338,11 @@ export default function AutomationBuilderPage() {
   const confirmationPublication = useRef(false);
   const [, setVersionBascule] = useState(0);
   const [fileBascule] = useState(() => creerFileBascule({
-    // La route serveur de publication (M8), la même que la liste.
-    envoyer: changerPublication,
+    // La route serveur de publication (M8), la même que la liste. Dans la
+    // file des écritures : publier touche la règle, donc sa version (A-09).
+    envoyer: (id, actif) => enFile(async () => {
+      noterVersion(id, await changerPublication(id, actif));
+    }),
     surFin: (id, actif) => {
       setRegle((r) => (r && r.id === id ? { ...r, is_active: actif } : r));
       setVersionBascule((v) => v + 1);
@@ -240,7 +369,14 @@ export default function AutomationBuilderPage() {
   // ── État d'enregistrement, façon « Saved » de GHL ──
   // Trois états : à jour, en cours, en attente. L'utilisateur doit savoir si
   // son travail est en sécurité sans avoir à chercher un bouton.
-  const [etatSauvegarde, setEtatSauvegarde] = useState<'a_jour' | 'en_cours' | 'modifie' | 'incomplet'>('a_jour');
+  const [etatSauvegarde, setEtatSauvegarde] = useState<'a_jour' | 'en_cours' | 'modifie' | 'incomplet' | 'refuse'>('a_jour');
+  /**
+   * LE DERNIER REFUS DU SERVEUR (triage éditeur, S-04), gardé à l'écran tant
+   * que rien ne s'enregistre : sa phrase, et les étapes qu'il désigne. Un
+   * refus n'est pas réessayé — la prochaine modification du parcours repart,
+   * elle, en enregistrement.
+   */
+  const [refus, setRefus] = useState<{ message: string; etapes: string[] } | null>(null);
 
   /*
    * Le serveur refuse au-delà de 30 étapes (`ETAPES_MAX`, validation.ts) :
@@ -278,12 +414,39 @@ export default function AutomationBuilderPage() {
   // ── Le parcours ──
   const [steps, setSteps] = useState<Etape[]>([]);
   const [etapeChoisie, setEtapeChoisie] = useState<string | null>(null);
+  /*
+   * L'ÉTAPE CHOISIE DANS LE TIROIR, PAS ENCORE DANS LE PARCOURS (triage
+   * actions, ligne 1). Elle entrait dans `steps` au clic, et l'enregistrement
+   * automatique l'écrivait trois secondes plus tard : sur une automatisation
+   * PUBLIÉE, le texto d'exemple (« Bonjour [client_name], c'est
+   * [company_name]. Merci ! ») était en ligne avant que quiconque l'ait lu.
+   *
+   * Elle attend donc ICI, hors de `steps` : le canevas la montre à sa place,
+   * son panneau s'ouvre, et elle n'entre dans le parcours — donc dans ce que
+   * l'enregistrement automatique écrit — qu'au clic sur « Enregistrer » de son
+   * panneau. Fermer le panneau l'abandonne.
+   */
+  const [etapeEnAttente, setEtapeEnAttente] = useState<{ etape: Etape; apresId: string | null; branche?: 'alors' | 'sinon' } | null>(null);
+  /**
+   * Qui a modifié le parcours en dernier, HORS du panneau d'étape : Lumi, ou
+   * autre chose (annuler / rétablir). Le panneau resté ouvert s'en sert pour
+   * dire « Lumi a modifié cette étape… » quand une saisie y est en cours.
+   */
+  const [modifieePar, setModifieePar] = useState<'lumi' | 'autre' | null>(null);
   /** Le panneau ouvert a-t-il un brouillon non enregistré ? (PanneauEtape.onModifie) */
   const brouillonEtapeModifie = useRef(false);
-  const signalerBrouillonEtape = useCallback((m: boolean) => { brouillonEtapeModifie.current = m; }, []);
+  /** … et son reflet en ÉTAT : la garde du bouton « Précédent » doit réagir quand une saisie commence. */
+  const [saisieEnCours, setSaisieEnCours] = useState(false);
+  const signalerBrouillonEtape = useCallback((m: boolean) => {
+    brouillonEtapeModifie.current = m;
+    setSaisieEnCours(m || brouillonDeclencheurModifie.current);
+  }, []);
   /** Même chose pour les réglages du déclencheur (PanneauDeclencheur.onModifie). */
   const brouillonDeclencheurModifie = useRef(false);
-  const signalerBrouillonDeclencheur = useCallback((m: boolean) => { brouillonDeclencheurModifie.current = m; }, []);
+  const signalerBrouillonDeclencheur = useCallback((m: boolean) => {
+    brouillonDeclencheurModifie.current = m;
+    setSaisieEnCours(m || brouillonEtapeModifie.current);
+  }, []);
 
   // ── De quoi remplir les menus du panneau ──
   // Les membres (pour « assigner a ») et les etiquettes deja utilisees.
@@ -336,7 +499,18 @@ export default function AutomationBuilderPage() {
   const quandPanneauLibre = useCallback((suite: () => void, versEtape?: string) => {
     const enFrancais = language === 'fr';
     const questions: Array<Parameters<typeof confirmer>[0]> = [];
-    if (etapeChoisie && versEtape !== etapeChoisie && brouillonEtapeModifie.current) {
+    const ajoutAbandonne = !!etapeEnAttente && versEtape !== etapeEnAttente.etape.id;
+    if (ajoutAbandonne) {
+      // L'étape en cours d'ajout n'est pas dans le parcours : la quitter l'abandonne.
+      questions.push({
+        title: enFrancais ? 'Abandonner l’étape en cours d’ajout ?' : 'Drop the step being added?',
+        message: enFrancais
+          ? 'L’étape ouverte n’a pas été enregistrée : elle ne sera pas ajoutée au parcours.'
+          : 'The open step was not saved: it will not be added to the journey.',
+        confirmLabel: enFrancais ? 'Ne pas l’ajouter' : 'Do not add it',
+        danger: true,
+      });
+    } else if (etapeChoisie && versEtape !== etapeChoisie && brouillonEtapeModifie.current) {
       questions.push(versEtape
         ? {
           title: enFrancais ? 'Changer d’étape sans enregistrer ?' : 'Switch step without saving?',
@@ -370,9 +544,10 @@ export default function AutomationBuilderPage() {
       for (const question of questions) {
         if (!(await confirmer(question))) return;
       }
+      if (ajoutAbandonne) setEtapeEnAttente(null);
       suite();
     })();
-  }, [etapeChoisie, reglageDeclencheur, language]);
+  }, [etapeChoisie, reglageDeclencheur, language, etapeEnAttente]);
 
   /** Affiche le panneau d'une étape — SEUL : tiroirs et réglages du déclencheur se ferment. */
   const montrerEtape = useCallback((idEtape: string) => {
@@ -380,6 +555,8 @@ export default function AutomationBuilderPage() {
     setReglageDeclencheur(false);
     setAjoutEnCours(null);
     setEtapeChoisie(idEtape);
+    // Une AUTRE étape affichée : l'ajout en attente est abandonné.
+    setEtapeEnAttente((a) => (a && a.etape.id !== idEtape ? null : a));
   }, []);
 
   /** Ouvrir une carte du canevas, à la demande de l'utilisateur. */
@@ -401,6 +578,18 @@ export default function AutomationBuilderPage() {
     () => objetDeLaRegle(regle?.trigger_event, (regle?.conditions ?? null) as Record<string, unknown> | null, champsPerso),
     [regle?.trigger_event, regle?.conditions, champsPerso],
   );
+  /**
+   * Le champ que la règle surveille (« Date atteinte », « Champ modifié » sur
+   * un champ précis) a-t-il été SUPPRIMÉ ? La carte le dit déjà (« champ
+   * supprimé ») ; la publication doit le refuser (déclencheurs, 06:109).
+   * Jugé seulement quand la liste des champs du bureau est là : vide (pas
+   * encore chargée, module éteint), elle ne prouve rien — le serveur, qui lit
+   * la base, tranche alors à la publication.
+   */
+  const champSurveilleAbsent = useMemo(() => {
+    const id = champQuiFixeLEntite(regle?.trigger_event, (regle?.conditions ?? null) as Record<string, unknown> | null);
+    return id !== '' && champsPerso.length > 0 && !champsPerso.some((c) => c.id === id);
+  }, [regle?.trigger_event, regle?.conditions, champsPerso]);
   /**
    * Les champs DATE du client ET du pipeline (deal), pour « Date atteinte ».
    * Un champ archivé ne doit plus déclencher d'envoi (`useChampsTous` les
@@ -460,12 +649,17 @@ export default function AutomationBuilderPage() {
 
   /** Ouvre le choix du type d'étape à insérer. */
   const ouvrirAjout = (apresId: string | null, branche?: 'alors' | 'sinon') => {
+    // « + » sous la carte EN ATTENTE : elle n'est pas dans le parcours, la
+    // nouvelle prend donc SA place (s'y accrocher la laisserait orpheline).
+    const ancre = etapeEnAttente && apresId === etapeEnAttente.etape.id
+      ? { apresId: etapeEnAttente.apresId, branche: etapeEnAttente.branche }
+      : { apresId, branche };
     quandPanneauLibre(() => {
       // Le tiroir « Actions » prend la place des réglages du déclencheur :
       // resté ouvert, leur panneau le cachait et « + » ne faisait rien.
       setTiroirDeclencheur(false);
       setReglageDeclencheur(false);
-      setAjoutEnCours({ apresId, branche });
+      setAjoutEnCours(ancre);
     });
   };
 
@@ -477,7 +671,7 @@ export default function AutomationBuilderPage() {
    * évite l'aller-retour « ajouter un message » puis « choisir lequel » —
    * c'est ce que fait leur tiroir, et c'est un clic de moins à chaque étape.
    */
-  const confirmerAjout = (cle: string) => {
+  const confirmerAjout = async (cle: string) => {
     if (!ajoutEnCours) return;
     if (steps.length >= ETAPES_MAX) {
       toast.error(fr
@@ -495,8 +689,33 @@ export default function AutomationBuilderPage() {
       // au rechargement (signalé le 2026-09-25). Le texte proposé est un vrai
       // brouillon, envoyable tel quel et réécrit en un clic.
       : { ...etapeVierge('action', id), action: { type: cle, config: configParDefaut(cle, fr) } };
-    memoriser(insererEtape(steps, nouvelle, ajoutEnCours.apresId, ajoutEnCours.branche));
+    /*
+     * « ARRÊTER ICI » AU MILIEU COUPE LA SUITE (triage éditeur, S-12). Les
+     * étapes qui suivaient disparaissaient du canevas sans un mot — et
+     * restaient en base, reliées à rien. On le DEMANDE d'abord, en disant
+     * combien d'étapes partent ; elles seront vraiment retirées quand
+     * l'arrêt sera enregistré.
+     */
+    if (cle === 'arreter') {
+      const perdues = etapesPerdues(steps, insererEtape(steps, nouvelle, ajoutEnCours.apresId, ajoutEnCours.branche));
+      if (perdues.length > 0) {
+        const n = perdues.length;
+        const ok = await confirmer({
+          title: fr ? 'Arrêter ici et retirer la suite ?' : 'Stop here and remove what follows?',
+          message: fr
+            ? `Le parcours s’arrêtera à cet endroit : ${n > 1 ? `les ${n} étapes qui suivent ne seront plus jamais atteintes et seront retirées` : 'l’étape qui suit ne sera plus jamais atteinte et sera retirée'} du parcours.`
+            : `The journey will stop at this point: ${n > 1 ? `the ${n} steps after it will never be reached and will be removed` : 'the step after it will never be reached and will be removed'} from the journey.`,
+          confirmLabel: fr ? 'Arrêter ici' : 'Stop here',
+          danger: true,
+        });
+        // Refusé : le tiroir reste ouvert, on peut choisir autre chose.
+        if (!ok) return;
+      }
+    }
+    // Pas dans `steps` : rien n'est écrit tant que son panneau n'est pas
+    // enregistré (voir `etapeEnAttente`).
     montrerEtape(nouvelle.id);
+    setEtapeEnAttente({ etape: nouvelle, apresId: ajoutEnCours.apresId, branche: ajoutEnCours.branche });
   };
 
   /**
@@ -658,6 +877,9 @@ export default function AutomationBuilderPage() {
   const construireAvecLumi = async () => {
     const demande = prompt.trim();
     if (demande.length < 10 || genere) return;
+    const parcoursALEcran = ajoutEnAttente
+      ? insererEtape(steps, ajoutEnAttente.etape, ajoutEnAttente.apresId, ajoutEnAttente.branche)
+      : steps;
     setGenere(true);
     try {
       /*
@@ -679,10 +901,59 @@ export default function AutomationBuilderPage() {
         // l'historique complet gonflerait le prompt sans rien apporter.
         echanges: echangesLumi.slice(-6),
         ruleId: idReel.current,
-        parcoursActuel: steps.length > 0
-          ? { trigger_event: regle?.trigger_event, steps }
+        // « Le parcours à l'écran » compte l'étape en cours d'ajout : c'est
+        // d'elle que parle « change le message » juste après l'avoir choisie.
+        parcoursActuel: parcoursALEcran.length > 0
+          ? { trigger_event: regle?.trigger_event, steps: parcoursALEcran }
           : null,
       });
+      // Garder la conversation a touché la règle : sa version est celle-ci.
+      noterVersion(idReel.current, propose.updated_at);
+      /*
+       * EN LIGNE : ON DEMANDE AVANT D'APPLIQUER (triage éditeur, S-03). Sur une
+       * automatisation PUBLIÉE, la proposition entrait dans le parcours comme
+       * sur un brouillon, et l'enregistrement automatique la mettait en ligne
+       * trois secondes plus tard, sans aucune question — sous un message qui
+       * disait « en pause, à publier quand tu es prêt ».
+       *
+       * La proposition est montrée ; elle n'entre dans le parcours qu'après un
+       * oui explicite. Sur un brouillon, rien ne change : rien ne part.
+       */
+      const enLigne = !!regle && !!idReel.current && fileBascule.etatAffiche(idReel.current, regle.is_active);
+      if (enLigne) {
+        const applique = await confirmer({
+          title: fr ? 'Appliquer les changements de Lumi ?' : 'Apply Lumi’s changes?',
+          message: [
+            fr
+              ? 'Cette automatisation est en ligne : appliquer les changements de Lumi ?'
+              : 'This automation is live: apply Lumi’s changes?',
+            ...(propose.resume ? [propose.resume] : []),
+            fr
+              ? 'Ils s’appliqueront dès le prochain déclenchement. Sans votre accord, le parcours en ligne ne change pas.'
+              : 'They take effect at the next trigger. Without your approval, the live journey does not change.',
+          ].join('\n\n'),
+          confirmLabel: fr ? 'Appliquer' : 'Apply',
+        });
+        if (!applique) {
+          setEchangesLumi((e) => [
+            ...e,
+            { role: 'user' as const, content: demande },
+            {
+              role: 'assistant' as const,
+              content: `${propose.resume || (fr ? 'Parcours proposé.' : 'Path proposed.')}\n\n${fr
+                ? '— Non appliqué : le parcours en ligne est inchangé.'
+                : '— Not applied: the live journey is unchanged.'}`,
+            },
+          ]);
+          setPrompt('');
+          toast.info(fr
+            ? 'Changements de Lumi non appliqués : le parcours en ligne est inchangé.'
+            : 'Lumi’s changes were not applied: the live journey is unchanged.');
+          return;
+        }
+      }
+      // Le panneau d'étape resté ouvert saura QUI vient de changer son étape.
+      setModifieePar('lumi');
       memoriser(propose.steps as Etape[]);
       setResumeLumi(propose.resume || null);
       // Le nom et le déclencheur suivent la proposition — c'est ce que
@@ -777,9 +1048,14 @@ export default function AutomationBuilderPage() {
        * Plus de coût affiché (P2-10) : construire une automatisation est
        * OFFERT depuis le 2026-09-28, hors budget Lumi — le champ le dit.
        */
-      toast.success(fr
-        ? 'Lumi a construit le parcours — en pause, à publier quand tu es prêt.'
-        : 'Lumi built the path — paused, publish it when you are ready.');
+      // … sauf sur une automatisation EN LIGNE, où « en pause » serait faux.
+      toast.success(enLigne
+        ? (fr
+          ? 'Changements de Lumi appliqués — l’automatisation est en ligne : ils valent dès le prochain déclenchement.'
+          : 'Lumi’s changes applied — the automation is live: they take effect at the next trigger.')
+        : (fr
+          ? 'Lumi a construit le parcours — en pause, à publier quand tu es prêt.'
+          : 'Lumi built the path — paused, publish it when you are ready.'));
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
       /*
@@ -814,9 +1090,59 @@ export default function AutomationBuilderPage() {
     // `/nouvelle` vient d'être remplacé par l'id du brouillon créé : l'écran
     // EST déjà la règle — relire la base écraserait ce qu'on tape.
     if (passageALaRegleCreee.current) { passageALaRegleCreee.current = false; return; }
-    // Une AUTRE règle ouverte dans le même éditeur (lien « Ouvrir » d'un
-    // toast) : les écritures doivent la viser, elle.
-    idReel.current = estNouvelle ? null : (id ?? null);
+    /*
+     * UNE AUTRE RÈGLE OUVERTE DANS LE MÊME ÉDITEUR (lien « Ouvrir » d'un toast).
+     *
+     * Triage éditeur, S-01 — une corruption de données : dès ce moment les
+     * écritures visaient la NOUVELLE règle, alors que l'écran portait encore
+     * le nom et le parcours de l'ancienne tant que la nouvelle chargeait. Sur
+     * un réseau lent, l'enregistrement automatique (3 s) partait donc dans la
+     * 2e automatisation avec le contenu de la 1re.
+     *
+     *   1. ce qui attendait d'être enregistré part dans SA règle, nommée ;
+     *   2. l'écran quitte l'ancienne règle tout de suite (« Chargement… ») :
+     *      plus rien d'elle ne reste en mémoire pour être écrit ailleurs.
+     * (`ecrire` refuse en plus toute écriture dont l'état n'est pas celui de
+     * la règle visée.)
+     */
+    const precedente = idReel.current;
+    const suivante = estNouvelle ? null : (id ?? null);
+    if (precedente && precedente !== suivante) {
+      const d = etatAuDepart.current;
+      if (d.aRegle && d.etat === 'incomplet') {
+        toast.error(d.fr
+          ? 'Automatisation quittée sans enregistrer : une étape était incomplète.'
+          : 'Automation left without saving: a step was incomplete.');
+      } else if (d.aRegle && d.incompletes === 0 && (d.etat === 'modifie' || d.etat === 'en_cours' || d.etat === 'refuse')) {
+        ecrireRegle(precedente, { name: d.nom, ...d.contenu(d.steps) }).catch((e: unknown) => {
+          console.error('[automatisations] enregistrement au changement d’automatisation impossible', e);
+          captureClientException(e, { where: 'AutomationBuilderPage.changementDeRegle' });
+          toast.error(d.fr
+            ? `Les dernières modifications de l’automatisation précédente n’ont pas pu être enregistrées : ${e instanceof Error ? e.message : String(e)}`
+            : `The previous automation’s latest changes could not be saved: ${e instanceof Error ? e.message : String(e)}`);
+        });
+      }
+      setChargement(true);
+      setRegle(null);
+      setNom('');
+      setSteps([]);
+      setHistorique([]);
+      setPosition(-1);
+      setEtatSauvegarde('a_jour');
+      echecsSauvegarde.current = 0;
+      setEtapeChoisie(null);
+      setEtapeEnAttente(null);
+      setAjoutEnCours(null);
+      setTiroirDeclencheur(false);
+      setReglageDeclencheur(false);
+      setMenuEtape(null);
+      setApercu(null);
+      setResumeLumi(null);
+      setModifieeAilleurs(false);
+      setRefus(null);
+      autreCreee.current = null;
+    }
+    idReel.current = suivante;
     creationEnVol.current = null;
     setDisparue(false);
     // La langue au moment du chargement, lue par ref : changer de langue en
@@ -854,6 +1180,10 @@ export default function AutomationBuilderPage() {
           } satisfies AutomationRule
           : d.rule;
         setRegle(trouvee);
+        // La version LUE : chaque enregistrement la renvoie au serveur (garde A-09).
+        if (!estNouvelle) noterVersion(trouvee?.id, trouvee?.updated_at);
+        // Un panneau d'étape resté ouvert pendant un RECHARGEMENT : ce qui change sous lui vient d'ailleurs.
+        setModifieePar('autre');
         /*
          * Le nom des préréglages est stocké en ANGLAIS en base
          * (« Appointment Confirmation ») — 275 des 500 règles actives en
@@ -875,6 +1205,9 @@ export default function AutomationBuilderPage() {
         setSteps(etapes);
         setHistorique([etapes]);
         setPosition(0);
+        // Rien n'a encore touché le parcours : ses `actions` restent celles de la base.
+        parcoursTouche.current = false;
+        actionsDOrigine.current = trouvee && estFormatOrigine({ steps: etapes, actions: trouvee.actions }) ? trouvee.actions : null;
         setAutresAutomatisations(d.autres.filter((r) => r.id !== id).map((r) => ({ id: r.id, nom: r.name })));
       })
       .catch((e: unknown) => {
@@ -895,6 +1228,90 @@ export default function AutomationBuilderPage() {
     return () => { vivant = false; };
   }, [id, essaiChargement]);
 
+  /**
+   * RECHARGER la version en base (constat A-09) : après un refus « modifiée
+   * ailleurs », ou en silence quand la fenêtre reprend le focus et que rien
+   * n'attend d'être enregistré. Ce que l'éditeur avait en mémoire est remplacé.
+   */
+  const recharger = useCallback(() => {
+    setModifieeAilleurs(false);
+    setRefus(null);
+    setEtapeEnAttente(null);
+    echecsSauvegarde.current = 0;
+    setEtatSauvegarde('a_jour');
+    setEssaiChargement((n) => n + 1);
+  }, []);
+
+  /*
+   * LA PAUSE GLOBALE DU BUREAU (« Tout arrêter », posée depuis la liste) —
+   * triage éditeur, S-32. L'éditeur d'une automatisation publiée affichait
+   * « Publiée », en vert, sans un mot : rien ne disait qu'elle n'envoyait plus
+   * rien. La liste, elle, l'affiche. Lue à l'ouverture, et relue quand la
+   * fenêtre reprend le focus (on a pu la lever dans un autre onglet).
+   */
+  /*
+   * La langue dans laquelle le bureau ENVOIE ses messages (« Messages en FR /
+   * EN ») : le panneau d'une étape montre CE texte-là dans son champ
+   * principal (`body` ou `body_en`). Lecture ratée : on ne sait pas — le
+   * panneau garde le français, le défaut du moteur.
+   */
+  const [langueEnvoi, setLangueEnvoi] = useState<'fr' | 'en'>('fr');
+  useEffect(() => {
+    let vivant = true;
+    getAutomationLanguage()
+      .then((langue) => { if (vivant) setLangueEnvoi(langue); })
+      .catch((e) => { console.error('[éditeur] langue des messages du bureau illisible', e); });
+    return () => { vivant = false; };
+  }, []);
+  const [bureauEnPause, setBureauEnPause] = useState(false);
+  useEffect(() => {
+    let vivant = true;
+    const lire = () => {
+      if (document.visibilityState === 'hidden') return;
+      lireEtatPause()
+        .then((e) => { if (vivant) setBureauEnPause(e?.paused === true); })
+        .catch((e: unknown) => console.error('[builder] état de la pause illisible', e instanceof Error ? e.message : String(e)));
+    };
+    lire();
+    window.addEventListener('focus', lire);
+    return () => { vivant = false; window.removeEventListener('focus', lire); };
+  }, []);
+
+  /*
+   * LA FENÊTRE REPREND LE FOCUS : une lecture légère de la version. Si la
+   * règle a changé en base (Lumi dans le clavardage général, un autre onglet)
+   * et que l'éditeur n'a RIEN de non enregistré, il la recharge sans rien
+   * demander — on revient sur l'onglet, on voit ce qui est vrai. S'il a une
+   * saisie en cours, il ne touche à rien : c'est son prochain enregistrement
+   * qui sera refusé (409) et qui le dira.
+   */
+  const rienANePasPerdre = useRef(false);
+  rienANePasPerdre.current = etatSauvegarde === 'a_jour' && !declencheurEnVol && !genere && !chargement
+    && !disparue && !modifieeAilleurs && !etapeEnAttente && !!regle?.id && !regle.deleted_at;
+  useEffect(() => {
+    let vivant = true;
+    const auRetour = () => {
+      if (document.visibilityState === 'hidden') return;
+      const idRegle = idReel.current;
+      const propre = () => rienANePasPerdre.current && !brouillonEtapeModifie.current && !brouillonDeclencheurModifie.current;
+      if (!idRegle || !versionLue(idRegle) || !propre()) return;
+      lireVersionAutomatisation(idRegle)
+        .then((version) => {
+          // Relu APRÈS la lecture : une saisie commencée entre-temps n'est pas écrasée.
+          if (!vivant || !version || version === versionLue(idRegle) || idRegle !== idReel.current || !propre()) return;
+          recharger();
+        })
+        .catch((e: unknown) => console.error('[builder] version de l’automatisation illisible', e instanceof Error ? e.message : String(e)));
+    };
+    window.addEventListener('focus', auRetour);
+    document.addEventListener('visibilitychange', auRetour);
+    return () => {
+      vivant = false;
+      window.removeEventListener('focus', auRetour);
+      document.removeEventListener('visibilitychange', auRetour);
+    };
+  }, [recharger]);
+
   /*
    * « Construire avec Lumi » ouvre l'éditeur avec `?lumi=1` : le curseur
    * va DANS le champ de Lumi. Avant, le paramètre n'était lu nulle part et
@@ -911,6 +1328,43 @@ export default function AutomationBuilderPage() {
   /** Dès le premier message, le fil s'ouvre en panneau à gauche. */
   const lumiLateral = lumiDisponible && (echangesLumi.length > 0 || genere);
 
+  /*
+   * `actions` SUIT LE PARCOURS (triage éditeur, 05b:303 ; constat A-02).
+   *
+   * La règle porte deux copies de ses messages : `steps` et `actions`.
+   * L'éditeur n'écrivait que `steps` : un parcours CONVERTI gardait dans
+   * `actions` son ancien message, et dès qu'on supprimait sa dernière étape la
+   * règle retombait au « format d'origine » — l'étape supprimée revenait, en
+   * lecture seule, et continuait de partir.
+   *
+   * Dès que le parcours est touché ici, `actions` en devient le reflet
+   * (`actionsDuParcours`), à l'écran ET dans chaque enregistrement. Une règle
+   * qu'on n'a pas touchée garde ses `actions` (la renommer ne les réécrit pas).
+   */
+  const parcoursTouche = useRef(false);
+  /**
+   * Les `actions` d'une règle CHARGÉE au format d'origine : « annuler »
+   * jusqu'au point de départ doit la rendre telle qu'elle était, pas vide.
+   * Oubliées à la conversion — après elle, un parcours vide est un parcours vide.
+   */
+  const actionsDOrigine = useRef<AutomationRule['actions'] | null>(null);
+  const refletActions = useCallback((etapes: Etape[]): AutomationRule['actions'] => (
+    etapes.length === 0 && actionsDOrigine.current
+      ? actionsDOrigine.current
+      : actionsDuParcours(etapes, frBascule.current) as AutomationRule['actions']
+  ), []);
+  /** Ce qu'un enregistrement du parcours envoie : les étapes, et leur reflet dès que le parcours a été touché. */
+  const contenuParcours = useCallback((etapes: Etape[]): Pick<BrouillonAutomatisation, 'steps' | 'actions'> | Pick<BrouillonAutomatisation, 'steps'> => (
+    parcoursTouche.current
+      ? { steps: etapes, actions: refletActions(etapes) as BrouillonAutomatisation['actions'] }
+      : { steps: etapes }
+  ), [refletActions]);
+  /** Le parcours vient de changer ICI : l'écran porte aussitôt des `actions` en accord. */
+  const accorderActions = useCallback((etapes: Etape[]) => {
+    parcoursTouche.current = true;
+    setRegle((r) => (r ? { ...r, actions: refletActions(etapes) } : r));
+  }, [refletActions]);
+
   /** Empile une version du parcours — c'est ce que « annuler » remontera. */
   const memoriser = useCallback((nouvelles: Etape[]) => {
     setHistorique((prev) => {
@@ -921,20 +1375,25 @@ export default function AutomationBuilderPage() {
     });
     setPosition((p) => p + 1);
     setSteps(nouvelles);
+    accorderActions(nouvelles);
     setEtatSauvegarde('modifie');
-  }, [position]);
+  }, [position, accorderActions]);
 
   const annuler = () => {
     if (position <= 0) return;
+    setModifieePar('autre');
     setPosition((p) => p - 1);
     setSteps(historique[position - 1]);
+    accorderActions(historique[position - 1]);
     setEtatSauvegarde('modifie');
   };
 
   const refaire = () => {
     if (position >= historique.length - 1) return;
+    setModifieePar('autre');
     setPosition((p) => p + 1);
     setSteps(historique[position + 1]);
+    accorderActions(historique[position + 1]);
     setEtatSauvegarde('modifie');
   };
 
@@ -972,15 +1431,43 @@ export default function AutomationBuilderPage() {
   // Ouvrir une carte, la modifier, l'enregistrer ou la supprimer. C'etait
   // le trou du builder : cliquer une carte la selectionnait et n'ouvrait
   // rien — on voyait son parcours sans jamais pouvoir le modifier.
+  /*
+   * L'ajout en attente ne vaut que tant que le parcours autour de lui n'a pas
+   * bougé (annuler / refaire, proposition de Lumi) : son point d'accroche doit
+   * exister encore, et son identifiant rester libre.
+   */
+  const ajoutEnAttente = useMemo(() => {
+    if (!etapeEnAttente) return null;
+    const { etape, apresId } = etapeEnAttente;
+    if (steps.some((e) => e.id === etape.id)) return null;
+    if (apresId !== null && !steps.some((e) => e.id === apresId)) return null;
+    return etapeEnAttente;
+  }, [etapeEnAttente, steps]);
+  useEffect(() => {
+    if (etapeEnAttente && !ajoutEnAttente) setEtapeEnAttente(null);
+  }, [etapeEnAttente, ajoutEnAttente]);
+
   const etapeOuverte = useMemo(
-    () => steps.find((e) => e.id === etapeChoisie) ?? null,
-    [steps, etapeChoisie],
+    () => (ajoutEnAttente && ajoutEnAttente.etape.id === etapeChoisie
+      ? ajoutEnAttente.etape
+      : steps.find((e) => e.id === etapeChoisie) ?? null),
+    [steps, etapeChoisie, ajoutEnAttente],
   );
 
   const enregistrerEtape = useCallback((modifiee: Etape) => {
-    memoriser(steps.map((e) => (e.id === modifiee.id ? modifiee : e)));
+    if (ajoutEnAttente && ajoutEnAttente.etape.id === modifiee.id) {
+      // « Enregistrer » dans le panneau d'une étape neuve : c'est MAINTENANT
+      // qu'elle entre dans le parcours (et que l'enregistrement auto la verra).
+      // … et ce qu'elle coupe du parcours (un « Arrêter ici » au milieu,
+      // déjà annoncé au choix) en sort avec : rien ne reste orphelin en base.
+      const inseree = insererEtape(steps, modifiee, ajoutEnAttente.apresId, ajoutEnAttente.branche);
+      memoriser(sansEtapes(inseree, etapesPerdues(steps, inseree)));
+      setEtapeEnAttente(null);
+    } else {
+      memoriser(steps.map((e) => (e.id === modifiee.id ? modifiee : e)));
+    }
     setEtapeChoisie(null);
-  }, [steps, memoriser]);
+  }, [steps, memoriser, ajoutEnAttente]);
 
   /**
    * Dupliquer une étape — le « Copier l'action » de leur menu.
@@ -1022,6 +1509,13 @@ export default function AutomationBuilderPage() {
    * un graphe mal formé ne doit pas faire boucler la suppression.
    */
   const supprimerDepuis = useCallback(async (idEtape: string) => {
+    // L'étape en cours d'ajout n'a rien après elle qui soit à elle : l'abandonner suffit.
+    if (ajoutEnAttente?.etape.id === idEtape) {
+      setEtapeEnAttente(null);
+      setMenuEtape(null);
+      setEtapeChoisie(null);
+      return;
+    }
     const aRetirer = new Set<string>();
     const file = [idEtape];
     while (file.length) {
@@ -1051,21 +1545,41 @@ export default function AutomationBuilderPage() {
     memoriser(restant);
     setMenuEtape(null);
     setEtapeChoisie(null);
-  }, [steps, memoriser, fr]);
+  }, [steps, memoriser, fr, ajoutEnAttente]);
 
   const supprimerEtape = useCallback(async (idEtape: string) => {
+    // L'étape en cours d'ajout n'est pas dans le parcours : rien à recoudre.
+    if (ajoutEnAttente?.etape.id === idEtape) {
+      setEtapeEnAttente(null);
+      setEtapeChoisie(null);
+      return;
+    }
+    // Ce qui ne se rebranche pas est DIT, et retiré (S-12) : supprimer une
+    // condition ne rebranche que sa branche « si oui ».
+    const recousu = retirerEtape(steps, idEtape);
+    const perdues = etapesPerdues(steps, recousu);
+    const n = perdues.length;
+    const cible = steps.find((e) => e.id === idEtape);
     const ok = await confirmer({
-      title: fr ? 'Supprimer cette étape ?' : 'Delete this step?',
-      message: fr
-        ? 'Ce qui venait après reste dans le parcours et se rebranche tout seul.'
-        : 'What came after stays in the journey and reconnects on its own.',
-      confirmLabel: fr ? 'Supprimer' : 'Delete',
       danger: true,
+      title: fr ? 'Supprimer cette étape ?' : 'Delete this step?',
+      message: n === 0
+        ? (fr
+          ? 'Ce qui venait après reste dans le parcours et se rebranche tout seul.'
+          : 'What came after stays in the journey and reconnects on its own.')
+        : cible?.type === 'si'
+          ? (fr
+            ? `La branche « si oui » reste dans le parcours et se rebranche. La branche « si non » (${n} étape${n > 1 ? 's' : ''}) sera retirée avec la condition.`
+            : `The “if yes” branch stays in the journey and reconnects. The “if no” branch (${n} step${n > 1 ? 's' : ''}) will be removed with the condition.`)
+          : (fr
+            ? `La suite reste dans le parcours et se rebranche. ${n > 1 ? `${n} étapes que plus rien n’atteindrait seront retirées` : 'Une étape que plus rien n’atteindrait sera retirée'} avec elle.`
+            : `What follows stays in the journey and reconnects. ${n > 1 ? `${n} steps that nothing would reach will be removed` : 'One step that nothing would reach will be removed'} with it.`),
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
     });
     if (!ok) return;
-    memoriser(retirerEtape(steps, idEtape));
+    memoriser(sansEtapes(recousu, perdues));
     setEtapeChoisie(null);
-  }, [steps, memoriser, fr]);
+  }, [steps, memoriser, fr, ajoutEnAttente]);
 
   // ── Enregistrement ──
   // Différé d'une seconde après la dernière frappe : enregistrer à chaque
@@ -1098,15 +1612,21 @@ export default function AutomationBuilderPage() {
       conditions: (regle?.conditions ?? null) as Record<string, unknown> | null,
       is_preset: regle?.is_preset,
       fr,
+      // L'entité que fixe le champ surveillé (« Date atteinte » sur un champ
+      // du pipeline = une opportunité) : la même que pour le tiroir et le panneau.
+      entite: objetRegle,
+      champSurveilleAbsent,
     }),
-    [regle?.trigger_event, regle?.actions, regle?.conditions, regle?.is_preset, steps, fr],
+    [regle?.trigger_event, regle?.actions, regle?.conditions, regle?.is_preset, steps, fr, objetRegle, champSurveilleAbsent],
   );
   /** Les étapes fautives, pour les signaler SUR le canevas (§6.5). */
   const etapesEnErreur = useMemo(
-    () => new Set(problemesVivants
-      .filter((p) => p.gravite === 'bloquant' && p.etapeId)
-      .map((p) => p.etapeId as string)),
-    [problemesVivants],
+    // … et celles que le serveur vient de refuser d'enregistrer.
+    () => new Set([
+      ...problemesVivants.filter((p) => p.gravite === 'bloquant' && p.etapeId).map((p) => p.etapeId as string),
+      ...(refus?.etapes ?? []),
+    ]),
+    [problemesVivants, refus],
   );
   const bloquantsVivants = useMemo(
     () => problemesVivants.filter((p) => p.gravite === 'bloquant'),
@@ -1153,12 +1673,27 @@ export default function AutomationBuilderPage() {
    * puis 48 s au plus) jusqu'au retour du serveur.
    */
   const echecsSauvegarde = useRef(0);
+  /** L'état d'enregistrement du dernier rendu, lu par une reprise en cours (voir plus bas). */
+  const etatSauvegardeCourant = useRef(etatSauvegarde);
+  etatSauvegardeCourant.current = etatSauvegarde;
+  /** « Réessayer » (bouton du message d'échec) : le prochain essai part tout de suite. */
+  const essaiSansDelai = useRef(false);
+  const [essaiDemande, setEssaiDemande] = useState(0);
+  const reessayerEnregistrement = useCallback(() => {
+    echecsSauvegarde.current = 0;
+    essaiSansDelai.current = true;
+    setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? actuel : 'modifie'));
+    setEssaiDemande((n) => n + 1);
+  }, []);
   useEffect(() => {
     // Règle disparue (404) : plus rien à enregistrer, donc plus d'essai.
-    if (etatSauvegarde !== 'modifie' || !regle || disparue) return;
+    // Modifiée ailleurs (409) : pareil — on attend « Recharger », on n'écrase rien.
+    // Lumi travaille : sa réponse touche la règle (la conversation y est gardée),
+    // on enregistre après elle, avec la bonne version.
+    if (etatSauvegarde !== 'modifie' || !regle || disparue || modifieeAilleurs || genere) return;
     if (etapesIncompletes > 0) { setEtatSauvegarde('incomplet'); return; }
-    let annule = false;
-    const delai = 3000 * 2 ** Math.min(echecsSauvegarde.current, 4);
+    const delai = essaiSansDelai.current ? 0 : 3000 * 2 ** Math.min(echecsSauvegarde.current, 4);
+    essaiSansDelai.current = false;
 
     const minuterie = setTimeout(async () => {
       /*
@@ -1185,9 +1720,20 @@ export default function AutomationBuilderPage() {
       // relancerait pour rien.
       const attentes = [1500, 4000];
       for (let essai = 0; essai <= attentes.length; essai++) {
-        if (annule) return;
+        /*
+         * LA REPRISE APRÈS UN 429 (triage éditeur, 12-enregistrement:86). Elle
+         * s'arrêtait sur un drapeau `annule` que posait le nettoyage de CET
+         * effet — relancé par notre propre passage à « en cours ». Le premier
+         * essai partait, jamais le deuxième : l'indicateur restait sur
+         * « Enregistrement… » pour de bon et rien n'atteignait la base.
+         *
+         * Une reprise ne s'abandonne que si elle n'a plus lieu d'être : l'écran
+         * n'est plus « en cours » (une modification plus récente a repris la
+         * main, et son propre enregistrement partira).
+         */
+        if (essai > 0 && etatSauvegardeCourant.current !== 'en_cours') return;
         try {
-          await ecrire({ name: nom.trim() || regle.name, steps });
+          await ecrire({ name: nom.trim() || regle.name, ...contenuParcours(steps) });
           echecsSauvegarde.current = 0;
           /*
            * On confirme même si l'effet a été relancé : le serveur a bien
@@ -1195,6 +1741,7 @@ export default function AutomationBuilderPage() {
            * repart de lui-même en « modifié » — ce qu'on ne veut surtout
            * pas, c'est laisser « Enregistrement… » à jamais.
            */
+          setRefus(null);
           setEtatSauvegarde((actuel) => {
             if (actuel !== 'en_cours') return actuel;
             return JSON.stringify(steps) === envoye ? 'a_jour' : 'modifie';
@@ -1205,14 +1752,42 @@ export default function AutomationBuilderPage() {
            * 404 : l'automatisation n'existe plus. Ni toast « nouvel essai
            * automatique », ni reprise — `ecrire` a déjà basculé l'écran.
            */
-          if (estIntrouvable(e)) {
+          // 409 « modifiée ailleurs » : même règle — le bandeau le dit et offre de recharger.
+          if (estIntrouvable(e) || estModifieeAilleurs(e)) {
+            // Dit aussi par un message : le bandeau peut être hors de vue (onglet Journaux…).
+            if (estModifieeAilleurs(e)) toast.error(e instanceof Error ? e.message : String(e), { id: 'enregistrement-auto' });
             setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
             return;
           }
           const message = e instanceof Error ? e.message : String(e);
-          const tropVite = /too many requests|429|rate limit/i.test(message);
+          /*
+           * UN REFUS N'EST PAS UNE PANNE (triage éditeur, S-04). « Ajouter »
+           * puis « Attendre » en dernière étape — un geste normal — donnait
+           * « Enregistrement impossible pour le moment — nouvel essai
+           * automatique. (La séquence se termine par une attente…) », et le
+           * même parcours refusé repartait en boucle, 400 après 400.
+           *
+           * Un refus est DIT comme un refus, n'est jamais renvoyé, désigne
+           * l'étape quand le serveur la nomme, et reste à l'écran : rien ne
+           * s'enregistre tant qu'il n'est pas corrigé. La prochaine
+           * modification du parcours repart en enregistrement.
+           */
+          if (estRefus(e)) {
+            const indices = (e as { etapes?: unknown }).etapes;
+            const fautives = Array.isArray(indices)
+              ? indices.flatMap((i) => (typeof i === 'number' && steps[i] ? [steps[i].id] : []))
+              : [];
+            setRefus({ message, etapes: [...new Set(fautives)] });
+            toast.error(fr ? `Enregistrement refusé — ${message}` : `Save refused — ${message}`, { id: 'enregistrement-auto' });
+            setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'refuse' : actuel));
+            return;
+          }
+          const tropVite = (e as { status?: unknown } | null)?.status === 429 || /too many requests|429|rate limit/i.test(message);
           if (tropVite && essai < attentes.length) {
-            await new Promise((r) => setTimeout(r, attentes[essai]));
+            // Le délai que le serveur indique (`Retry-After`), sinon un délai court croissant.
+            const indique = Number((e as { retryApresMs?: unknown } | null)?.retryApresMs);
+            const attente = Number.isFinite(indique) && indique > 0 ? Math.min(Math.max(indique, attentes[essai]), 15_000) : attentes[essai];
+            await new Promise((r) => setTimeout(r, attente));
             continue;
           }
           echecsSauvegarde.current += 1;
@@ -1225,15 +1800,19 @@ export default function AutomationBuilderPage() {
               : 'Too many changes at once — retrying in a moment.')
             : (fr
               ? `Enregistrement impossible pour le moment — nouvel essai automatique. (${message})`
-              : `Could not save right now — retrying automatically. (${message})`), { id: 'enregistrement-auto' });
+              : `Could not save right now — retrying automatically. (${message})`), {
+            id: 'enregistrement-auto',
+            // Sans attendre le prochain essai automatique (espacé de plus en plus).
+            action: { label: fr ? 'Réessayer' : 'Try again', onClick: reessayerEnregistrement },
+          });
           // Même raison : ne jamais rester bloqué sur « en cours ».
           setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
           return;
         }
       }
     }, delai);
-    return () => { annule = true; clearTimeout(minuterie); };
-  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire, disparue]);
+    return () => { clearTimeout(minuterie); };
+  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire, disparue, modifieeAilleurs, genere, essaiDemande, reessayerEnregistrement]);
 
   // Dès que la dernière étape vide est remplie, on repart en enregistrement.
   useEffect(() => {
@@ -1246,6 +1825,13 @@ export default function AutomationBuilderPage() {
     // Une confirmation déjà à l'écran : les clics suivants n'en ouvrent pas d'autres.
     if (confirmationPublication.current) return;
     const versActive = !fileBascule.etatAffiche(regle.id, regle.is_active);
+    if (versActive && ajoutEnAttente) {
+      // Elle n'est pas dans le parcours : publier la laisserait de côté sans le dire.
+      toast.error(fr
+        ? 'Une étape est en cours d’ajout : enregistrez-la dans son panneau, ou fermez-le, avant de publier.'
+        : 'A step is being added: save it in its panel, or close it, before publishing.');
+      return;
+    }
     if (versActive) {
       /*
        * REFUSER AVANT, PAS APRÈS.
@@ -1269,6 +1855,8 @@ export default function AutomationBuilderPage() {
         conditions: (regle.conditions ?? null) as Record<string, unknown> | null,
         is_preset: regle.is_preset,
         fr,
+        entite: objetRegle,
+        champSurveilleAbsent,
       });
       const bloquants = problemes.filter((p) => p.gravite === 'bloquant');
       if (bloquants.length > 0) {
@@ -1326,9 +1914,10 @@ export default function AutomationBuilderPage() {
        * secondes de modifications partent d'abord, sinon il jugerait
        * (et publierait) l'avant-dernière version du parcours.
        */
-      if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours') {
+      if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse') {
         try {
-          await ecrire({ name: nom.trim() || regle.name, steps });
+          await ecrire({ name: nom.trim() || regle.name, ...contenuParcours(steps) });
+          setRefus(null);
           setEtatSauvegarde('a_jour');
         } catch (e: unknown) {
           toast.error(e instanceof Error ? e.message : String(e));
@@ -1380,8 +1969,11 @@ export default function AutomationBuilderPage() {
   const etapesAffichees = useMemo(
     () => (formatOrigine && regle
       ? projeterFormatOrigine({ actions: regle.actions, delay_seconds: regle.delay_seconds })
-      : steps),
-    [formatOrigine, regle, steps],
+      // L'étape en cours d'ajout est MONTRÉE à sa place, sans être dans `steps`.
+      : ajoutEnAttente
+        ? insererEtape(steps, ajoutEnAttente.etape, ajoutEnAttente.apresId, ajoutEnAttente.branche)
+        : steps),
+    [formatOrigine, regle, steps, ajoutEnAttente],
   );
 
   /**
@@ -1429,9 +2021,21 @@ export default function AutomationBuilderPage() {
     }
     setConversionEnCours(true);
     try {
-      const maj = await modifierAutomatisation(regle.id, { steps: conversion.etapes });
+      // Par `ecrire` : la conversion porte la garde de version comme toute écriture.
+      // … et `actions` part avec, en accord : aucune copie de l'ancien format ne reste en base.
+      const maj = await ecrire({
+        steps: conversion.etapes,
+        actions: actionsDuParcours(conversion.etapes, fr) as BrouillonAutomatisation['actions'],
+      });
+      const converties = (maj.steps as Etape[] | undefined) ?? [];
       setRegle(maj);
-      setSteps((maj.steps as Etape[] | undefined) ?? []);
+      setSteps(converties);
+      // C'est désormais un parcours : vidé, il est VIDE (plus de retour au
+      // format d'origine), et « annuler » ne remonte pas avant la conversion.
+      actionsDOrigine.current = null;
+      parcoursTouche.current = true;
+      setHistorique([converties]);
+      setPosition(0);
       if (ouvrir) montrerEtape(ouvrir);
       toast.success(fr ? 'Parcours converti — il est modifiable' : 'Journey converted — it is editable');
     } catch (e: unknown) {
@@ -1439,7 +2043,7 @@ export default function AutomationBuilderPage() {
     } finally {
       setConversionEnCours(false);
     }
-  }, [regle, conversion, fr, montrerEtape]);
+  }, [regle, conversion, fr, montrerEtape, ecrire]);
 
   /**
    * Y a-t-il du travail NON ENREGISTRÉ ?
@@ -1451,7 +2055,8 @@ export default function AutomationBuilderPage() {
   // « en cours » compte aussi : fermer l'onglet pendant l'enregistrement
   // peut couper la requête avant que le serveur l'ait reçue (P2-13).
   // … et un changement de déclencheur dont le serveur n'a pas encore répondu.
-  const travailNonEnregistre = declencheurEnVol || etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours';
+  // … et un parcours que le serveur REFUSE : il n'est pas en base.
+  const travailNonEnregistre = declencheurEnVol || etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse';
 
   /**
    * Prévenir avant de FERMER l'onglet.
@@ -1483,9 +2088,72 @@ export default function AutomationBuilderPage() {
    * d'enregistrer, est DIT par un message (le toast vit hors de la page).
    */
   const sortieGeree = useRef(false);
+
+  /*
+   * … ET CE QUI NE PEUT PAS S'ENREGISTRER EN PARTANT SE DEMANDE AVANT (triage
+   * éditeur, EDT-166). Une étape incomplète, un parcours que le serveur
+   * refuse, une saisie en cours dans un panneau : « Précédent » quittait
+   * l'éditeur, le travail était perdu, et un toast le disait après coup.
+   * « Mes automatisations », lui, pose la question.
+   *
+   * Le routeur ne sait pas retenir un retour arrière. Tant qu'il y a quelque
+   * chose à perdre, on pose donc une entrée d'historique en double (même
+   * adresse) : « Précédent » la consomme sans quitter la page, et c'est là
+   * qu'on demande. Oui : on recule pour de bon. Non : on la repose.
+   */
+  const aPerdreEnPartant = !!regle && !disparue && !modifieeAilleurs
+    && (etatSauvegarde === 'incomplet' || etatSauvegarde === 'refuse' || !!etapeEnAttente || saisieEnCours);
+  const raisonDePerte = useRef<'incomplet' | 'refuse' | 'saisie'>('saisie');
+  raisonDePerte.current = etatSauvegarde === 'incomplet' ? 'incomplet' : etatSauvegarde === 'refuse' ? 'refuse' : 'saisie';
+  useEffect(() => {
+    if (!aPerdreEnPartant) return;
+    const MARQUE = 'lumeGardeEditeur';
+    const poser = () => window.history.pushState({ ...(window.history.state ?? {}), [MARQUE]: true }, '');
+    if (!(window.history.state as Record<string, unknown> | null)?.[MARQUE]) poser();
+    let enSortie = false;
+    let questionOuverte = false;
+    const surRetour = () => {
+      // Notre propre recul, ou une question déjà à l'écran : rien à refaire.
+      if (enSortie || questionOuverte) return;
+      // Encore sur l'entrée en double (un « Suivant ») : rien n'est quitté.
+      if ((window.history.state as Record<string, unknown> | null)?.[MARQUE]) return;
+      questionOuverte = true;
+      const enFrancais = frBascule.current;
+      const raison = raisonDePerte.current;
+      void confirmer({
+        title: enFrancais ? 'Quitter sans enregistrer ?' : 'Leave without saving?',
+        message: raison === 'incomplet'
+          ? (enFrancais
+            ? 'Une étape est incomplète, donc le parcours n’a pas pu être enregistré. Si vous quittez maintenant, ces modifications seront perdues.'
+            : 'A step is incomplete, so the journey could not be saved. If you leave now, those changes are lost.')
+          : raison === 'refuse'
+            ? (enFrancais
+              ? 'Le parcours tel qu’il est a été refusé à l’enregistrement. Si vous quittez maintenant, ces modifications seront perdues.'
+              : 'The journey as it stands was refused when saving. If you leave now, those changes are lost.')
+            : (enFrancais
+              ? 'Une étape est en cours de modification et n’a pas été enregistrée. Si vous quittez maintenant, ce que vous y avez saisi sera perdu.'
+              : 'A step is being edited and has not been saved. If you leave now, what you entered there is lost.'),
+        confirmLabel: enFrancais ? 'Quitter' : 'Leave',
+        danger: true,
+      }).then((quitter) => {
+        questionOuverte = false;
+        if (quitter) {
+          // Abandon confirmé : le départ n'a plus rien à dire ni à tenter.
+          enSortie = true;
+          sortieGeree.current = true;
+          window.history.back();
+        } else {
+          poser();
+        }
+      });
+    };
+    window.addEventListener('popstate', surRetour);
+    return () => window.removeEventListener('popstate', surRetour);
+  }, [aPerdreEnPartant]);
+
   // Une règle disparue (404) n'a plus rien à enregistrer au départ.
-  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue });
-  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue };
+  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, contenu: contenuParcours, aRegle: !!regle && !disparue && !modifieeAilleurs });
+  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, contenu: contenuParcours, aRegle: !!regle && !disparue && !modifieeAilleurs };
   useEffect(() => () => {
     const d = etatAuDepart.current;
     if (sortieGeree.current || !d.aRegle) return;
@@ -1495,8 +2163,8 @@ export default function AutomationBuilderPage() {
         : 'Automation left without saving: a step was incomplete.');
       return;
     }
-    if ((d.etat !== 'modifie' && d.etat !== 'en_cours') || d.incompletes > 0) return;
-    d.ecrire({ name: d.nom, steps: d.steps }).catch((e: unknown) => {
+    if ((d.etat !== 'modifie' && d.etat !== 'en_cours' && d.etat !== 'refuse') || d.incompletes > 0) return;
+    d.ecrire({ name: d.nom, ...d.contenu(d.steps) }).catch((e: unknown) => {
       console.error('[automatisations] enregistrement au départ impossible', e);
       captureClientException(e, { where: 'AutomationBuilderPage.depart' });
       toast.error(d.fr
@@ -1520,9 +2188,10 @@ export default function AutomationBuilderPage() {
      * incomplète, ou le serveur qui refuse.
      */
     let echecEnregistrement = false;
-    if (regle && etapesIncompletes === 0 && (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours')) {
+    if (regle && etapesIncompletes === 0 && (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse')) {
       try {
-        await ecrire({ name: nom.trim() || regle.name, steps });
+        await ecrire({ name: nom.trim() || regle.name, ...contenuParcours(steps) });
+        setRefus(null);
         setEtatSauvegarde('a_jour');
       } catch (e: unknown) {
         console.error('[automatisations] enregistrement à la sortie impossible', e);
@@ -1839,6 +2508,7 @@ export default function AutomationBuilderPage() {
               setRestauration(true);
               restaurerAutomatisation(regle.id)
                 .then((maj) => {
+                  noterVersion(maj?.id ?? regle.id, maj?.updated_at);
                   setRegle((r) => (r ? { ...r, deleted_at: null, is_active: maj.is_active } : maj));
                   toast.success(fr ? 'Automatisation restaurée, en brouillon.' : 'Automation restored, as a draft.');
                 })
@@ -1872,9 +2542,10 @@ export default function AutomationBuilderPage() {
     <div className="fixed inset-0 z-50 flex flex-col bg-surface">
       {/* ══ Barre 1 : sortie, nom, annuler/refaire, état ══ */}
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5">
+        {/* Une étape en cours d'ajout se perdrait en partant : on le demande d'abord. */}
         <button
           type="button"
-          onClick={() => void quitterEditeur()}
+          onClick={() => (ajoutEnAttente ? quandPanneauLibre(() => void quitterEditeur()) : void quitterEditeur())}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -1928,7 +2599,19 @@ export default function AutomationBuilderPage() {
 
           {/* L'état d'enregistrement, toujours visible — comme le « Saved » de GHL. */}
           <span className="ml-1 inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-text-tertiary">
-            {etatSauvegarde === 'incomplet' ? (
+            {modifieeAilleurs ? (
+              // Ni « Modifié » (rien ne partira) ni « Enregistré » (ce serait faux).
+              <span className="inline-flex items-center gap-1.5 text-warning">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                {fr ? 'Modifiée ailleurs' : 'Changed elsewhere'}
+              </span>
+            ) : etatSauvegarde === 'refuse' ? (
+              // « Modifié » laisserait croire que l'enregistrement va venir : il ne viendra pas.
+              <span className="inline-flex items-center gap-1.5 text-danger">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                {fr ? 'Refusé — à corriger' : 'Refused — to fix'}
+              </span>
+            ) : etatSauvegarde === 'incomplet' ? (
               <span className="inline-flex items-center gap-1.5 text-warning">
                 <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
                 {fr
@@ -1998,8 +2681,9 @@ export default function AutomationBuilderPage() {
                   toast.info(fr ? 'Complétez les étapes en cours pour voir l’aperçu à jour.' : 'Complete the unfinished steps to see an up-to-date preview.');
                   return;
                 }
-                if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours') {
-                  await ecrire({ name: nom.trim() || regle.name, steps });
+                if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse') {
+                  await ecrire({ name: nom.trim() || regle.name, ...contenuParcours(steps) });
+                  setRefus(null);
                   setEtatSauvegarde('a_jour');
                 }
                 setApercu(await apercuAutomatisation(idReel.current));
@@ -2029,6 +2713,78 @@ export default function AutomationBuilderPage() {
           />
         </div>
       </div>
+
+      {/* ══ Le bureau a tout mis en pause (S-32) : « Publiée » ne veut pas
+          dire « envoie ». Dit sur tous les onglets, tant que la pause dure. ══ */}
+      {bureauEnPause && (
+        <div role="status" className="flex shrink-0 items-start gap-2 border-b border-warning/40 bg-warning-light px-4 py-2.5">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-warning">
+              {fr ? 'Vos automatisations sont en pause.' : 'Your automations are paused.'}
+            </p>
+            <p className="mt-0.5 text-[12px] text-text-secondary">
+              {regle.is_active
+                ? (fr
+                  ? 'Cette automatisation est publiée, mais elle n’envoie rien tant que la pause dure. La pause se lève depuis « Mes automatisations ».'
+                  : 'This automation is published, but it sends nothing while the pause lasts. Lift the pause from “My automations”.')
+                : (fr
+                  ? 'Même publiée, cette automatisation n’enverra rien tant que la pause dure. La pause se lève depuis « Mes automatisations ».'
+                  : 'Even once published, this automation will send nothing while the pause lasts. Lift the pause from “My automations”.')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Modifiée ailleurs (A-09) : dit sur tous les onglets, avec la seule
+          issue qui n'écrase rien — recharger la version en base. ══ */}
+      {modifieeAilleurs && (
+        <div role="alert" className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-warning/40 bg-warning-light px-4 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-warning">
+              {fr
+                ? 'Cette automatisation a été modifiée ailleurs (par Lumi ou dans un autre onglet).'
+                : 'This automation was changed elsewhere (by Lumi or in another tab).'}
+            </p>
+            <p className="mt-0.5 text-[12px] text-text-secondary">
+              {fr
+                ? 'Pour ne rien écraser, vos dernières modifications n’ont pas été enregistrées. Rechargez pour repartir de la version à jour.'
+                : 'To avoid overwriting anything, your latest changes were not saved. Reload to start again from the current version.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={recharger}
+            className="shrink-0 rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Recharger' : 'Reload'}
+          </button>
+        </div>
+      )}
+
+      {/* ══ Enregistrement refusé (S-04) : dit tant qu'il dure, avec ce qu'il
+          faut corriger et l'étape désignée quand le serveur la nomme. ══ */}
+      {etatSauvegarde === 'refuse' && refus && !modifieeAilleurs && (
+        <div role="alert" className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-danger/40 bg-danger/5 px-4 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-danger">
+              {fr
+                ? 'Enregistrement refusé : rien n’est enregistré tant que ce n’est pas corrigé.'
+                : 'Save refused: nothing is saved until this is fixed.'}
+            </p>
+            <p className="mt-0.5 text-[12px] text-text-secondary">{refus.message}</p>
+          </div>
+          {refus.etapes.length > 0 && (
+            <button
+              type="button"
+              onClick={() => { setOnglet('parcours'); ouvrirEtape(refus.etapes[0]); }}
+              className="shrink-0 rounded-lg border border-danger/50 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {fr ? 'Ouvrir l’étape' : 'Open the step'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ══ Le contenu ══ */}
       {/* Une RANGEE : le canevas a gauche, le panneau d'edition a droite —
@@ -2373,7 +3129,8 @@ export default function AutomationBuilderPage() {
                       onClick={() => {
                         const id = menuEtape;
                         if (!id) return;
-                        if (cle === 'dupliquer') dupliquerEtape(id);
+                        if (cle === 'dupliquer' && ajoutEnAttente) { setMenuEtape(null); quandPanneauLibre(() => dupliquerEtape(id)); }
+                        else if (cle === 'dupliquer') dupliquerEtape(id);
                         else if (cle === 'modifier') { setMenuEtape(null); void ouvrirEtape(id); }
                         else if (cle === 'supprimer') { setMenuEtape(null); void supprimerEtape(id); }
                         else void supprimerDepuis(id);
@@ -2593,6 +3350,7 @@ export default function AutomationBuilderPage() {
               ruleId={regle.id}
               reglages={(regle.settings ?? null) as ReglagesAutomatisation | null}
               fr={fr}
+              enregistrer={ecrire}
               onChange={(r) => setRegle((x) => (x ? { ...x, settings: r as Record<string, unknown> | null } : x))}
             />
           </div>
@@ -2662,10 +3420,13 @@ export default function AutomationBuilderPage() {
           etapesPipeline={etapesPipeline}
           champsPerso={champsPerso}
           objetChamps={objetRegle}
+          langueEnvoi={langueEnvoi}
           stats={statsEtapes?.[etapeOuverte.id] ?? null}
+          nouvelle={ajoutEnAttente?.etape.id === etapeOuverte.id}
+          modifieePar={modifieePar}
           onEnregistrer={enregistrerEtape}
           onSupprimer={supprimerEtape}
-          onFermer={() => setEtapeChoisie(null)}
+          onFermer={() => { setEtapeChoisie(null); setEtapeEnAttente(null); }}
           onModifie={signalerBrouillonEtape}
         />
       )}

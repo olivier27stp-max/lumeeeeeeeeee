@@ -27,88 +27,32 @@
    rien annuler du tout.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { X, Trash2, BarChart3, Pencil } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
   ACTIONS,
+  DELAI_MAX_SECONDES,
+  DELAI_NEGATIF_MAX_SECONDES,
   FAMILLES_ACTIONS,
   actionCompatible,
   champVisible,
+  fauteDeValeur,
   trouverAction,
 } from '../../lib/automationCatalogue';
+import type { ChampAction as ModeleChamp } from '../../lib/automationCatalogue';
 import type { Etape, EtapeAction, EtapeAttendre, EtapeSi } from '../../lib/sequenceTypes';
 import ChampActionUI from './ChampAction';
 import {
   BoutonsVariablesChamps, ConditionsChampsEtape, EditeurMajChamp, sansConditionsIncompletes,
 } from '../champs/automatisations';
 import type { ChampPerso, ObjetChamp } from '../../lib/champs/types';
-import { variablesInconnues, variableLisible } from '../../lib/emailBodyText';
+import { htmlVersTexte, texteVersHtml, variablesInconnues, variableLisible } from '../../lib/emailBodyText';
 import { confirmer } from '../ui/ConfirmDialog';
+import { analyserConditions, conditionsConservees, texteDesConditions } from '../../lib/conditionsEtapeSi';
 
-/** Les conditions d'une étape « si », en texte modifiable. */
-/** L'opérateur, tel qu'on l'ecrit : `montant > 5000`. */
-const SIGNES: Array<[string, string]> = [
-  ['gte', '>='], ['lte', '<='], ['gt', '>'], ['lt', '<'], ['neq', '!='], ['eq', '='],
-];
-
-function texteDesConditions(etape: Etape): string {
-  if (etape.type !== 'si') return '';
-  const lignes: string[] = [];
-  for (const [cle, v] of Object.entries(etape.conditions ?? {})) {
-    // Les conditions de champs personnalisés ont leur propre éditeur : les
-    // écrire ici donnerait « champs_perso = [object Object] ».
-    if (cle === 'champs_perso') continue;
-    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-      // Un intervalle (`{ gte, lt }`) s'ecrit sur DEUX lignes : c'est ce
-      // qu'on relit le mieux, et l'analyse les recolle sur la meme cle.
-      for (const [op, signe] of SIGNES) {
-        if (op in (v as Record<string, unknown>)) {
-          lignes.push(cle + ' ' + signe + ' ' + String((v as Record<string, unknown>)[op]));
-        }
-      }
-      continue;
-    }
-    lignes.push(cle + ' = ' + String(v));
-  }
-  return lignes.join(String.fromCharCode(10));
-}
-
-/** Le texte saisi → l'objet `conditions`. Une ligne incomplète est ignorée. */
-/** Un nombre pur (montant, quantité) reste un nombre. */
-const NOMBRE_SEUL = /^-?[0-9]+([.][0-9]+)?$/;
-
-function analyserConditions(texte: string): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const ligne of texte.split(String.fromCharCode(10))) {
-    // `>=` et `<=` d'abord : sinon `>` couperait `>=` en deux.
-    const trouve = SIGNES
-      .map(([op, signe]) => ({ op, signe, i: ligne.indexOf(signe) }))
-      .filter((x) => x.i > 0)
-      .sort((a, b) => (a.i - b.i) || (b.signe.length - a.signe.length))[0];
-    if (!trouve) continue;
-
-    const cle = ligne.slice(0, trouve.i).trim();
-    const val = ligne.slice(trouve.i + trouve.signe.length).trim();
-    if (!cle || !val) continue;
-
-    if (trouve.op === 'eq') {
-      // L'égalité reste écrite à plat : c'est la forme d'origine, que
-      // portent toutes les règles existantes.
-      out[cle] = val;
-      continue;
-    }
-
-    // Un montant s'écrit en chiffres : on le garde en nombre pour que la
-    // comparaison ne dépende pas d'une conversion plus loin.
-    const valeur = NOMBRE_SEUL.test(val) ? Number(val) : val;
-    const existant = out[cle];
-    out[cle] = (existant !== null && typeof existant === 'object' && !Array.isArray(existant))
-      ? { ...(existant as Record<string, unknown>), [trouve.op]: valeur }
-      : { [trouve.op]: valeur };
-  }
-  return out;
-}
+/** Les conditions d'une étape « si », en texte modifiable (règles : src/lib/conditionsEtapeSi.ts). */
+const texteSi = (etape: Etape, fr: boolean): string => (etape.type === 'si' ? texteDesConditions(etape.conditions, fr) : '');
 
 /**
  * Les conditions de champs d'une étape « si », à GARDER quand le texte est
@@ -118,6 +62,122 @@ function analyserConditions(texte: string): Record<string, unknown> {
 function champsPersoDe(etape: Etape): Record<string, unknown> {
   const liste = etape.type === 'si' ? etape.conditions?.champs_perso : undefined;
   return Array.isArray(liste) ? { champs_perso: liste } : {};
+}
+
+/**
+ * LA VERSION ANGLAISE D'UN TEXTE (`<cle>_en`) — triage actions, ligne 2.
+ *
+ * Le moteur l'envoie À LA PLACE du texte français quand la langue du bureau
+ * est l'anglais (`champLocalise`, server/lib/actions). Les automatisations
+ * fournies en portent une, et « Convertir » la garde. Le panneau ne montrait
+ * que le français : on corrigeait « 20 % jusqu'au 1er juin » pendant que
+ * « 10% off until May 1st. », invisible, continuait de partir.
+ *
+ * Elle est donc un champ comme un autre — même contrôle, même compteur, mêmes
+ * variables — affiché dès que l'étape en porte une.
+ *
+ * AJUSTEMENT (décision du coordinateur, après revérification de 539be241) :
+ *   · le champ PRINCIPAL montre le texte que le bureau ENVOIE — `body` s'il
+ *     envoie en français, `body_en` s'il envoie en anglais (`langueEnvoi`,
+ *     le réglage « Messages en FR / EN ») ;
+ *   · l'AUTRE langue vit dans un bloc secondaire, replié par défaut ;
+ *   · corriger le texte principal sans toucher à l'autre ne bloque JAMAIS
+ *     « Enregistrer » : le bloc se déplie, dit « Cette version n'est plus à
+ *     jour. » et offre « La retirer » (coché d'office) ou « La garder ».
+ *     Rien n'est retiré en silence, rien de périmé ne reste sans choix.
+ * Une version retirée disparaît de l'étape : le moteur retombe sur `body`
+ * (`champLocalise`). Dans un bureau qui envoie en anglais, « retirer la
+ * version française » fait donc du texte anglais le SEUL texte : il passe
+ * dans `body`, et `body_en` disparaît.
+ */
+const cleAnglaise = (cle: string): string => `${cle}_en`;
+const aVersionAnglaise = (champ: ModeleChamp): boolean => champ.type === 'zone' || champ.type === 'texte';
+/** Le champ de l'AUTRE langue, dans son bloc secondaire. */
+function champAutreLangue(champ: ModeleChamp, cle: string, autreEstAnglais: boolean): ModeleChamp {
+  return {
+    ...champ,
+    cle,
+    fr: `${champ.fr} — version ${autreEstAnglais ? 'anglaise' : 'française'}`,
+    en: `${champ.en} — ${autreEstAnglais ? 'English' : 'French'} version`,
+    obligatoire: false,
+    defaut_fr: undefined,
+    defaut_en: undefined,
+    aide_fr: `Part à la place du texte ci-dessus si vos messages partent en ${autreEstAnglais ? 'anglais' : 'français'}. Vide = le texte ci-dessus part à tout le monde.`,
+    aide_en: `Sent instead of the text above if your messages go out in ${autreEstAnglais ? 'English' : 'French'}. Empty = the text above goes to everyone.`,
+  };
+}
+
+/** L'étape telle qu'on l'enregistre : une version anglaise VIDÉE disparaît, au lieu de rester en `""`. */
+function sansAnglaisVide(etape: Etape): Etape {
+  if (etape.type !== 'action') return etape;
+  const config = Object.fromEntries(
+    Object.entries(etape.action.config).filter(([cle, v]) => !(cle.endsWith('_en') && (v ?? '').trim() === '')),
+  );
+  return { ...etape, action: { ...etape.action, config } };
+}
+
+/**
+ * L'étape telle qu'on l'enregistre, une fois RETIRÉES les autres versions
+ * qu'on a choisi de retirer : il ne reste qu'un texte, sous la clé de base —
+ * celle que le moteur lit quand la version demandée manque.
+ */
+function sansVersionsRetirees(etape: Etape, aRetirer: Array<{ cle: string; principalEstAnglais: boolean }>): Etape {
+  if (etape.type !== 'action' || aRetirer.length === 0) return etape;
+  const config = { ...etape.action.config };
+  for (const { cle, principalEstAnglais } of aRetirer) {
+    const cleEn = cleAnglaise(cle);
+    // Le bureau envoie en anglais : c'est le texte anglais qu'on garde, seul.
+    if (principalEstAnglais) config[cle] = config[cleEn];
+    delete config[cleEn];
+  }
+  return { ...etape, action: { ...etape.action, config } };
+}
+
+/**
+ * LE CORPS D'UN COURRIEL FOURNI EST DU HTML — triage actions, ligne 3.
+ *
+ * Les automatisations fournies stockent `<div style="font-family:…"><h2>…` :
+ * nécessaire à l'envoi, illisible pour qui veut changer une phrase. Le panneau
+ * montrait ce balisage brut dans « Message ». Comme l'éditeur de la liste
+ * (MessageEditor), on édite donc du TEXTE :
+ *   · à l'ouverture, le HTML devient son texte (`htmlVersTexte`) ;
+ *   · à l'enregistrement, un texte INCHANGÉ rend le HTML d'origine, à
+ *     l'octet près ; un texte modifié est remis en HTML (`texteVersHtml`).
+ * Un corps écrit en texte simple (toute étape créée dans l'éditeur) n'est
+ * jamais touché : il est enregistré tel qu'on l'a tapé.
+ */
+const CLES_CORPS_COURRIEL = ['body', cleAnglaise('body')];
+/** Du HTML du produit : il COMMENCE par une balise de bloc. « total < 500 $ » n'en est pas. */
+const estCorpsHtml = (valeur: string | undefined): valeur is string =>
+  typeof valeur === 'string' && /^\s*<(div|p|h[1-6]|ul|table)\b[^>]*>/i.test(valeur);
+
+/** L'étape telle que le panneau l'édite, et ce qu'il faut pour rendre le HTML à l'enregistrement. */
+function versEdition(etape: Etape): { etape: Etape; html: Record<string, { html: string; texte: string }> } {
+  const html: Record<string, { html: string; texte: string }> = {};
+  if (etape.type !== 'action' || etape.action.type !== 'send_email') return { etape, html };
+  const config = { ...etape.action.config };
+  for (const cle of CLES_CORPS_COURRIEL) {
+    const valeur = config[cle];
+    if (!estCorpsHtml(valeur)) continue;
+    html[cle] = { html: valeur, texte: htmlVersTexte(valeur) };
+    config[cle] = html[cle].texte;
+  }
+  return Object.keys(html).length ? { etape: { ...etape, action: { ...etape.action, config } }, html } : { etape, html };
+}
+
+/** L'inverse, au moment d'enregistrer. Une étape devenue autre chose qu'un courriel garde le TEXTE. */
+function versEnregistrement(etape: Etape, html: Record<string, { html: string; texte: string }>): Etape {
+  if (etape.type !== 'action' || etape.action.type !== 'send_email') return etape;
+  const config = { ...etape.action.config };
+  for (const [cle, origine] of Object.entries(html)) {
+    const valeur = config[cle];
+    if (typeof valeur !== 'string' || valeur.trim() === '') continue;
+    // Un texte resté tel quel retrouve SON HTML — y compris passé d'une clé à
+    // l'autre (la version anglaise devenue le seul texte, voir `sansVersionsRetirees`).
+    const intact = valeur === origine.texte ? origine : Object.values(html).find((o) => o.texte === valeur);
+    config[cle] = intact ? intact.html : texteVersHtml(valeur);
+  }
+  return { ...etape, action: { ...etape.action, config } };
 }
 
 /** Les variables offertes, insérables d'un clic dans un champ de texte. */
@@ -158,6 +218,24 @@ interface Props {
   objetChamps?: ObjetChamp | null;
   /** Statistiques de l'étape, pour l'onglet du même nom. */
   stats?: { envoyes: number; sautes: number; echecs: number; en_attente: number } | null;
+  /**
+   * L'étape vient d'être choisie dans le tiroir et n'est PAS encore dans le
+   * parcours : « Enregistrer » l'y ajoute, fermer le panneau l'abandonne —
+   * ce qui se demande, comme toute saisie non enregistrée.
+   */
+  nouvelle?: boolean;
+  /**
+   * Qui vient de modifier le parcours HORS de ce panneau : Lumi, ou autre
+   * chose (annuler / rétablir, rechargement). Sert à nommer l'auteur quand
+   * l'étape ouverte change pendant une saisie.
+   */
+  modifieePar?: 'lumi' | 'autre' | null;
+  /**
+   * La langue dans laquelle le bureau ENVOIE ses messages (réglage « Messages
+   * en FR / EN », `company_settings.default_language`) : c'est ce texte-là
+   * que le champ principal montre. Inconnue : français, le défaut du moteur.
+   */
+  langueEnvoi?: 'fr' | 'en';
   onEnregistrer: (etape: Etape) => void;
   onSupprimer: (id: string) => void;
   onFermer: () => void;
@@ -182,14 +260,42 @@ function decomposer(secondes: number): { valeur: number; unite: string } {
   return { valeur: Math.max(0, Math.round(secondes / 60)), unite: 'minutes' };
 }
 
+/**
+ * Le délai d'une attente TEL QU'ON LE SAISIT — triage actions, ligne 4 : le
+ * nombre, en texte (donc vide le temps de le retaper), et l'unité CHOISIE.
+ *
+ * Les deux étaient recalculés à chaque frappe depuis les secondes : effacer le
+ * « 3 » de « 3 jours » donnait 0 seconde, donc « 0 minutes », et le 5 tapé
+ * ensuite devenait « 05 minutes ». Trois jours étaient devenus cinq minutes.
+ */
+interface SaisieDelai { texte: string; unite: string }
+function saisieDelaiDe(etape: Etape): SaisieDelai {
+  if (etape.type !== 'attendre') return { texte: '', unite: 'minutes' };
+  const d = decomposer((etape.mode === 'avant_date' ? etape.secondes_avant : etape.delai_secondes) ?? 0);
+  return { texte: String(d.valeur), unite: d.unite };
+}
+/** Le nombre saisi, s'il se lit comme une durée (0 ou plus) ; sinon `null`. */
+function nombreSaisi(texte: string): number | null {
+  const t = texte.trim().replace(',', '.');
+  if (t === '') return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 export default function PanneauEtape({
   etape, fr, declencheur, membres, etiquettes, automatisations = [], etapesPipeline = [], champsPerso = [], objetChamps = null, stats,
-  onEnregistrer, onSupprimer, onFermer, onModifie,
+  nouvelle = false, modifieePar = null, langueEnvoi = 'fr', onEnregistrer, onSupprimer, onFermer, onModifie,
 }: Props) {
   const ids = useId();
   const [onglet, setOnglet] = useState<'edition' | 'stats'>('edition');
+  /**
+   * L'étape TELLE QU'ON L'ÉDITE : le corps HTML d'un courriel fourni y est du
+   * texte (voir `versEdition`). C'est à elle, pas à `etape`, que le brouillon
+   * se compare pour savoir si quelque chose a changé.
+   */
+  const reference = useMemo(() => versEdition(etape), [etape]);
   // Le brouillon : on ne touche au parcours qu'en enregistrant.
-  const [brouillon, setBrouillon] = useState<Etape>(etape);
+  const [brouillon, setBrouillon] = useState<Etape>(reference.etape);
 
   /**
    * Le texte BRUT du champ « Conditions », tel qu'on le tape.
@@ -203,25 +309,73 @@ export default function PanneauEtape({
    * On garde donc le texte tel quel pendant la saisie, et on ne l'analyse
    * qu'au moment d'enregistrer.
    */
-  const [conditionsTexte, setConditionsTexte] = useState(() => texteDesConditions(etape));
+  const [conditionsTexte, setConditionsTexte] = useState(() => texteSi(etape, fr));
+  /** Champs dont la version anglaise, inchangée, a été déclarée « toujours valable ». */
+  const [versionsGardees, setVersionsGardees] = useState<string[]>([]);
+  /** Les blocs « autre langue » que l'utilisateur a dépliés lui-même. */
+  const [autresDepliees, setAutresDepliees] = useState<string[]>([]);
+
+  /**
+   * LA VERSION DE L'ÉTAPE DONT LE BROUILLON EST PARTI (constat A-01, le bug
+   * n° 1 du propriétaire : « Lumi dit avoir changé le message, rien ne
+   * change »).
+   *
+   * Le brouillon n'était rechargé que si l'IDENTIFIANT de l'étape changeait.
+   * Or Lumi rend la MÊME étape (`e1`) avec un autre texte : le canevas
+   * changeait, le panneau resté ouvert gardait l'ancien texte, se croyait
+   * « modifié », et son « Enregistrer » remettait l'ancien texte par-dessus
+   * celui de Lumi.
+   *
+   * On retient donc de quelle version le brouillon est parti. Quand l'étape
+   * reçue change PAR AILLEURS (Lumi, annuler / rétablir, rechargement) :
+   *   · rien n'a été tapé ici → le panneau prend aussitôt la nouvelle version ;
+   *   · une saisie est en cours → rien n'est écrasé, ni dans un sens ni dans
+   *     l'autre : un bandeau le dit et laisse choisir (`conflit`).
+   */
+  const [base, setBase] = useState<Etape>(reference.etape);
+  /** L'étape a changé ailleurs pendant une saisie : qui l'a changée, tant que le choix n'est pas fait. */
+  const [conflit, setConflit] = useState<'lumi' | 'autre' | null>(null);
+  /** Étape « attendre » : le nombre et l'unité tels qu'on les saisit (voir `saisieDelaiDe`). */
+  const [delaiSaisi, setDelaiSaisi] = useState<SaisieDelai>(() => saisieDelaiDe(reference.etape));
+  /** Le brouillon et le texte des conditions du dernier rendu, lus par l'effet ci-dessous. */
+  const saisie = useRef({ brouillon, conditionsTexte });
+  saisie.current = { brouillon, conditionsTexte };
+
+  const prendre = (version: Etape) => {
+    setBase(version);
+    setBrouillon(version);
+    setDelaiSaisi(saisieDelaiDe(version));
+    setConditionsTexte(texteSi(version, fr));
+    setVersionsGardees([]);
+    setAutresDepliees([]);
+    setConflit(null);
+  };
 
   /*
    * Changer de CARTE remet le panneau sur la nouvelle étape, et ramène
    * l'onglet d'édition — on ouvre une étape pour la modifier, pas pour lire
    * les statistiques de la précédente.
    *
-   * La dépendance est `etape.id`, PAS `etape` : le jour où le parent cessera
-   * de mémoriser l'étape (`useMemo` sur `steps`), un objet neuf à chaque
-   * rendu rejouerait cet effet en boucle et effacerait la saisie en cours.
-   * Suivre l'identifiant décrit ce qu'on veut vraiment — « une AUTRE carte a
-   * été ouverte » — au lieu de dépendre d'un détail du parent.
+   * Même carte : on compare le CONTENU, jamais l'identité de l'objet — le
+   * parent rend un objet neuf à chaque modification du parcours, et s'y fier
+   * effacerait la saisie en cours à chaque rendu.
    */
   useEffect(() => {
-    setBrouillon(etape);
-    setConditionsTexte(texteDesConditions(etape));
-    setOnglet('edition');
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- voir ci-dessus : suivre `etape` rendrait le panneau fragile à une optimisation du parent.
-  }, [etape.id]);
+    const recue = reference.etape;
+    if (recue.id !== base.id) {
+      prendre(recue);
+      setOnglet('edition');
+      return;
+    }
+    if (JSON.stringify(recue) === JSON.stringify(base)) return;
+    const brouillonActuel = JSON.stringify(saisie.current.brouillon);
+    const intact = brouillonActuel === JSON.stringify(base)
+      && saisie.current.conditionsTexte === texteSi(base, fr);
+    // Rien de tapé ici — ou exactement ce qui vient d'arriver : la nouvelle version, sans question.
+    if (intact || brouillonActuel === JSON.stringify(recue)) prendre(recue);
+    else setConflit(modifieePar === 'lumi' ? 'lumi' : 'autre');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'à l'étape REÇUE : `base` et `modifieePar` sont lus au moment où elle change.
+  }, [reference]);
 
   /*
    * UN BROUILLON NON ENREGISTRÉ NE SE JETTE PAS SANS PRÉVENIR (audit
@@ -231,23 +385,33 @@ export default function PanneauEtape({
    * carte.
    */
   const modifie = useMemo(
-    () => brouillon.id === etape.id
-      && (JSON.stringify(brouillon) !== JSON.stringify(etape) || conditionsTexte !== texteDesConditions(etape)),
-    [brouillon, etape, conditionsTexte],
+    // Une étape NEUVE est tout entière une saisie non enregistrée.
+    () => nouvelle || (brouillon.id === base.id
+      && (JSON.stringify(brouillon) !== JSON.stringify(base) || conditionsTexte !== texteSi(base, fr))),
+    [brouillon, base, conditionsTexte, nouvelle, fr],
   );
   useEffect(() => { onModifie?.(modifie); }, [modifie, onModifie]);
   useEffect(() => () => onModifie?.(false), [onModifie]);
 
   const fermer = async () => {
     if (modifie) {
-      const ok = await confirmer({
-        title: fr ? 'Fermer sans enregistrer ?' : 'Close without saving?',
-        message: fr
-          ? 'Les modifications de cette étape ne sont pas enregistrées : elles seront perdues.'
-          : 'This step’s changes are not saved: they will be lost.',
-        confirmLabel: fr ? 'Fermer sans enregistrer' : 'Close without saving',
-        danger: true,
-      });
+      const ok = await confirmer(nouvelle
+        ? {
+          title: fr ? 'Fermer sans ajouter cette étape ?' : 'Close without adding this step?',
+          message: fr
+            ? 'Cette étape n’a pas été enregistrée : elle ne sera pas ajoutée au parcours.'
+            : 'This step was not saved: it will not be added to the journey.',
+          confirmLabel: fr ? 'Ne pas l’ajouter' : 'Do not add it',
+          danger: true,
+        }
+        : {
+          title: fr ? 'Fermer sans enregistrer ?' : 'Close without saving?',
+          message: fr
+            ? 'Les modifications de cette étape ne sont pas enregistrées : elles seront perdues.'
+            : 'This step’s changes are not saved: they will be lost.',
+          confirmLabel: fr ? 'Fermer sans enregistrer' : 'Close without saving',
+          danger: true,
+        });
       if (!ok) return;
     }
     onFermer();
@@ -257,9 +421,120 @@ export default function PanneauEtape({
   /** L'étape technique « note dans l'historique » (`log_activity`) : rien à régler. */
   const journal = brouillon.type === 'action' && brouillon.action.type === 'log_activity';
 
+  /**
+   * Les textes de l'étape qui existent en DEUX langues : lequel est le texte
+   * principal (celui que le bureau envoie), lequel est l'autre, et si l'autre
+   * est PÉRIMÉ — le principal a changé dans ce panneau, pas lui. Une version
+   * périmée ne bloque rien : le bloc secondaire se déplie et fait choisir
+   * (la retirer, par défaut, ou la garder).
+   *
+   * Le rôle de chaque clé se décide sur l'étape D'ORIGINE (`base`), pas sur
+   * la saisie : vider le champ principal pour le retaper ne doit pas le faire
+   * basculer sur l'autre langue au milieu d'une frappe.
+   */
+  const versionsLangue = useMemo(() => {
+    if (brouillon.type !== 'action' || !modele) return [];
+    const config = brouillon.action.config as Record<string, string | undefined>;
+    const origine = (base.type === 'action' ? base.action.config : {}) as Record<string, string | undefined>;
+    return modele.champs
+      .filter((c) => aVersionAnglaise(c) && champVisible(c, config)
+        && config[cleAnglaise(c.cle)] !== undefined
+        && ((origine[cleAnglaise(c.cle)] ?? '').trim() !== '' || (config[cleAnglaise(c.cle)] ?? '').trim() !== ''))
+      .map((c) => {
+        const cleEn = cleAnglaise(c.cle);
+        // Le moteur ne lit `_en` que si elle est remplie : sinon c'est `body` qui part, même en anglais.
+        const principalEstAnglais = langueEnvoi === 'en' && (origine[cleEn] ?? '').trim() !== '';
+        const clePrincipale = principalEstAnglais ? cleEn : c.cle;
+        const cleAutre = principalEstAnglais ? c.cle : cleEn;
+        const autre = config[cleAutre] ?? '';
+        /** Le texte principal a changé ici, l'autre langue non. */
+        const perimee = (config[clePrincipale] ?? '') !== (origine[clePrincipale] ?? '')
+          && autre.trim() !== ''
+          && autre === (origine[cleAutre] ?? '');
+        return {
+          champ: c, clePrincipale, cleAutre, principalEstAnglais, autreEstAnglais: !principalEstAnglais,
+          modeleAutre: champAutreLangue(c, cleAutre, !principalEstAnglais), perimee,
+          /** L'autre langue a été VIDÉE à la main : c'est la retirer. */
+          videe: autre.trim() === '',
+        };
+      });
+  }, [brouillon, base, modele, langueEnvoi]);
+  // Un bloc déplié parce que sa version est périmée RESTE déplié ensuite :
+  // retaper l'autre langue lève « périmée », et le champ se refermerait sous les doigts.
+  const perimees = versionsLangue.filter((v) => v.perimee).map((v) => v.champ.cle).join(',');
+  useEffect(() => {
+    if (!perimees) return;
+    setAutresDepliees((liste) => [...new Set([...liste, ...perimees.split(',')])]);
+  }, [perimees]);
+  /** « Version anglaise (Objet) — utilisée seulement si vos messages partent en anglais ». */
+  const titreAutreLangue = (champ: ModeleChamp, autreEstAnglais: boolean): string => (fr
+    ? `Version ${autreEstAnglais ? 'anglaise' : 'française'} (${champ.fr}) — utilisée seulement si vos messages partent en ${autreEstAnglais ? 'anglais' : 'français'}`
+    : `${autreEstAnglais ? 'English' : 'French'} version (${champ.en}) — only used if your messages go out in ${autreEstAnglais ? 'English' : 'French'}`);
+  /** Le champ principal d'un texte : la clé de la langue que le bureau envoie. */
+  const clePrincipaleDe = (cle: string): string => versionsLangue.find((v) => v.champ.cle === cle)?.clePrincipale ?? cle;
+  /** L'étape à enregistrer : les versions périmées non gardées, et celles vidées à la main, sont retirées. */
+  const pourEnregistrer = (etapeAction: Etape): Etape => sansAnglaisVide(sansVersionsRetirees(
+    etapeAction,
+    versionsLangue
+      .filter((v) => (v.perimee && !versionsGardees.includes(v.champ.cle)) || (v.videe && v.principalEstAnglais))
+      .map((v) => ({ cle: v.champ.cle, principalEstAnglais: v.principalEstAnglais })),
+  ));
+
+  /*
+   * ÉTAPE « SI… » : CE QUE LA ZONE « CONDITIONS » NE SAIT PAS LIRE OU ÉCRIRE
+   * N'EST JAMAIS JETÉ EN SILENCE (triage déclencheurs, 05:470 et 05:501).
+   *   · une ligne illisible (« montant 5000 », « statut = ») est signalée et
+   *     retient l'enregistrement — avant, elle était ignorée : la condition
+   *     partait vide et le parcours suivait toujours « si oui » ;
+   *   · une condition que le texte ne peut pas porter est gardée telle quelle
+   *     (`conservees`) et montrée en lecture seule — avant, le premier
+   *     enregistrement l'effaçait.
+   */
+  const origineSi = base.type === 'si' ? base.conditions : null;
+  const lignesIllisibles = useMemo(
+    () => (brouillon.type === 'si' ? analyserConditions(conditionsTexte, origineSi).illisibles : []),
+    [brouillon.type, conditionsTexte, origineSi],
+  );
+  const conservees = useMemo(
+    () => (brouillon.type === 'si' ? conditionsConservees(brouillon.conditions) : {}),
+    [brouillon],
+  );
+  /** Le texte de la zone → les `conditions` de l'étape : lignes lisibles + conditions conservées + champs personnalisés. */
+  const conditionsSaisies = (texte: string): Record<string, unknown> => ({
+    ...conservees,
+    ...analyserConditions(texte, origineSi).conditions,
+    ...champsPersoDe(brouillon),
+  });
+
   /** Ce qui empêche d'enregistrer, dit avant de cliquer. */
   const problemes = useMemo(() => {
     const out: string[] = [];
+    if (brouillon.type === 'si') {
+      for (const l of lignesIllisibles) {
+        out.push(fr ? `Ligne illisible « ${l.ligne} » : ${l.fr}` : `Unreadable line “${l.ligne}”: ${l.en}`);
+      }
+      return out;
+    }
+    if (brouillon.type === 'attendre') {
+      // Un champ vidé le temps de retaper le nombre : pas « 0 », rien — on le dit.
+      if (nombreSaisi(delaiSaisi.texte) === null) {
+        out.push(fr ? 'Indiquez combien de temps attendre (0 ou plus).' : 'Enter how long to wait (0 or more).');
+      }
+      /*
+       * Les plafonds du serveur, dits ICI (triage actions, 05-panneau-etape:345 ;
+       * déclencheurs, 05-etapes-controle:338). 900 jours, ou 45 jours avant un
+       * rendez-vous : « Enregistrer » restait offert, et le serveur refusait
+       * ensuite le parcours entier. Mêmes constantes que lui (catalogue).
+       */
+      if (brouillon.mode === 'avant_date') {
+        if ((brouillon.secondes_avant ?? 0) > DELAI_NEGATIF_MAX_SECONDES) {
+          out.push(fr ? 'On peut envoyer au plus 30 jours avant le rendez-vous.' : 'You can send at most 30 days before the appointment.');
+        }
+      } else if ((brouillon.delai_secondes ?? 0) > DELAI_MAX_SECONDES) {
+        out.push(fr ? 'Une attente ne peut pas dépasser 366 jours (un an).' : 'A wait cannot exceed 366 days (one year).');
+      }
+      return out;
+    }
     if (brouillon.type !== 'action') return out;
     if (!modele) return out;
     const config = brouillon.action.config as Record<string, string | undefined>;
@@ -282,9 +557,22 @@ export default function PanneauEtape({
     for (const champ of modele.champs) {
       if (!champ.obligatoire) continue;
       if (!champVisible(champ, config)) continue;
-      if (!config[champ.cle]?.trim()) {
+      // Jugé sur le texte PRINCIPAL (celui que le bureau envoie) : c'est lui qui est à l'écran.
+      if (!config[clePrincipaleDe(champ.cle)]?.trim()) {
         out.push(fr ? `« ${champ.fr} » est vide.` : `“${champ.en}” is empty.`);
       }
+    }
+    /*
+     * UNE SAISIE QUE LE SERVEUR REFUSERAIT EST REFUSÉE ICI, avec la borne
+     * (triage actions, lignes 8 et 9). 999 jours, -5 jours, 10 000 001 $, une
+     * adresse en http:// : « Enregistrer » restait actif, et le refus arrivait
+     * trois secondes plus tard, par l'enregistrement automatique. La règle est
+     * celle du serveur (`fauteDeValeur`, catalogue partagé).
+     */
+    for (const champ of modele.champs) {
+      if (!champVisible(champ, config)) continue;
+      const faute = fauteDeValeur(champ, config[champ.cle]);
+      if (faute) out.push(fr ? `« ${champ.fr} » ${faute.fr}.` : `“${champ.en}” ${faute.en}.`);
     }
     /*
      * « Mettre à jour un champ » n'écrit QUE sur la fiche de l'événement
@@ -300,7 +588,8 @@ export default function PanneauEtape({
       }
     }
     return out;
-  }, [brouillon, modele, fr, declencheur, objetChamps, champsPerso]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `clePrincipaleDe` ne dépend que de `versionsLangue`.
+  }, [brouillon, modele, fr, declencheur, objetChamps, champsPerso, versionsLangue, delaiSaisi, lignesIllisibles]);
 
   /** Variables écrites dans les textes de l'action que le serveur ne saura pas remplir. */
   const inconnues = useMemo(() => {
@@ -311,6 +600,8 @@ export default function PanneauEtape({
       if (champ.type !== 'zone' && champ.type !== 'texte') continue;
       if (!champVisible(champ, config)) continue;
       for (const v of variablesInconnues(config[champ.cle] ?? '')) trouvees.add(v);
+      // La version anglaise part aux clients comme l'autre : mêmes variables, même contrôle.
+      for (const v of variablesInconnues(config[cleAnglaise(champ.cle)] ?? '')) trouvees.add(v);
     }
     return [...trouvees];
   }, [brouillon, modele]);
@@ -330,8 +621,13 @@ export default function PanneauEtape({
       // le reste ne l'est pas (un objet de courriel sur un texto ferait
       // refuser l'enregistrement par la validation serveur).
       const texte = b.action.config.body;
+      // … et sa version anglaise le suit : la laisser tomber ici l'effacerait
+      // sans que personne le voie.
+      const anglais = b.action.config[cleAnglaise('body')];
       const cible = trouverAction(type);
-      const garde = cible?.champs?.some((c) => c.cle === 'body') && texte ? { body: texte } : {};
+      const garde: Record<string, string | undefined> = cible?.champs?.some((c) => c.cle === 'body') && texte
+        ? { body: texte, ...(anglais?.trim() ? { [cleAnglaise('body')]: anglais } : {}) }
+        : {};
       return { ...b, action: { type, config: garde } };
     });
   };
@@ -359,10 +655,14 @@ export default function PanneauEtape({
 
   // « Avant la date » : le délai saisi est « combien avant », pas une durée.
   const avantDate = brouillon.type === 'attendre' && brouillon.mode === 'avant_date';
-  const champDelai: 'delai_secondes' | 'secondes_avant' = avantDate ? 'secondes_avant' : 'delai_secondes';
-  const delai = brouillon.type === 'attendre'
-    ? decomposer((avantDate ? brouillon.secondes_avant : brouillon.delai_secondes) ?? 0)
-    : null;
+  /** Le nombre et l'unité saisis → les secondes de l'attente (un champ vide vaut 0 en attendant). */
+  const poserDelai = (saisie: SaisieDelai) => {
+    setDelaiSaisi(saisie);
+    const u = UNITES.find((x) => x.cle === saisie.unite) ?? UNITES[0];
+    setBrouillon((b) => (b.type === 'attendre'
+      ? { ...b, [b.mode === 'avant_date' ? 'secondes_avant' : 'delai_secondes']: Math.round((nombreSaisi(saisie.texte) ?? 0) * u.secondes) }
+      : b));
+  };
 
   return (
     <aside
@@ -444,6 +744,40 @@ export default function PanneauEtape({
           </div>
         ) : (
           <div className="space-y-4">
+            {/* L'étape a changé AILLEURS pendant qu'on la modifiait ici : on
+                ne choisit pas à la place de l'utilisateur. */}
+            {conflit && (
+              <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                <p className="font-medium">
+                  {conflit === 'lumi'
+                    ? (fr ? 'Lumi a modifié cette étape pendant que vous l’éditiez.' : 'Lumi changed this step while you were editing it.')
+                    : (fr ? 'Cette étape a été modifiée ailleurs pendant que vous l’éditiez.' : 'This step was changed elsewhere while you were editing it.')}
+                </p>
+                <p className="mt-0.5 text-[11px]">
+                  {fr
+                    ? 'Rien n’est écrasé : choisissez la version à garder.'
+                    : 'Nothing is overwritten: choose which version to keep.'}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => prendre(reference.etape)}
+                    className="rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    {conflit === 'lumi'
+                      ? (fr ? 'Voir la version de Lumi' : 'See Lumi’s version')
+                      : (fr ? 'Voir l’autre version' : 'See the other version')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setBase(reference.etape); setConflit(null); }}
+                    className="rounded-md border border-amber-400 px-2.5 py-1.5 text-[11px] font-medium transition-colors hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-amber-700 dark:hover:bg-amber-900/40"
+                  >
+                    {fr ? 'Garder ma version' : 'Keep my version'}
+                  </button>
+                </div>
+              </div>
+            )}
             {/* ── Étape « action » ────────────────────────────── */}
             {journal && (
               <p className="rounded-lg bg-surface-secondary p-3 text-[13px] text-text-secondary">
@@ -526,20 +860,82 @@ export default function PanneauEtape({
                 {/* Les champs de l'action choisie. */}
                 {modele?.cle !== 'update_custom_field' && modele?.champs
                   .filter((champ) => champVisible(champ, brouillon.action.config as Record<string, unknown>))
-                  .map((champ) => (
-                    <ChampActionUI
-                      key={champ.cle}
-                      champ={champ}
-                      valeur={(brouillon.action.config as Record<string, string | undefined>)[champ.cle] ?? ''}
-                      onChange={(v) => majConfig(champ.cle, v)}
-                      fr={fr}
-                      membres={membres}
-                      etiquettes={etiquettes}
-                      automatisations={automatisations}
-                      etapesPipeline={etapesPipeline}
-                      sms={modele.cle === 'send_sms' && champ.cle === 'body'}
-                    />
-                  ))}
+                  .map((champ) => {
+                    const langue = versionsLangue.find((v) => v.champ.cle === champ.cle);
+                    const config = brouillon.action.config as Record<string, string | undefined>;
+                    // Le champ principal montre le texte que le bureau ENVOIE.
+                    const clePrincipale = langue?.clePrincipale ?? champ.cle;
+                    const ouvert = langue ? (langue.perimee || autresDepliees.includes(champ.cle)) : false;
+                    const idBloc = `${ids}-autre-${champ.cle}`;
+                    return (
+                      <React.Fragment key={champ.cle}>
+                        <ChampActionUI
+                          champ={champ}
+                          valeur={config[clePrincipale] ?? ''}
+                          onChange={(v) => majConfig(clePrincipale, v)}
+                          fr={fr}
+                          membres={membres}
+                          etiquettes={etiquettes}
+                          automatisations={automatisations}
+                          etapesPipeline={etapesPipeline}
+                          sms={modele.cle === 'send_sms' && champ.cle === 'body'}
+                        />
+                        {/* L'autre langue, quand l'étape en porte une : un bloc
+                            secondaire, replié tant qu'il n'y a rien à décider. */}
+                        {langue && (
+                          <div className="rounded-lg border border-border">
+                            <button
+                              type="button"
+                              aria-expanded={ouvert}
+                              aria-controls={idBloc}
+                              onClick={() => setAutresDepliees((liste) => (liste.includes(champ.cle)
+                                ? liste.filter((c) => c !== champ.cle)
+                                : [...liste, champ.cle]))}
+                              className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-[11px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            >
+                              <span aria-hidden="true" className="mt-px shrink-0">{ouvert ? '▾' : '▸'}</span>
+                              <span>{titreAutreLangue(champ, langue.autreEstAnglais)}</span>
+                            </button>
+                            {ouvert && (
+                              <div id={idBloc} className="space-y-2 border-t border-border px-3 py-2.5">
+                                <ChampActionUI
+                                  champ={langue.modeleAutre}
+                                  valeur={config[langue.cleAutre] ?? ''}
+                                  onChange={(v) => majConfig(langue.cleAutre, v)}
+                                  fr={fr}
+                                  sms={modele.cle === 'send_sms' && champ.cle === 'body'}
+                                />
+                                {langue.perimee && (
+                                  <fieldset className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                                    <legend className="sr-only">{fr ? 'Que faire de cette version' : 'What to do with this version'}</legend>
+                                    <p className="font-medium">{fr ? 'Cette version n’est plus à jour.' : 'This version is out of date.'}</p>
+                                    {([
+                                      ['retirer', fr ? 'La retirer (vos clients recevront le texte ci-dessus)' : 'Remove it (your clients will get the text above)'],
+                                      ['garder', fr ? 'La garder telle quelle' : 'Keep it as it is'],
+                                    ] as const).map(([choix, libelle]) => (
+                                      <label key={choix} htmlFor={`${idBloc}-${choix}`} className="mt-1.5 flex cursor-pointer items-center gap-2">
+                                        <input
+                                          id={`${idBloc}-${choix}`}
+                                          type="radio"
+                                          name={`${idBloc}-choix`}
+                                          checked={(choix === 'garder') === versionsGardees.includes(champ.cle)}
+                                          onChange={() => setVersionsGardees((liste) => (choix === 'garder'
+                                            ? [...liste.filter((c) => c !== champ.cle), champ.cle]
+                                            : liste.filter((c) => c !== champ.cle)))}
+                                          className="h-4 w-4 border-border text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                        />
+                                        <span>{libelle}</span>
+                                      </label>
+                                    ))}
+                                  </fieldset>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
 
                 {/* Une variable que le serveur ne connaît pas part VIDE :
                     « Bonjour [prenom], » devient « Bonjour , ». La liste le
@@ -567,9 +963,11 @@ export default function PanneauEtape({
                           onClick={() => {
                             const champ = modele.champs.find((c) => c.type === 'zone');
                             if (!champ) return;
+                            // Dans le texte PRINCIPAL : celui que le bureau envoie.
+                            const cle = clePrincipaleDe(champ.cle);
                             const actuel =
-                              (brouillon.action.config as Record<string, string | undefined>)[champ.cle] ?? '';
-                            majConfig(champ.cle, `${actuel}[${v.cle}]`);
+                              (brouillon.action.config as Record<string, string | undefined>)[cle] ?? '';
+                            majConfig(cle, `${actuel}[${v.cle}]`);
                           }}
                           className="rounded-md bg-surface-tertiary px-2 py-1 text-[11px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         >
@@ -602,7 +1000,7 @@ export default function PanneauEtape({
             )}
 
             {/* ── Étape « attendre » ──────────────────────────── */}
-            {brouillon.type === 'attendre' && delai && (
+            {brouillon.type === 'attendre' && (
               <div>
                 <label htmlFor={`${ids}-delai`} className="mb-1 block text-xs font-medium text-text-primary">
                   {fr ? 'Attendre' : 'Wait'}
@@ -614,21 +1012,14 @@ export default function PanneauEtape({
                     type="number"
                     min={0}
                     max={365}
-                    value={delai.valeur}
-                    onChange={(e) => {
-                      const n = Math.max(0, Number(e.target.value) || 0);
-                      const u = UNITES.find((x) => x.cle === delai.unite) ?? UNITES[0];
-                      setBrouillon({ ...(brouillon as EtapeAttendre), [champDelai]: n * u.secondes });
-                    }}
+                    value={delaiSaisi.texte}
+                    onChange={(e) => poserDelai({ texte: e.target.value, unite: delaiSaisi.unite })}
                     className="w-24 rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   />
                   <select
                     aria-label={fr ? 'Unité de temps' : 'Time unit'}
-                    value={delai.unite}
-                    onChange={(e) => {
-                      const u = UNITES.find((x) => x.cle === e.target.value) ?? UNITES[0];
-                      setBrouillon({ ...(brouillon as EtapeAttendre), [champDelai]: delai.valeur * u.secondes });
-                    }}
+                    value={delaiSaisi.unite}
+                    onChange={(e) => poserDelai({ texte: delaiSaisi.texte, unite: e.target.value })}
                     className="flex-1 rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
                     {UNITES.map((u) => (
@@ -659,9 +1050,12 @@ export default function PanneauEtape({
                       const actuelle = brouillon as EtapeAttendre;
                       // Passer à « avant la date » reprend le délai saisi comme
                       // « combien avant », et la durée propre de l'attente tombe à 0.
+                      // … le délai À L'ÉCRAN (nombre et unité saisis), pas une valeur restée dans l'étape.
+                      const u = UNITES.find((x) => x.cle === delaiSaisi.unite) ?? UNITES[0];
+                      const secondes = Math.round((nombreSaisi(delaiSaisi.texte) ?? 0) * u.secondes);
                       setBrouillon(mode === 'avant_date'
-                        ? { ...actuelle, mode, secondes_avant: actuelle.secondes_avant ?? actuelle.delai_secondes, delai_secondes: 0 }
-                        : { ...actuelle, mode, delai_secondes: actuelle.mode === 'avant_date' ? (actuelle.secondes_avant ?? 86400) : actuelle.delai_secondes });
+                        ? { ...actuelle, mode, secondes_avant: secondes, delai_secondes: 0 }
+                        : { ...actuelle, mode, delai_secondes: secondes });
                     }}
                     className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
@@ -701,8 +1095,8 @@ export default function PanneauEtape({
                 </label>
                 <p className="mb-2 text-[11px] text-text-tertiary">
                   {fr
-                    ? 'Une ligne par condition : champ = valeur, ou une comparaison (montant > 5000, created_at >= 2026-06-01). Deux lignes sur le même champ font un intervalle. Le parcours suit « alors » quand toutes sont vraies.'
-                    : 'One condition per line: field = value, or a comparison (amount > 5000, created_at >= 2026-06-01). Two lines on the same field make a range. The journey follows “then” when all are true.'}
+                    ? 'Une ligne par condition : champ = valeur, une comparaison (montant > 5000, created_at >= 2026-06-01), ou une liste (source est l’un de web, facebook ; statut n’est aucun de perdu). Deux lignes sur le même champ font un intervalle. Le parcours suit « alors » quand toutes sont vraies.'
+                    : 'One condition per line: field = value, a comparison (amount > 5000, created_at >= 2026-06-01), or a list (source is one of web, facebook; status is none of lost). Two lines on the same field make a range. The journey follows “then” when all are true.'}
                 </p>
 
                 {/*
@@ -724,7 +1118,7 @@ export default function PanneauEtape({
                         setConditionsTexte(ajout);
                         setBrouillon({
                           ...(brouillon as EtapeSi),
-                          conditions: { ...analyserConditions(ajout), ...champsPersoDe(brouillon) },
+                          conditions: conditionsSaisies(ajout),
                         });
                       }}
                       className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-text-secondary transition-colors hover:border-accent hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -746,11 +1140,34 @@ export default function PanneauEtape({
                     setConditionsTexte(e.target.value);
                     setBrouillon({
                       ...(brouillon as EtapeSi),
-                      conditions: { ...analyserConditions(e.target.value), ...champsPersoDe(brouillon) },
+                      conditions: conditionsSaisies(e.target.value),
                     });
                   }}
                   className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 font-mono text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 />
+                {lignesIllisibles.length > 0 && (
+                  <div role="alert" className="mt-1.5 rounded-lg border border-danger/40 bg-danger-light px-3 py-2 text-[11px] text-danger">
+                    {lignesIllisibles.map((l, i) => (
+                      <p key={`${i}-${l.ligne}`}>
+                        {fr ? `Ligne illisible « ${l.ligne} » : ${l.fr}` : `Unreadable line “${l.ligne}”: ${l.en}`}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {Object.keys(conservees).length > 0 && (
+                  <div className="mt-1.5 rounded-lg border border-border bg-surface-secondary px-3 py-2 text-[11px] text-text-secondary">
+                    <p className="font-medium text-text-primary">
+                      {fr
+                        ? 'Conditions avancées, conservées telles quelles (non modifiables ici) :'
+                        : 'Advanced conditions, kept as they are (not editable here):'}
+                    </p>
+                    <ul className="mt-1 space-y-0.5 font-mono">
+                      {Object.entries(conservees).map(([cle, v]) => (
+                        <li key={cle} className="break-all">{cle} : {JSON.stringify(v)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {/* Conditions sur les champs personnalisés de la fiche,
                     jugées sur les valeurs ACTUELLES quand on arrive ici. */}
                 <ConditionsChampsEtape
@@ -807,9 +1224,11 @@ export default function PanneauEtape({
           Les problèmes sont déjà calculés en clair juste au-dessus : il
           suffisait de les dire.
         */}
-        {problemes.length > 0 && (
+        {(conflit || problemes.length > 0) && (
           <span className="max-w-[55%] text-right text-[11px] leading-tight text-danger">
-            {problemes[0]}
+            {conflit
+              ? (fr ? 'Choisissez d’abord quelle version garder.' : 'First choose which version to keep.')
+              : problemes[0]}
           </span>
         )}
         <button
@@ -824,8 +1243,8 @@ export default function PanneauEtape({
           onClick={() => onEnregistrer(brouillon.type === 'si'
             // Une ligne de champ incomplète bloquerait la branche pour toujours.
             ? { ...brouillon, conditions: sansConditionsIncompletes((brouillon.conditions ?? {}) as Record<string, unknown>) }
-            : brouillon)}
-          disabled={problemes.length > 0}
+            : versEnregistrement(pourEnregistrer(brouillon), reference.html))}
+          disabled={problemes.length > 0 || conflit !== null}
           className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {fr ? 'Enregistrer' : 'Save action'}

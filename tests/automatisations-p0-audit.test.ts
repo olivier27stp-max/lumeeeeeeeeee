@@ -43,7 +43,10 @@ describe('P0-1 — le champ « Conditions » accepte le clavier', () => {
     expect(panneau).toMatch(/setConditionsTexte\(e\.target\.value\)/);
     // Les conditions de champs personnalisés (`champs_perso`) ne vivent pas
     // dans le texte : elles sont reportées, sinon chaque frappe les effaçait.
-    expect(panneau).toMatch(/conditions: \{ \.\.\.analyserConditions\(e\.target\.value\), \.\.\.champsPersoDe\(brouillon\) \}/);
+    // (Depuis le triage « déclencheurs » 05:470 / 05:501, l'assemblage vit dans
+    // `conditionsSaisies` : lignes lisibles + conditions conservées + champs.)
+    expect(panneau).toMatch(/conditions: conditionsSaisies\(e\.target\.value\)/);
+    expect(panneau).toMatch(/\.\.\.analyserConditions\(texte, origineSi\)\.conditions,\s+\.\.\.champsPersoDe\(brouillon\),/);
   });
 
   it('des exemples cliquables disent QUOI écrire', () => {
