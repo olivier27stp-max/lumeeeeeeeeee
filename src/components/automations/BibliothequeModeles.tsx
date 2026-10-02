@@ -356,9 +356,13 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
     return () => { vivant = false; };
   }, [open, essai]);
 
+  /* Fermée, la fenêtre oublie TOUT : la recherche et les catégories repartaient
+     de zéro, mais le tri (« Nom ») et l'affichage (liste) étaient gardés — une
+     remise à zéro à moitié (01-bibliotheque:328). */
   useEffect(() => {
     if (open) return;
     setApercu(null); setSaisie(''); setRecherche(''); setCategories(new Set()); setFiltresMobile(false);
+    setTri('recent'); setVue('grille'); setToutesCategories(false); setCategoriesOuvertes(true);
   }, [open]);
 
   useEffect(() => {
