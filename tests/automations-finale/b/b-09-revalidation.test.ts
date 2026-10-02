@@ -337,6 +337,47 @@ describe('point 13 — FUSION de deux fiches pendant qu’une relance attend sur
     expect((await journauxDe(b, id)).filter((j) => j.result_data?.saute_code === 'fiche_fusionnee')).toHaveLength(1);
     expect(await envoisAvec(b, m)).toHaveLength(1);
   });
+
+  it('[B9-15c] la clé d’unicité de la relance est déjà prise sur la fiche gardée (autre règle) : la fusion RÉUSSIT quand même, la relance s’arrête « fiche fusionnée »', async () => {
+    /*
+     * Revue du coordinateur (2026-10-02). La relance qui suit la fiche gardée change de clé d'unicité ; l'index
+     * unique des tâches en attente peut la refuser quand la fiche gardée porte déjà une tâche à cette clé, d'une
+     * AUTRE règle (donc invisible au « déjà dans la même automatisation »). Sans garde, cette `unique_violation`
+     * annulait TOUTE la fusion : l'utilisateur voyait un échec pour un détail.
+     */
+    const m = marque('B9-15c');
+    const { absorbe, garde } = await creerPaire(m);
+    const id = await regle(b, m, { trigger_event: 'note.added', delay_seconds: UN_JOUR, actions: [courriel(m, 'Message différé')] });
+    const autre = await regle(b, `${m} autre`, { trigger_event: 'client.tagged', delay_seconds: UN_JOUR, actions: [courriel(`${m} autre`, 'Autre message')] });
+    await emettre(b, 'note.added', 'client', absorbe.id);
+    const [relance] = await attendreTaches(b, id, 1);
+    const ligne = await ok<{ execution_key: string; execute_at: string }>(
+      b.admin.from('automation_scheduled_tasks').select('execution_key, execute_at').eq('id', relance.id).single(), 'clé de la relance');
+    expect(ligne.execution_key).toContain(absorbe.id);
+    // La fiche gardée porte déjà, pour une autre règle, une tâche à la clé que la relance prendrait en la suivant.
+    await ok(b.admin.from('automation_scheduled_tasks').insert({
+      org_id: b.orgA, automation_rule_id: autre, entity_type: 'client', entity_id: garde.id, status: 'pending',
+      execute_at: ligne.execute_at, execution_key: ligne.execution_key.split(absorbe.id).join(garde.id),
+      action_config: { ...courriel(`${m} autre`, 'Autre message'), event_metadata: {} },
+    }), 'tâche en conflit');
+
+    // La fusion réussit (avant : erreur « duplicate key value violates unique constraint »).
+    const r = await fusionner(garde.id, absorbe.id);
+    expect(Number(r.relances_arretees)).toBeGreaterThanOrEqual(1);
+    const fiches = await ok<Array<{ id: string; deleted_at: string | null }>>(
+      b.admin.from('clients').select('id, deleted_at').in('id', [garde.id, absorbe.id]), 'fiches');
+    expect(fiches.find((f) => f.id === absorbe.id)!.deleted_at, 'la fiche absorbée est bien partie').not.toBeNull();
+    expect(fiches.find((f) => f.id === garde.id)!.deleted_at).toBeNull();
+
+    // La relance en conflit n'a pas été repointée : elle est arrêtée, avec le bon motif et sa ligne au journal.
+    const [t] = await tachesDe(b, id);
+    expect([t.status, t.entity_id, t.action_config.motif_code]).toEqual(['cancelled', absorbe.id, 'fiche_fusionnee']);
+    expect((await journauxDe(b, id)).filter((j) => j.result_data?.saute_code === 'fiche_fusionnee')).toHaveLength(1);
+    // La tâche de l'autre règle, sur la fiche gardée, n'a pas bougé.
+    const [intacte] = await tachesDe(b, autre);
+    expect([intacte.status, intacte.entity_id]).toEqual(['pending', garde.id]);
+    await b.admin.from('automation_scheduled_tasks').update({ status: 'cancelled', last_error: 'fin du test B9-15c' }).eq('id', intacte.id);
+  });
 });
 
 describe('point 9 — la raison de l’arrêt est lisible (« ignoré : condition plus valide »)', () => {
