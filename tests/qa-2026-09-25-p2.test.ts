@@ -43,8 +43,13 @@ describe('P2-12 — un bouton grisé doit dire POURQUOI', () => {
      * passait, l'étape restait « à compléter ». Cas rencontré au QA :
      * un message de texto laissé vide.
      */
-    expect(panneau).toMatch(/\{problemes\.length > 0 && \(/);
-    expect(panneau).toMatch(/\{problemes\[0\]\}/);
+    // La forme a changé (2b27e032 : un conflit de versions grise aussi le
+    // bouton, et dit pourquoi au même endroit). Le COMPORTEMENT est éprouvé
+    // sur le vrai composant dans tests/automations-finale/u/panneau-etape.test.tsx
+    // « P2-12 » ; ici, on garde la trace dans le source.
+    expect(panneau).toMatch(/\{\(conflit \|\| problemes\.length > 0\) && \(/);
+    expect(panneau).toMatch(/: problemes\[0\]\}/);
+    expect(panneau).toMatch(/disabled=\{problemes\.length > 0 \|\| conflit !== null\}/);
   });
 });
 
