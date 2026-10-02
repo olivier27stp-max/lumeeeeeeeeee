@@ -19,7 +19,7 @@ import {
   ecrireMessageDeRegle, lireMessageDeRegle, getAutomationLanguage, getCompanyBranding, type EcritureMessage,
 } from '../../lib/automationRulesApi';
 import {
-  htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES, VARIABLES_CONNUES, VARIABLES_POINTEES_CONNUES,
+  htmlVersTexte, texteVersHtml, remplacerVariables, variablesInconnues, VARIABLES_PROPOSEES, VARIABLES_CONNUES, VARIABLES_POINTEES_CONNUES,
 } from '../../lib/emailBodyText';
 import { variablesPour, VARIABLES_PAR_TYPE } from '../../lib/variablesCourriel';
 import { apercuCourriel, envoyerEssaiCourriel } from '../../lib/emailTemplatesApi';
@@ -483,6 +483,13 @@ export default function EmailPreviewEditor({
       if (!ressemble) continue;
       if (!connues.has(cle)) vues.add(cle);
     }
+    /* UNE AUTOMATISATION : le moteur remplace par du VIDE toute variable d'un
+       seul mot qu'il ne connaît pas — « Bonjour [prenom], » part en
+       « Bonjour , » — qu'elle ressemble ou non à une variable connue. C'est
+       le contrôle de l'éditeur de texto (`variablesInconnues`) ; l'éditeur de
+       courriel ne signalait que les clés PROCHES d'une vraie, et laissait
+       passer « [prenom] » (triage « modèles », 04-courriel:620). */
+    if (!typeCourriel) for (const cle of variablesInconnues(texte)) if (!connues.has(cle)) vues.add(cle);
     return [...vues];
   }, [versions, lecture.aAnglais, variables]);
 

@@ -301,6 +301,34 @@ describe('04-courriel:560 et :588 — sur « Aperçu réel » : pas de palette, 
   });
 });
 
+describe('04-courriel:620 — une variable inventée est signalée, comme dans l’éditeur de texto', () => {
+  const C = { subject: OBJET, body: CORPS };
+  const alerte = () => /n’existe pas|n’existent pas/.test(texteEcran());
+
+  it('« Bonjour [prenom], » : le serveur enverra « Bonjour , » — l’éditeur le dit et nomme la variable', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    expect(alerte()).toBe(false);
+    await saisir(champs('Paragraphe')[0], 'Bonjour [prenom],');
+    expect(texteEcran()).toContain('Cette variable n’existe pas');
+    expect(texteEcran()).toContain('[prenom] — votre client verra un blanc');
+  });
+
+  it('dans l’objet aussi, et au pluriel quand il y en a deux', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await saisir(objet(), 'Pour [prenom] — facture {numero}');
+    expect(texteEcran()).toContain('Ces variables n’existent pas');
+  });
+
+  it('ni un crochet de texte courant, ni une variable que le moteur remplit ne sont signalés', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await saisir(champs('Paragraphe')[0], 'Rabais [50 %] pour [client_first_name] — [quote_link], [invoice_due_date], {{soumission.total}}');
+    expect(alerte()).toBe(false);
+  });
+});
+
 describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’éditeur montre et modifie le courriel qui part', () => {
   const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
   const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };
