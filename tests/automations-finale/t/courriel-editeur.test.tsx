@@ -405,6 +405,54 @@ describe('04-courriel:201 — fermer avec une modification : le bouton dit ce qu
   });
 });
 
+describe('04-courriel:212 — la fenêtre au clavier : un dialogue qui prend le focus, le garde et le rend', () => {
+  const C = { subject: OBJET, body: CORPS };
+  const dialogue = () => document.body.querySelector<HTMLElement>('[role="dialog"]');
+  const dedans = () => !!dialogue()?.contains(document.activeElement);
+  function tab(maj = false) {
+    const cible = document.activeElement ?? document.body;
+    cible.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: maj, bubbles: true, cancelable: true }));
+  }
+
+  it('c’est un dialogue nommé, et le focus y entre à l’ouverture', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    expect(dialogue()).not.toBeNull();
+    expect(dialogue()?.getAttribute('aria-modal')).toBe('true');
+    expect(dialogue()?.getAttribute('aria-label')).toBe('Rappel de rendez-vous');
+    expect(dedans()).toBe(true);
+  });
+
+  it('Tab boucle dans la fenêtre : après le dernier bouton on revient au premier, et Maj+Tab fait l’inverse', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    const atteignables = Array.from(dialogue()?.querySelectorAll<HTMLElement>('button:not([disabled]), input, textarea') ?? []);
+    const premier = atteignables[0];
+    const dernier = atteignables[atteignables.length - 1];
+    // À l'ouverture le focus est sur la fenêtre elle-même : Maj+Tab va au dernier, pas à la page derrière.
+    tab(true);
+    expect(document.activeElement).toBe(dernier);
+    tab();
+    expect(document.activeElement).toBe(premier);
+    tab(true);
+    expect(document.activeElement).toBe(dernier);
+    expect(dedans()).toBe(true);
+  });
+
+  it('à la fermeture, le focus revient sur le bouton qui l’avait ouverte', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    const modifier = document.createElement('button');
+    modifier.textContent = 'Modifier (ouvreur)';
+    document.body.appendChild(modifier);
+    modifier.focus();
+    await ouvrir(C);
+    expect(dedans()).toBe(true);
+    await demonter();
+    expect(document.activeElement).toBe(modifier);
+    modifier.remove();
+  });
+});
+
 describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’éditeur montre et modifie le courriel qui part', () => {
   const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
   const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };

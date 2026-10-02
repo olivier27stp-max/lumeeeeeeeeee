@@ -600,6 +600,36 @@ export default function EmailPreviewEditor({
     onClose();
   }, [modifie, fr, onClose]);
 
+  /*
+   * LA FENÊTRE AU CLAVIER (triage « modèles », 04-courriel:212).
+   *
+   * Ouverte par Entrée sur « Modifier », elle laissait le focus sur la page
+   * derrière : Tab et Maj+Tab s'y promenaient, et un lecteur d'écran ne savait
+   * pas qu'une fenêtre venait de s'ouvrir. Elle est maintenant un dialogue
+   * (`role="dialog"`, `aria-modal`) qui prend le focus à l'ouverture, le garde
+   * (Tab boucle dedans), et le rend à ce qui l'a ouverte quand elle se ferme.
+   */
+  const fenetre = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const ouvreur = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    fenetre.current?.focus();
+    return () => { if (ouvreur && document.contains(ouvreur)) ouvreur.focus(); };
+  }, []);
+  const garderLeFocus = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab') return;
+    const cadre = fenetre.current;
+    if (!cadre) return;
+    const atteignables = Array.from(cadre.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], iframe',
+    ));
+    if (atteignables.length === 0) { e.preventDefault(); return; }
+    const premier = atteignables[0];
+    const dernier = atteignables[atteignables.length - 1];
+    const ici = document.activeElement;
+    if (e.shiftKey && (ici === premier || ici === cadre)) { e.preventDefault(); dernier.focus(); }
+    else if (!e.shiftKey && ici === dernier) { e.preventDefault(); premier.focus(); }
+  };
+
   // Échap ferme la fenêtre — réflexe attendu d'une fenêtre superposée.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') void fermer(); };
@@ -748,10 +778,14 @@ export default function EmailPreviewEditor({
       onClick={fermer}
     >
       <div
-        className="w-full sm:max-w-3xl h-[95vh] sm:h-auto sm:max-h-[90vh] flex flex-col rounded-t-xl sm:rounded-xl bg-surface-secondary shadow-2xl overflow-hidden"
-        role="presentation"
+        ref={fenetre}
+        className="w-full sm:max-w-3xl h-[95vh] sm:h-auto sm:max-h-[90vh] flex flex-col rounded-t-xl sm:rounded-xl bg-surface-secondary shadow-2xl overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+        role="dialog"
+        aria-modal="true"
+        aria-label={ruleName}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={garderLeFocus}
       >
         {/* En-tête */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-outline/50 shrink-0">
