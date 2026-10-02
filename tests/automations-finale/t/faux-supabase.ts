@@ -8,7 +8,14 @@
  * `base.erreurEcriture` (l'objet d'erreur que PostgREST rendrait) ou
  * `base.ecritureFiltree` (la RLS filtre la ligne : 0 ligne touchée, aucune erreur).
  *
- * Usage : `vi.mock('…/src/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabase())`.
+ * La MÊME base sert au navigateur (`moduleSupabase`, à la place de
+ * `src/lib/supabase`) et au serveur (`moduleSupabaseServeur`, à la place de
+ * `server/lib/supabase`) : un test fait le geste à l'écran, la vraie route
+ * écrit, et on relit ce qui est en base.
+ *
+ * Usage :
+ *   vi.mock('…/src/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabase());
+ *   vi.mock('…/server/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabaseServeur());
  */
 
 type Ligne = Record<string, unknown>;
@@ -24,15 +31,27 @@ export interface FausseBase {
   erreursLectureParTable: Record<string, { message: string; code?: string }>;
   erreurEcriture: { message: string; code?: string } | null;
   ecritureFiltree: boolean;
+  /** L'utilisateur connecté (côté serveur) : son adhésion est lue dans `memberships`. */
+  utilisateur: string;
 }
+
+/** Le bureau de la fausse session. */
+export const ORG = 'org-1';
+const adhesion = (utilisateur: string, role: string): Ligne => ({
+  id: `m-${utilisateur}`, user_id: utilisateur, org_id: ORG, status: 'active', role, scope: 'company',
+  team_id: null, department_id: null, manager_id: null, permissions: {},
+});
 
 export const base: FausseBase = {
   tables: {}, ecritures: [], lectures: {}, erreurLecture: null, erreursLectureParTable: {}, erreurEcriture: null, ecritureFiltree: false,
+  utilisateur: 'proprio',
 };
 
 /** Remet la fausse base à neuf, avec ces lignes. */
 export function remettre(tables: Record<string, Ligne[]> = {}): void {
-  base.tables = structuredClone(tables);
+  // Deux comptes par défaut : un propriétaire (tous les droits) et un technicien (aucun sur les automatisations).
+  base.tables = structuredClone({ memberships: [adhesion('proprio', 'owner'), adhesion('technicien', 'technician')], ...tables });
+  base.utilisateur = 'proprio';
   base.ecritures = [];
   base.lectures = {};
   base.erreurLecture = null;
@@ -89,9 +108,18 @@ export function moduleSupabase() {
       rpc: async () => ({ data: null, error: null }),
       auth: {
         getUser: async () => ({ data: { user: null } }),
-        getSession: async () => ({ data: { session: null } }),
+        getSession: async () => ({ data: { session: { access_token: 'jeton-de-test' } } }),
         onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
       },
     },
+  };
+}
+
+/** Le module `server/lib/supabase` de remplacement : la session est celle de `base.utilisateur`, dans le bureau `ORG`. */
+export function moduleSupabaseServeur() {
+  const client = { from: (table: string) => requete(table) };
+  return {
+    requireAuthedClient: async () => ({ client, orgId: ORG, user: { id: base.utilisateur, email: `${base.utilisateur}@lume-qa.test` } }),
+    getServiceClient: () => client,
   };
 }

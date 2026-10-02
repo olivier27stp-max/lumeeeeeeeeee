@@ -13,11 +13,13 @@
  * messages sur une fausse base.
  */
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 
 const toasts = vi.hoisted(() => ({ succes: [] as string[], erreurs: [] as string[] }));
 vi.mock('../../../src/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabase());
 vi.mock('../../../src/lib/orgApi', () => ({ getCurrentOrgId: async () => 'org-1', getCurrentOrgIdOrThrow: async () => 'org-1' }));
+vi.mock('../../../server/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabaseServeur());
+vi.mock('../../../server/lib/automatisations-bureaux', () => ({ bureauxCibles: async () => [], copierVersBureaux: async () => [], propagerAuxCopies: async () => [] }));
 vi.mock('../../../src/components/ui/ConfirmDialog', () => ({ confirmer: async () => true, default: () => null }));
 vi.mock('sonner', () => ({
   toast: Object.assign(() => {}, {
@@ -28,6 +30,7 @@ vi.mock('sonner', () => ({
 
 import { remettre, ligne } from './faux-supabase';
 import { monter, demonter, bouton, champs, cliquer, saisir, jusqua } from './banc-composants';
+import { brancherServeur, arreterServeur } from './serveur-messages';
 import MessageEditor from '../../../src/components/automations/MessageEditor';
 
 type Action = { type: string; config: Record<string, unknown> };
@@ -61,8 +64,9 @@ async function deplier(actions: Action[], plus: Record<string, unknown> = {}) {
   );
 }
 
-beforeEach(() => { localStorage.setItem('lume-language', 'fr'); toasts.succes.length = 0; toasts.erreurs.length = 0; });
+beforeEach(async () => { localStorage.setItem('lume-language', 'fr'); toasts.succes.length = 0; toasts.erreurs.length = 0; await brancherServeur(); });
 afterEach(async () => { await demonter(); });
+afterAll(async () => { await arreterServeur(); });
 
 describe('03-texto:172 [MSG-010] — modifier un texto ne touche pas à l’autre texto de la même automatisation', () => {
   it('corriger le premier de deux textos, « Enregistrer » : « Message enregistré », et seul le premier a changé', async () => {

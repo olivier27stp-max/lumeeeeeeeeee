@@ -1,16 +1,20 @@
 /**
  * LES MESSAGES D'UNE AUTOMATISATION, CÔTÉ API — triage « modèles » du 2026-10-01.
  *
- * La vraie `src/lib/automationRulesApi.ts` sur une fausse base en mémoire : on
- * regarde ce qui est ÉCRIT, message par message. Un bloc `describe` par ligne
- * du triage.
+ * La vraie `src/lib/automationRulesApi.ts`, qui appelle la VRAIE route
+ * `PATCH /api/automations/rules/:id/messages` (montée dans une app de test),
+ * sur une fausse base en mémoire : on regarde ce qui est ÉCRIT, message par
+ * message. Un bloc `describe` par ligne du triage.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 
 vi.mock('../../../src/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabase());
 vi.mock('../../../src/lib/orgApi', () => ({ getCurrentOrgId: async () => 'org-1', getCurrentOrgIdOrThrow: async () => 'org-1' }));
+vi.mock('../../../server/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabaseServeur());
+vi.mock('../../../server/lib/automatisations-bureaux', () => ({ bureauxCibles: async () => [], copierVersBureaux: async () => [], propagerAuxCopies: async () => [] }));
 
 import { base, remettre, ligne } from './faux-supabase';
+import { brancherServeur, arreterServeur } from './serveur-messages';
 import {
   updateRuleMessage, ecrireMessageDeRegle, lireMessageDeRegle, messagesDeRegle, texteDuMessage, avecTexteDuMessage, texteQuiPart,
 } from '../../../src/lib/automationRulesApi';
@@ -36,8 +40,8 @@ const PARCOURS = [
   { id: 'e4', type: 'action', action: sms('Second texto : rappel la veille.'), suivant: null },
 ];
 
-beforeEach(() => { remettre(); });
-afterEach(() => { vi.unstubAllGlobals(); });
+beforeEach(async () => { remettre(); await brancherServeur(); });
+afterAll(async () => { await arreterServeur(); });
 
 describe('03-texto:172 et 04-courriel:816 — modifier un message ne recopie pas son texte dans l’autre message du même type', () => {
   it('deux textos (règle à plat) : seul celui qu’on désigne par le texte lu change', async () => {

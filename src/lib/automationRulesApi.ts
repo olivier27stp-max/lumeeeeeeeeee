@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
    API — Automation Rules (event-driven engine presets)
-   Reads/writes to the automation_rules table.
+   Reads the automation_rules table; the content of a rule is only ever
+   WRITTEN through the server (messages: PATCH /api/automations/rules/:id/messages).
    These are the REAL working workflows powered by the automation engine.
 
    Presets are seeded via DB migration (idempotent upsert).
@@ -12,6 +13,8 @@ import { getCurrentOrgId } from './orgApi';
 import { changerPublication } from './automationBuilderApi';
 import { interfaceEnFrancais } from './champs/messages';
 import { estPrereglageRetire } from './automationCatalogue';
+import { appelServeur } from './appelServeur';
+import { messageDuServeur } from './messageDuServeur';
 
 export interface AutomationRule {
   id: string;
@@ -287,7 +290,7 @@ export async function updateRuleMessage(
   }
   const objet = actionType === 'send_email' && subject !== undefined ? subject : undefined;
   const { langue, ...message } = cible;
-  return ecrireMessageDeRegle(
+  await ecrireMessageDeRegle(
     id,
     actionType,
     langue === 'en' ? { body_en: body, subject_en: objet } : { body, subject: objet },
@@ -311,19 +314,47 @@ export async function lireMessageDeRegle(id: string, actionType: TypeMessage, ci
 }
 
 /**
+ * Les en-têtes d'un appel au serveur. `x-org-id` : sans lui, le serveur
+ * retomberait sur le premier bureau de la personne. `Accept-Language` : il
+ * répond dans la langue de l'interface.
+ */
+async function entetesServeur(): Promise<HeadersInit> {
+  const fr = interfaceEnFrancais();
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error(fr ? 'Session expirée — reconnectez-vous. Rien n’a été modifié.' : 'Session expired — sign in again. Nothing was changed.');
+  const orgId = await getCurrentOrgId();
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+    'Accept-Language': fr ? 'fr' : 'en',
+    ...(orgId ? { 'x-org-id': orgId } : {}),
+  };
+}
+
+/**
  * Écrit dans UN message d'une automatisation — et seulement dans celui-là.
- * Lecture, modification, écriture : les autres actions (autre texto, courriel,
- * tâches, notes) ne bougent pas.
+ *
+ * PAR LE SERVEUR (`PATCH /api/automations/rules/:id/messages`,
+ * server/routes/automation-messages.ts), plus jamais par une écriture directe
+ * dans la table : c'est lui qui désigne le message visé, valide (texte non
+ * vide, 1 600 caractères pour un texto), refuse une règle à la corbeille ou un
+ * message changé ailleurs, écrit le parcours ET son reflet `actions`, et rend
+ * l'état enregistré. Ses refus arrivent en phrases, dans la langue de
+ * l'interface.
+ *
+ * Rend les variables écrites que le serveur ne saura pas remplir.
  */
 export async function ecrireMessageDeRegle(
   id: string,
   actionType: TypeMessage,
   ecriture: EcritureMessage,
   cible: CibleMessage = {},
-): Promise<void> {
+): Promise<{ variablesInconnues: string[] }> {
   const fr = interfaceEnFrancais();
   const estCourriel = actionType === 'send_email';
 
+  // Les deux refus qu'on peut dire sans aller-retour, avec les mots du serveur.
   // Le français ne se vide pas : c'est le texte qui part quand il n'y a pas
   // d'autre version. La version anglaise, elle, se retire en la vidant.
   if (ecriture.body !== undefined && !texteVisible(ecriture.body)) {
@@ -332,69 +363,40 @@ export async function ecrireMessageDeRegle(
   if (estCourriel && ecriture.subject !== undefined && !ecriture.subject.trim()) {
     throw new Error(fr ? 'L’objet du courriel ne peut pas être vide.' : 'The email subject cannot be empty.');
   }
-  const { data: rule, error: readErr } = await supabase
-    .from('automation_rules')
-    .select('actions, steps')
-    .eq('id', id)
-    .single();
-  if (readErr) throw readErr;
 
-  const vise = messageVise(messagesDeRegle(rule, actionType), cible, fr);
-
-  const reecrire = (config: Record<string, any> | undefined): Record<string, any> => {
-    const neuf: Record<string, any> = { ...(config || {}) };
-    if (ecriture.body !== undefined) neuf.body = ecriture.body;
-    if (estCourriel && ecriture.subject !== undefined) neuf.subject = ecriture.subject;
-    const anglais: Array<['body_en' | 'subject_en', string | undefined]> = [
-      ['body_en', ecriture.body_en],
-      ['subject_en', estCourriel ? ecriture.subject_en : undefined],
-    ];
-    for (const [cle, valeur] of anglais) {
-      if (valeur === undefined) continue;
-      const vide = cle === 'body_en' ? !texteVisible(valeur) : !valeur.trim();
-      if (vide) delete neuf[cle]; else neuf[cle] = valeur;
-    }
-    return neuf;
+  const francais = ecriture.body !== undefined || ecriture.subject !== undefined;
+  const anglais = ecriture.body_en !== undefined || ecriture.subject_en !== undefined;
+  const corps = {
+    canal: actionType,
+    etape_id: cible.etapeId,
+    rang: cible.rang,
+    corps_lu: cible.corpsLu,
+    objet_lu: cible.objetLu,
+    ...(francais
+      ? {
+        langue: 'fr',
+        texte: ecriture.body,
+        objet: ecriture.subject,
+        ...(anglais ? { version_en: { texte: ecriture.body_en, objet: ecriture.subject_en } } : {}),
+      }
+      : { langue: 'en', texte: ecriture.body_en, objet: ecriture.subject_en }),
   };
 
-  /*
-   * UNE AUTOMATISATION À PARCOURS : le moteur exécute `steps` et ignore
-   * `actions`, qui n'en est qu'un reflet. Réécrire `actions` seul répondait
-   * « Message enregistré » pendant que le client recevait l'ancien texte
-   * (Réglages › Messagerie et Avis ; même correctif que l'outil Lumi,
-   * server/lib/agent/tools-reglages.ts). On écrit donc l'étape visée, ET on
-   * remet `actions` en accord dans la même écriture.
-   */
-  let ecritureBase: { actions: AutomationRule['actions']; steps?: Array<Record<string, any>> };
-  if (Array.isArray(rule?.steps)) {
-    const steps = (rule.steps as Array<Record<string, any>>).map((e) => (e && e.id === vise.etapeId
-      ? { ...e, action: { ...e.action, config: reecrire(e.action?.config) } }
-      : e));
-    ecritureBase = { steps, actions: refletDuParcours(steps) };
-  } else {
-    // Seule l'action visée est modifiée : la même, par son rang parmi celles de son type.
-    let rang = -1;
-    ecritureBase = {
-      actions: ((rule?.actions || []) as AutomationRule['actions']).map((a) => {
-        if (!(a.type === actionType)) return a;
-        rang += 1;
-        return rang === vise.rang ? { ...a, config: reecrire(a.config) } : a;
-      }),
-    };
+  const reponse = await appelServeur(`/api/automations/rules/${id}/messages`, {
+    method: 'PATCH',
+    headers: await entetesServeur(),
+    body: JSON.stringify(corps),
+  });
+  const rendu: unknown = await reponse.json().catch(() => null);
+  if (!reponse.ok) {
+    // La phrase du serveur ; sans elle (panne d'un relais, réponse sans JSON),
+    // une phrase qui dit quoi faire — jamais un texte technique.
+    throw new Error(messageDuServeur(rendu) ?? (fr
+      ? 'Enregistrement impossible pour le moment : rien n’a été modifié. Réessayez dans un instant.'
+      : 'Could not save right now: nothing was changed. Try again in a moment.'));
   }
-
-  // `.select()` force PostgREST à retourner les lignes touchées : sans lui, un
-  // filtrage par la RLS produirait un « succès » silencieux (0 ligne modifiée)
-  // et l'utilisateur croirait avoir enregistré son texte.
-  const { data: updated, error } = await supabase
-    .from('automation_rules')
-    .update({ ...ecritureBase, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select('id');
-  if (error) throw error;
-  if (!updated || updated.length === 0) {
-    throw new Error("Modification refusée — vous n'avez pas accès à cette automatisation.");
-  }
+  const inconnues = (rendu as { variables_inconnues?: unknown } | null)?.variables_inconnues;
+  return { variablesInconnues: Array.isArray(inconnues) ? inconnues.map(String) : [] };
 }
 
 /**

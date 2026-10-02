@@ -6,7 +6,7 @@
  * et on regarde ce qui est écrit. Un bloc `describe` par ligne du triage.
  */
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 
 const toasts = vi.hoisted(() => ({ succes: [] as string[], erreurs: [] as string[] }));
 const confirmerMock = vi.hoisted(() => vi.fn(async (_o: unknown) => true));
@@ -14,6 +14,8 @@ const apercu = vi.hoisted(() => ({ appels: [] as unknown[][], essais: [] as unkn
 
 vi.mock('../../../src/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabase());
 vi.mock('../../../src/lib/orgApi', () => ({ getCurrentOrgId: async () => 'org-1', getCurrentOrgIdOrThrow: async () => 'org-1' }));
+vi.mock('../../../server/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabaseServeur());
+vi.mock('../../../server/lib/automatisations-bureaux', () => ({ bureauxCibles: async () => [], copierVersBureaux: async () => [], propagerAuxCopies: async () => [] }));
 vi.mock('../../../src/components/ui/ConfirmDialog', () => ({ confirmer: (o: unknown) => confirmerMock(o), default: () => null }));
 vi.mock('../../../src/hooks/useChampsPersoActifs', () => ({ useChampsPersoActifs: () => ({ isEnabled: false, loading: false }) }));
 vi.mock('../../../src/lib/champsPersoApi', () => ({ listerChamps: async () => ({ fields: [] }) }));
@@ -32,6 +34,7 @@ vi.mock('sonner', () => {
 
 import { base, remettre, ligne } from './faux-supabase';
 import { monter, demonter, bouton, boutonPresent, champ, champs, cliquer, saisir, texteEcran, jusqua } from './banc-composants';
+import { brancherServeur, arreterServeur } from './serveur-messages';
 import EmailPreviewEditor from '../../../src/components/automations/EmailPreviewEditor';
 
 type Action = { type: string; config: Record<string, unknown> };
@@ -64,13 +67,15 @@ async function ouvrir(config: Record<string, unknown>, props: Partial<React.Comp
 }
 const objet = () => champ<HTMLInputElement>('Objet du courriel');
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.setItem('lume-language', 'fr');
   toasts.succes.length = 0; toasts.erreurs.length = 0;
   apercu.appels.length = 0; apercu.essais.length = 0;
   confirmerMock.mockClear();
+  await brancherServeur();
 });
 afterEach(async () => { await demonter(); });
+afterAll(async () => { await arreterServeur(); });
 
 describe('04-courriel:816 — modifier un courriel ne touche pas à l’autre courriel de la même automatisation', () => {
   it('changer l’objet du premier : le second garde son objet ET son corps', async () => {
