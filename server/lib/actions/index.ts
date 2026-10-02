@@ -637,6 +637,45 @@ export function resolveTemplate(
 }
 
 /**
+ * Le corps d'un courriel porte-t-il déjà du HTML (une balise ouvrante,
+ * fermante, ou un commentaire) ? C'est le cas de tout ce que l'éditeur
+ * enregistre (`<p>…</p>`). « 5 < 10 » ou « <3 » ne sont pas des balises.
+ */
+export function corpsEstDuHtml(texte: string): boolean {
+  return /<\/?[a-z][a-z0-9]*(?:\s[^<>]*)?\/?>|<!--/i.test(texte);
+}
+
+/**
+ * Un corps de courriel en TEXTE BRUT garde ses paragraphes (A-21).
+ *
+ * Le corps est posé dans un gabarit HTML : sans balise, ses retours à la
+ * ligne ne valent rien pour un navigateur — un courriel écrit à la main en
+ * trois paragraphes (ou par un ancien outil, ou importé) partait chez le
+ * client en un seul bloc, « Bonjour Marie, Votre facture… Merci, L'équipe ».
+ *
+ *   · `gabarit` : le texte tel qu'il est ENREGISTRÉ. C'est lui qui dit si
+ *     l'auteur a écrit du HTML — jamais le texte rendu : une valeur de
+ *     variable ne peut ni faire passer un texte brut pour du HTML, ni
+ *     l'inverse (et elle reste échappée par `resolveTemplate`, comme avant) ;
+ *   · `rendu` : le même texte, variables remplacées.
+ *
+ * Texte brut avec au moins un retour à la ligne : les lignes vides séparent
+ * des paragraphes (`<p>`), un retour simple devient `<br>`. Un corps qui
+ * porte déjà du HTML, ou qui tient sur une ligne, est rendu tel quel.
+ */
+export function corpsCourrielEnHtml(gabarit: string, rendu: string): string {
+  if (corpsEstDuHtml(gabarit)) return rendu;
+  const texte = rendu.replace(/\r\n?/g, '\n').trim();
+  if (!texte.includes('\n')) return rendu;
+  return texte
+    .split(/\n(?:[ \t]*\n)+/)
+    .map((paragraphe) => paragraphe.split('\n').map((ligne) => ligne.trim()).join('<br>'))
+    .filter((paragraphe) => paragraphe.replace(/<br>/g, '').trim() !== '')
+    .map((paragraphe) => `<p>${paragraphe}</p>`)
+    .join('');
+}
+
+/**
  * Le contrat à signer d'une job, s'il y en a un en attente.
  *
  * Une confirmation de rendez-vous qui n'apporte pas le document à signer force
@@ -1327,7 +1366,9 @@ export async function executeSendEmail(
   const rendre = (gabarit: string, html = false) =>
     (options.dejaResolu ? gabarit : resolveTemplate(gabarit, vars, html ? { html: true } : {}));
   const subject = sansPrenomVide(rendre(champLocalise(config, 'subject', ctx.langue)));
-  const body = sansPrenomVide(rendre(champLocalise(config, 'body', ctx.langue), true));
+  // Un corps en texte brut garde ses paragraphes (A-21) ; un corps HTML n'est pas touché.
+  const gabaritDuCorps = champLocalise(config, 'body', ctx.langue);
+  const body = corpsCourrielEnHtml(gabaritDuCorps, sansPrenomVide(rendre(gabaritDuCorps, true)));
 
   try {
     const { sendEmail, isMailerConfigured, adresseInjoignable } = await import('../mailer');
