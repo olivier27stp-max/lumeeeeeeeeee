@@ -108,6 +108,22 @@ router.post('/cron/rappels-dates', async (req, res) => {
   }
 });
 
+/*
+ * L'état du tick du planificateur (B-19) : quand a fini le dernier tick, en
+ * combien de temps, et s'il est en retard. Lecture seule, même secret que les
+ * autres routes du cron. `/api/health` peut appeler la même fonction
+ * (`etatDuTick`, server/lib/scheduler.ts).
+ */
+router.get('/cron/etat-tick', async (req, res) => {
+  if (!checkCronAuth(req, res)) return;
+  try {
+    const { etatDuTick } = await import('../lib/scheduler');
+    return res.status(200).json({ ok: true, ...(await etatDuTick(getServiceClient())) });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Cron job failed.', '[cron/etat-tick]');
+  }
+});
+
 router.post('/cron/webhook-retries', async (req, res) => {
   if (!checkCronAuth(req, res)) return;
   try {

@@ -933,8 +933,12 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
     }
   } catch (err: any) {
     console.error('[scheduler] unexpected error in tick:', err.message);
+    tickInterrompu = true;
   }
 }
+
+/** Vrai si le dernier tick a été interrompu par une erreur inattendue : sa trace « terminé » n'est pas écrite. */
+let tickInterrompu = false;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -978,6 +982,90 @@ export function startScheduler(
   intervalHandle = setInterval(() => void tickProtege(supabase, twilioConfig), INTERVAL_MS);
 }
 
+// ---------------------------------------------------------------------------
+// Surveillance du tick (B-19)
+// ---------------------------------------------------------------------------
+//
+// Le tick est le seul à écrire aux clients, et rien ne disait qu'il tournait :
+// figé, les relances s'arrêtaient en silence. Trois traces maintenant :
+//   1. chaque tick TERMINÉ écrit son heure de début et de fin dans
+//      `cron_locks` (ligne dédiée, jamais un verrou : ses deux dates sont
+//      passées) — lisible par `etatDuTick()`, donc par /api/health ;
+//   2. un passage Sentry (`withCronCheckIn`) : Sentry alerte sur un tick qui
+//      plante ET sur un tick qui ne vient plus (« missed check-in »), une fois
+//      le moniteur `automation-scheduler` créé de son côté ;
+//   3. une ligne d'ERREUR si un tick dépasse le bail de son verrou (10 min,
+//      `try_advisory_lock`) : au-delà, une seconde instance peut le doubler.
+
+/** Bail du verrou distribué (`try_advisory_lock` : 10 minutes). */
+export const BAIL_TICK_MS = 10 * 60 * 1000;
+/** Au-delà de cet âge, le dernier tick terminé est tenu pour « en retard ». */
+export const TICK_EN_RETARD_MS = 2 * INTERVAL_MS + BAIL_TICK_MS;
+const NOM_TRACE_TICK = 'automation-scheduler:dernier-tick';
+
+/** Même hachage que `advisory-lock.ts` (clé bigint de `cron_locks`). */
+function cleDeTrace(nom: string): number {
+  let h = 5381;
+  for (let i = 0; i < nom.length; i++) h = ((h << 5) + h + nom.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+/** Écrit la trace du tick qui vient de finir. Ne lève jamais. */
+export async function noterTickTermine(supabase: SupabaseClient, debutMs: number, finMs: number = Date.now()): Promise<void> {
+  try {
+    const { error } = await supabase.from('cron_locks').upsert(
+      { key: cleDeTrace(NOM_TRACE_TICK), locked_at: new Date(debutMs).toISOString(), locked_until: new Date(finMs).toISOString() },
+      { onConflict: 'key' },
+    );
+    if (error) logger.error('[scheduler] trace du tick non écrite', { message: error.message });
+  } catch (e: unknown) {
+    logger.error('[scheduler] trace du tick non écrite', { message: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+export interface EtatDuTick {
+  /** Début et fin du dernier tick TERMINÉ (ISO), ou null s'il n'y en a jamais eu. */
+  dernier_tick_debut: string | null;
+  dernier_tick_fin: string | null;
+  duree_ms: number | null;
+  /** Secondes écoulées depuis la fin du dernier tick. */
+  age_s: number | null;
+  /** Vrai si aucun tick n'a fini depuis TICK_EN_RETARD_MS (ou jamais) : le planificateur est figé ou arrêté. */
+  en_retard: boolean;
+}
+
+/** Pur : l'état à partir de la trace lue. */
+export function etatDepuisTrace(trace: { locked_at?: string | null; locked_until?: string | null } | null, maintenantMs: number = Date.now()): EtatDuTick {
+  const debut = trace?.locked_at ? Date.parse(trace.locked_at) : NaN;
+  const fin = trace?.locked_until ? Date.parse(trace.locked_until) : NaN;
+  if (!Number.isFinite(fin)) return { dernier_tick_debut: null, dernier_tick_fin: null, duree_ms: null, age_s: null, en_retard: true };
+  return {
+    dernier_tick_debut: Number.isFinite(debut) ? new Date(debut).toISOString() : null,
+    dernier_tick_fin: new Date(fin).toISOString(),
+    duree_ms: Number.isFinite(debut) ? Math.max(0, fin - debut) : null,
+    age_s: Math.max(0, Math.round((maintenantMs - fin) / 1000)),
+    en_retard: maintenantMs - fin > TICK_EN_RETARD_MS,
+  };
+}
+
+/** Le dernier tick terminé, lu en base (toutes instances confondues). Pour /api/health. */
+export async function etatDuTick(supabase: SupabaseClient, maintenantMs: number = Date.now()): Promise<EtatDuTick> {
+  const { data, error } = await supabase
+    .from('cron_locks').select('locked_at, locked_until').eq('key', cleDeTrace(NOM_TRACE_TICK)).maybeSingle();
+  if (error) throw new Error(error.message);
+  return etatDepuisTrace(data as { locked_at?: string | null; locked_until?: string | null } | null, maintenantMs);
+}
+
+/** Dit fort qu'un tick a dépassé le bail de son verrou. */
+function signalerTickTropLong(dureeMs: number, encoreEnCours: boolean): void {
+  const minutes = Math.round(dureeMs / 60_000);
+  const message = encoreEnCours
+    ? `[scheduler] tick encore en cours après ${minutes} min : le bail du verrou (${BAIL_TICK_MS / 60_000} min) est dépassé, une autre instance peut le doubler`
+    : `[scheduler] tick terminé en ${minutes} min : il a dépassé le bail du verrou (${BAIL_TICK_MS / 60_000} min)`;
+  logger.error(message, { duree_ms: dureeMs });
+  void import('./sentry').then(({ captureCronFailure }) => captureCronFailure('automation-scheduler', new Error(message))).catch(() => undefined);
+}
+
 /** Vrai pendant qu'un tick est en cours dans CE processus. */
 let tickEnCours = false;
 
@@ -1001,15 +1089,31 @@ async function tickProtege(supabase: SupabaseClient, twilio: TwilioConfig | null
     return;
   }
   tickEnCours = true;
+  const debut = Date.now();
+  // Le tick qui ne finit pas : on le dit pendant qu'il dure, pas seulement après.
+  const alarme = setTimeout(() => signalerTickTropLong(Date.now() - debut, true), BAIL_TICK_MS);
+  alarme.unref?.();
   try {
     const { withAdvisoryLock } = await import('./advisory-lock');
-    const { acquired } = await withAdvisoryLock('automation-scheduler', () => tick(supabase, twilio));
+    const { withCronCheckIn } = await import('./sentry');
+    const { acquired } = await withAdvisoryLock('automation-scheduler', () =>
+      withCronCheckIn('automation-scheduler', async () => {
+        tickInterrompu = false;
+        await tick(supabase, twilio);
+        // Un tick coupé par une erreur inattendue n'est pas « terminé » : Sentry le reçoit, la trace n'avance pas.
+        if (tickInterrompu) throw new Error('tick interrompu par une erreur inattendue (voir le journal du serveur)');
+        // Dans le verrou : la trace est celle du tick qui a vraiment tourné.
+        await noterTickTermine(supabase, debut);
+      }));
     if (!acquired) {
       logger.info('[scheduler] tick pris par une autre instance — passage ignoré');
+    } else if (Date.now() - debut > BAIL_TICK_MS) {
+      signalerTickTropLong(Date.now() - debut, false);
     }
   } catch (err: any) {
     console.error('[scheduler] tick échoué:', err?.message);
   } finally {
+    clearTimeout(alarme);
     tickEnCours = false;
   }
 }
