@@ -40,22 +40,27 @@ function urlComplete(cle: string): string {
 export default function AdressesDAppel({ fr }: { fr: boolean }) {
   const [adresses, setAdresses] = useState<AdresseDAppel[]>([]);
   const [chargement, setChargement] = useState(true);
+  /** La lecture a échoué : on ne sait PAS s'il y a des adresses — on ne dit donc pas « aucune ». */
+  const [lectureRatee, setLectureRatee] = useState(false);
+  const [essaiLecture, setEssaiLecture] = useState(0);
   const [creation, setCreation] = useState(false);
   const [devoilees, setDevoilees] = useState<Set<string>>(new Set());
   const [copiee, setCopiee] = useState<string | null>(null);
 
   useEffect(() => {
     let vivant = true;
+    setChargement(true);
     listerAdressesDAppel()
-      .then((l) => { if (vivant) setAdresses(l); })
+      .then((l) => { if (vivant) { setAdresses(l); setLectureRatee(false); } })
       .catch(() => {
         if (vivant) {
-          toast.error(fr ? 'Impossible de lire vos adresses d’appel.' : 'Could not load your endpoints.');
+          setLectureRatee(true);
+          toast.error(fr ? 'Impossible de lire vos adresses d’appel.' : 'Could not load your addresses.');
         }
       })
       .finally(() => { if (vivant) setChargement(false); });
     return () => { vivant = false; };
-  }, [fr]);
+  }, [fr, essaiLecture]);
 
   async function creer() {
     setCreation(true);
@@ -204,7 +209,27 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
 
   return (
     <div className="space-y-3">
-      {adresses.length === 0 && (
+      {/* Lecture en panne : la carte disait « Aucune adresse pour l'instant »
+          alors qu'il en existait une — on aurait cru devoir en recréer
+          (06-reglages-globaux:467). */}
+      {lectureRatee && (
+        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[12px] text-text-secondary">
+          <span>
+            {fr
+              ? 'Vos adresses d’appel n’ont pas pu être lues pour le moment : celles qui existent fonctionnent toujours.'
+              : 'Your addresses could not be read right now: the existing ones still work.'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setEssaiLecture((n) => n + 1)}
+            className="font-medium text-accent underline underline-offset-2 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Réessayer' : 'Try again'}
+          </button>
+        </div>
+      )}
+
+      {!lectureRatee && adresses.length === 0 && (
         <p className="text-[12px] text-text-secondary">
           {fr
             ? 'Aucune adresse pour l’instant. Créez-en une, puis collez-la dans votre formulaire, Zapier ou Facebook Leads.'
