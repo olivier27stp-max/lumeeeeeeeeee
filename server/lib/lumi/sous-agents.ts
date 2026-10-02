@@ -53,9 +53,17 @@ export function estSousAgent(topic: string | null | undefined): topic is IdTopic
  * classé « job » ; sans l'outil de pointage dans ce jeu, Lumi répondait « pas d'outil punch_in dans
  * Lume » — faux, et un nom d'outil dans la réponse (passe du 2026-10-01, terrain-05). Le technicien
  * pointe SUR un job : les deux vont ensemble.
+ *
+ * planification + get_team_schedule : « ki travail demain » est classé « horaire » ; le sous-agent des
+ * jobs n'avait que l'horaire des VISITES et répondait « aucune visite planifiée demain » — la question
+ * portait sur les employés (qui travaille, qui est en congé). Passe en prod du 2026-10-02.
+ *
+ * facturation + get_team_performance : « quelle équipe a rapporté le plus ce mois-ci ? » est une
+ * question d'argent ; sans l'outil, Lumi répondait par employé avec la rentabilité (même passe).
  */
 export const OUTILS_VOISINS: Partial<Record<IdTopic, readonly string[]>> = {
-  planification: ['analyze_profitability', 'punch_in', 'punch_out'],
+  planification: ['analyze_profitability', 'punch_in', 'punch_out', 'get_team_schedule'],
+  facturation: ['get_team_performance'],
 };
 
 export function outilsDuSousAgent(topic: IdTopic): string[] {
