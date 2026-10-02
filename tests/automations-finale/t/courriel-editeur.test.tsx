@@ -1,0 +1,728 @@
+// @vitest-environment jsdom
+/**
+ * L'ÉDITEUR DE COURRIEL D'UNE AUTOMATISATION — triage « modèles » du 2026-10-01,
+ * fichier `04-courriel`. Le VRAI `EmailPreviewEditor` et la VRAIE API des
+ * messages, sur une fausse base en mémoire : on fait le geste de l'utilisateur
+ * et on regarde ce qui est écrit. Un bloc `describe` par ligne du triage.
+ */
+import React from 'react';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
+
+const toasts = vi.hoisted(() => ({ succes: [] as string[], erreurs: [] as string[] }));
+const confirmerMock = vi.hoisted(() => vi.fn(async (_o: unknown) => true));
+const apercu = vi.hoisted(() => ({ appels: [] as unknown[][], essais: [] as unknown[][], refusEssai: null as string | null }));
+
+vi.mock('../../../src/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabase());
+vi.mock('../../../src/lib/orgApi', () => ({ getCurrentOrgId: async () => 'org-1', getCurrentOrgIdOrThrow: async () => 'org-1' }));
+vi.mock('../../../server/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabaseServeur());
+vi.mock('../../../server/lib/automatisations-bureaux', () => ({ bureauxCibles: async () => [], copierVersBureaux: async () => [], propagerAuxCopies: async () => [] }));
+vi.mock('../../../src/components/ui/ConfirmDialog', () => ({ confirmer: (o: unknown) => confirmerMock(o), default: () => null }));
+vi.mock('../../../src/hooks/useChampsPersoActifs', () => ({ useChampsPersoActifs: () => ({ isEnabled: false, loading: false }) }));
+vi.mock('../../../src/lib/champsPersoApi', () => ({ listerChamps: async () => ({ fields: [] }) }));
+vi.mock('../../../src/lib/emailTemplatesApi', () => ({
+  apercuCourriel: async (...a: unknown[]) => { apercu.appels.push(a); return '<p>aperçu</p>'; },
+  envoyerEssaiCourriel: async (...a: unknown[]) => {
+    apercu.essais.push(a);
+    if (apercu.refusEssai) throw new Error(apercu.refusEssai);
+    return 'proprio@lume-qa.test';
+  },
+}));
+vi.mock('sonner', () => {
+  const toast = Object.assign((m: string) => { toasts.succes.push(m); }, {
+    success: (m: string) => { toasts.succes.push(m); },
+    error: (m: string) => { toasts.erreurs.push(m); },
+    info: () => {},
+  });
+  return { toast };
+});
+
+import { base, remettre, ligne } from './faux-supabase';
+import { monter, demonter, bouton, boutonPresent, champ, champs, choix, cliquer, saisir, texteEcran, jusqua } from './banc-composants';
+import { brancherServeur, arreterServeur } from './serveur-messages';
+import EmailPreviewEditor from '../../../src/components/automations/EmailPreviewEditor';
+
+type Action = { type: string; config: Record<string, unknown> };
+type Regle = { id: string; actions: Action[]; steps: unknown[] | null };
+
+const ENVELOPPE = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">';
+const P = (t: string) => `<p style="color:#333;line-height:1.6;">${t}</p>`;
+const H2 = (t: string) => `<h2 style="color:#1a1a1a;font-size:18px;">${t}</h2>`;
+const OBJET = 'Votre rendez-vous du [appointment_date]';
+const CORPS = `${ENVELOPPE}${H2('Votre rendez-vous approche')}${P('Bonjour [client_first_name],')}${P('Merci, [company_name]')}</div>`;
+
+function poser(actions: Action[], plus: Record<string, unknown> = {}): void {
+  remettre({
+    automation_rules: [{ id: 'r1', org_id: 'org-1', actions, steps: null, deleted_at: null, ...plus }],
+    company_settings: [{ id: 'cs1', org_id: 'org-1', company_name: 'Nettoyage Test A', default_language: 'fr' }],
+  });
+}
+const enBase = () => ligne<Regle>('automation_rules', 'r1');
+
+/** Ouvre l'éditeur sur un courriel de la règle, comme « Modifier » dans la liste (qui passe le corps et l'objet français). */
+async function ouvrir(config: Record<string, unknown>, props: Partial<React.ComponentProps<typeof EmailPreviewEditor>> = {}) {
+  await monter(
+    <EmailPreviewEditor
+      ruleId="r1" ruleName="Rappel de rendez-vous" fr
+      body={String(config.body ?? '')} subject={String(config.subject ?? '')}
+      onClose={() => {}} onSaved={() => {}} declencheur="appointment.created"
+      {...props}
+    />,
+  );
+}
+const objet = () => champ<HTMLInputElement>('Objet du courriel');
+
+beforeEach(async () => {
+  localStorage.setItem('lume-language', 'fr');
+  toasts.succes.length = 0; toasts.erreurs.length = 0;
+  apercu.appels.length = 0; apercu.essais.length = 0; apercu.refusEssai = null;
+  confirmerMock.mockClear();
+  await brancherServeur();
+});
+afterEach(async () => { await demonter(); });
+afterAll(async () => { await arreterServeur(); });
+
+describe('04-courriel:816 — modifier un courriel ne touche pas à l’autre courriel de la même automatisation', () => {
+  it('changer l’objet du premier : le second garde son objet ET son corps', async () => {
+    const c1 = { subject: OBJET, body: CORPS };
+    const c2 = { subject: 'Second objet', body: `${ENVELOPPE}${H2('Second courriel')}${P('Texte du second.')}</div>` };
+    poser([{ type: 'send_email', config: c1 }, { type: 'send_email', config: c2 }]);
+    await ouvrir(c1);
+    await saisir(objet(), 'Premier objet corrigé');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    expect(enBase().actions[0].config.subject).toBe('Premier objet corrigé');
+    expect(enBase().actions[1].config).toEqual(c2);
+  });
+
+  it('ouvert sur le SECOND : c’est lui qui change, pas le premier', async () => {
+    const c1 = { subject: OBJET, body: CORPS };
+    const c2 = { subject: 'Second objet', body: `${ENVELOPPE}${H2('Second courriel')}${P('Texte du second.')}</div>` };
+    poser([{ type: 'send_email', config: c1 }, { type: 'send_email', config: c2 }]);
+    await ouvrir(c2);
+    await saisir(objet(), 'Second objet corrigé');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    expect(enBase().actions[0].config).toEqual(c1);
+    expect(enBase().actions[1].config.subject).toBe('Second objet corrigé');
+  });
+
+  it('deux enregistrements de suite sans que la liste ait rechargé : le second vise toujours le même courriel', async () => {
+    const c1 = { subject: OBJET, body: CORPS };
+    const c2 = { subject: 'Second objet', body: `${ENVELOPPE}${H2('Second courriel')}</div>` };
+    poser([{ type: 'send_email', config: c1 }, { type: 'send_email', config: c2 }]);
+    await ouvrir(c1);
+    await saisir(objet(), 'Objet, première correction');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.length === 1);
+    await saisir(objet(), 'Objet, seconde correction');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.length === 2);
+    expect(toasts.erreurs).toEqual([]);
+    expect(enBase().actions[0].config.subject).toBe('Objet, seconde correction');
+    expect(enBase().actions[1].config).toEqual(c2);
+  });
+});
+
+describe('04-courriel:260 — après « Enregistrer », l’éditeur dit que c’est enregistré', () => {
+  it('la fenêtre affiche « Aucune modification » et « Enregistrer » se grise, sans attendre le rechargement de la liste', async () => {
+    const c1 = { subject: OBJET, body: CORPS };
+    poser([{ type: 'send_email', config: c1 }]);
+    const fermetures: number[] = [];
+    await ouvrir(c1, { onClose: () => { fermetures.push(1); } });
+    await saisir(objet(), 'Nouvel objet');
+    expect(texteEcran()).toContain('Modifications non enregistrées');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    expect(enBase().actions[0].config.subject).toBe('Nouvel objet');
+    // Personne n'a cliqué « Fermer » : l'éditeur ne se ferme pas de lui-même.
+    expect(fermetures).toEqual([]);
+    expect(texteEcran()).toContain('Aucune modification');
+    expect(bouton('Enregistrer').disabled).toBe(true);
+  });
+});
+
+describe('04-courriel:394 et :410 — ce qu’on n’a pas touché garde sa mise en forme', () => {
+  const corpsEnBase = () => String(enBase().actions[0].config.body);
+  const paragraphe = (rang: number) => champs('Paragraphe')[rang];
+
+  it('corriger un mot d’un paragraphe ne détruit ni le lien « Voir votre soumission » ni le gras d’un autre paragraphe', async () => {
+    const corps = `${ENVELOPPE}${H2('Bonjour [client_first_name],')}${P('On vous a envoyé une soumission hier.')}${P('<strong>Offre valable 30 jours.</strong>')}<p style="color:#333;line-height:1.6;"><a href="[quote_link]">Voir votre soumission</a></p>${P('Merci, [company_name]')}</div>`;
+    const c = { subject: 'Votre soumission', body: corps };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    await saisir(paragraphe(0), 'On vous a envoyé une soumission avant-hier.');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    // Seul le paragraphe corrigé a changé : le reste est le HTML d'origine, au caractère près.
+    expect(corpsEnBase()).toBe(corps.replace('soumission hier.', 'soumission avant-hier.'));
+    expect(corpsEnBase()).toContain('<a href="[quote_link]">Voir votre soumission</a>');
+    expect(corpsEnBase()).toContain('<strong>Offre valable 30 jours.</strong>');
+  });
+
+  it('un courriel qui commence par un paragraphe : ce paragraphe ne devient pas un titre', async () => {
+    const c = { subject: 'Votre facture', body: `${ENVELOPPE}${P('Bonjour [client_first_name],')}${P('Votre facture est prête.')}</div>` };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    expect(champs('Titre')).toHaveLength(0);
+    await saisir(paragraphe(1), 'Votre facture est prête, merci!');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    expect(corpsEnBase()).toBe(`${ENVELOPPE}${P('Bonjour [client_first_name],')}${P('Votre facture est prête, merci!')}</div>`);
+    expect(corpsEnBase()).not.toMatch(/<h2[^>]*>Bonjour/);
+  });
+
+  it('un bloc réécrit est reconstruit dans SON type, avec les styles du générateur ; les puces qui se suivent partagent une liste', async () => {
+    const c = { subject: 'Objet', body: `${ENVELOPPE}${H2('Titre')}${P('Ligne A')}<ul style="padding-left:18px;line-height:1.6;"><li>Un</li><li><strong>Deux</strong></li></ul></div>` };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    await saisir(champs('Titre')[0], 'Titre <corrigé> & co');
+    await saisir(champs('Puce')[0], 'Un, corrigé');
+    await cliquer(bouton('Puce'));
+    await saisir(champs('Puce')[2], 'Trois');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    expect(corpsEnBase()).toBe(
+      `${ENVELOPPE}${H2('Titre &lt;corrigé&gt; &amp; co')}${P('Ligne A')}<ul style="padding-left:18px;line-height:1.6;"><li>Un, corrigé</li><li><strong>Deux</strong></li><li>Trois</li></ul></div>`,
+    );
+  });
+
+  it('un texte remis comme il était retrouve sa mise en forme d’origine, et « Enregistrer » se grise', async () => {
+    const c = { subject: 'Objet', body: `${ENVELOPPE}${H2('Titre')}${P('<strong>Offre valable 30 jours.</strong>')}</div>` };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    await saisir(paragraphe(0), 'Offre valable 60 jours.');
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    await saisir(paragraphe(0), 'Offre valable 30 jours.');
+    expect(bouton('Enregistrer').disabled).toBe(true);
+    expect(texteEcran()).toContain('Aucune modification');
+  });
+
+  it('l’aperçu réel reçoit ce qui sera enregistré : le lien et le gras y sont', async () => {
+    const corps = `${ENVELOPPE}${H2('Bonjour,')}${P('<strong>Offre valable 30 jours.</strong>')}<p><a href="[quote_link]">Voir votre soumission</a></p></div>`;
+    const c = { subject: 'Objet', body: corps };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    await cliquer(bouton('Aperçu réel'));
+    await jusqua(() => apercu.appels.length > 0);
+    expect(apercu.appels.at(-1)?.[0]).toBe(corps);
+  });
+
+  it('un courriel écrit en texte brut (sans balises) : une ligne = un paragraphe, aucune promue en titre', async () => {
+    const c = { subject: 'Objet', body: 'Bonjour Marie,\n\nVotre facture est prête.\nMerci!' };
+    poser([{ type: 'send_email', config: c }]);
+    await ouvrir(c);
+    expect(champs('Titre')).toHaveLength(0);
+    expect(champs('Paragraphe').map((p) => p.value)).toEqual(['Bonjour Marie,', 'Votre facture est prête.', 'Merci!']);
+    await saisir(paragraphe(2), 'Merci beaucoup!');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+    expect(corpsEnBase()).toBe(`${ENVELOPPE}${P('Bonjour Marie,')}${P('Votre facture est prête.')}${P('Merci beaucoup!')}</div>`);
+  });
+});
+
+describe('04-courriel:538 et :547 — « Insérer » écrit là où est le curseur', () => {
+  const C = { subject: 'Objet', body: `${ENVELOPPE}${H2('Titre')}${P('Bonjour , à demain.')}${P('Dernière ligne')}</div>` };
+  /** Met le curseur dans un champ, comme un clic puis une flèche. */
+  async function curseur(el: HTMLInputElement | HTMLTextAreaElement, position: number) {
+    await saisir(el, el.value); // lui donne le focus, sans changer son texte
+    el.setSelectionRange(position, position);
+  }
+
+  it('dans une ligne : la variable va au curseur, pas en fin de ligne', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    const ligne = champs('Paragraphe')[0];
+    await curseur(ligne, 8);
+    await cliquer(bouton('Prénom du client'));
+    expect(ligne.value).toBe('Bonjour [client_first_name], à demain.');
+    // Le curseur reste juste après la variable : une seconde insertion s'enchaîne.
+    expect(ligne.selectionStart).toBe(8 + '[client_first_name]'.length);
+    await cliquer(bouton('Nom complet'));
+    expect(ligne.value).toBe('Bonjour [client_first_name][client_name], à demain.');
+    // Les autres lignes et l'objet n'ont rien reçu.
+    expect(champs('Paragraphe')[1].value).toBe('Dernière ligne');
+    expect(objet().value).toBe('Objet');
+  });
+
+  it('dans l’objet : au curseur aussi ; un texte sélectionné est remplacé', async () => {
+    poser([{ type: 'send_email', config: { ...C, subject: 'Rappel pour XXX demain' } }]);
+    await ouvrir({ ...C, subject: 'Rappel pour XXX demain' });
+    await saisir(objet(), objet().value);
+    objet().setSelectionRange(12, 15);
+    await cliquer(bouton('Prénom du client'));
+    expect(objet().value).toBe('Rappel pour [client_first_name] demain');
+  });
+
+  it('sans champ cliqué : à la fin de la dernière ligne, comme avant', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await cliquer(bouton('Prénom du client'));
+    expect(champs('Paragraphe')[1].value).toBe('Dernière ligne[client_first_name]');
+    expect(objet().value).toBe('Objet');
+  });
+
+  it('courriel vidé de toutes ses lignes : la variable ouvre une ligne, au lieu d’un clic sans effet', async () => {
+    const seule = { subject: 'Objet', body: `${ENVELOPPE}${H2('Seule ligne')}</div>` };
+    poser([{ type: 'send_email', config: seule }]);
+    await ouvrir(seule);
+    await cliquer(bouton('Supprimer cette ligne'));
+    expect(champs('Titre').length + champs('Paragraphe').length).toBe(0);
+    await cliquer(bouton('Prénom du client'));
+    expect(champs('Paragraphe').map((p) => p.value)).toEqual(['[client_first_name]']);
+  });
+});
+
+describe('04-courriel:560 et :588 — sur « Aperçu réel » : pas de palette, et « M’envoyer un essai » sous la main', () => {
+  const C = { subject: OBJET, body: CORPS };
+  const palette = () => document.body.querySelector('[data-testid="palette-variables"]');
+
+  it('la palette « Insérer » n’est offerte que sur « Modifier » : regarder l’aperçu ne modifie rien', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    expect(palette()).not.toBeNull();
+    await cliquer(bouton('Aperçu réel'));
+    expect(palette()).toBeNull();
+    expect(boutonPresent('Prénom du client')).toBe(false);
+    expect(document.body.querySelector('input[type="search"]')).toBeNull();
+    expect(texteEcran()).toContain('Aucune modification');
+    // De retour sur « Modifier », elle est là, et rien n'a été touché.
+    await cliquer(bouton('Modifier'));
+    expect(palette()).not.toBeNull();
+    expect(texteEcran()).toContain('Aucune modification');
+  });
+
+  it('« M’envoyer un essai » est dans le pied de la fenêtre, à côté de « Enregistrer » — pas sous le cadre de l’aperçu', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    expect(boutonPresent('M’envoyer un essai')).toBe(false);
+    await cliquer(bouton('Aperçu réel'));
+    await jusqua(() => apercu.appels.length > 0);
+    const essai = bouton('M’envoyer un essai');
+    expect(essai.parentElement).toBe(bouton('Enregistrer').parentElement);
+    await cliquer(essai);
+    await jusqua(() => toasts.succes.includes('Essai envoyé à proprio@lume-qa.test'));
+    expect(apercu.essais).toHaveLength(1);
+  });
+});
+
+describe('04-courriel:620 — une variable inventée est signalée, comme dans l’éditeur de texto', () => {
+  const C = { subject: OBJET, body: CORPS };
+  const alerte = () => /n’existe pas|n’existent pas/.test(texteEcran());
+
+  it('« Bonjour [prenom], » : le serveur enverra « Bonjour , » — l’éditeur le dit et nomme la variable', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    expect(alerte()).toBe(false);
+    await saisir(champs('Paragraphe')[0], 'Bonjour [prenom],');
+    expect(texteEcran()).toContain('Cette variable n’existe pas');
+    expect(texteEcran()).toContain('[prenom] — votre client verra un blanc');
+  });
+
+  it('dans l’objet aussi, et au pluriel quand il y en a deux', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await saisir(objet(), 'Pour [prenom] — facture {numero}');
+    expect(texteEcran()).toContain('Ces variables n’existent pas');
+  });
+
+  it('ni un crochet de texte courant, ni une variable que le moteur remplit ne sont signalés', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await saisir(champs('Paragraphe')[0], 'Rabais [50 %] pour [client_first_name] — [quote_link], [invoice_due_date], {{soumission.total}}');
+    expect(alerte()).toBe(false);
+  });
+});
+
+describe('04-courriel:366 — un objet très long est signalé', () => {
+  const C = { subject: OBJET, body: CORPS };
+  const repere = () => document.body.querySelector('[role="status"]')?.textContent ?? '';
+
+  it('70 caractères : rien ; 71 : la boîte de réception n’en montrera qu’environ 70', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await saisir(objet(), 'o'.repeat(70));
+    expect(repere()).toBe('');
+    await saisir(objet(), 'o'.repeat(71));
+    expect(repere()).toBe('71 caractères : une boîte de réception n’en montre qu’environ 70. Mettez l’essentiel au début.');
+    expect(bouton('Enregistrer').disabled).toBe(false);
+  });
+
+  it('au-delà de 200 (le plafond du serveur) : c’est dit, « Enregistrer » se grise, rien ne part', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await saisir(objet(), `Objet ${'o'.repeat(290)} fin`);
+    expect(repere()).toBe('300 caractères : un objet en fait 200 au plus. Raccourcissez-le pour enregistrer.');
+    expect(bouton('Enregistrer').disabled).toBe(true);
+    await saisir(objet(), 'o'.repeat(200));
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    expect(toasts.erreurs).toEqual([]);
+  });
+
+  it('un modèle de courriel (hors automatisation) n’a pas ce plafond : le repère seul, et on enregistre', async () => {
+    const ecrits: string[] = [];
+    await ouvrir(C, { ruleId: undefined, enregistrerTexte: async (_corps, o) => { ecrits.push(o); }, typeCourriel: 'invoice_sent' });
+    await saisir(objet(), 'o'.repeat(250));
+    expect(repere()).toContain('une boîte de réception n’en montre qu’environ 70');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => ecrits.length === 1);
+    expect(ecrits[0]).toHaveLength(250);
+  });
+});
+
+describe('04-courriel:201 — fermer avec une modification : le bouton dit ce qu’il fait', () => {
+  const C = { subject: OBJET, body: CORPS };
+
+  it('la confirmation propose « Fermer sans enregistrer », pas « Confirmer »', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    const fermetures: number[] = [];
+    await ouvrir(C, { onClose: () => { fermetures.push(1); } });
+    await saisir(objet(), 'Objet en cours');
+    await cliquer(bouton('Fermer', 0));
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(confirmerMock.mock.calls[0][0]).toMatchObject({
+      message: 'Vos modifications ne sont pas enregistrées. Fermer quand même ?',
+      confirmLabel: 'Fermer sans enregistrer',
+      danger: true,
+    });
+    await jusqua(() => fermetures.length === 1);
+  });
+
+  it('refuser garde la fenêtre et le texte ; en anglais : « Close without saving »', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    confirmerMock.mockResolvedValueOnce(false);
+    const fermetures: number[] = [];
+    await ouvrir(C, { fr: false, onClose: () => { fermetures.push(1); } });
+    await saisir(champ<HTMLInputElement>('Email subject'), 'Subject in progress');
+    await cliquer(bouton('Close', 0));
+    expect(confirmerMock.mock.calls[0][0]).toMatchObject({ confirmLabel: 'Close without saving' });
+    expect(fermetures).toEqual([]);
+    expect(champ<HTMLInputElement>('Email subject').value).toBe('Subject in progress');
+  });
+
+  it('sans modification : aucune question', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    const fermetures: number[] = [];
+    await ouvrir(C, { onClose: () => { fermetures.push(1); } });
+    await cliquer(bouton('Fermer', 0));
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(fermetures).toEqual([1]);
+  });
+});
+
+describe('04-courriel:212 — la fenêtre au clavier : un dialogue qui prend le focus, le garde et le rend', () => {
+  const C = { subject: OBJET, body: CORPS };
+  const dialogue = () => document.body.querySelector<HTMLElement>('[role="dialog"]');
+  const dedans = () => !!dialogue()?.contains(document.activeElement);
+  function tab(maj = false) {
+    const cible = document.activeElement ?? document.body;
+    cible.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: maj, bubbles: true, cancelable: true }));
+  }
+
+  it('c’est un dialogue nommé, et le focus y entre à l’ouverture', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    expect(dialogue()).not.toBeNull();
+    expect(dialogue()?.getAttribute('aria-modal')).toBe('true');
+    expect(dialogue()?.getAttribute('aria-label')).toBe('Rappel de rendez-vous');
+    expect(dedans()).toBe(true);
+  });
+
+  it('Tab boucle dans la fenêtre : après le dernier bouton on revient au premier, et Maj+Tab fait l’inverse', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    const atteignables = Array.from(dialogue()?.querySelectorAll<HTMLElement>('button:not([disabled]), input, textarea') ?? []);
+    const premier = atteignables[0];
+    const dernier = atteignables[atteignables.length - 1];
+    // À l'ouverture le focus est sur la fenêtre elle-même : Maj+Tab va au dernier, pas à la page derrière.
+    tab(true);
+    expect(document.activeElement).toBe(dernier);
+    tab();
+    expect(document.activeElement).toBe(premier);
+    tab(true);
+    expect(document.activeElement).toBe(dernier);
+    expect(dedans()).toBe(true);
+  });
+
+  it('à la fermeture, le focus revient sur le bouton qui l’avait ouverte', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    const modifier = document.createElement('button');
+    modifier.textContent = 'Modifier (ouvreur)';
+    document.body.appendChild(modifier);
+    modifier.focus();
+    await ouvrir(C);
+    expect(dedans()).toBe(true);
+    await demonter();
+    expect(document.activeElement).toBe(modifier);
+    modifier.remove();
+  });
+});
+
+describe('04-courriel:443 — la ligne ajoutée reçoit le curseur', () => {
+  const C = { subject: OBJET, body: CORPS };
+
+  it('« Paragraphe » : on peut taper tout de suite dans la ligne neuve', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    const avant = champs('Paragraphe').length;
+    await cliquer(bouton('Paragraphe'));
+    const lignes = champs('Paragraphe');
+    expect(lignes).toHaveLength(avant + 1);
+    expect(document.activeElement).toBe(lignes[lignes.length - 1]);
+  });
+
+  it('« Puce » aussi ; et « Insérer » vise alors cette ligne-là', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await cliquer(bouton('Puce'));
+    const puce = champs('Puce')[0];
+    expect(document.activeElement).toBe(puce);
+    await cliquer(bouton('Prénom du client'));
+    expect(puce.value).toBe('[client_first_name]');
+  });
+});
+
+describe('04-courriel:478 — la corbeille d’une ligne se voit au clavier et au toucher', () => {
+  it('le bouton est nommé, et n’est plus invisible hors survol : focus de la ligne, focus du bouton, écran tactile', async () => {
+    const C = { subject: OBJET, body: CORPS };
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    const corbeille = bouton('Supprimer cette ligne');
+    expect(corbeille.getAttribute('aria-label')).toBe('Supprimer cette ligne');
+    const classes = corbeille.className.split(/\s+/);
+    // Caché par défaut, montré au survol (comme avant)…
+    expect(classes).toContain('opacity-0');
+    expect(classes).toContain('group-hover:opacity-100');
+    // … et aussi quand la ligne a le focus, quand le bouton l'a, et au doigt.
+    expect(classes).toContain('group-focus-within:opacity-100');
+    expect(classes).toContain('focus-visible:opacity-100');
+    expect(classes).toContain('pointer-coarse:opacity-100');
+    // Le groupe qui porte « group » est bien la ligne (le champ et sa corbeille).
+    expect(corbeille.closest('.group')?.querySelector('textarea')).not.toBeNull();
+  });
+});
+
+describe('04-courriel:683 — les onglets disent lequel est affiché', () => {
+  it('`aria-pressed` suit l’onglet actif', async () => {
+    const C = { subject: OBJET, body: CORPS };
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    expect(bouton('Modifier').getAttribute('aria-pressed')).toBe('true');
+    expect(bouton('Aperçu réel').getAttribute('aria-pressed')).toBe('false');
+    await cliquer(bouton('Aperçu réel'));
+    expect(bouton('Modifier').getAttribute('aria-pressed')).toBe('false');
+    expect(bouton('Aperçu réel').getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('04-courriel:793 — échec de « M’envoyer un essai » : l’écran dit pourquoi', () => {
+  it('la raison donnée par le serveur est montrée, pas seulement « Envoi impossible »', async () => {
+    const C = { subject: OBJET, body: CORPS };
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await cliquer(bouton('Aperçu réel'));
+    apercu.refusEssai = 'Aucun service de courriel n’est configuré pour votre entreprise.';
+    await cliquer(bouton('M’envoyer un essai'));
+    await jusqua(() => toasts.erreurs.length === 1);
+    expect(toasts.erreurs).toEqual(['Aucun service de courriel n’est configuré pour votre entreprise.']);
+    expect(toasts.succes).toEqual([]);
+    // Le bouton est de nouveau utilisable : on peut réessayer.
+    expect(bouton('M’envoyer un essai').disabled).toBe(false);
+  });
+});
+
+describe('04-courriel:834 et la règle des deux langues — l’éditeur montre et modifie le courriel qui PART ; l’autre langue est dans un bloc replié', () => {
+  const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
+  const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };
+  const langueDuBureau = (l: 'fr' | 'en') => { base.tables.company_settings[0].default_language = l; };
+  const paragraphes = () => champs('Paragraphe').map((c) => c.value);
+  const config = () => enBase().actions[0].config;
+  const objetPret = () => jusqua(() => champs<HTMLInputElement>('Objet du courriel').length === 1);
+  const TITRE_EN = 'Version anglaise — utilisée seulement si vos messages partent en anglais';
+  const TITRE_FR = 'Version française — utilisée seulement si vos messages partent en français';
+  const RETIRER = 'La retirer (vos clients recevront le texte ci-dessus)';
+  const GARDER = 'La garder telle quelle';
+  const PERIMEE = 'Cette version n’est plus à jour.';
+  const enregistrer = async () => {
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+  };
+
+  it('bureau en anglais : l’éditeur s’ouvre sur le courriel anglais et dit que les messages partent en anglais ; le français est dans un bloc REPLIÉ', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    langueDuBureau('en');
+    await ouvrir(FR);
+    await objetPret();
+    expect(objet().value).toBe('Your appointment');
+    expect(paragraphes()).toEqual(['See you tomorrow.']);
+    expect(texteEcran()).toContain('Vos messages partent en anglais : c’est ce texte que vos clients reçoivent.');
+    expect(bouton(TITRE_FR).getAttribute('aria-expanded')).toBe('false');
+    // Replié : ni l'objet ni les lignes du français ne sont à l'écran.
+    expect(champs<HTMLInputElement>('Objet du courriel — Version française')).toHaveLength(0);
+    expect(texteEcran()).not.toContain(PERIMEE);
+  });
+
+  it('bureau en anglais : corriger l’anglais sans le français ne bloque pas — le bloc se déplie, « La retirer » est coché d’office, et l’anglais devient le seul texte', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    langueDuBureau('en');
+    await ouvrir(FR);
+    await objetPret();
+    await saisir(objet(), 'Your appointment tomorrow');
+    expect(bouton(TITRE_FR).getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain(PERIMEE);
+    expect(champ<HTMLInputElement>('Objet du courriel — Version française').value).toBe('Votre rendez-vous');
+    expect(champs('Paragraphe — Version française').map((c) => c.value)).toEqual(['À demain.']);
+    expect(choix(RETIRER).checked).toBe(true);
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    await enregistrer();
+    // Un seul texte dans le courriel — celui que l'écran montrait. Pas de `body_en: ""`.
+    expect(config()).toEqual({ subject: 'Your appointment tomorrow', body: EN.body_en });
+    // L'écran suit : plus de bloc, rien à enregistrer, le même courriel sous les yeux.
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+    expect(objet().value).toBe('Your appointment tomorrow');
+    expect(paragraphes()).toEqual(['See you tomorrow.']);
+    expect(texteEcran()).toContain('Aucune modification');
+  });
+
+  it('bureau en anglais : « La garder telle quelle » — `subject_en` est écrit, le français ne bouge pas', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    langueDuBureau('en');
+    await ouvrir(FR);
+    await objetPret();
+    await saisir(objet(), 'Your appointment tomorrow');
+    await cliquer(choix(GARDER));
+    await enregistrer();
+    expect(config()).toEqual({ ...FR, ...EN, subject_en: 'Your appointment tomorrow' });
+    expect(texteEcran()).not.toContain(PERIMEE);
+    expect(texteEcran()).toContain('Aucune modification');
+  });
+
+  it('bureau en français, courriel qui porte une version anglaise : corrigé seul, « Enregistrer » reste actif et la version anglaise est RETIRÉE (choix d’office)', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR);
+    await objetPret();
+    expect(objet().value).toBe('Votre rendez-vous');
+    expect(texteEcran()).toContain('Vos messages partent en français : c’est ce texte que vos clients reçoivent.');
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('false');
+    await saisir(objet(), 'Votre rendez-vous de jeudi');
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain(PERIMEE);
+    expect(choix(RETIRER).checked).toBe(true);
+    expect(choix(GARDER).checked).toBe(false);
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    await enregistrer();
+    expect(config()).toEqual({ ...FR, subject: 'Votre rendez-vous de jeudi' });
+    expect('body_en' in config()).toBe(false);
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+  });
+
+  it('bureau en français : « La garder telle quelle » — la version anglaise reste, parce que l’utilisateur l’a choisi', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR);
+    await objetPret();
+    await saisir(objet(), 'Votre rendez-vous de jeudi');
+    await cliquer(choix(GARDER));
+    await enregistrer();
+    expect(config()).toEqual({ ...FR, ...EN, subject: 'Votre rendez-vous de jeudi' });
+    expect(texteEcran()).not.toContain(PERIMEE);
+    // Le bloc est toujours là, replié : la version anglaise existe encore.
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('l’autre langue se déplie à la main et s’y modifie ; les deux corrigées : rien n’est périmé, une seule écriture, les deux en base', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR);
+    await objetPret();
+    await cliquer(bouton(TITRE_EN));
+    const objetAnglais = () => champ<HTMLInputElement>('Objet du courriel — Version anglaise');
+    expect(objetAnglais().value).toBe('Your appointment');
+    expect(champs('Titre — Version anglaise').map((c) => c.value)).toEqual(['Hello,']);
+    await saisir(objetAnglais(), 'Your Thursday appointment');
+    await saisir(objet(), 'Votre rendez-vous de jeudi');
+    expect(texteEcran()).not.toContain(PERIMEE);
+    await enregistrer();
+    expect(base.ecritures).toHaveLength(1);
+    expect(config()).toEqual({ ...FR, ...EN, subject: 'Votre rendez-vous de jeudi', subject_en: 'Your Thursday appointment' });
+    expect(texteEcran()).toContain('Aucune modification');
+  });
+
+  it('l’autre langue modifiée seule : elle seule est écrite, et sa mise en forme intacte est gardée', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR);
+    await objetPret();
+    await cliquer(bouton(TITRE_EN));
+    await saisir(champ('Paragraphe — Version anglaise'), 'See you on Thursday.');
+    expect(texteEcran()).not.toContain(PERIMEE);
+    await enregistrer();
+    expect(config()).toEqual({ ...FR, subject_en: 'Your appointment', body_en: EN.body_en.replace('See you tomorrow.', 'See you on Thursday.') });
+  });
+
+  it('vider l’autre langue, c’est la retirer', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR);
+    await objetPret();
+    await cliquer(bouton(TITRE_EN));
+    await saisir(champ('Titre — Version anglaise'), '');
+    await saisir(champ('Paragraphe — Version anglaise'), '');
+    await enregistrer();
+    expect(config()).toEqual(FR);
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+  });
+
+  it('bureau en anglais, version anglaise sans objet : l’objet de base est montré (c’est lui qui part) et n’est pas recopié en `subject_en`', async () => {
+    poser([{ type: 'send_email', config: { ...FR, body_en: EN.body_en } }]);
+    langueDuBureau('en');
+    await ouvrir(FR);
+    await objetPret();
+    expect(objet().value).toBe('Votre rendez-vous');
+    expect(paragraphes()).toEqual(['See you tomorrow.']);
+    await saisir(champ('Paragraphe'), 'See you soon.');
+    await cliquer(choix(GARDER));
+    await enregistrer();
+    expect(config()).toEqual({ ...FR, body_en: EN.body_en.replace('See you tomorrow.', 'See you soon.') });
+  });
+
+  it('bureau en anglais, courriel SANS version anglaise : un seul texte, l’écran dit que c’est lui qui part, pas de bloc', async () => {
+    poser([{ type: 'send_email', config: FR }]);
+    langueDuBureau('en');
+    await ouvrir(FR);
+    await objetPret();
+    expect(objet().value).toBe('Votre rendez-vous');
+    expect(texteEcran()).toContain('Vos messages partent en anglais, mais ce courriel n’a qu’un texte : c’est lui que vos clients reçoivent.');
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+  });
+
+  it('bureau en français, courriel sans version anglaise : pas de bloc', async () => {
+    poser([{ type: 'send_email', config: FR }]);
+    await ouvrir(FR);
+    await objetPret();
+    expect(texteEcran()).toContain('Vos messages partent en français');
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+    expect(texteEcran()).not.toContain('Version anglaise');
+  });
+
+  it('langue du bureau illisible : l’écran le dit, montre le texte de base, et l’autre langue reste à un clic', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    base.erreursLectureParTable.company_settings = { message: 'panne simulée' };
+    const journal = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await ouvrir(FR);
+    await objetPret();
+    expect(objet().value).toBe('Votre rendez-vous');
+    expect(texteEcran()).toContain('La langue dans laquelle vos messages partent n’a pas pu être lue pour le moment : le texte affiché est le texte de base.');
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('false');
+    journal.mockRestore();
+  });
+
+  it('interface anglaise : les mêmes repères, en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR, { fr: false });
+    await jusqua(() => champs<HTMLInputElement>('Email subject').length === 1);
+    expect(texteEcran()).toContain('Your messages are sent in French: this is the text your clients receive.');
+    await saisir(champ<HTMLInputElement>('Email subject'), 'Votre rendez-vous de jeudi');
+    expect(bouton('English version — used only if your messages are sent in English').getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain('This version is no longer up to date.');
+    expect(choix('Remove it (your clients will receive the text above)').checked).toBe(true);
+    expect(choix('Keep it as is').checked).toBe(false);
+    expect(champ<HTMLInputElement>('Email subject — English version').value).toBe('Your appointment');
+  });
+});
