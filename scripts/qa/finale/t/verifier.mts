@@ -7,7 +7,7 @@
  */
 import type { Page } from '@playwright/test';
 import {
-  CAPTURES, creerRegle, deplierMessages, editeurCourriel, fermer, langueDuBureau, lireRegle, ouvrirListe, ouvrirPage, supprimerRegle, verifier,
+  BASE, CAPTURES, creerRegle, deplierMessages, editeurCourriel, fermer, langueDuBureau, lireRegle, ouvrirListe, ouvrirPage, supprimerRegle, verifier,
 } from './banc.mts';
 
 type Action = { type: string; config: Record<string, unknown> };
@@ -154,6 +154,28 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       await page.context().close();
       await supprimerRegle(r.id);
       await supprimerRegle(r2.id);
+    }
+  },
+
+  /**
+   * 02-chaque-modele:131 — le canevas de « Relance de devis » : une carte par étape.
+   * ROUGE tant que le patch `T-a-reporter/SequenceCanvas.patch` n'est pas appliqué (fichier hors zone).
+   */
+  async canevas131() {
+    const { trouverModele } = await import('../../../../server/lib/automationTemplates');
+    const modele = trouverModele('pack_relance_devis');
+    if (!modele?.steps) throw new Error('modèle pack_relance_devis introuvable');
+    const r = await creerRegle({ name: `T-canevas-${Date.now()}`, trigger_event: modele.declencheur, steps: modele.steps, actions: modele.actions });
+    const page = await ouvrirPage();
+    try {
+      await page.goto(`${BASE}/automations/${r.id}`);
+      await page.getByRole('button', { name: /^(Quand|When)/ }).first().waitFor({ timeout: 120_000 });
+      const cartes = await page.getByRole('button', { name: /^Options de l’étape / }).count();
+      await page.screenshot({ path: `${CAPTURES}/canevas131.png`, fullPage: true });
+      verifier(cartes === modele.steps.length, `${cartes} cartes pour ${modele.steps.length} étapes`);
+    } finally {
+      await page.context().close();
+      await supprimerRegle(r.id);
     }
   },
 };
