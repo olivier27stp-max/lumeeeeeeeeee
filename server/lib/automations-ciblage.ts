@@ -202,8 +202,8 @@ export interface VerdictCiblageMoteur extends VerdictCiblage {
 }
 
 const CIBLE: VerdictCiblageMoteur = { cible: true, raison: null, phrase: null, code: null };
-const horsCiblage = (raison: string, erreur = false): VerdictCiblageMoteur => ({
-  cible: false, raison, phrase: phraseHorsCiblage(raison), code: CODE_HORS_CIBLAGE, ...(erreur ? { erreur: true } : {}),
+const horsCiblage = (raison: string, erreur = false, fr = true): VerdictCiblageMoteur => ({
+  cible: false, raison, phrase: phraseHorsCiblage(raison, fr), code: CODE_HORS_CIBLAGE, ...(erreur ? { erreur: true } : {}),
 });
 
 /**
@@ -219,23 +219,27 @@ const horsCiblage = (raison: string, erreur = false): VerdictCiblageMoteur => ({
 export async function ciblageOk(
   supabase: SupabaseClient, orgId: string, entityType: string, entityId: string,
   conditions: Record<string, unknown> | null | undefined,
+  /** `fr: false` : la raison en anglais (écran « Tester avec un client »). Le moteur ne le passe pas : le journal est en français. */
+  options: { fr?: boolean } = {},
 ): Promise<VerdictCiblageMoteur> {
   const ciblage = lireCiblage(conditions);
   if (ciblageVide(ciblage)) return CIBLE;
+  const fr = options.fr !== false;
+  const non = (f: string, e: string, erreur = false) => horsCiblage(fr ? f : e, erreur, fr);
   try {
     const clientId = await clientDeLEntite({ supabase, orgId, entityType, entityId });
-    if (!clientId) return horsCiblage('aucun client n’est lié à cette fiche');
+    if (!clientId) return non('aucun client n’est lié à cette fiche', 'no client is linked to this record');
     const { fiches, libelles } = await chargerFiches(supabase, orgId, ciblage, { clientId });
-    if (!fiches[0]) return horsCiblage('la fiche du client est introuvable');
+    if (!fiches[0]) return non('la fiche du client est introuvable', 'the client record cannot be found');
     // Le fuseau ne sert qu'aux comparaisons de dates : lu seulement si un champ est cité.
     const fuseau = champsCites(ciblage).length > 0 ? await fuseauOrg(supabase, orgId) : undefined;
-    const v = evaluerCiblage(ciblage, fiches[0], { fuseau }, libelles);
-    return v.cible ? CIBLE : horsCiblage(v.raison ?? 'ne correspond pas au ciblage');
+    const v = evaluerCiblage(ciblage, fiches[0], { fuseau, fr }, libelles);
+    return v.cible ? CIBLE : non(v.raison ?? 'ne correspond pas au ciblage', v.raison ?? 'does not match the targeting');
   } catch (err) {
     logger.error('[automations-ciblage] ciblage illisible — client tenu hors ciblage', {
       orgId, entity_type: entityType, entity_id: entityId, message: err instanceof Error ? err.message : String(err),
     });
-    return horsCiblage('le ciblage n’a pas pu être vérifié (lecture impossible)', true);
+    return non('le ciblage n’a pas pu être vérifié (lecture impossible)', 'the targeting could not be checked (read failed)', true);
   }
 }
 
