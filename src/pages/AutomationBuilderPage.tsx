@@ -84,6 +84,7 @@ import {
   FAMILLES_ACTIONS,
   FAMILLES_DECLENCHEURS,
   actionCompatible,
+  champQuiFixeLEntite,
   champVisible,
   configParDefaut,
   declencheurOffert,
@@ -577,6 +578,18 @@ export default function AutomationBuilderPage() {
     () => objetDeLaRegle(regle?.trigger_event, (regle?.conditions ?? null) as Record<string, unknown> | null, champsPerso),
     [regle?.trigger_event, regle?.conditions, champsPerso],
   );
+  /**
+   * Le champ que la règle surveille (« Date atteinte », « Champ modifié » sur
+   * un champ précis) a-t-il été SUPPRIMÉ ? La carte le dit déjà (« champ
+   * supprimé ») ; la publication doit le refuser (déclencheurs, 06:109).
+   * Jugé seulement quand la liste des champs du bureau est là : vide (pas
+   * encore chargée, module éteint), elle ne prouve rien — le serveur, qui lit
+   * la base, tranche alors à la publication.
+   */
+  const champSurveilleAbsent = useMemo(() => {
+    const id = champQuiFixeLEntite(regle?.trigger_event, (regle?.conditions ?? null) as Record<string, unknown> | null);
+    return id !== '' && champsPerso.length > 0 && !champsPerso.some((c) => c.id === id);
+  }, [regle?.trigger_event, regle?.conditions, champsPerso]);
   /**
    * Les champs DATE du client ET du pipeline (deal), pour « Date atteinte ».
    * Un champ archivé ne doit plus déclencher d'envoi (`useChampsTous` les
@@ -1588,8 +1601,9 @@ export default function AutomationBuilderPage() {
       // L'entité que fixe le champ surveillé (« Date atteinte » sur un champ
       // du pipeline = une opportunité) : la même que pour le tiroir et le panneau.
       entite: objetRegle,
+      champSurveilleAbsent,
     }),
-    [regle?.trigger_event, regle?.actions, regle?.conditions, regle?.is_preset, steps, fr, objetRegle],
+    [regle?.trigger_event, regle?.actions, regle?.conditions, regle?.is_preset, steps, fr, objetRegle, champSurveilleAbsent],
   );
   /** Les étapes fautives, pour les signaler SUR le canevas (§6.5). */
   const etapesEnErreur = useMemo(
@@ -1828,6 +1842,7 @@ export default function AutomationBuilderPage() {
         is_preset: regle.is_preset,
         fr,
         entite: objetRegle,
+        champSurveilleAbsent,
       });
       const bloquants = problemes.filter((p) => p.gravite === 'bloquant');
       if (bloquants.length > 0) {

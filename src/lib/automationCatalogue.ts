@@ -1629,6 +1629,14 @@ export function problemesAvantPublication(regle: {
    * tiroir venait d'offrir.
    */
   entite?: string | null;
+  /**
+   * Le champ que la règle surveille (« Date atteinte », « Champ personnalisé
+   * modifié » sur un champ précis) N'EXISTE PLUS — supprimé ou archivé. À
+   * l'appelant de le savoir : l'éditeur par la liste des champs du bureau, le
+   * serveur par la base. Le balayage et le moteur ne trouveraient jamais ce
+   * champ : l'automatisation ne partirait jamais.
+   */
+  champSurveilleAbsent?: boolean;
 }): ProblemePublication[] {
   const fr = regle.fr !== false;
   const out: ProblemePublication[] = [];
@@ -1673,6 +1681,19 @@ export function problemesAvantPublication(regle: {
         );
       }
     }
+  }
+  /*
+   * Le champ surveillé a été SUPPRIMÉ (triage déclencheurs,
+   * 06-publication-declencheur:109). La carte du déclencheur disait « champ
+   * supprimé », et l'interrupteur proposait quand même « Publier cette
+   * automatisation ? » : publiée, elle ne serait jamais partie, sans un mot.
+   */
+  if (decl && !decl.bientot && regle.champSurveilleAbsent && champQuiFixeLEntite(regle.trigger_event, regle.conditions)) {
+    dire(
+      `« ${decl.fr} » : le champ surveillé a été supprimé. Choisissez-en un autre, sinon l’automatisation ne partirait jamais.`,
+      `“${decl.en}”: the watched field was deleted. Pick another one, otherwise the automation would never run.`,
+      'bloquant',
+    );
   }
 
   const steps = Array.isArray(regle.steps) ? (regle.steps as Array<Record<string, any>>) : null;

@@ -1576,3 +1576,50 @@ describe('ligne 1 — une étape choisie dans le tiroir n’est écrite qu’une
     });
   });
 });
+
+// ─── Triage « déclencheurs », 06-publication-declencheur:109 ────
+
+describe('06:109 — « Date atteinte » sur un champ date SUPPRIMÉ : l’interrupteur refuse de publier, et dit quoi corriger', () => {
+  const DATE_CLIENT = 'cccccccc-0000-4000-8000-0000000000d2';
+  const SUPPRIME = 'cccccccc-0000-4000-8000-0000000000ff';
+  const REFUS = '« Date atteinte » : le champ surveillé a été supprimé. Choisissez-en un autre, sinon l’automatisation ne partirait jamais.';
+  const champDate = (id: string, label: string) => ({
+    id, object_type: 'client', folder_id: null, key: label.toLowerCase().replace(/\W+/g, '_'), label, placeholder: null, help_text: null,
+    field_type: 'date', config: {}, is_required: false, position: 0, archived_at: null, options: [],
+  });
+  const surLeChamp = (idChamp: string) => regle({
+    trigger_event: 'date.reached', conditions: { champ_id: idChamp, jours_avant: 7 },
+    steps: [{ id: 'e1', type: 'action', nom: null, action: { type: 'create_notification', config: { title: 'Fin de contrat' } }, suivant: null }],
+  });
+  beforeEach(() => { etat.champs = [champDate(DATE_CLIENT, 'Fin de garantie')]; });
+
+  it('le champ n’est plus dans le bureau : bandeau rouge, clic sur l’interrupteur → refus en toast, AUCUNE question « Publier ? », rien n’est envoyé', async () => {
+    etat.regles = [surLeChamp(SUPPRIME)];
+    await ouvrir();
+    expect(container.textContent).toContain('champ supprimé');
+    expect(container.textContent).toContain('1 chose à corriger avant de publier');
+    expect(container.textContent).toContain(REFUS);
+    cliquer(container.querySelector('button[role="switch"]'));
+    await attendre(12);
+    expect(toasts.erreur.join('\n')).toContain(REFUS);
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(api.publier).not.toHaveBeenCalled();
+  });
+
+  it('le champ existe : aucun bandeau, la question « Publier cette automatisation ? » est posée', async () => {
+    etat.regles = [surLeChamp(DATE_CLIENT)];
+    await ouvrir();
+    expect(container.textContent).not.toContain('le champ surveillé a été supprimé');
+    cliquer(container.querySelector('button[role="switch"]'));
+    await attendre(12);
+    expect(toasts.erreur).toEqual([]);
+    expect((confirmerMock.mock.calls[0][0] as { title: string }).title).toBe('Publier cette automatisation ?');
+  });
+
+  it('la liste des champs n’est pas (encore) là : l’éditeur n’accuse pas — c’est le serveur, qui lit la base, qui tranche', async () => {
+    etat.champs = [];
+    etat.regles = [surLeChamp(SUPPRIME)];
+    await ouvrir();
+    expect(container.textContent).not.toContain('le champ surveillé a été supprimé');
+  });
+});

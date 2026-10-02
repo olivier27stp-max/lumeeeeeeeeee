@@ -493,3 +493,87 @@ describe('03:316 et 03:581 — les réglages d’un déclencheur que le panneau 
     expect(r.json.error).toContain('« Montant minimum ($) » est plus grand que « Montant maximum ($) »');
   });
 });
+
+// ─── Triage « déclencheurs », 06-publication-declencheur:109 ────
+
+describe('06:109 — publier une automatisation dont le champ surveillé a été SUPPRIMÉ est refusé (elle ne partirait jamais)', () => {
+  const DATE = 'dddddddd-0000-4000-8000-0000000000a1';
+  const ARCHIVE = 'dddddddd-0000-4000-8000-0000000000a2';
+  const INCONNU = 'dddddddd-0000-4000-8000-0000000000a9';
+  const NOTIF = [{ id: 'e1', type: 'action', action: { type: 'create_notification', config: { title: 'Fin de contrat' } }, suivant: null }];
+  const REFUS = '« Date atteinte » : le champ surveillé a été supprimé. Choisissez-en un autre, sinon l’automatisation ne partirait jamais.';
+  const publier = (entetes: Record<string, string> = {}) => appeler('POST', `/automations/rules/${REGLE}/publication`, { actif: true }, entetes);
+  const surLeChamp = (champ: string, sup: Ligne = {}) => regle({ trigger_event: 'date.reached', conditions: { champ_id: champ, jours_avant: 7 }, steps: NOTIF, ...sup });
+
+  beforeEach(() => {
+    etat.tables.custom_fields = [
+      { id: DATE, org_id: ORG, object_type: 'client', field_type: 'date', archived_at: null },
+      { id: ARCHIVE, org_id: ORG, object_type: 'client', field_type: 'date', archived_at: '2026-09-30T12:00:00Z' },
+      { id: INCONNU, org_id: 'un-autre-bureau', object_type: 'client', field_type: 'date', archived_at: null },
+    ];
+  });
+
+  it('le champ n’existe pas dans ce bureau : 422, la raison est dite, la règle reste en brouillon', async () => {
+    etat.tables.automation_rules = [surLeChamp('dddddddd-0000-4000-8000-0000000000ff')];
+    const r = await publier();
+    expect(r.status).toBe(422);
+    expect(r.json.problemes).toEqual([REFUS]);
+    expect(r.json.error).toContain(REFUS);
+    expect(enBase().is_active).toBe(false);
+  });
+
+  it('le champ est ARCHIVÉ (le balayage l’ignore), ou appartient à un autre bureau : refusé aussi', async () => {
+    for (const champ of [ARCHIVE, INCONNU]) {
+      etat.tables.automation_rules = [surLeChamp(champ)];
+      const r = await publier();
+      expect(r.status, champ).toBe(422);
+      expect(r.json.problemes, champ).toEqual([REFUS]);
+    }
+  });
+
+  it('en anglais', async () => {
+    etat.tables.automation_rules = [surLeChamp(ARCHIVE)];
+    const r = await publier({ 'Accept-Language': 'en' });
+    expect(r.json.problemes).toEqual(['“Date reached”: the watched field was deleted. Pick another one, otherwise the automation would never run.']);
+  });
+
+  it('le champ existe : publiée', async () => {
+    etat.tables.automation_rules = [surLeChamp(DATE)];
+    expect((await publier()).status).toBe(200);
+    expect(enBase().is_active).toBe(true);
+  });
+
+  it('« Champ personnalisé modifié » sur un champ supprimé : refusé ; sans champ choisi (« n’importe quel champ ») : publiée', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'custom_field.changed', conditions: { field_id: { eq: ARCHIVE } }, steps: NOTIF })];
+    const r = await publier();
+    expect(r.status).toBe(422);
+    expect(r.json.problemes).toEqual(['« Champ personnalisé modifié » : le champ surveillé a été supprimé. Choisissez-en un autre, sinon l’automatisation ne partirait jamais.']);
+    etat.tables.automation_rules = [regle({ trigger_event: 'custom_field.changed', conditions: {}, steps: NOTIF })];
+    expect((await publier()).status).toBe(200);
+  });
+
+  it('publier par PATCH (`is_active: true`) et créer déjà publiée suivent la même règle', async () => {
+    etat.tables.automation_rules = [surLeChamp(ARCHIVE)];
+    const patch = await appeler('PATCH', `/automations/rules/${REGLE}`, { is_active: true });
+    expect(patch.status).toBe(422);
+    expect(JSON.stringify(patch.json)).toContain('le champ surveillé a été supprimé');
+    const creee = await appeler('POST', '/automations/rules', {
+      name: 'Fin de contrat', trigger_event: 'date.reached', delay_seconds: 0, conditions: { champ_id: ARCHIVE }, is_active: true,
+      actions: [{ type: 'create_notification', config: { title: 'Fin de contrat' } }], steps: NOTIF,
+    });
+    expect(creee.status).toBe(422);
+    expect(JSON.stringify(creee.json)).toContain('le champ surveillé a été supprimé');
+  });
+
+  it('une automatisation DÉJÀ publiée dont le champ a été supprimé depuis reste modifiable (renommer, corriger un texte) : le défaut n’est pas nouveau', async () => {
+    etat.tables.automation_rules = [surLeChamp(ARCHIVE, { is_active: true })];
+    expect((await appeler('PATCH', `/automations/rules/${REGLE}`, { name: 'Autre nom' })).status).toBe(200);
+  });
+
+  it('… mais on ne peut pas POINTER une automatisation publiée vers un champ supprimé', async () => {
+    etat.tables.automation_rules = [surLeChamp(DATE, { is_active: true })];
+    const r = await appeler('PATCH', `/automations/rules/${REGLE}`, { conditions: { champ_id: ARCHIVE, jours_avant: 7 } });
+    expect(r.status).toBe(422);
+    expect((enBase().conditions as { champ_id: string }).champ_id).toBe(DATE);
+  });
+});

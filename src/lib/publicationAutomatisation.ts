@@ -32,6 +32,8 @@ export interface RegleAPublier {
   fr?: boolean;
   /** L'entité que les réglages de la règle fixent — voir `champQuiFixeLEntite` (catalogue). */
   entite?: string | null;
+  /** Le champ que la règle surveille n'existe plus (supprimé, archivé) — voir `problemesAvantPublication`. */
+  champSurveilleAbsent?: boolean;
 }
 
 /** L'action « À compléter » posée à la création : ce n'est pas un vrai envoi. */
@@ -110,6 +112,7 @@ export function problemesPublication(regle: RegleAPublier): ProblemePublication[
       conditions: regle.conditions ?? null,
       fr: regle.fr,
       entite: regle.entite,
+      champSurveilleAbsent: regle.champSurveilleAbsent,
     });
   }
 
@@ -123,6 +126,7 @@ export function problemesPublication(regle: RegleAPublier): ProblemePublication[
     conditions: regle.conditions ?? null,
     fr: regle.fr,
     entite: regle.entite,
+    champSurveilleAbsent: regle.champSurveilleAbsent,
   });
 }
 

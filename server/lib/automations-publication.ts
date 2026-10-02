@@ -67,14 +67,39 @@ export async function entiteDeLaRegle(
   orgId: string,
   regle: { trigger_event?: string | null; conditions?: Record<string, unknown> | null },
 ): Promise<string | null> {
+  return (await champSurveilleDeLaRegle(client, orgId, regle)).entite;
+}
+
+/**
+ * LE CHAMP QUE LA RÈGLE SURVEILLE, vu de la base : l'entité qu'il fixe, et
+ * s'il EXISTE ENCORE (triage déclencheurs, 06-publication-declencheur:109).
+ *
+ * « Date atteinte » sur un champ date supprimé se publiait : la règle
+ * s'affichait active et le balayage l'ignorait chaque nuit (« champ date
+ * introuvable — règle ignorée », un journal que personne ne lit). `absent`
+ * vaut vrai quand la règle nomme un champ que ce bureau n'a pas, ou qu'il a
+ * archivé. Une lecture en échec ne prouve rien : `absent` reste faux.
+ *
+ * Le résultat s'étale tel quel dans la règle à juger :
+ * `problemesBloquants({ ...regle, ...(await champSurveilleDeLaRegle(…)) })`.
+ */
+export async function champSurveilleDeLaRegle(
+  client: SupabaseClient,
+  orgId: string,
+  regle: { trigger_event?: string | null; conditions?: Record<string, unknown> | null },
+): Promise<{ entite: string | null; champSurveilleAbsent: boolean }> {
   const idChamp = champQuiFixeLEntite(regle.trigger_event, regle.conditions);
-  if (!/^[0-9a-f-]{36}$/i.test(idChamp)) return null;
-  const { data, error } = await client.from('custom_fields').select('object_type').eq('id', idChamp).eq('org_id', orgId).maybeSingle();
+  if (!idChamp) return { entite: null, champSurveilleAbsent: false };
+  // Un identifiant qui n'en est pas un ne peut désigner aucun champ.
+  if (!/^[0-9a-f-]{36}$/i.test(idChamp)) return { entite: null, champSurveilleAbsent: true };
+  const { data, error } = await client.from('custom_fields').select('object_type, archived_at').eq('id', idChamp).eq('org_id', orgId).maybeSingle();
   if (error) {
     logger.error('[publication] objet du champ surveillé illisible', { field_id: idChamp, message: error.message });
-    return null;
+    return { entite: null, champSurveilleAbsent: false };
   }
-  return entiteDuChamp((data as { object_type?: string | null } | null)?.object_type);
+  const champ = data as { object_type?: string | null; archived_at?: string | null } | null;
+  if (!champ || champ.archived_at) return { entite: null, champSurveilleAbsent: true };
+  return { entite: entiteDuChamp(champ.object_type), champSurveilleAbsent: false };
 }
 
 /**
@@ -143,8 +168,8 @@ export async function changerPublication(
         erreur: t('Cette automatisation est à la corbeille : restaurez-la avant de la publier.'),
       };
     }
-    const entite = await entiteDeLaRegle(client, orgId, regle as RegleAPublier);
-    const problemes = problemesBloquants({ ...(regle as RegleAPublier), entite }, fr);
+    const surveille = await champSurveilleDeLaRegle(client, orgId, regle as RegleAPublier);
+    const problemes = problemesBloquants({ ...(regle as RegleAPublier), ...surveille }, fr);
     if (problemes.length > 0) {
       return { ok: false, id, statut: 422, erreur: messageRefus(problemes, fr), problemes };
     }
