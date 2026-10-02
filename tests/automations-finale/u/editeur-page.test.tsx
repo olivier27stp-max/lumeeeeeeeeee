@@ -47,6 +47,8 @@ const api = vi.hoisted(() => ({
   lumi: vi.fn(),
   version: vi.fn(),
   pause: vi.fn(),
+  /** La langue dans laquelle le bureau ENVOIE ses messages (`company_settings.default_language`). */
+  langue: vi.fn(),
 }));
 const confirmerMock = vi.hoisted(() => vi.fn(async (_o: unknown) => true));
 const toasts = vi.hoisted(() => ({
@@ -82,6 +84,10 @@ vi.mock('../../../src/lib/automationBuilderApi', async (orig) => ({
   changerPublication: (id: string, a: boolean) => api.publier(id, a),
   chargerStatistiques: (id?: string) => api.stats(id),
   restaurerAutomatisation: vi.fn(),
+}));
+vi.mock('../../../src/lib/automationRulesApi', async (orig) => ({
+  ...(await orig<typeof import('../../../src/lib/automationRulesApi')>()),
+  getAutomationLanguage: () => api.langue(),
 }));
 vi.mock('../../../src/lib/automationWebhooksApi', async (orig) => ({
   ...(await orig<typeof import('../../../src/lib/automationWebhooksApi')>()),
@@ -147,6 +153,8 @@ beforeEach(() => {
     catalogue: { declencheurs: DECLENCHEURS.filter((d) => !d.drapeau), actions: ACTIONS },
     autres: [],
   }));
+  api.langue.mockReset();
+  api.langue.mockImplementation(async () => 'fr');
   api.creer.mockReset();
   api.creer.mockImplementation(async (b: Record<string, unknown>) => ({ ...regle({ id: 'neuve-1', steps: [] }), ...b }));
   api.modifier.mockReset();
@@ -1621,5 +1629,53 @@ describe('06:109 — « Date atteinte » sur un champ date SUPPRIMÉ : l’inter
     etat.regles = [surLeChamp(SUPPRIME)];
     await ouvrir();
     expect(container.textContent).not.toContain('le champ surveillé a été supprimé');
+  });
+});
+
+// ─── Ajustement de la ligne 2 (commit 539be241) ─────────────────
+
+describe('ligne 2 (ajustement) — le panneau montre dans son champ principal le texte que le bureau ENVOIE', () => {
+  const FR = 'Rabais de 10 % jusqu’au 1er mai.';
+  const EN = '10% off until May 1st.';
+  const bilingue = () => regle({
+    trigger_event: 'quote.sent',
+    steps: [{ id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: FR, body_en: EN } }, suivant: null }],
+  });
+  const principal = () => panneauEtape()?.querySelector<HTMLTextAreaElement>('textarea')?.value;
+
+  it('bureau qui envoie en français : le champ principal montre le français', async () => {
+    etat.regles = [bilingue()];
+    await ouvrir();
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    expect(principal()).toBe(FR);
+    expect(panneauEtape()?.textContent).toContain('Version anglaise (Texte du message) — utilisée seulement si vos messages partent en anglais');
+  });
+
+  it('bureau qui envoie en ANGLAIS : le champ principal montre l’anglais ; corriger et enregistrer ne laisse qu’un texte, celui qui part', async () => {
+    api.langue.mockImplementation(async () => 'en');
+    etat.regles = [bilingue()];
+    await ouvrir();
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    expect(principal()).toBe(EN);
+    expect(panneauEtape()?.textContent).toContain('Version française (Texte du message) — utilisée seulement si vos messages partent en français');
+    vi.useFakeTimers();
+    saisir(panneauEtape()?.querySelector('textarea'), '20% off until June 1st.');
+    cliquer(bouton('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    expect(((derniersSteps() ?? [])[0] as { action: { config: Record<string, string> } }).action.config).toEqual({ body: '20% off until June 1st.' });
+  });
+
+  it('la langue du bureau est illisible (panne) : le panneau garde le français, sans planter', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    api.langue.mockImplementation(async () => { throw new Error('panne'); });
+    etat.regles = [bilingue()];
+    await ouvrir();
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    expect(principal()).toBe(FR);
   });
 });
