@@ -668,13 +668,23 @@ export default function Automations() {
   /** Le dossier affiché — `null` = tout, `'racine'` = celles sans dossier. */
   const [dossierActif, setDossierActif] = useState<string | null>(null);
 
-  useEffect(() => {
+  /**
+   * La lecture des dossiers a ÉCHOUÉ — ce n'est pas « aucun dossier » (triage `02-dossiers:354`).
+   * La barre de dossiers disparaissait sans un mot, et « Déplacer dans un dossier » répondait
+   * « Créez d'abord un dossier. » alors qu'il en existait.
+   */
+  const [dossiersIllisibles, setDossiersIllisibles] = useState(false);
+  const lireDossiers = useCallback(() => {
     // Un échec ici ne doit PAS empêcher la page de s'afficher : sans
-    // dossiers, la liste reste simplement à plat.
+    // dossiers, la liste reste simplement à plat — et l'écran le dit.
     chargerDossiers()
-      .then(setDossiers)
-      .catch((e: unknown) => console.error('[automations] dossiers', e instanceof Error ? e.message : String(e)));
+      .then((d) => { setDossiers(d); setDossiersIllisibles(false); })
+      .catch((e: unknown) => {
+        console.error('[automations] dossiers', e instanceof Error ? e.message : String(e));
+        setDossiersIllisibles(true);
+      });
   }, []);
+  useEffect(() => { lireDossiers(); }, [lireDossiers]);
 
 
   /** Lignes cochées — GHL les utilise pour les actions en lot. */
@@ -1938,6 +1948,20 @@ export default function Automations() {
 
         </div>
 
+        {dossiersIllisibles && (
+          <div role="alert" className="flex flex-wrap items-center gap-2.5 rounded-xl border border-warning/40 bg-warning-light px-3 py-2 text-[13px] text-text-primary">
+            <AlertTriangle size={15} className="shrink-0 text-warning" aria-hidden="true" />
+            <span>
+              {fr
+                ? 'Impossible de lire les dossiers pour le moment : la liste est affichée sans eux. Aucun dossier n’a été supprimé.'
+                : 'The folders could not be read right now: the list is shown without them. No folder was deleted.'}
+            </span>
+            <button type="button" onClick={lireDossiers} className="glass-button text-[12px]">
+              {fr ? 'Réessayer' : 'Try again'}
+            </button>
+          </div>
+        )}
+
         {/* Les dossiers — n'apparaissent qu'une fois qu'il y en a.
             Une barre vide occuperait de la place pour rien. */}
         {dossiers.length > 0 && (
@@ -2662,6 +2686,15 @@ export default function Automations() {
                                       type="button"
                                       role="menuitem"
                                       onClick={() => {
+                                        // Dossiers illisibles : on ne prétend pas qu'il n'y en a aucun.
+                                        if (dossiersIllisibles) {
+                                          setMenuLigne(null);
+                                          toast.error(fr
+                                            ? 'Les dossiers n’ont pas pu être lus : réessayez avant de ranger cette automatisation.'
+                                            : 'The folders could not be read: try again before moving this automation.');
+                                          lireDossiers();
+                                          return;
+                                        }
                                         // Sans dossier, créer d'abord : proposer
                                         // « déplacer vers rien » n'aurait aucun sens.
                                         if (dossiers.length === 0) {

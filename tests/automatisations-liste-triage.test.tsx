@@ -1295,6 +1295,52 @@ describe('02-dossiers:283 — supprimer un dossier le confirme à l’écran', (
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('02-dossiers:354 — dossiers illisibles : l’écran le dit, et ne prétend pas qu’il n’y en a aucun', () => {
+  const alerteDossiers = () => Array.from(conteneur.querySelectorAll('[role="alert"]')).find((a) => /dossiers/.test(a.textContent || ''));
+  const deplacer = async () => {
+    await cliquer(bouton(/^Actions pour Relance 1$/));
+    await cliquer(Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((m) => m.textContent === 'Déplacer dans un dossier'));
+    await laisser();
+  };
+
+  it('la lecture en panne s’affiche, à la place de la barre de dossiers disparue sans un mot', async () => {
+    vi.mocked(builder.chargerDossiers).mockRejectedValue(new Error('Impossible de lire les dossiers.'));
+    await rendre();
+    expect(alerteDossiers()?.textContent).toContain('Impossible de lire les dossiers pour le moment : la liste est affichée sans eux.');
+    // La liste, elle, est là.
+    expect(texte()).toContain('Relance 1');
+  });
+
+  it('« Déplacer dans un dossier » ne répond pas « Créez d’abord un dossier. » et n’ouvre pas la saisie', async () => {
+    vi.mocked(builder.chargerDossiers).mockRejectedValue(new Error('panne'));
+    await rendre();
+    await deplacer();
+    expect(toast.info).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith('Les dossiers n’ont pas pu être lus : réessayez avant de ranger cette automatisation.');
+    expect(conteneur.querySelector('#nouveau-dossier')).toBeNull();
+  });
+
+  it('« Réessayer » relit : les dossiers reviennent, l’alerte part, et « Déplacer » propose le dossier', async () => {
+    vi.mocked(builder.chargerDossiers).mockRejectedValueOnce(new Error('panne'))
+      .mockResolvedValue([{ id: 'd1', name: 'Existe', position: 0, created_at: '' }] as never);
+    await rendre();
+    await cliquer(alerteDossiers()?.querySelector('button'));
+    await laisser();
+    expect(alerteDossiers()).toBeUndefined();
+    expect(bouton(/^Existe/)).toBeDefined();
+    await deplacer();
+    expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).map((m) => m.textContent)).toContain('Existe');
+  });
+
+  it('un bureau qui n’a VRAIMENT aucun dossier garde « Créez d’abord un dossier. », sans alerte', async () => {
+    await rendre();
+    expect(alerteDossiers()).toBeUndefined();
+    await deplacer();
+    expect(toast.info).toHaveBeenCalledWith('Créez d’abord un dossier.');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
