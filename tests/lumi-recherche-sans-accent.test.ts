@@ -75,3 +75,60 @@ describe('search_clients : second passage sans accent', () => {
     expect(String(r.note)).toMatch(/Aucun client ne correspond/);
   });
 });
+
+describe('motProche : une lettre d’écart, comme après une dictée', () => {
+  it('reconnaît les noms dictés de travers', async () => {
+    const { motProche } = await import('../server/lib/agent/sans-accent');
+    expect(motProche('Roi', 'Roy')).toBe(true);
+    expect(motProche('Trembley', 'Tremblay')).toBe(true);
+    expect(motProche('Gagnion', 'Gagnon')).toBe(true);
+    expect(motProche('Cote', 'Côté')).toBe(true);
+    expect(motProche('Lévesque', 'Levesqe')).toBe(true);
+  });
+
+  it('ne confond pas deux noms différents, ni deux mots trop courts', async () => {
+    const { motProche } = await import('../server/lib/agent/sans-accent');
+    expect(motProche('Roy', 'Ray')).toBe(true); // une lettre : c'est le troisième passage, marqué « approchant », qui le tolère
+    expect(motProche('Roy', 'Rioux')).toBe(false);
+    expect(motProche('Gagnon', 'Gagné')).toBe(false);
+    expect(motProche('Marie', 'Marc')).toBe(false);
+    expect(motProche('Li', 'La')).toBe(false);
+    expect(motProche('', '')).toBe(false);
+  });
+});
+
+describe('search_clients : troisième passage, nom approchant', () => {
+  const roy1 = { id: 'r1', first_name: 'Marie', last_name: 'Roy', company: null, email: null, phone: '450-555-0101', address: '12 rue des Pins', city: 'Longueuil', status: 'active' };
+  const roy2 = { id: 'r2', first_name: 'Marie', last_name: 'Roy', company: null, email: null, phone: '450-555-0102', address: '4 rue du Parc', city: 'Brossard', status: 'active' };
+  const rioux = { id: 'r3', first_name: 'Mario', last_name: 'Rioux', company: null, email: null, phone: null, address: null, city: 'Longueuil', status: 'active' };
+  const chercher = (query: string, reponses: Array<Record<string, unknown>[]>) => {
+    const { client, filtres } = clientParReponses(reponses);
+    return TOOLS_BY_NAME.search_clients.handler!({ query }, { client, orgId: 'o', userId: 'u' } as never).then((r) => ({ r: r as any, filtres }));
+  };
+
+  it('« Marie Roi » trouve les Marie Roy, et le dit approchant', async () => {
+    const { r } = await chercher('Marie Roi', [[], [], [roy1, roy2, rioux]]);
+    expect(r.clients.map((c: any) => `${c.name} ${c.city}`)).toEqual(['Marie Roy Longueuil', 'Marie Roy Brossard']);
+    expect(r.approchant).toBe(true);
+    expect(String(r.note)).toMatch(/noms PROCHES/);
+  });
+
+  it('avec la ville dictée, seule la bonne fiche revient', async () => {
+    const { r } = await chercher('marie roi longueuil', [[], [], [roy1, roy2, rioux]]);
+    expect(r.clients.map((c: any) => c.city)).toEqual(['Longueuil']);
+  });
+
+  it('une ville seule ne nomme personne ; rien de proche : la note « aucun client » reste', async () => {
+    expect((await chercher('longueuil xyz', [[], [], [roy1, rioux]])).r.clients).toEqual([]);
+    const { r } = await chercher('Zzyzx Qwerty', [[], [], [roy1, roy2]]);
+    expect(r.clients).toEqual([]);
+    expect(r.approchant).toBeUndefined();
+    expect(String(r.note)).toMatch(/Aucun client ne correspond/);
+  });
+
+  it('une recherche qui trouve du premier coup n’est jamais « approchante »', async () => {
+    const { r, filtres } = await chercher('Marie Roy', [[roy1, roy2]]);
+    expect(r.approchant).toBeUndefined();
+    expect(filtres).toHaveLength(1);
+  });
+});

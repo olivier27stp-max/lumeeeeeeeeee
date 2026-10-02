@@ -10,9 +10,10 @@ le 2026-10-01 ; le banc refuse toute adresse qui n'est pas `127.0.0.1`).
 
 ```bash
 # 1. Une fois : monte Postgres + GoTrue + PostgREST + Realtime (Docker), schéma = supabase/baseline + migrations.
-#    E2E_SAUVEGARDE = un fichier de `npm run backup:install` : seules `plans` et `role_permission_defaults`
-#    en sont lues (aucune donnée de client n'entre dans la pile).
-E2E_SAUVEGARDE=../lume-backups/prod-AAAAMMJJ-HHMM.dump bash scripts/qa/automations-e2e/pile.sh
+#    Les deux tables de référence (`plans`, `role_permission_defaults`) viennent de la semence du dépôt
+#    (scripts/qa/automations-e2e/reference.sql) ; aucune donnée de client n'entre dans la pile.
+#    Pour les prendre plutôt dans une sauvegarde récente de la prod : E2E_SAUVEGARDE=../lume-backups/prod-….dump
+bash scripts/qa/automations-e2e/pile.sh
 
 # 2. La passe complète (≈ 2 h à un worker ; prépare d'abord le jeu de bureaux du dossier « roles »).
 npm run test:automations:e2e:local
@@ -20,6 +21,10 @@ npm run test:automations:e2e:local
 # Un dossier, un fichier, un test :
 node scripts/qa/automations-e2e/lancer.mjs liste/ --project=bureau
 node scripts/qa/automations-e2e/lancer.mjs editeur/12-enregistrement.spec.ts --project=bureau -g "429"
+
+# Le verdict d'une passe (le code de sortie de Playwright ne suffit pas : les tests @defaut sont rouges exprès) :
+node scripts/qa/automations-e2e/bilan.mjs <E2E_SORTIES>/resultats.json            # rouge si un test sans marque est rouge ou un @defaut vert
+node scripts/qa/automations-e2e/bilan.mjs <E2E_SORTIES>/resultats.json --zero-defaut   # « prêt pour le launch » : plus aucun défaut, rien de non joué
 
 # Fin de séance : arrête les conteneurs (rien n'est supprimé).
 bash scripts/qa/automations-e2e/pile.sh arreter
