@@ -45,6 +45,11 @@ const NOMS_ACTION_FR: Record<string, string> = {
   archive_job: 'l’archivage', cancel_quote: 'l’annulation du devis', convert_quote_to_job: 'la conversion du devis en job', convert_lead_to_client: 'la conversion du prospect',
   add_note: 'la note', set_job_expenses: 'les dépenses', remember_this: 'la note en mémoire', forget_note: 'l’oubli',
   apply_day_optimization: 'la réorganisation de la journée',
+  // Automatisations (F-16, A-05) : le reçu disait « C'est fait : l’action. »
+  create_automation_from_text: 'l’automatisation', create_automation_from_template: 'l’automatisation', update_automation_from_text: 'l’automatisation',
+  toggle_automation_rule: 'l’automatisation', update_automation_message: 'l’automatisation', update_automation_sms_body: 'l’automatisation',
+  rename_automation_rule: 'l’automatisation', duplicate_automation_rule: 'la copie de l’automatisation', delete_automation_rule: 'la mise à la corbeille de l’automatisation',
+  pause_all_automations: 'les automatisations', set_automation_language: 'la langue des messages automatiques',
 };
 const NOMS_ACTION_EN: Record<string, string> = {
   create_job: 'the job', create_task: 'the task', create_client: 'the client', create_quote: 'the quote', create_invoice: 'the invoice',
@@ -55,7 +60,17 @@ const NOMS_ACTION_EN: Record<string, string> = {
   archive_job: 'archiving', cancel_quote: 'cancelling the quote', convert_quote_to_job: 'converting the quote', convert_lead_to_client: 'converting the lead',
   add_note: 'the note', set_job_expenses: 'the expenses', remember_this: 'the note', forget_note: 'forgetting it',
   apply_day_optimization: 'reorganizing the day',
+  create_automation_from_text: 'the automation', create_automation_from_template: 'the automation', update_automation_from_text: 'the automation',
+  toggle_automation_rule: 'the automation', update_automation_message: 'the automation', update_automation_sms_body: 'the automation',
+  rename_automation_rule: 'the automation', duplicate_automation_rule: 'the copy of the automation', delete_automation_rule: 'moving the automation to the trash',
+  pause_all_automations: 'the automations', set_automation_language: 'the language of automatic messages',
 };
+
+/** Les outils d'automatisation : leur reçu NOMME l'automatisation et cite ce qui est enregistré. */
+const OUTILS_AUTOMATISATION: ReadonlySet<string> = new Set([
+  'create_automation_from_text', 'create_automation_from_template', 'update_automation_from_text', 'toggle_automation_rule',
+  'update_automation_message', 'update_automation_sms_body', 'rename_automation_rule', 'duplicate_automation_rule', 'delete_automation_rule',
+]);
 
 function nomAction(outil: string, fr: boolean): string {
   return (fr ? NOMS_ACTION_FR : NOMS_ACTION_EN)[outil] ?? (fr ? 'l’action' : 'the action');
@@ -69,7 +84,9 @@ export function texteRecus(lignes: LigneRecu[], decision: 'confirm' | 'cancel', 
       // « Devis Q-0043 » se suffit ; un titre nu (« Rappeler Marie ») est précédé du nom de l'action : « la tâche « Rappeler Marie » ».
       const label = recu.fiche?.label ?? '';
       const nomme = /^(devis|facture|job|tâche|fiche|quote|invoice|task)\b/i.test(label);
-      const quoi = label ? (nomme ? label : `${nomAction(outil, fr)} « ${label} »`) : nomAction(outil, fr);
+      // Une automatisation n'a pas de fiche : son nom vient du résultat RELU de l'outil.
+      const nomAuto = !label && OUTILS_AUTOMATISATION.has(outil) && typeof resultat?.name === 'string' && resultat.name.trim() ? resultat.name.trim() : '';
+      const quoi = label ? (nomme ? label : `${nomAction(outil, fr)} « ${label} »`) : nomAuto ? `${nomAction(outil, fr)} « ${nomAuto} »` : nomAction(outil, fr);
       const montant = recu.fiche?.montant_cents !== undefined ? ` (${fmtDollars(recu.fiche.montant_cents, fr)})` : '';
       // Audit 2026-09-30 : « C'est fait » seulement quand c'est VRAIMENT fait.
       // Un envoi incertain, une action faite à moitié ou déjà faite avant se
@@ -86,7 +103,13 @@ export function texteRecus(lignes: LigneRecu[], decision: 'confirm' | 'cancel', 
       if (resultat?.incomplet) return fr ? `Fait en partie seulement : ${quoi}${montant}.${note}${avert}` : `Only partly done: ${quoi}${montant}.${note}${avert}`;
       if (resultat?.deja_existante) return fr ? `Rien de nouveau : ${quoi} existait déjà.${note}` : `Nothing new: ${quoi} already existed.${note}`;
       if (resultat?.deja_fait) return fr ? `C'était déjà fait : ${quoi}${montant}.${avert}` : `Already done earlier: ${quoi}${montant}.${avert}`;
-      return fr ? `C'est fait : ${quoi}${montant}.${avert}` : `Done: ${quoi}${montant}.${avert}`;
+      // CE QUI EST ENREGISTRÉ (A-05) : l'outil a relu la base après avoir écrit et le dit dans `recu`
+      // (le texte exact du message, l'état publié ou non). Sans `recu`, une écriture d'automatisation
+      // reprend la note de l'outil (« Créée EN PAUSE… ») — jamais un « c'est fait » nu.
+      const enregistre = typeof resultat?.recu === 'string' && resultat.recu.trim()
+        ? `\n${resultat.recu.trim()}`
+        : (OUTILS_AUTOMATISATION.has(outil) ? note : '');
+      return fr ? `C'est fait : ${quoi}${montant}.${avert}${enregistre}` : `Done: ${quoi}${montant}.${avert}${enregistre}`;
     }
     const raison = erreur ? ` ${erreur.replace(/\s+$/, '')}` : '';
     return fr ? `${cap(nomAction(outil, fr))} n’a pas fonctionné.${raison}` : `${cap(nomAction(outil, fr))} did not go through.${raison}`;

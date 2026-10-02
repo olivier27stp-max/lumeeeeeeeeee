@@ -32,6 +32,18 @@ import type { IdTopic } from '../lumi/topics';
 import type { AgentTool, ToolContext } from './tools';
 import { executerIdempotent, champRequis, appelInterne, traduireStatut, AppelInterneIncertain } from './tools-etendus';
 import { etatCredits } from '../lumi/budget';
+import {
+  COLONNES_REGLE_LUE, etapesDeLaRegle, aUnParcours, messagesDeLaRegle, actionsDepuisEtapes, resumeDeLaRegle,
+  declencheurEnClair, avisSegments, regleAtteintLeClient, type RegleLue,
+} from '../automations-etapes';
+import { messageCorbeille } from '../automations-corbeille';
+import { ecrireRegle, type ChangementsRegle } from '../automations-ecriture';
+import { langueDuTour } from '../lumi/contexte-appel';
+import { porteeALActivation } from '../lumi/panneau-automatisation';
+import { trouverDeclencheur, estPrereglageRetire } from '../../../src/lib/automationCatalogue';
+import { localizeAutomationName } from '../../../src/lib/automationNames';
+import { textesDExemple } from '../../../src/lib/publicationAutomatisation';
+import { VARIABLES_CONNUES, variablesInconnues, variableLisible, texteVersHtml } from '../../../src/lib/emailBodyText';
 
 /* ── Petits utilitaires locaux ─────────────────────────────────── */
 
@@ -337,19 +349,116 @@ const duplicateEmailTemplate: AgentTool = {
 
 /* ════════════════════════════════════════════════════════════════
    AUTOMATISATIONS
+
+   Mission finale (2026-10-02), règle commune à tous les outils ci-dessous :
+   une écriture RELIT la ligne après avoir écrit et rend l'état relu (nom,
+   publiée ou non, déclencheur en clair, étapes, messages tels qu'enregistrés).
+   Lumi cite ce résultat — jamais ce qu'il avait l'intention d'écrire.
+   Lecture des étapes : un seul accès, `automations-etapes.ts`.
    ════════════════════════════════════════════════════════════════ */
+
+type RegleEnBase = RegleLue & { id: string; name: string; trigger_event: string; modele_id?: string | null };
+
+/** Une automatisation du bureau (jamais une règle supprimée définitivement). */
+async function lireAutomatisation(ctx: ToolContext, id: string): Promise<RegleEnBase> {
+  const { data, error } = await ctx.client
+    .from('automation_rules')
+    .select(`${COLONNES_REGLE_LUE}, modele_id`)
+    .eq('id', id).eq('org_id', ctx.orgId).is('purged_at', null)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Automatisation introuvable dans cette entreprise — elle a peut-être été supprimée.');
+  return data as unknown as RegleEnBase;
+}
+
+/** Aucune écriture sur une automatisation à la corbeille : on la restaure d'abord (comme l'éditeur, 409). */
+function refuserCorbeille(regle: RegleLue): void {
+  if (regle.deleted_at) throw new Error(`${messageCorbeille(langueDuTour() === 'fr')} Rien n’a été modifié.`);
+}
+
+/** Variables utiles à un déclencheur : le client et l'entreprise, toujours ; puis celles de la fiche qui déclenche. */
+const VARIABLES_TOUJOURS = ['client_first_name', 'client_name', 'company_name', 'company_phone'];
+const VARIABLES_PAR_FICHE: Record<string, string[]> = {
+  quote: ['quote_number', 'quote_total', 'quote_link', 'quote_valid_until'],
+  invoice: ['invoice_number', 'invoice_total', 'invoice_due_date', 'invoice_link'],
+  appointment: ['appointment_date', 'appointment_time', 'appointment_address', 'job_name'],
+  job: ['job_name', 'review_link'],
+  agreement: ['contract_link', 'signed_contract_link', 'deposit_amount'],
+  deal: ['deal_stage', 'deal_source'],
+  lead: [],
+};
+export function variablesPourDeclencheur(cle: string | null | undefined): string[] {
+  const fiche = (cle ? trouverDeclencheur(cle)?.entite : undefined) ?? '';
+  return [...VARIABLES_TOUJOURS, ...(VARIABLES_PAR_FICHE[fiche] ?? [])].filter((v) => VARIABLES_CONNUES.includes(v));
+}
+
+/**
+ * Refuse un message qui partirait TROUÉ (A-06). Le moteur remplace une
+ * variable inconnue par du vide : « Bonjour {{client_prenom}}, payez ici :
+ * {{lien_paiement}} » arrive « Bonjour , payez ici : . » — vu 3 fois sur 5
+ * réécritures libres du clavardage. Même contrôle que « Construire avec Lumi »
+ * (`variablesInconnues`), plus les crochets qui ne sont pas des variables
+ * (« [lien de paiement] » partirait tel quel).
+ */
+export function problemeDeVariables(textes: Array<string | undefined>, declencheur: string | null | undefined): string | null {
+  const texte = textes.filter((t): t is string => typeof t === 'string').join('\n');
+  const inconnues = variablesInconnues(texte).map(variableLisible);
+  const fauxCrochets = [...texte.matchAll(/\[([^\]\n]{1,60})\]|\{\{?([^{}\n]{1,60})\}?\}/g)]
+    .map((m) => ({ tout: m[0], dedans: String(m[1] ?? m[2] ?? '').trim() }))
+    // « [lien de paiement] », « [prénom] », « {{lien paiement}} » : des mots en minuscules — un essai de variable.
+    // (« [URGENT] » ou une référence « [A-12] » restent du texte : on ne refuse pas ce qui n'y ressemble pas.)
+    .filter((c) => !/^\w+$/.test(c.dedans) && !/^[a-z]+\.[a-z][a-z0-9_]*$/.test(c.dedans))
+    .filter((c) => c.tout.startsWith('{') || /^[a-zà-ÿ_ ’']+$/.test(c.dedans))
+    .map((c) => c.tout);
+  const fautives = [...new Set([...inconnues, ...fauxCrochets])];
+  if (!fautives.length) return null;
+  const valides = variablesPourDeclencheur(declencheur).map((v) => `[${v}]`).join(', ');
+  return `Message refusé, rien n’a été enregistré : ${fautives.join(', ')} ${fautives.length > 1 ? 'ne sont pas des variables' : 'n’est pas une variable'} de Lume — le client recevrait un trou à la place. `
+    + `Variables valides pour « ${declencheurEnClair(declencheur, true)} » : ${valides}.`;
+}
+function refuserVariablesInconnues(textes: Array<string | undefined>, declencheur: string | null | undefined): void {
+  const probleme = problemeDeVariables(textes, declencheur);
+  if (probleme) throw new Error(probleme);
+}
+
+/** Le corps d'un courriel au format ENREGISTRÉ par l'éditeur (HTML) : un texte brut y partait en un seul bloc (A-21). */
+function corpsCourriel(corps: string): string {
+  return /<[a-z][^>]*>/i.test(corps) ? corps : texteVersHtml(corps);
+}
+
+/** L'état RELU d'une automatisation, sous la forme compacte que Lumi cite. */
+function etatRelu(regle: RegleLue, langue: 'fr' | 'en'): Record<string, unknown> {
+  const r = resumeDeLaRegle(regle, langue, { maxMessage: 1_500 });
+  return {
+    nom: r.nom,
+    etat: r.etat,
+    declencheur: r.declencheur,
+    ...(r.filtres.length ? { filtres: r.filtres } : {}),
+    etapes: r.etapes,
+    ...(r.reglages.length ? { reglages: r.reglages } : {}),
+  };
+}
+
+/** Ce que fait l'automatisation, en une ou deux lignes — pour le reçu affiché après « Confirmer ». */
+function etapesPourRecu(regle: RegleLue, langue: 'fr' | 'en'): string {
+  const r = resumeDeLaRegle(regle, langue, { maxMessage: 600 });
+  return r.etapes.length ? r.etapes.join('\n') : (langue === 'fr' ? '(aucune étape)' : '(no step)');
+}
 
 const toggleAutomationRule: AgentTool = {
   kind: 'write',
   needsIdentity: true,
   declaration: {
     name: 'toggle_automation_rule',
-    description: 'Enable or pause an automation rule. Enabling means messages will go to clients automatically when the trigger fires: confirm with the user.',
+    description:
+      'Publish (enable) or pause an automation. Pausing is immediate and never refused. '
+      + 'To enable: call this tool right away, without writing a summary yourself. The app writes above the card exactly what will run (the trigger, each message word for word, who is reached at activation), and the card asks for the OK. '
+      + 'Refused when a step still carries the editor sample text or when the journey is incomplete: say why, never "done".',
     parameters: {
       type: 'object',
       properties: {
-        rule_id: { type: 'string', description: 'Automation rule id (from list_automations).' },
-        is_active: { type: 'boolean', description: 'true = enable, false = pause.' },
+        rule_id: { type: 'string', description: 'Automation rule id (from get_automation or list_automations).' },
+        is_active: { type: 'boolean', description: 'true = publish, false = pause.' },
       },
       required: ['rule_id', 'is_active'],
     },
@@ -359,18 +468,44 @@ const toggleAutomationRule: AgentTool = {
       const id = champRequis(args.rule_id, 'L’automatisation');
       if (typeof args.is_active !== 'boolean') throw new Error('Précise si l’automatisation doit être activée (true) ou mise en pause (false).');
       const actif = args.is_active;
+      const langue = langueDuTour();
+      const fr = langue === 'fr';
+      if (actif) {
+        // Un texte d'EXEMPLE de l'éditeur ne part jamais à un client. L'écran demande
+        // une confirmation avant de publier ; Lumi, lui, ne publie pas : il le dit.
+        const avant = await lireAutomatisation(ctx, id);
+        const exemples = textesDExemple({ ...avant, fr });
+        if (!avant.deleted_at && exemples.length) {
+          const cites = messagesDeLaRegle(avant).filter((m) => exemples.some((p) => p.etapeId === m.etape)).map((m) => `« ${m.texte.slice(0, 120)} »`);
+          throw new Error(fr
+            ? `Je ne l’ai PAS activée : ${exemples.length > 1 ? 'des étapes portent' : 'une étape porte'} encore le texte d’exemple de l’éditeur${cites.length ? ` (${cites.join(', ')})` : ''}, qui partirait tel quel aux clients. Écris d’abord le vrai message (dis-moi quoi écrire), puis demande l’activation.`
+            : `I did NOT enable it: ${exemples.length > 1 ? 'some steps still carry' : 'a step still carries'} the editor’s sample text${cites.length ? ` (${cites.join(', ')})` : ''}, which would go to clients as is. Write the real message first, then ask to enable it.`);
+        }
+      }
       // Le même chemin que l'interface (audit M8) : un parcours cassé n'est
       // pas publié, et Lumi reçoit la liste des problèmes à expliquer.
       const { changerPublication } = await import('../automations-publication');
-      const r = await changerPublication(ctx.client, ctx.orgId, id, actif);
-      if (!r.ok) throw new Error(r.erreur);
-      const row = { id: r.id, name: r.name };
+      const r = await changerPublication(ctx.client, ctx.orgId, id, actif, fr);
+      if (!r.ok) throw new Error(`${r.erreur} ${fr ? 'Rien n’a changé.' : 'Nothing changed.'}`);
+      // RELU en base (A-05) : la réponse dit l'état d'aujourd'hui, pas la valeur demandée.
+      const relue = await lireAutomatisation(ctx, id);
+      if ((relue.is_active === true) !== actif) {
+        throw new Error(fr ? 'La modification n’a pas été appliquée : l’automatisation n’a pas changé d’état. Réessaie.' : 'The change was not applied: the automation did not change state. Try again.');
+      }
+      const portee = actif ? await porteeALActivation(getServiceClient(), ctx.orgId, relue, langue) : null;
       return {
         updated: true,
-        rule_id: row.id,
-        name: row.name,
-        is_active: actif,
-        note: actif ? 'Automatisation activée : elle partira dès son prochain déclenchement.' : 'Automatisation mise en pause : plus rien ne partira jusqu’à sa réactivation.',
+        rule_id: relue.id,
+        name: relue.name,
+        is_active: relue.is_active === true,
+        automatisation: etatRelu(relue, langue),
+        ...(portee ? { portee } : {}),
+        recu: actif
+          ? (fr
+            ? `Elle est maintenant publiée. Déclencheur : ${declencheurEnClair(relue.trigger_event, true)}. Ce qui part :\n${etapesPourRecu(relue, 'fr')}\n${portee}`
+            : `It is now published. Trigger: ${declencheurEnClair(relue.trigger_event, false)}. What runs:\n${etapesPourRecu(relue, 'en')}\n${portee}`)
+          : (fr ? 'Elle est maintenant en brouillon : plus rien ne part tant qu’elle n’est pas republiée.' : 'It is now a draft: nothing is sent until it is published again.'),
+        note: actif ? 'Automatisation publiée : elle partira dès son prochain déclenchement.' : 'Automatisation mise en pause : plus rien ne partira jusqu’à sa réactivation.',
       };
     }),
 };
