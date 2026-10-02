@@ -115,64 +115,39 @@ describe('reminders-cron — le journal reflète la réalité', () => {
 // 3. Le scheduler : bon numéro, et notification honnête
 // ───────────────────────────────────────────────────────────────────
 
-describe('scheduler — numéro par org et notification fidèle', () => {
+describe('scheduler — il n’envoie plus aucun texto lui-même (B-20)', () => {
   const scheduler = read('server/lib/scheduler.ts');
+  const actions = read('server/lib/actions/index.ts');
 
-  it('résout le numéro Twilio de chaque org au lieu du numéro plateforme', () => {
-    // Avant : tous les locataires envoyaient depuis TWILIO_PHONE_NUMBER. Si la
-    // variable était vide, AUCUN SMS d'automatisation ne partait, en silence.
-    expect(scheduler).toContain("await import('./twilioProvisioning')");
-    expect(scheduler).toContain('getOrgSmsFromNumber(orgId)');
-    expect(scheduler).toContain('async function sendOrgSms');
+  /*
+   * Ce bloc vérifiait le chemin d'envoi de l'ANCIEN système (table
+   * `automations`, cinq traitements par texto : `sendOrgSms`,
+   * `runAutomationOnce`, `notifyAutomationResult`). Ce système a été retiré
+   * (mission finale, B-20) : la table est vide en prod, aucun écran n'y
+   * écrit, et son chemin ignorait la pause d'entreprise, l'arrêt global, la
+   * fenêtre d'envoi, le consentement et le plafond du moteur. Ce que ces
+   * tests protégeaient — bon numéro, pas de faux « envoyé » — se vérifie
+   * maintenant là où les textos d'automatisation partent : le moteur.
+   */
+  it('l’ancien système est retiré : plus de lecture de `automations`, plus de chemin d’envoi à part', () => {
+    expect(scheduler).not.toContain("from('automations')");
+    expect(scheduler).not.toMatch(/sendOrgSms|runAutomationOnce|notifyAutomationResult/);
+    expect(scheduler).not.toMatch(/handleDaysAfterQuoteSent|handleDaysBeforeAppointment|handleOnInvoiceDueDate|handleDaysAfterInvoiceDue|handleDaysAfterJobCompleted/);
   });
 
-  it('aucun site n’envoie plus directement avec le numéro global', () => {
-    // Ancré sur du code exécutable (`await ...`) : la chaîne nue apparaît aussi
-    // dans le commentaire qui explique pourquoi ce détour existe.
-    expect(scheduler).not.toMatch(/await sendSmsIfConfigured\(twilio,/);
-    // Les 5 déclencheurs passent tous par le chemin unique, qui résout le
-    // numéro par org via sendOrgSms.
-    expect((scheduler.match(/await runAutomationOnce\(supabase, automation, twilio/g) || []).length).toBe(5);
-    expect(scheduler).toContain('await sendOrgSms(twilio, automation.org_id');
+  it('aucun site du planificateur n’envoie de texto, ni avec le numéro global ni autrement', () => {
+    expect(scheduler).not.toMatch(/sendSmsIfConfigured/);
+    expect(scheduler).not.toMatch(/messages\.create\(/);
   });
 
-  it('l’envoi précède la notification, et la notification reflète le résultat', () => {
-    // Avant : la notification était créée AVANT l'appel Twilio et sans jamais
-    // regarder son résultat → « envoyé » affiché pour un SMS jamais parti.
-    expect(scheduler).toContain('async function notifyAutomationResult');
-
-    const run = scheduler.slice(
-      scheduler.indexOf('async function runAutomationOnce'),
-      scheduler.indexOf('async function notifyAutomationResult'),
-    );
-    const send = run.indexOf('await sendOrgSms(');
-    const notify = run.indexOf('await notifyAutomationResult(');
-    expect(send).toBeGreaterThan(-1);
-    expect(notify).toBeGreaterThan(send);
+  it('les textos d’automatisation partent du moteur, avec le numéro propre à l’entreprise', () => {
+    // Avant : tous les locataires envoyaient depuis TWILIO_PHONE_NUMBER.
+    expect(actions).toContain("await import('../twilioProvisioning')");
+    expect(actions).toContain('getOrgSmsFromNumber(ctx.orgId)');
   });
 
-  it('un échec réel produit une notification explicite, pas un faux succès', () => {
-    expect(scheduler).toContain('SMS non envoyé');
-    expect(scheduler).toContain("aucun numéro SMS n'est configuré");
-  });
-
-  it('le titre de notification reste stable, échec compris', () => {
-    // Le titre sert de clé à la détection de doublon en base (org_id +
-    // reference_id + title). Un titre différent selon l'issue rendrait la
-    // garde inopérante dès le premier échec : l'automatisation repartirait au
-    // tick suivant. La cause va donc dans le corps, jamais dans le titre.
-    const notify = scheduler.slice(
-      scheduler.indexOf('async function notifyAutomationResult'),
-      scheduler.indexOf('// Recurring invoices'),
-    );
-    expect(notify).not.toMatch(/`\$\{automation\.name\} — /);
-    expect((notify.match(/automation\.name,/g) || []).length).toBe(2);
-  });
-
-  it('un client sans téléphone n’est pas signalé comme un échec', () => {
-    // Distinction volontaire : rien à envoyer ≠ panne. Sinon on noierait
-    // l'utilisateur sous des alertes inutiles.
-    expect(scheduler).toContain("smsRes.sent || smsRes.reason === 'no_recipient'");
+  it('le moteur vérifie la liste STOP avant tout texto', () => {
+    expect(actions).toContain(".from('sms_opt_outs')");
   });
 });
 
@@ -396,12 +371,11 @@ describe('conformité CASL — le STOP est respecté sur tous les envois', () =>
     expect(await isSmsOptedOut(supa, 'org1', null)).toBe(false);
   });
 
-  it('les 6 sites qui ignoraient la liste STOP la vérifient désormais', () => {
+  it('les sites qui ignoraient la liste STOP la vérifient désormais (le 6e, le planificateur, n’envoie plus rien)', () => {
     // Avant : seuls messages.ts et actions/index.ts la consultaient. Un client
     // désabonné continuait de recevoir devis, contrats, demandes de paiement
     // et toutes les relances automatiques.
     for (const site of [
-      'server/lib/scheduler.ts',        // les 5 automatisations récurrentes
       'server/routes/quotes.ts',        // devis par SMS
       'server/routes/agreements.ts',    // contrats par SMS
       'server/routes/payment-requests.ts',
@@ -409,6 +383,9 @@ describe('conformité CASL — le STOP est respecté sur tous les envois', () =>
     ]) {
       expect(read(site), `${site} ne vérifie pas l'opt-out`).toContain('isSmsOptedOut');
     }
+    // Le 6e site — les 5 automatisations récurrentes du planificateur — a été
+    // retiré (B-20) : il n'envoie plus rien, donc n'a plus de liste à vérifier.
+    expect(read('server/lib/scheduler.ts')).not.toMatch(/sendSmsIfConfigured|sendOrgSms/);
   });
 
   it('les deux sites historiquement conformes le restent', () => {
@@ -567,45 +544,18 @@ describe('formulaire public — le visiteur reçoit enfin une confirmation', () 
 describe('scheduler — plus de doublons au redéploiement', () => {
   const scheduler = read('server/lib/scheduler.ts');
 
-  it('la détection s’appuie sur la base, plus sur la mémoire du processus', () => {
-    // Avant : un Set en mémoire, vidé à chaque redémarrage. Le tick suivant
-    // (toutes les 5 min) renvoyait les messages déjà envoyés. Avec plusieurs
-    // instances, chacune avait sa propre copie.
-    expect(scheduler).toContain('async function hasFired');
-    expect(scheduler).toContain("from('notifications')");
-    expect(scheduler).toContain(".eq('reference_id', refId)");
-    expect(scheduler).toContain(".gte('created_at', debutJour)");
-  });
-
-  it('la garde couvre l’ENVOI, pas seulement la notification', () => {
-    // Le défaut le plus coûteux de l'ancienne version : l'appel SMS était en
-    // dehors de la garde, donc il repartait à chaque tick même quand le
-    // doublon était détecté. Le client recevait le message en boucle.
-    const run = scheduler.slice(
-      scheduler.indexOf('async function runAutomationOnce'),
-      scheduler.indexOf('async function notifyAutomationResult'),
-    );
-    const garde = run.indexOf('if (await hasFired(');
-    const envoi = run.indexOf('await sendOrgSms(');
-    expect(garde).toBeGreaterThan(-1);
-    expect(envoi).toBeGreaterThan(garde);
-  });
-
-  it('marque AVANT l’envoi — deux ticks rapprochés ne passent pas tous les deux', () => {
-    const run = scheduler.slice(
-      scheduler.indexOf('async function runAutomationOnce'),
-      scheduler.indexOf('async function notifyAutomationResult'),
-    );
-    expect(run.indexOf('markFired(')).toBeLessThan(run.indexOf('await sendOrgSms('));
-  });
-
-  it('fail-open : un incident de lecture ne rend pas les automatisations muettes', () => {
-    expect(scheduler).toContain('vérification anti-doublon échouée');
-    const has = scheduler.slice(
-      scheduler.indexOf('async function hasFired'),
-      scheduler.indexOf('function markFired'),
-    );
-    expect(has).toContain('return false');
+  /*
+   * Les quatre tests d'ici protégeaient les textos de l'ANCIEN système
+   * (`hasFired` lisait `notifications`, `runAutomationOnce` marquait avant
+   * d'envoyer). Ce système est retiré (B-20) : il n'y a plus d'envoi à
+   * dédoublonner ici. Les envois du moteur le sont en base — clé d'unicité de
+   * la file planifiée et réservation du journal (tests/automation,
+   * tests/automations-suite).
+   */
+  it('plus aucun envoi à dédoublonner dans le planificateur : la garde en base est partie avec lui', () => {
+    expect(scheduler).not.toContain('async function hasFired(');
+    expect(scheduler).not.toContain('runAutomationOnce');
+    expect(scheduler).not.toMatch(/sendSmsIfConfigured|sendOrgSms/);
   });
 
   it('les détections internes gardent une garde mémoire dédiée', () => {

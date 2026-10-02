@@ -1635,15 +1635,6 @@ async function scheduleDelayedActions(
 // ── Event handler ───────────────────────────────────────────
 
 
-// ── Convert delay_value + delay_unit to seconds ───────────
-function delayToSeconds(value: number, unit: string): number {
-  if (unit === 'immediate' || value <= 0) return 0;
-  if (unit === 'minutes') return value * 60;
-  if (unit === 'hours') return value * 3600;
-  if (unit === 'days') return value * 86400;
-  return 0;
-}
-
 async function handleEvent(event: CRMEvent) {
   if (!engineConfig) return;
   // Interrupteur d'arrêt (F6) : avant TOUTE lecture. L'événement est

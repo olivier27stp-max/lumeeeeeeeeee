@@ -614,34 +614,3 @@ export function etapeSuivante(etape: Etape, resultat?: boolean): string | null {
   if (etape.type === 'arreter') return null;
   return (etape as EtapeAction | EtapeAttendre).suivant ?? null;
 }
-
-/**
- * Annule tout ce qui reste en file pour cette entité et cette règle.
- *
- * Appelée quand la séquence n'a plus lieu d'être : le client a répondu, le
- * devis est accepté, la facture est payée. `cancelled` plutôt qu'une
- * suppression — le journal doit garder la trace de ce qui était prévu et de
- * pourquoi ça ne partira pas.
- */
-export async function annulerSequence(
-  supabase: SupabaseClient,
-  orgId: string,
-  ruleId: string,
-  entityId: string,
-  motif: string,
-): Promise<number> {
-  const { data, error } = await supabase
-    .from('automation_scheduled_tasks')
-    .update({ status: 'cancelled', last_error: motif })
-    .eq('org_id', orgId)
-    .eq('automation_rule_id', ruleId)
-    .eq('entity_id', entityId)
-    .eq('status', 'pending')
-    .select('id');
-
-  if (error) {
-    logger.error('[sequences] annulation échouée', { rule_id: ruleId, entity_id: entityId, message: error.message });
-    return 0;
-  }
-  return data?.length ?? 0;
-}
