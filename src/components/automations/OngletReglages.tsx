@@ -100,8 +100,15 @@ export default function OngletReglages({ ruleId, reglages, fr, onChange, enregis
    */
   const appliquer = (patch: Partial<ReglagesAutomatisation>): Promise<void> => {
     const suivant = { ...voulu.current, ...patch };
-    // Retirer les clés remises à leur valeur par défaut.
-    for (const [k, v] of Object.entries(suivant)) {
+    /*
+     * Retirer les clés remises à leur valeur par défaut — CELLES DE CE
+     * CHANGEMENT seulement (triage éditeur, S-08). La boucle passait sur tout
+     * l'objet : un `false` posé ailleurs disparaissait au passage. Or
+     * `arreter_si_resolu: false` est un CHOIX (la case « Arrêter si… » du
+     * déclencheur, décochée) : basculer « Jours ouvrables » l'effaçait, et la
+     * sortie automatique redevenait active sans que personne l'ait demandé.
+     */
+    for (const [k, v] of Object.entries(patch)) {
       if (v === false || v === undefined) delete (suivant as Record<string, unknown>)[k];
     }
     voulu.current = suivant;

@@ -127,6 +127,20 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await page.context().close();
   },
 
+  /** S-08 — basculer un réglage n'efface pas `arreter_si_resolu: false`. */
+  async s08() {
+    const regle = await creerRegle({ trigger_event: 'invoice.sent', settings: { arreter_si_resolu: false }, steps: [action('create_task', { title: 'Tâche' })] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    await page.getByRole('tab', { name: 'Réglages' }).click();
+    await page.getByRole('switch', { name: /Jours ouvrables seulement/ }).click();
+    await pause(4000);
+    const reglages = (await lireRegle(regle.id)).settings;
+    verifier(JSON.stringify(reglages) === JSON.stringify({ arreter_si_resolu: false, jours_ouvrables: true }) || JSON.stringify(reglages) === JSON.stringify({ jours_ouvrables: true, arreter_si_resolu: false }),
+      `la case décochée du déclencheur reste décochée en base (${JSON.stringify(reglages)})`);
+    await page.context().close();
+  },
+
   /** S-32 — bureau en pause globale : l'éditeur d'une automatisation publiée le dit. */
   async s32() {
     const b = await leBureau();
