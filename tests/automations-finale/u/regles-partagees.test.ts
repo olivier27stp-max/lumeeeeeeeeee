@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { actionsDuParcours } from '../../../src/lib/publicationAutomatisation';
 import { estFormatOrigine } from '../../../src/lib/sequenceTypes';
-import { ACTIONS, ENTITE_PAR_DECLENCHEUR, actionCompatible, champQuiFixeLEntite, entiteDuChamp, fauteDeValeur, problemesAvantPublication } from '../../../src/lib/automationCatalogue';
+import { ACTIONS, ENTITE_PAR_DECLENCHEUR, actionCompatible, champQuiFixeLEntite, entiteDuChamp, fauteDeValeur, fautesDuDeclencheur, problemesAvantPublication } from '../../../src/lib/automationCatalogue';
 import { objetDeLaRegle } from '../../../src/components/champs/automatisations';
 import type { ChampPerso } from '../../../src/lib/champs/types';
 
@@ -268,5 +268,43 @@ describe('`fauteDeValeur` — ce qu’une valeur de champ a de fautif : la même
       ],
     }).filter((p) => p.gravite === 'bloquant');
     expect(problemes).toEqual([]);
+  });
+});
+
+// ─── Triage « déclencheurs », 03-panneau-declencheur:316 et :581 ─
+
+describe('`fautesDuDeclencheur` — les réglages d’un déclencheur : la même règle pour le panneau et le serveur', () => {
+  const fr = (cle: string, valeurs: Record<string, unknown>) => fautesDuDeclencheur(cle, valeurs).map((f) => f.fr);
+
+  it('une plage de montants impossible, lue en texte (panneau) comme en nombres (conditions)', () => {
+    const attendu = ['« Montant minimum ($) » est plus grand que « Montant maximum ($) » : rien ne peut remplir les deux, l’automatisation ne partirait jamais.'];
+    expect(fr('quote.viewed', { montant__gte: '5000', montant__lte: '100' })).toEqual(attendu);
+    expect(fr('quote.viewed', { montant__gte: 5000, montant__lte: 100 })).toEqual(attendu);
+    expect(fr('quote.viewed', { montant__gte: 1250.5, montant__lte: 0 })).toEqual(attendu);
+  });
+
+  it('un montant négatif : la borne est dite — et la plage n’est pas reprochée en plus', () => {
+    expect(fr('quote.viewed', { montant__gte: '-5', montant__lte: '-10' })).toEqual([
+      '« Montant minimum ($) » doit être au moins 0.',
+      '« Montant maximum ($) » doit être au moins 0.',
+    ]);
+  });
+
+  it('des mois, des jours : un nombre ENTIER, dans les bornes', () => {
+    for (const mois of ['0', '61', '2.5', 0, 61, 2.5]) {
+      expect(fr('client.inactive', { mois }), String(mois)).toEqual(['« Aucun job terminé depuis (mois) » doit être un nombre entier, entre 1 et 60.']);
+    }
+    expect(fr('date.reached', { champ_id: 'x', jours_avant: '9999' })).toEqual(['« Combien de jours avant » doit être un nombre entier, entre -365 et 365.']);
+    expect(fautesDuDeclencheur('date.reached', { jours_avant: 3.5 })[0].en).toBe('“How many days before” must be a whole number between -365 and 365.');
+  });
+
+  it('rien à redire : valeurs valides, vides, absentes, déclencheur sans réglage, déclencheur inconnu', () => {
+    expect(fr('quote.viewed', { montant__gte: '100', montant__lte: '100' })).toEqual([]);
+    expect(fr('quote.viewed', { montant__gte: '', montant__lte: '100' })).toEqual([]);
+    expect(fr('client.inactive', { mois: 12, max_par_heure: 25 })).toEqual([]);
+    expect(fr('date.reached', { champ_id: 'x', jours_avant: -7 })).toEqual([]);
+    expect(fr('invoice.paid', { n_importe: 'quoi' })).toEqual([]);
+    expect(fr('inconnu.partout', { mois: 0 })).toEqual([]);
+    expect(fautesDuDeclencheur('quote.viewed', null)).toEqual([]);
   });
 });

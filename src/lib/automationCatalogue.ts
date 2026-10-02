@@ -352,13 +352,13 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
     champs: [
       {
         cle: 'mois', fr: 'Aucun job terminé depuis (mois)', en: 'No completed job for (months)',
-        obligatoire: true, type: 'nombre', min_valeur: 1, max_valeur: 60, defaut_fr: '6', defaut_en: '6',
+        obligatoire: true, type: 'nombre', min_valeur: 1, max_valeur: 60, entier: true, defaut_fr: '6', defaut_en: '6',
         aide_fr: '3, 6 ou 12 mois — ou toute autre valeur.',
         aide_en: '3, 6 or 12 months — or any other value.',
       },
       {
         cle: 'max_par_heure', fr: 'Au plus, par heure', en: 'At most, per hour',
-        obligatoire: false, type: 'nombre', min_valeur: 1, max_valeur: 1000,
+        obligatoire: false, type: 'nombre', min_valeur: 1, max_valeur: 1000, entier: true,
         aide_fr: 'Évite d’envoyer des centaines de messages d’un coup à l’activation. Le reste part aux heures suivantes (entre 9 h et 19 h).',
         aide_en: 'Avoids sending hundreds of messages at once when activated. The rest go out in the following hours (9 a.m. – 7 p.m.).',
       },
@@ -416,7 +416,7 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
       },
       {
         cle: 'jours_avant', fr: 'Combien de jours avant', en: 'How many days before',
-        obligatoire: false, type: 'nombre', min_valeur: -365, max_valeur: 365,
+        obligatoire: false, type: 'nombre', min_valeur: -365, max_valeur: 365, entier: true,
         aide_fr: '7 = une semaine avant la date. 0 = le jour même. -7 = une semaine après.',
         aide_en: '7 = one week before the date. 0 = on the day. -7 = one week after.',
       },
@@ -577,6 +577,56 @@ export function trouverDeclencheur(cle: string): DeclencheurCatalogue | undefine
   return DECLENCHEURS.find((d) => d.cle === cle);
 }
 
+/**
+ * CE QUI CLOCHE DANS LES RÉGLAGES D'UN DÉCLENCHEUR — une seule règle pour le
+ * panneau du déclencheur et pour le serveur (triage « déclencheurs »,
+ * 03-panneau-declencheur:316 et :581).
+ *
+ * « Montant minimum 5 000 $, maximum 100 $ », « -5 $ », « 0 mois », « 61
+ * mois », « 2,5 mois » s'enregistraient tels quels : l'automatisation
+ * s'affichait comme réglée et ne partait jamais (ou partait sur une autre
+ * valeur que celle à l'écran), sans un mot. Sont jugés ici :
+ *   · chaque champ `nombre` visible : un nombre, dans ses bornes, entier s'il
+ *     compte des mois ou des jours (`fauteDeValeur`) ;
+ *   · chaque plage `x__gte` / `x__lte` : le minimum ne dépasse pas le maximum.
+ *
+ * `valeurs` : le brouillon du panneau (du texte) ou les `conditions` qu'on
+ * s'apprête à écrire (des nombres) — les deux formes sont lues.
+ */
+export function fautesDuDeclencheur(cle: string, valeurs: Record<string, unknown> | null | undefined): FauteValeur[] {
+  const champs = trouverDeclencheur(cle)?.champs ?? [];
+  const lues = valeurs ?? {};
+  const fautes: FauteValeur[] = [];
+  const fautifs = new Set<string>();
+  for (const champ of champs) {
+    if (champ.type !== 'nombre' || !champVisible(champ, lues)) continue;
+    const faute = fauteDeValeur(champ, lues[champ.cle]);
+    if (!faute) continue;
+    fautifs.add(champ.cle);
+    fautes.push({ fr: `« ${champ.fr} » ${faute.fr}.`, en: `“${champ.en}” ${faute.en}.` });
+  }
+  const nombre = (champ: ChampAction): number | null => {
+    const brut = lues[champ.cle];
+    if (fautifs.has(champ.cle) || brut === undefined || brut === null || String(brut).trim() === '') return null;
+    const n = Number(String(brut).trim());
+    return Number.isFinite(n) ? n : null;
+  };
+  for (const min of champs) {
+    if (min.type !== 'nombre' || !min.cle.endsWith('__gte')) continue;
+    const max = champs.find((c) => c.type === 'nombre' && c.cle === `${min.cle.slice(0, -'__gte'.length)}__lte`);
+    if (!max || !champVisible(min, lues) || !champVisible(max, lues)) continue;
+    const a = nombre(min);
+    const b = nombre(max);
+    if (a !== null && b !== null && a > b) {
+      fautes.push({
+        fr: `« ${min.fr} » est plus grand que « ${max.fr} » : rien ne peut remplir les deux, l’automatisation ne partirait jamais.`,
+        en: `“${min.en}” is greater than “${max.en}”: nothing can meet both, the automation would never run.`,
+      });
+    }
+  }
+  return fautes;
+}
+
 // ── Actions ─────────────────────────────────────────────────
 
 /**
@@ -649,6 +699,8 @@ export interface ChampAction {
   /** Bornes pour `nombre`. */
   min_valeur?: number;
   max_valeur?: number;
+  /** `nombre` : seulement un nombre ENTIER (des mois, des jours) — « 2,5 » est refusé. */
+  entier?: boolean;
   /** Options d'un `choix`. La valeur stockée est `cle`. */
   options?: Array<{ cle: string; fr: string; en: string }>;
   /** Aide sous le champ — la phrase qui évite une question au support. */
@@ -1386,6 +1438,18 @@ export function fauteDeValeur(champ: ChampAction, brut: unknown): FauteValeur | 
     case 'nombre': {
       const n = Number(v);
       if (!Number.isFinite(n)) return { fr: 'doit être un nombre', en: 'must be a number' };
+      if (champ.entier) {
+        // Des mois, des jours : le moteur ne sait viser qu'un nombre entier.
+        // La faute dit les DEUX exigences d'un coup (entier, et dans les bornes).
+        const { min_valeur: min, max_valeur: max } = champ;
+        const dedans = (min === undefined || n >= min) && (max === undefined || n <= max);
+        if (Number.isInteger(n) && dedans) return null;
+        const [bornesFr, bornesEn] = min !== undefined && max !== undefined
+          ? [`, entre ${min} et ${max}`, ` between ${min} and ${max}`]
+          : min !== undefined ? [`, d’au moins ${min}`, ` of at least ${min}`]
+            : max !== undefined ? [`, d’au plus ${max}`, ` of at most ${max}`] : ['', ''];
+        return { fr: `doit être un nombre entier${bornesFr}`, en: `must be a whole number${bornesEn}` };
+      }
       if (champ.min_valeur !== undefined && n < champ.min_valeur) {
         return { fr: `doit être au moins ${champ.min_valeur}`, en: `must be at least ${champ.min_valeur}` };
       }

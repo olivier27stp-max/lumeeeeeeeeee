@@ -440,3 +440,56 @@ describe('lignes 8, 9 et 24 — un nombre hors bornes, une adresse de webhook re
     expect(enBase().is_active).toBe(false);
   });
 });
+
+// ─── Triage « déclencheurs », 03-panneau-declencheur:316 et :581 ─
+
+describe('03:316 et 03:581 — les réglages d’un déclencheur que le panneau refuse, le serveur les refuse aussi (même règle)', () => {
+  const modifier = (corps: unknown, entetes: Record<string, string> = {}) => appeler('PATCH', `/automations/rules/${REGLE}`, corps, entetes);
+
+  it('« Devis ouvert » : minimum 5 000 $, maximum 100 $ → 400, la raison est dite, rien n’est écrit', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'quote.viewed', conditions: { ouverture: 'premiere' } })];
+    const r = await modifier({ conditions: { ouverture: 'premiere', montant__gte: 5000, montant__lte: 100 } });
+    expect(r.status).toBe(400);
+    expect(r.json.error).toBe('« Montant minimum ($) » est plus grand que « Montant maximum ($) » : rien ne peut remplir les deux, l’automatisation ne partirait jamais.');
+    expect(ecritures()).toEqual([]);
+  });
+
+  it('… un minimum négatif aussi ; en anglais pour une interface anglaise', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'quote.viewed', conditions: {} })];
+    expect((await modifier({ conditions: { montant__gte: -5 } })).json.error).toBe('« Montant minimum ($) » doit être au moins 0.');
+    const en = await modifier({ conditions: { montant__gte: 5000, montant__lte: 100 } }, { 'Accept-Language': 'en' });
+    expect(en.status).toBe(400);
+    expect(en.json.error).toBe('“Minimum amount ($)” is greater than “Maximum amount ($)”: nothing can meet both, the automation would never run.');
+  });
+
+  it('« Client inactif » : 0, 61 et 2,5 mois → 400', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'client.inactive', conditions: { mois: 6, max_par_heure: 25 } })];
+    etat.tables.org_features = [{ org_id: ORG, feature_key: 'auto_client_inactif', enabled: true }];
+    for (const mois of [0, 61, 2.5]) {
+      const r = await modifier({ conditions: { mois, max_par_heure: 25 } });
+      expect(r.status, String(mois)).toBe(400);
+      expect(r.json.error, String(mois)).toBe('« Aucun job terminé depuis (mois) » doit être un nombre entier, entre 1 et 60.');
+    }
+    expect(ecritures()).toEqual([]);
+  });
+
+  it('une plage possible, des mois dans les bornes : acceptés', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'quote.viewed', conditions: {} })];
+    expect((await modifier({ conditions: { montant__gte: 100, montant__lte: 5000 } })).status).toBe(200);
+    expect(enBase().conditions).toEqual({ montant__gte: 100, montant__lte: 5000 });
+  });
+
+  it('une modification qui ne touche PAS aux conditions ne rejuge pas une règle déjà hors bornes (elle reste renommable)', async () => {
+    etat.tables.automation_rules = [regle({ trigger_event: 'quote.viewed', conditions: { montant__gte: 5000, montant__lte: 100 } })];
+    expect((await modifier({ name: 'Autre nom' })).status).toBe(200);
+  });
+
+  it('à la création aussi', async () => {
+    const r = await appeler('POST', '/automations/rules', {
+      name: 'Devis ouvert', trigger_event: 'quote.viewed', delay_seconds: 0, conditions: { montant__gte: 5000, montant__lte: 100 },
+      actions: [{ type: 'create_notification', config: { title: 'Devis ouvert' } }],
+    });
+    expect(r.status).toBe(400);
+    expect(r.json.error).toContain('« Montant minimum ($) » est plus grand que « Montant maximum ($) »');
+  });
+});

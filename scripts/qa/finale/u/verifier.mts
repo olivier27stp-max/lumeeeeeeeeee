@@ -605,6 +605,80 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     verifier(en.status === 400 && en.erreur.includes('Step 1 (“Create a task”): “Due in (days)” must be at most 365.') && !/Étape|doit/.test(en.erreur), `le serveur, en anglais : ${en.status} ${en.erreur}`);
     await page.context().close();
   },
+
+  /** Déclencheurs 03:316, 03:581 et « jours avant » — plage impossible, mois et jours hors bornes : refusés dans le panneau, et par le serveur. */
+  async d316() {
+    const b = await leBureau();
+    const notif = [action('create_notification', { title: 'Devis ouvert' })];
+    const regle = await creerRegle({ trigger_event: 'quote.viewed', conditions: { ouverture: 'premiere' }, steps: notif });
+    const page = await ouvrirPage();
+    const ecritures: number[] = [];
+    page.on('response', (r) => { if (r.request().method() === 'PATCH' && /\/api\/automations\/rules\/[0-9a-f-]{36}$/.test(r.url())) ecritures.push(r.status()); });
+    await ouvrirEditeur(page, regle.id);
+    const p = page.getByRole('complementary', { name: 'Réglages du déclencheur' });
+    const sauver = p.getByRole('button', { name: 'Enregistrer', exact: true });
+    await page.getByRole('button', { name: /^Quand/ }).first().click();
+    await p.waitFor();
+    await p.getByLabel(/^Montant minimum \(\$\)/).fill('5000');
+    await p.getByLabel(/^Montant maximum \(\$\)/).fill('100');
+    await sauver.click();
+    verifier(await p.getByRole('alert').isVisible(), 'minimum 5 000 $, maximum 100 $ : le refus est écrit, « Enregistrer » ne ferme pas le panneau');
+    verifier(await p.getByRole('alert').getByText(/Montant minimum \(\$\) » est plus grand que « Montant maximum \(\$\) »/).isVisible(), 'la raison est dite dans le panneau');
+    await p.getByLabel(/^Montant maximum \(\$\)/).fill('');
+    await p.getByLabel(/^Montant minimum \(\$\)/).fill('-5');
+    await sauver.click();
+    verifier(await p.getByText('« Montant minimum ($) » doit être au moins 0.').isVisible(), '-5 $ : refusé, « au moins 0 »');
+    await pause(4500);
+    verifier(ecritures.length === 0, `rien n’est parti vers le serveur (${ecritures.join(', ') || 'aucune écriture'})`);
+    await p.getByLabel(/^Montant minimum \(\$\)/).fill('100');
+    await p.getByLabel(/^Montant maximum \(\$\)/).fill('5000');
+    await sauver.click();
+    await pause(5000);
+    verifier(JSON.stringify((await lireRegle(regle.id)).conditions) === JSON.stringify({ ouverture: 'premiere', montant__gte: 100, montant__lte: 5000 }), `une plage possible est enregistrée : ${JSON.stringify((await lireRegle(regle.id)).conditions)}`);
+
+    // « Date atteinte » : 9999 jours avant.
+    const champDate = await assurerChamp('client', 'u_fin_contrat', 'Fin de contrat U', 'date');
+    const dates = await creerRegle({ trigger_event: 'date.reached', conditions: { champ_id: champDate, jours_avant: 7 }, steps: notif });
+    await ouvrirEditeur(page, dates.id);
+    await page.getByRole('button', { name: /^Quand/ }).first().click();
+    await p.waitFor();
+    ecritures.length = 0;
+    await p.getByLabel(/^Combien de jours avant/).fill('9999');
+    await sauver.click();
+    verifier(await p.getByText('« Combien de jours avant » doit être un nombre entier, entre -365 et 365.').isVisible(), '9999 jours avant : refusé dans le panneau, bornes dites');
+    await pause(4500);
+    verifier(ecritures.length === 0 && (await lireRegle(dates.id)).conditions !== null && ((await lireRegle(dates.id)).conditions as { jours_avant?: number }).jours_avant === 7, 'rien ne part, la base garde 7 jours');
+
+    // Le vrai serveur, sans l'éditeur.
+    const jeton = await page.evaluate(() => JSON.parse(localStorage.getItem('lume-auth-token') ?? '{}').access_token as string);
+    const ecrire = async (id: string, conditions: Record<string, unknown>) => {
+      const r = await fetch(`http://127.0.0.1:3497/api/automations/rules/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}`, 'x-org-id': b.orgA }, body: JSON.stringify({ conditions }),
+      });
+      return { status: r.status, erreur: ((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? '' };
+    };
+    const plage = await ecrire(regle.id, { montant__gte: 5000, montant__lte: 100 });
+    verifier(plage.status === 400 && plage.erreur.includes('est plus grand que'), `le serveur refuse la plage impossible : ${plage.status} ${plage.erreur}`);
+    const inactif = await creerRegle({ trigger_event: 'client.inactive', conditions: { mois: 6, max_par_heure: 25 }, steps: notif });
+    for (const mois of [0, 61, 2.5]) {
+      const r = await ecrire(inactif.id, { mois, max_par_heure: 25 });
+      verifier(r.status === 400 && r.erreur.includes('doit être un nombre entier, entre 1 et 60'), `le serveur refuse ${mois} mois : ${r.status} ${r.erreur}`);
+    }
+    verifier(((await lireRegle(inactif.id)).conditions as { mois?: number }).mois === 6, 'la base garde 6 mois');
+    // Le panneau de « Client inactif » (le déclencheur est sous drapeau : la carte s'ouvre quand même sur une règle qui le porte).
+    await ouvrirEditeur(page, inactif.id);
+    await page.getByRole('button', { name: /^Quand/ }).first().click();
+    if (await p.isVisible().catch(() => false)) {
+      for (const faux of ['0', '61', '2.5']) {
+        await p.getByLabel(/^Aucun job terminé depuis \(mois\)/).fill(faux);
+        await sauver.click();
+        verifier(await p.getByText('« Aucun job terminé depuis (mois) » doit être un nombre entier, entre 1 et 60.').isVisible(), `« ${faux} » mois : refusé dans le panneau`);
+      }
+    } else {
+      console.log('  (panneau « Client inactif » non offert à ce bureau : vérifié par le serveur et par le test du composant)');
+    }
+    await page.context().close();
+  },
 };
 
 const demandes = process.argv.slice(2);

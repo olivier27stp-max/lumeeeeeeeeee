@@ -54,6 +54,7 @@ import {
   DECLENCHEURS,
   ACTIONS,
   trouverDeclencheur,
+  fautesDuDeclencheur,
   conditionsApresChangement,
   declencheurOffert,
   estPrereglageRetire,
@@ -89,6 +90,15 @@ export function verifierCoherence(corps: {
   if (trigger_event === 'date.reached' && conditions) {
     const probleme = problemeJoursAvant(conditions.jours_avant, fr);
     if (probleme) return probleme;
+  }
+
+  // Les réglages du déclencheur qu'on s'apprête à ÉCRIRE : un nombre hors
+  // bornes (« 0 mois », « -5 $ »), « 2,5 mois », un minimum plus grand que le
+  // maximum s'enregistraient tels quels — la règle ne partait jamais, sans un
+  // mot. Même règle que le panneau, qui refuse avant d'envoyer (catalogue).
+  if (trigger_event && conditions) {
+    const faute = fautesDuDeclencheur(trigger_event, conditions)[0];
+    if (faute) return fr ? faute.fr : faute.en;
   }
 
   // Un délai négatif = « X avant la date de référence ». Le moteur ne sait le
