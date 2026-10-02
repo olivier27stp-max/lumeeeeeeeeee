@@ -453,6 +453,30 @@ describe('04-courriel:212 — la fenêtre au clavier : un dialogue qui prend le 
   });
 });
 
+describe('04-courriel:443 — la ligne ajoutée reçoit le curseur', () => {
+  const C = { subject: OBJET, body: CORPS };
+
+  it('« Paragraphe » : on peut taper tout de suite dans la ligne neuve', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    const avant = champs('Paragraphe').length;
+    await cliquer(bouton('Paragraphe'));
+    const lignes = champs('Paragraphe');
+    expect(lignes).toHaveLength(avant + 1);
+    expect(document.activeElement).toBe(lignes[lignes.length - 1]);
+  });
+
+  it('« Puce » aussi ; et « Insérer » vise alors cette ligne-là', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await cliquer(bouton('Puce'));
+    const puce = champs('Puce')[0];
+    expect(document.activeElement).toBe(puce);
+    await cliquer(bouton('Prénom du client'));
+    expect(puce.value).toBe('[client_first_name]');
+  });
+});
+
 describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’éditeur montre et modifie le courriel qui part', () => {
   const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
   const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };

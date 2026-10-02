@@ -116,19 +116,23 @@ let compteurId = 0;
  * champ et lui fait perdre le focus au milieu d'une phrase.
  */
 function ChampBloc({
-  bloc, fr, onChange, onFocus,
+  bloc, fr, onChange, onFocus, prendLeFocus,
 }: {
   bloc: Bloc;
   fr: boolean;
+  /** La ligne vient d'être ajoutée : elle reçoit le curseur, on peut taper tout de suite (04-courriel:443). */
+  prendLeFocus?: boolean;
   onChange: (texte: string) => void;
   /** Le champ qui reçoit le curseur : « Insérer » écrira là où il est. */
   onFocus: (champ: HTMLTextAreaElement) => void;
 }) {
+  const champ = useRef<HTMLTextAreaElement | null>(null);
   const ajuster = (el: HTMLTextAreaElement | null) => {
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
   };
+  useEffect(() => { if (prendLeFocus) champ.current?.focus(); }, [prendLeFocus]);
 
   return (
     <textarea
@@ -146,7 +150,7 @@ function ChampBloc({
           : 'text-[13px] text-text-secondary leading-relaxed',
       )}
       style={{ minHeight: bloc.type === 'titre' ? 30 : 26 }}
-      ref={ajuster}
+      ref={(el) => { champ.current = el; ajuster(el); }}
     />
   );
 }
@@ -667,8 +671,13 @@ export default function EmailPreviewEditor({
     });
   };
 
-  const ajouterBloc = (type: Bloc['type']) =>
-    setBlocs((bs) => [...bs, { id: compteurId++, type, texte: '' }]);
+  /** La ligne qu'on vient d'ajouter : elle reçoit le curseur. */
+  const [ligneNeuve, setLigneNeuve] = useState<number | null>(null);
+  const ajouterBloc = (type: Bloc['type']) => {
+    const id = compteurId++;
+    setBlocs((bs) => [...bs, { id, type, texte: '' }]);
+    setLigneNeuve(id);
+  };
 
   /*
    * « INSÉRER » ÉCRIT LÀ OÙ EST LE CURSEUR (triage « modèles », 04-courriel:538
@@ -984,7 +993,8 @@ export default function EmailPreviewEditor({
                       bloc={bloc}
                       fr={fr}
                       onChange={(t) => majBloc(bloc.id, t)}
-                      onFocus={(champ) => { setActif(bloc.id); setCibleObjet(false); champActif.current = champ; }}
+                      onFocus={(champ) => { setActif(bloc.id); setCibleObjet(false); champActif.current = champ; setLigneNeuve(null); }}
+                      prendLeFocus={bloc.id === ligneNeuve}
                     />
                   </div>
                   <button
