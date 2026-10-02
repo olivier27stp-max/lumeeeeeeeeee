@@ -3085,6 +3085,9 @@ export default function AutomationBuilderPage() {
                       steps={etapesAffichees}
                       fr={fr}
                       langueEnvoi={langueEnvoi}
+                      membres={membres}
+                      etapesPipeline={etapesPipeline}
+                      automatisations={autresAutomatisations}
                       lectureSeule={formatOrigine}
                       selectionId={etapeChoisie}
                       // Format d'origine : le clic convertit, puis ouvre l'étape.

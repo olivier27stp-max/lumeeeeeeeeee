@@ -121,3 +121,65 @@ describe('03:177 — la carte résume le texte tel qu’il est écrit, « < » e
     expect(carte('Envoyer un texto')).toContain(`${`Rabais < 500 $ ${'x'.repeat(80)}`.slice(0, 60)}…`);
   });
 });
+
+// ─── Triage « actions », 03-champs-types:727 ────────────────────
+
+describe('03:727 — la carte d’une action sans message dit ce qu’elle fera (quelle étiquette, quel membre, quelle adresse, quelle étape)', () => {
+  const MEMBRE = '99999999-0000-4000-8000-000000000001';
+  const ETAPE = 'eeeeeeee-0000-4000-8000-000000000001';
+  const listes = {
+    membres: [{ user_id: MEMBRE, nom: 'Tech QA' }],
+    etapesPipeline: [{ id: ETAPE, label: 'Ventes · Négociation' }],
+    automatisations: [{ id: 'aaaaaaaa-0000-4000-8000-000000000002', nom: 'Relance devis' }],
+  };
+
+  it('étiquette, membre, adresse du webhook, étape « Gagné »', () => {
+    monter([
+      action('ajouter_etiquette', { etiquette: 'VIP QA' }, 'e1', 'e2'),
+      action('assigner_responsable', { membre_id: MEMBRE }, 'e2', 'e3'),
+      action('webhook', { url: 'https://crochets.lume-qa.test/entrant?jeton=abc' }, 'e3', 'e4'),
+      action('move_deal_stage', { cible: 'gagne' }, 'e4', null),
+    ], listes);
+    expect(carte('Ajouter une étiquette')).toContain('VIP QA');
+    expect(carte('Assigner un responsable')).toContain('Tech QA');
+    // L'hôte seulement : le chemin et ses jetons n'ont rien à faire sur une carte.
+    expect(carte('Appeler un webhook')).toContain('crochets.lume-qa.test');
+    expect(carte('Appeler un webhook')).not.toContain('jeton=abc');
+    expect(carte('Déplacer l’opportunité')).toContain('Gagné');
+  });
+
+  it('une étape précise du pipeline, une automatisation démarrée : leur NOM, jamais leur identifiant', () => {
+    monter([
+      action('move_deal_stage', { cible: 'etape', stage_id: ETAPE }, 'e1', 'e2'),
+      action('demarrer_automatisation', { rule_id: 'aaaaaaaa-0000-4000-8000-000000000002' }, 'e2', null),
+    ], listes);
+    expect(carte('Déplacer l’opportunité')).toContain('Ventes · Négociation');
+    expect(carte('Démarrer une automatisation')).toContain('Relance devis');
+    expect(conteneur.textContent).not.toContain(ETAPE);
+  });
+
+  it('un identifiant qu’on ne sait pas nommer (liste pas encore là, membre parti) n’est pas affiché brut', () => {
+    monter([action('assigner_responsable', { membre_id: MEMBRE })]);
+    expect(conteneur.textContent).not.toContain(MEMBRE);
+  });
+
+  it('un réglage CACHÉ ne s’affiche pas ; une case cochée se dit par son libellé', () => {
+    monter([
+      action('retirer_etiquette', { etiquette: 'VIP QA', toutes: 'true' }, 'e1', 'e2'),
+      action('assigner_responsable', { membre_id: MEMBRE, seulement_si_vide: 'true' }, 'e2', null),
+    ], listes);
+    expect(carte('Retirer une étiquette')).not.toContain('VIP QA');
+    expect(carte('Assigner un responsable')).toContain('Tech QA · Seulement si personne n’est assigné');
+  });
+
+  it('une action qui porte un message garde SON résumé (le texte), pas la liste de ses réglages', () => {
+    monter([action('create_task', { title: 'Rappeler [client_name]', echeance_jours: '3' })]);
+    expect(carte('Créer une tâche')).toContain('Rappeler [client_name]');
+    expect(carte('Créer une tâche')).not.toContain('À faire dans');
+  });
+
+  it('en anglais : les options dans la langue de l’écran', () => {
+    monter([action('move_deal_stage', { cible: 'gagne' })], { ...listes, fr: false });
+    expect(carte('Move the deal')).toContain('The “Won” stage');
+  });
+});

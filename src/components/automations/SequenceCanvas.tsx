@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Etape } from '../../lib/sequenceTypes';
-import { trouverAction } from '../../lib/automationCatalogue';
+import { champVisible, trouverAction } from '../../lib/automationCatalogue';
 import { texteSansHtml } from '../../lib/automationTemplates';
 import { estCorpsHtml } from '../../lib/emailBodyText';
 
@@ -44,6 +44,14 @@ interface Props {
    * Non fournie : français, le défaut du moteur.
    */
   langueEnvoi?: 'fr' | 'en';
+  /**
+   * Les listes du bureau, pour dire sur la carte QUI et OÙ plutôt qu'un
+   * identifiant : le membre assigné, l'étape du pipeline visée,
+   * l'automatisation démarrée.
+   */
+  membres?: Array<{ user_id: string; nom: string }>;
+  etapesPipeline?: Array<{ id: string; label: string }>;
+  automatisations?: Array<{ id: string; nom: string }>;
   /** Étape sélectionnée, mise en évidence. */
   selectionId?: string | null;
   onSelection: (id: string) => void;
@@ -138,8 +146,76 @@ function texteEnvoye(config: Record<string, unknown> | undefined, champ: string,
   return typeof base === 'string' ? base : '';
 }
 
+interface Listes {
+  membres?: Array<{ user_id: string; nom: string }>;
+  etapesPipeline?: Array<{ id: string; label: string }>;
+  automatisations?: Array<{ id: string; nom: string }>;
+}
+
+/**
+ * CE QUE FERA UNE ACTION SANS MESSAGE, en une ligne (triage actions,
+ * 03-champs-types:727). « Ajouter une étiquette », « Assigner un
+ * responsable », « Appeler un webhook », « Déplacer l'opportunité » ne
+ * portaient que leur nom : il fallait ouvrir chaque carte pour savoir quelle
+ * étiquette, quel membre, quelle adresse, quelle étape.
+ *
+ * Les réglages REMPLIS et VISIBLES de l'action, dans l'ordre du catalogue,
+ * chacun dit comme le panneau le montre (le nom du membre, le libellé de
+ * l'option, l'hôte de l'adresse). Un identifiant qu'on ne sait pas nommer
+ * (liste pas encore chargée, membre parti) n'est pas affiché brut.
+ */
+function resumeDesReglages(type: string, config: Record<string, unknown>, fr: boolean, listes: Listes): string {
+  const modele = trouverAction(type);
+  if (!modele) return '';
+  const bouts: string[] = [];
+  for (const champ of modele.champs) {
+    if (champ.type === 'zone' || !champVisible(champ, config)) continue;
+    const brut = config[champ.cle];
+    const v = typeof brut === 'string' ? brut.trim() : typeof brut === 'number' || typeof brut === 'boolean' ? String(brut) : '';
+    if (!v) continue;
+    switch (champ.type) {
+      case 'membre': {
+        const nom = listes.membres?.find((m) => m.user_id === v)?.nom;
+        if (nom) bouts.push(nom);
+        break;
+      }
+      case 'etape_pipeline': {
+        const libelle = listes.etapesPipeline?.find((e) => e.id === v)?.label;
+        if (libelle) bouts.push(libelle);
+        break;
+      }
+      case 'automatisation': {
+        const nom = listes.automatisations?.find((a) => a.id === v)?.nom;
+        if (nom) bouts.push(nom);
+        break;
+      }
+      case 'choix': {
+        const option = champ.options?.find((o) => o.cle === v);
+        bouts.push(option ? (fr ? option.fr : option.en) : v);
+        break;
+      }
+      case 'bascule':
+        if (v === 'true') bouts.push(fr ? champ.fr : champ.en);
+        break;
+      case 'url':
+        try { bouts.push(new URL(v).host || v); } catch { bouts.push(v); }
+        break;
+      case 'nombre':
+        bouts.push(`${fr ? champ.fr : champ.en} : ${v}`);
+        break;
+      case 'champ_date':
+      case 'service':
+        break;
+      default:
+        // Un identifiant technique tapé dans un champ de texte n'apprend rien.
+        if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(v)) bouts.push(v);
+    }
+  }
+  return bouts.join(' · ');
+}
+
 /** Le détail d'une étape, en une ligne — ce qu'on veut lire sans ouvrir. */
-function detailEtape(etape: Etape, fr: boolean, langueEnvoi: 'fr' | 'en' = 'fr'): string {
+function detailEtape(etape: Etape, fr: boolean, langueEnvoi: 'fr' | 'en' = 'fr', listes: Listes = {}): string {
   if (etape.type === 'attendre') {
     // « 7 jour(s) avant le rendez-vous » — sinon la carte afficherait
     // « tout de suite », le délai propre de cette attente étant 0.
@@ -165,7 +241,9 @@ function detailEtape(etape: Etape, fr: boolean, langueEnvoi: 'fr' | 'en' = 'fr')
     // ses « > » : « Rabais si le total est < 500 $ ou > 1000 $ » s'affichait
     // « Rabais si le total est 1000 $ » — tout ce qui était entre les deux
     // signes passait pour une balise (triage actions, 03-champs-types:177).
-    const texte = (estCorpsHtml(brut) ? texteSansHtml(brut) : brut).replace(/\s+/g, ' ').trim();
+    const message = (estCorpsHtml(brut) ? texteSansHtml(brut) : brut).replace(/\s+/g, ' ').trim();
+    // Pas de message : ce que l'action fera (quelle étiquette, quel membre, quelle adresse, quelle étape).
+    const texte = message || resumeDesReglages(etape.action?.type ?? '', config ?? {}, fr, listes);
     return texte.length > 60 ? `${texte.slice(0, 60)}…` : texte;
   }
   if (etape.type === 'si') {
@@ -209,9 +287,9 @@ function Connecteur({
 
 /** Une carte d'étape. */
 function Carte({
-  etape, fr, langueEnvoi, selectionnee, enErreur, onClick, onMenu, lectureSeule,
+  etape, fr, langueEnvoi, listes, selectionnee, enErreur, onClick, onMenu, lectureSeule,
 }: {
-  etape: Etape; fr: boolean; langueEnvoi: 'fr' | 'en'; selectionnee: boolean; enErreur?: boolean;
+  etape: Etape; fr: boolean; langueEnvoi: 'fr' | 'en'; listes: Listes; selectionnee: boolean; enErreur?: boolean;
   onClick: () => void;
   /** Le menu « … » de la carte — dupliquer, supprimer. */
   onMenu?: (id: string) => void;
@@ -223,7 +301,7 @@ function Carte({
     : etape.type === 'arreter' ? Square
     : ICONES[etape.action?.type] ?? Send;
 
-  const detail = detailEtape(etape, fr, langueEnvoi);
+  const detail = detailEtape(etape, fr, langueEnvoi, listes);
 
   /*
    * La bordure de la carte. Calculée ici, pas dans le JSX : le détecteur
@@ -293,10 +371,12 @@ function Carte({
 }
 
 export default function SequenceCanvas({
-  declencheurLabel, steps, fr, langueEnvoi = 'fr', selectionId, onSelection, onAjouter, onMenu, onDeclencheur,
+  declencheurLabel, steps, fr, langueEnvoi = 'fr', membres, etapesPipeline, automatisations,
+  selectionId, onSelection, onAjouter, onMenu, onDeclencheur,
   declencheurDetail, lectureSeule, etapesEnErreur,
 }: Props) {
   const parId = new Map(steps.map((e) => [e.id, e]));
+  const listes: Listes = { membres, etapesPipeline, automatisations };
 
   /**
    * Rend une chaîne d'étapes à partir d'un identifiant.
@@ -323,7 +403,7 @@ export default function SequenceCanvas({
     if (etape.type === 'si') {
       return (
         <div className="flex flex-col items-center">
-          <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
+          <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} listes={listes} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
           {/* Deux branches, côte à côte : c'est le seul endroit où le
               parcours se divise, et ça doit se voir. */}
           <div className="flex items-start gap-6 pt-1">
@@ -343,7 +423,7 @@ export default function SequenceCanvas({
     const suivant = etape.type === 'arreter' ? null : etape.suivant;
     return (
       <div className="flex flex-col items-center">
-        <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
+        <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} listes={listes} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
         {etape.type !== 'arreter' && (
           <>
             <Connecteur fr={fr} lectureSeule={lectureSeule} onAjouter={() => onAjouter(etape.id)} />
