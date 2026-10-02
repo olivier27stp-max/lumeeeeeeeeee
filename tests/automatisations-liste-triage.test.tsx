@@ -988,6 +988,40 @@ describe('05-lignes:78 — une automatisation à la corbeille n’affiche jamais
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('05-lignes:336 — pendant le décompte des clients inactifs, l’interrupteur montre qu’il travaille', () => {
+  it('aria-busy et la roue tant que le serveur compte ; plus rien quand la confirmation s’ouvre', async () => {
+    let liberer: (n: number) => void = () => undefined;
+    vi.mocked(apercuClientsInactifs).mockReturnValue(new Promise((ok) => { liberer = ok; }) as never);
+    vi.mocked(confirmer).mockResolvedValue(false);
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Inactifs', trigger_event: 'client.inactive', conditions: { mois: 6 } })]);
+    await rendre();
+    const interrupteur = () => conteneur.querySelector('[role="switch"]') as HTMLButtonElement;
+    expect(interrupteur().getAttribute('aria-busy')).toBeNull();
+    await cliquer(interrupteur());
+    // Avant : rien ne bougeait jusqu'au retour du décompte.
+    expect(interrupteur().getAttribute('aria-busy')).toBe('true');
+    expect(interrupteur().querySelector('.animate-spin')).not.toBeNull();
+    expect(confirmer).not.toHaveBeenCalled();
+    await act(async () => { liberer(4); });
+    await laisser();
+    expect(confirmer).toHaveBeenCalledTimes(1);
+    expect(interrupteur().getAttribute('aria-busy')).toBeNull();
+    expect(interrupteur().getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('le décompte en panne ne laisse pas la roue tourner', async () => {
+    vi.mocked(apercuClientsInactifs).mockRejectedValue(new Error('panne'));
+    vi.mocked(confirmer).mockResolvedValue(false);
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Inactifs', trigger_event: 'client.inactive' })]);
+    await rendre();
+    await cliquer(conteneur.querySelector('[role="switch"]'));
+    await laisser();
+    expect(conteneur.querySelector('[role="switch"]')?.getAttribute('aria-busy')).toBeNull();
+    expect(confirmer).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 

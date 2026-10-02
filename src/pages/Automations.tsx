@@ -557,6 +557,8 @@ export default function Automations() {
   /** Le bureau a-t-il un numéro texto ? `false` = bandeau ; `null` = inconnu, rien. */
   const [textoConfigure, setTextoConfigure] = useState<boolean | null>(null);
   const [occupeId, setOccupeId] = useState<string | null>(null);
+  /** L'automatisation « Client inactif » dont le serveur compte les clients visés, avant la confirmation. */
+  const [decompteId, setDecompteId] = useState<string | null>(null);
   /**
    * La langue des messages du bureau — `null` tant qu'on ne la CONNAÎT pas.
    *
@@ -1026,10 +1028,15 @@ export default function Automations() {
     confirmationOuverte.current = true;
     try {
       let n: number | null = null;
+      // Le serveur compte les clients : tant qu'il n'a pas répondu, l'interrupteur MONTRE qu'il travaille.
+      // Rien ne bougeait, on croyait que le clic n'avait pas pris (triage `05-lignes:336`).
+      setDecompteId(rule.id);
       try {
         n = await apercuClientsInactifs(Number((rule.conditions as Record<string, unknown> | null)?.mois ?? 6));
       } catch (e) {
         console.error('[Automations] aperçu clients inactifs', e);
+      } finally {
+        setDecompteId(null);
       }
       const combien = n === null
         ? (fr ? 'Les messages partiront par petits lots, en journée.' : 'Messages will go out in small batches, during the day.')
@@ -2427,7 +2434,7 @@ export default function Automations() {
                               <InterrupteurPublication
                                 actif={rule.is_active && !rule.deleted_at}
                                 onBascule={() => handleToggle(rule)}
-                                enCours={fileBascule.enCours(rule.id)}
+                                enCours={fileBascule.enCours(rule.id) || decompteId === rule.id}
                                 desactive={!!rule.deleted_at || !peutModifier}
                                 libelle={rule.is_active && !rule.deleted_at
                                   ? (fr ? `Repasser ${localizeAutomationName(rule.name, language)} en brouillon` : `Unpublish ${localizeAutomationName(rule.name, language)}`)
