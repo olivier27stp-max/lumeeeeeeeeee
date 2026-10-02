@@ -2119,8 +2119,17 @@ export default function Automations() {
                           ? <AlertTriangle className="mx-auto mb-3 h-7 w-7 text-warning" aria-hidden="true" />
                           : <Zap className="mx-auto mb-3 h-7 w-7 text-text-tertiary" aria-hidden="true" />}
                         <p className="text-[13px] font-medium text-text-primary">
-                          {onglet === 'corbeille'
-                            ? (fr ? 'La corbeille est vide' : 'The bin is empty')
+                          {/*
+                            Une recherche ou un filtre qui ne trouve rien n'est PAS « Aucune automatisation »
+                            (triage `03-onglets-etats:277`) : le bureau en a peut-être 35. On dit ce qui a
+                            vidé la liste — dans n'importe quel onglet —, et on propose de le lever.
+                          */}
+                          {search.trim() !== ''
+                            ? (fr ? `Aucun résultat pour « ${search.trim()} »` : `No results for “${search.trim()}”`)
+                            : filterCategory !== 'all' || filterStatut !== 'all'
+                              ? (fr ? 'Aucune automatisation ne correspond à ces filtres' : 'No automation matches these filters')
+                            : onglet === 'corbeille'
+                              ? (fr ? 'La corbeille est vide' : 'The bin is empty')
                             : onglet === 'verifier'
                               /*
                                * « Tout roule » ne s'affirme que si les échecs ONT ÉTÉ LUS et qu'il n'y en a
@@ -2137,6 +2146,19 @@ export default function Automations() {
                         {onglet === 'verifier' && statsIllisibles && (
                           <button type="button" onClick={() => void lireChiffres.current()} className="glass-button mt-4">
                             {fr ? 'Réessayer' : 'Try again'}
+                          </button>
+                        )}
+                        {search.trim() !== '' ? (
+                          <button type="button" onClick={() => setSearch('')} className="glass-button mt-4">
+                            {fr ? 'Effacer la recherche' : 'Clear the search'}
+                          </button>
+                        ) : (filterCategory !== 'all' || filterStatut !== 'all') && (
+                          <button
+                            type="button"
+                            onClick={() => { setFilterCategory('all'); setFilterStatut('all'); }}
+                            className="glass-button mt-4"
+                          >
+                            {fr ? 'Réinitialiser les filtres' : 'Reset the filters'}
                           </button>
                         )}
                         {/*

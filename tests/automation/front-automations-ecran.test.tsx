@@ -284,10 +284,13 @@ describe('T13.2 — états vides', () => {
     expect(onglets).toEqual(['Toutes', 'À vérifier', 'Prêtes à publier', 'Corbeille']);
   });
 
-  it('recherche sans résultat : le message vide commun (« Aucun résultat » n’existe plus)', async () => {
+  // Attente retournée le 2026-10-01 (triage de la liste, 03-onglets-etats:277) : ce test figeait le défaut —
+  // « Aucune automatisation » pour une recherche qui ne trouve rien, dans un bureau qui en a.
+  it('recherche sans résultat : l’écran dit « Aucun résultat pour … », pas « Aucune automatisation »', async () => {
     await rendre();
     await saisir(conteneur.querySelector('#rech-automations') as HTMLInputElement, 'zzz-introuvable');
-    expect(texte()).toContain('Aucune automatisation');
+    expect(texte()).toContain('Aucun résultat pour « zzz-introuvable »');
+    expect(texte()).not.toContain('Aucune automatisation');
     expect(texte()).not.toContain(NOM_FR);
     expect(texte()).toMatch(/sur 1/);
   });

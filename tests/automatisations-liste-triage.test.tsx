@@ -574,6 +574,54 @@ describe('03-onglets-etats:266 — l’état vide propose lui-même de créer', 
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('03-onglets-etats:277 — une recherche sans résultat le DIT, au lieu de « Aucune automatisation »', () => {
+  const vide = () => conteneur.querySelector('tbody td[colspan]') as HTMLElement;
+  const chercher = async (q: string) => {
+    await act(async () => {
+      const champ = conteneur.querySelector('#rech-automations') as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(champ, q);
+      champ.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await laisser();
+  };
+
+  it('« Aucun résultat pour « … » » et « Effacer la recherche », qui ramène la liste', async () => {
+    await rendre();
+    await chercher('zzz-aucune-ne-porte-ce-nom');
+    expect(vide().textContent).toContain('Aucun résultat pour « zzz-aucune-ne-porte-ce-nom »');
+    expect(vide().textContent).not.toContain('Aucune automatisation');
+    // Le menu « Créer » n'a rien à faire là : il y a des automatisations, c'est la recherche qui ne trouve rien.
+    expect(Array.from(vide().querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Effacer la recherche']);
+    await cliquer(vide().querySelector('button'));
+    expect(texte()).toContain('Relance 1');
+    expect((conteneur.querySelector('#rech-automations') as HTMLInputElement).value).toBe('');
+  });
+
+  it('un filtre qui vide la liste : « Aucune automatisation ne correspond à ces filtres » et « Réinitialiser les filtres »', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Publiée', is_active: true })]);
+    await rendre();
+    await cliquer(bouton(/^Filtres avancés/));
+    await act(async () => {
+      const statut = conteneur.querySelector('#f-statut') as HTMLSelectElement;
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(statut, 'brouillon');
+      statut.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await laisser();
+    expect(vide().textContent).toContain('Aucune automatisation ne correspond à ces filtres');
+    await cliquer(Array.from(vide().querySelectorAll('button')).find((b) => b.textContent === 'Réinitialiser les filtres'));
+    expect(texte()).toContain('Publiée');
+    expect((conteneur.querySelector('#f-statut') as HTMLSelectElement).value).toBe('all');
+  });
+
+  it('en anglais, et dans la corbeille aussi', async () => {
+    await rendre('en', '/automations?onglet=corbeille');
+    await chercher('nothing');
+    expect(vide().textContent).toContain('No results for “nothing”');
+    expect(vide().textContent).not.toContain('The bin is empty');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
