@@ -59,6 +59,16 @@ describe.each([
   });
 });
 
+describe('les refus de /lumi/execute parlent la langue de la personne', () => {
+  // 2026-10-02, trois confirmations de la même carte : la troisième répondait « No such pending action. » à un compte en français.
+  it.each(['decision_en_cours', 'aucune_proposition', 'proposition_expiree'])('%s : une phrase en français et une en anglais', (code) => {
+    const fin = execute.indexOf(`code: '${code}'`);
+    expect(fin).toBeGreaterThan(0);
+    const reponse = execute.slice(execute.lastIndexOf('res.status(409)', fin), fin);
+    expect(reponse).toMatch(/ctx\.language === 'fr' \? '[^']+' : '[^']+'/);
+  });
+});
+
 describe('un seul verrou pour les deux routes', () => {
   it('le chat et la décision partagent le même ensemble', () => {
     expect(route.match(/const conversationsOccupees = new Set<string>\(\);/g)).toHaveLength(1);
