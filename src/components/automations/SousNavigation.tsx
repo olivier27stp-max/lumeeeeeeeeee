@@ -1,8 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════
    La sous-navigation de la section Automatisations.
 
-   « Automatisations · Vue d'ensemble · Réglages globaux », en tête des
-   trois pages. Elle était recopiée dans chacune : la liste avait des
+   « Automatisations · Vue d'ensemble · Activité · Réglages globaux », en
+   tête des quatre pages. Elle était recopiée dans chacune : la liste avait des
    liens, les deux autres encore des boutons — ni nouvel onglet, ni
    Ctrl+clic, et rien n'annonçait la section courante à un lecteur
    d'écran (audit du 2026-10-01). Un seul composant : les trois pages ne
@@ -11,8 +11,9 @@
 
 import { Link } from 'react-router-dom';
 import { Settings } from 'lucide-react';
+// « Activité » : l'Historique et les Journaux de TOUT le bureau (constat D-13).
 
-export type SectionAutomatisations = 'liste' | 'apercu' | 'reglages';
+export type SectionAutomatisations = 'liste' | 'apercu' | 'activite' | 'reglages';
 
 const CLASSE_BASE = 'inline-flex items-center gap-1.5 border-b-2 px-3 pb-3 pt-1 text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent';
 const CLASSE_COURANTE = `${CLASSE_BASE} border-primary font-semibold text-primary`;
@@ -37,6 +38,9 @@ export default function SousNavigation({ courante, fr }: { courante: SectionAuto
           <span className="rounded bg-warning-light px-1 py-0.5 text-[9px] font-bold uppercase text-warning">
             {fr ? 'Bêta' : 'Beta'}
           </span>
+        </Link>
+        <Link to="/automations/activite" {...lien('activite')}>
+          {fr ? 'Activité' : 'Activity'}
         </Link>
         <Link to="/automations/reglages" {...lien('reglages')}>
           <Settings size={13} aria-hidden="true" />

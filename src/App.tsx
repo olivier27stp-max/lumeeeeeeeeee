@@ -105,6 +105,7 @@ const Automations = lazyResilient(() => import('./pages/Automations'));
 const AutomationBuilderPage = lazyResilient(() => import('./pages/AutomationBuilderPage'));
 const AutomationsApercu = lazyResilient(() => import('./pages/AutomationsApercu'));
 const AutomationsReglages = lazyResilient(() => import('./pages/AutomationsReglages'));
+const AutomationsActivite = lazyResilient(() => import('./pages/AutomationsActivite'));
 const CompanySettings = lazyResilient(() => import('./pages/CompanySettings'));
 const ManageTeam = lazyResilient(() => import('./pages/ManageTeam'));
 const TeamMemberDetails = lazyResilient(() => import('./pages/TeamMemberDetails'));
@@ -1675,6 +1676,7 @@ function AuthenticatedApp({
                     {/* AVANT /automations/:id : sans ça, « apercu » et « reglages »
                         seraient pris pour des identifiants d'automatisation. */}
                     <Route path="/automations/apercu" element={<Gated permission="automations.read"><PlanFeatureGate flag="includes_automations"><PageWrapper><AutomationsApercu /></PageWrapper></PlanFeatureGate></Gated>} />
+                    <Route path="/automations/activite" element={<Gated permission="automations.read"><PlanFeatureGate flag="includes_automations"><PageWrapper><AutomationsActivite /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/automations/reglages" element={<Gated permission="automations.update"><PlanFeatureGate flag="includes_automations"><PageWrapper><AutomationsReglages /></PageWrapper></PlanFeatureGate></Gated>} />
                     {/* Le builder occupe TOUT l'écran (fixed inset-0) : pas de
                         PageWrapper, il se pose par-dessus la navigation comme
