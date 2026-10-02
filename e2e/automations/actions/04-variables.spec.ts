@@ -36,26 +36,47 @@ const SIX = [
   { id: 'EDT-114', fr: 'Date du rendez-vous', variable: '[appointment_date]' },
 ];
 
+/*
+ * Chaque bouton est éprouvé sur un déclencheur dont la fiche REMPLIT sa variable (server/lib/actions/index.ts,
+ * `resolveEntityVariables` : un devis ne remplit ni [invoice_total], ni [invoice_link], ni [appointment_date]).
+ * Ce test exigeait les 6 boutons sur « Devis envoyé » — c'est-à-dire le défaut que décrit, plus bas,
+ * « seules les variables que ce déclencheur sait remplir sont offertes » : les deux ne pouvaient pas être
+ * verts ensemble. Tel qu'il est écrit maintenant, il vaut aujourd'hui (le produit offre les 6 partout) et
+ * vaudra encore quand ce défaut sera corrigé.
+ */
+const OU_ELLE_EST_REMPLIE: Array<{ declencheur: string; boutons: string[] }> = [
+  { declencheur: 'quote.sent', boutons: ['Nom du client', 'Nom de votre entreprise', 'Lien du devis'] },
+  { declencheur: 'invoice.sent', boutons: ['Total', 'Lien facture'] },
+  { declencheur: 'appointment.created', boutons: ['Date du rendez-vous'] },
+];
+
 test.describe('variables — information du client', () => {
-  test('[EDT-109][EDT-110][EDT-111][EDT-112][EDT-113][EDT-114][CHA-07] chacun des 6 boutons écrit sa variable dans le texte ; le texte est enregistré et relu tel quel', async ({ page, bureau, marque }) => {
-    const regle = await creerBrouillonAvecAction(bureau, marque, 'quote.sent', 'send_sms', { body: 'Bonjour ' });
-    const p = await ouvrirEtape(page, regle.id, 'Envoyer un texto');
-    await expect(p.getByText('Insérer une information du client', { exact: true })).toBeVisible();
-    const zone = champ(p, 'Texte du message', true);
-    let attendu = 'Bonjour ';
-    for (const v of SIX) {
-      await p.getByRole('button', { name: v.fr, exact: true }).click();
-      attendu += v.variable;
-      await expect(zone, `bouton « ${v.fr} »`).toHaveValue(attendu);
+  test('[EDT-109][EDT-110][EDT-111][EDT-112][EDT-113][EDT-114][CHA-07] chacun des 6 boutons écrit sa variable dans le texte, sur un déclencheur qui sait la remplir ; le texte est enregistré et relu tel quel', async ({ page, bureau, marque }) => {
+    expect(OU_ELLE_EST_REMPLIE.flatMap((g) => g.boutons).sort(), 'les 6 boutons de la carte sont tous éprouvés').toEqual(SIX.map((v) => v.fr).sort());
+    for (const groupe of OU_ELLE_EST_REMPLIE) {
+      await test.step(`sur « ${groupe.declencheur} » : ${groupe.boutons.join(', ')}`, async () => {
+        const regle = await creerBrouillonAvecAction(bureau, marque, groupe.declencheur, 'send_sms', { body: 'Bonjour ' });
+        const p = await ouvrirEtape(page, regle.id, 'Envoyer un texto');
+        await expect(p.getByText('Insérer une information du client', { exact: true })).toBeVisible();
+        const zone = champ(p, 'Texte du message', true);
+        let attendu = 'Bonjour ';
+        for (const nom of groupe.boutons) {
+          const v = SIX.find((x) => x.fr === nom);
+          if (!v) throw new Error(`bouton inconnu de la carte : ${nom}`);
+          await p.getByRole('button', { name: v.fr, exact: true }).click();
+          attendu += v.variable;
+          await expect(zone, `bouton « ${v.fr} »`).toHaveValue(attendu);
+        }
+        await page.screenshot({ path: `${CAPTURES}/variables-${groupe.declencheur}.png` });
+        await boutonEnregistrer(p).click();
+        await attendreConfig(bureau, regle.id, { body: attendu });
+        await attendreEnregistre(page);
+        await page.reload();
+        await expect(carte(page, 'Envoyer un texto')).toBeVisible({ timeout: 180_000 });
+        await carte(page, 'Envoyer un texto').click();
+        await expect(champ(panneauEtape(page), 'Texte du message', true)).toHaveValue(attendu);
+      });
     }
-    await page.screenshot({ path: `${CAPTURES}/variables-six.png` });
-    await boutonEnregistrer(p).click();
-    await attendreConfig(bureau, regle.id, { body: attendu });
-    await attendreEnregistre(page);
-    await page.reload();
-    await expect(carte(page, 'Envoyer un texto')).toBeVisible({ timeout: 180_000 });
-    await carte(page, 'Envoyer un texto').click();
-    await expect(champ(panneauEtape(page), 'Texte du message', true)).toHaveValue(attendu);
   });
 
   test('[EDT-109][EDT-108] une action sans zone de texte (étiquette, webhook) n’offre aucun bouton de variable', async ({ page, bureau, marque }) => {

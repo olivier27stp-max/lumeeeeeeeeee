@@ -13,6 +13,7 @@ import {
   test, expect, DELAI_TEST,
   CAPTURES, creerParcours, troisTextos, ouvrirEditeur, cartes, attendreRegle, panneauEtape, panneauDeclencheur,
   tiroirActions, tiroirDeclencheurs, toasts, indicateur, attendreEnregistre, filEnBase, carteDeclencheurVide,
+  aucuneEcriture, enregistrerPanneau,
 } from './_aides';
 
 test.describe.configure({ timeout: DELAI_TEST });
@@ -160,7 +161,11 @@ test.describe('tiroir « Actions »', () => {
     await expect(panneauEtape(page).getByRole('heading', { name: 'Envoyer un courriel' })).toBeVisible();
     await expect(panneauEtape(page).getByLabel(/^Objet/)).toHaveValue('Un message de [company_name]');
     expect((await cartes(page)).length).toBe(1);
-    await panneauEtape(page).getByRole('button', { name: 'Enregistrer' }).click();
+    // Montrée sur le canevas, mais pas encore dans le parcours (3b739958) : rien ne part avant « Enregistrer » du panneau.
+    await aucuneEcriture(page);
+    await expect(indicateur(page)).toHaveText('Enregistré');
+    expect((await lireRegle(bureau, r.id))?.updated_at).toBe(r.updated_at);
+    await enregistrerPanneau(page);
     await attendreEnregistre(page);
     const fil = await filEnBase(bureau, r.id);
     expect(fil.length).toBe(1);
@@ -179,20 +184,22 @@ test.describe('tiroir « Actions »', () => {
     await expect(tiroir.getByRole('button', { name: /^Attendre/ })).toContainText('Met le parcours en pause avant la suite.');
     await expect(tiroir.getByRole('button', { name: /^Condition/ })).toContainText('Sépare le parcours en deux chemins.');
     await expect(tiroir.getByRole('button', { name: /^Arrêter ici/ })).toContainText('Le client sort du parcours.');
+    /* Chaque étape est ENREGISTRÉE dans son panneau : depuis 3b739958 c'est ce clic qui la fait entrer dans le
+       parcours (avant, le test refermait le panneau par « Annuler » et l'étape, déjà insérée, restait). */
     await tiroir.getByRole('button', { name: /^Attendre/ }).click();
     await expect(panneauEtape(page).getByRole('heading', { name: 'Attendre' })).toBeVisible();
-    await panneauEtape(page).getByRole('button', { name: 'Annuler' }).click();
+    await enregistrerPanneau(page);
 
     await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
     await tiroir.getByRole('button', { name: /^Condition/ }).click();
     await expect(panneauEtape(page).getByLabel('Conditions')).toBeVisible();
-    await panneauEtape(page).getByRole('button', { name: 'Annuler' }).click();
+    await enregistrerPanneau(page);
 
     // « Ajouter » vise la fin du chemin principal : sous « si oui ».
     await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
     await tiroir.getByRole('button', { name: /^Arrêter ici/ }).click();
     await expect(panneauEtape(page).getByText('Rien à configurer. Le client sort du parcours en arrivant ici.')).toBeVisible();
-    await panneauEtape(page).getByRole('button', { name: 'Annuler' }).click();
+    await enregistrerPanneau(page);
     expect(await cartes(page)).toEqual(['Attendre | 1 jour(s)', 'Envoyer un texto | Texto ALPHA', 'Si… | 0 condition(s)', 'Arrêter ici']);
     await attendreEnregistre(page);
     const etapes = ((await lireRegle(bureau, r.id))?.steps ?? []) as Array<Record<string, unknown>>;

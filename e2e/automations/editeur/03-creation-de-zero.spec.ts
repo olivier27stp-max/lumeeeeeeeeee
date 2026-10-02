@@ -14,7 +14,7 @@ import { ouvrirListe, lireRegle, type Bureau, type LigneRegle } from '../_outils
 import {
   test, expect, DELAI_TEST,
   CAPTURES, cartes, barre, indicateur, attendreEnregistre, corpsDuFil, filEnBase, panneauEtape, tiroirActions, tiroirDeclencheurs, toasts, dialogue,
-  carteDeclencheurVide,
+  carteDeclencheurVide, carte, aucuneEcriture, enregistrerPanneau,
 } from './_aides';
 
 test.describe.configure({ timeout: DELAI_TEST });
@@ -90,6 +90,16 @@ test.describe('création à partir de zéro', () => {
 
     await tiroirActions(page).getByRole('button', { name: /^Envoyer un texto/ }).click();
     await expect(panneauEtape(page)).toBeVisible();
+    /* Choisir une étape dans le tiroir n'est pas non plus une modification (3b739958, triage actions ligne 1) :
+       elle n'entre dans le parcours qu'à « Enregistrer » de son panneau. Tant que ce n'est pas fait, rien ne
+       part au serveur, l'adresse reste /nouvelle et l'indicateur dit toujours « Pas encore enregistrée ». */
+    await aucuneEcriture(page);
+    await expect(page).toHaveURL(/\/automations\/nouvelle$/);
+    await expect(indicateur(page)).toHaveText('Pas encore enregistrée');
+    expect(await neesDepuis(bureau, debut)).toEqual([]);
+
+    // « Enregistrer » du panneau : c'est LÀ que l'étape entre dans le parcours, et que la ligne naît.
+    await enregistrerPanneau(page);
     await expect(indicateur(page)).toHaveText(/Modifié|Enregistrement…|Enregistré/);
     // La naissance : l'adresse passe de /nouvelle à l'identifiant réel, sans rechargement.
     await expect(page).toHaveURL(/\/automations\/[0-9a-f]{8}-[0-9a-f-]{27}$/, { timeout: 120_000 });
@@ -103,6 +113,7 @@ test.describe('création à partir de zéro', () => {
     expect(await corpsDuFil(bureau, id)).toEqual(['Bonjour [client_name], c’est [company_name]. Merci !']);
 
     // Modifier le texte de l'étape puis renommer : toujours la MÊME ligne.
+    await carte(page, 'Bonjour [client_name]').click();
     await panneauEtape(page).getByLabel(/Texte du message/).fill('Merci pour votre confiance, [client_name].');
     await panneauEtape(page).getByRole('button', { name: 'Enregistrer' }).click();
     await expect(indicateur(page)).toHaveText('Modifié');

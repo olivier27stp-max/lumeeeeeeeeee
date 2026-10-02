@@ -10,10 +10,13 @@
 import { test, expect } from './_aides';
 import {
   CAPTURES, donnees, creerBrouillon, creerBrouillonAvecAction, ouvrirEditeur, ouvrirTiroir, tiroirActions, itemTiroir, panneauEtape,
-  champ, boutonEnregistrer, finStable, quitterSansEnregistrer, carte, optionChoisie, etapesEnBase, configDe,
+  champ, boutonEnregistrer, finStable, carte, optionChoisie, etapesEnBase, configDe,
+  attendreConfig, attendreEnregistre, enregistrerEtape, ecrituresVers, laisserPasserLEnregistrementAuto,
 } from './_aides';
 import { ACTIONS_ATTENDUES, ACTIONS_DISPONIBLES, OPTIONS_ATTENDUES, idsDe } from './_catalogue';
 import type { Locator } from '@playwright/test';
+
+const BASE = process.env.E2E_BASE || 'http://127.0.0.1:5191';
 
 test.use({ langue: 'en' });
 
@@ -145,12 +148,21 @@ test.describe('anglais — chaque action', () => {
       expect(francais(texte), `français dans le panneau de “${a.en}”`).toEqual([]);
       expect(clesTechniques(texte), `clés techniques dans le panneau de “${a.en}”`).toEqual([]);
 
-      // Ce qui a été enregistré à la création est le brouillon anglais, pas le français.
+      // Choisie dans le tiroir, l'étape n'est pas dans le parcours tant que son panneau n'est pas enregistré (3b739958).
       await finStable(page);
+      expect(await etapesEnBase(bureau, regle.id), 'rien n’est écrit avant « Save action »').toEqual([]);
+      // Ce qui est enregistré par « Save action », sans rien retaper, est le brouillon ANGLAIS, pas le français.
       const attendu: Record<string, string> = {};
       for (const c of a.champs) if (c.defaut_en) attendu[c.cle] = c.defaut_en;
-      if (Object.keys(attendu).length === a.champs.filter((c) => c.obligatoire).length) {
-        expect(configDe(await etapesEnBase(bureau, regle.id))).toEqual(attendu);
+      // Le seul réglage que la boucle ci-dessus a changé pour faire apparaître un champ dépendant (CHA-12).
+      if (a.champs.some((c) => c.id === 'CHA-12')) attendu.destinataire = 'membre';
+      // (Même périmètre qu'avant : les actions dont chaque champ obligatoire naît avec un texte de départ.)
+      if (a.champs.filter((c) => c.defaut_en).length === a.champs.filter((c) => c.obligatoire).length) {
+        await enregistrerEtape(p, true);
+        await expect(carte(page, a.en)).toBeVisible();
+        const etapes = await attendreConfig(bureau, regle.id, attendu);
+        expect(etapes).toEqual([{ id: 'e1', type: 'action', action: { type: a.cle, config: attendu }, suivant: null }]);
+        await attendreEnregistre(page, true);
       }
     });
   }
@@ -236,19 +248,75 @@ test.describe('anglais — messages et variables', () => {
     await expect.soft(p.getByRole('button', { name: 'Save action', exact: true })).toHaveCount(0);
   });
 
-  test('[EDT-085][CHA-38][EDT-130] une adresse refusée par le serveur : le message montré est en anglais @defaut', async ({ page, bureau, marque, moniteur }) => {
-    moniteur.attendu(/400 PATCH .*\/api\/automations\/rules\//, 'le serveur refuse une adresse en http://');
-    const regle = await creerBrouillonAvecAction(bureau, marque, 'lead.created', 'webhook', { url: 'https://crochets.lume-qa.test/avant' });
+  /*
+   * Avant 71d2b5e9, « Save action » se cliquait sur une adresse en http://, et le refus du serveur s'affichait en
+   * français dans l'interface anglaise. Le comportement décidé : le panneau refuse lui-même, en anglais, et rien ne
+   * part. Le geste a donc changé ; l'attente d'origine est gardée (aucun mot français dans le message montré), et le
+   * refus du SERVEUR — celui que verrait un appel passé à côté de l'écran, en-tête de langue anglais — est éprouvé
+   * directement : il doit être en anglais lui aussi.
+   */
+  test('[EDT-085][CHA-38][CHA-29][EDT-130] une adresse ou un nombre refusé : le panneau le dit en anglais, rien ne part au serveur, et le refus du serveur lui-même est en anglais', async ({ page, bureau, marque, jetonDe, baseURL }) => {
+    const regle = await creerBrouillon(bureau, marque, 'lead.created', {
+      steps: [
+        { id: 'e1', type: 'action', action: { type: 'webhook', config: { url: 'https://crochets.lume-qa.test/avant' } }, suivant: 'e2' },
+        { id: 'e2', type: 'action', action: { type: 'create_task', config: { title: 'Call [client_name] back' } }, suivant: null },
+      ],
+    });
+    const ecritures = ecrituresVers(page, regle.id);
     await ouvrirEditeur(page, regle.id);
+
+    // L'adresse : chaque faute a sa phrase anglaise, écrite deux fois (encadré, et à côté du bouton).
     await carte(page, 'Call a webhook').click();
-    const p = panneauEtape(page);
-    await champ(p, 'The address', true, true).fill('http://crochets.lume-qa.test/entrant');
-    await boutonEnregistrer(p, true).click();
-    const toast = page.getByRole('region', { name: /Notifications/ }).getByRole('listitem').first();
-    await expect(toast).toBeVisible({ timeout: 120_000 });
-    const texte = await toast.innerText();
-    await page.screenshot({ path: `${CAPTURES}/en-refus-serveur.png` });
-    expect.soft(francais(texte), `français dans le message : ${texte}`).toEqual([]);
-    await quitterSansEnregistrer(page);
+    let p = panneauEtape(page);
+    for (const [saisie, raison] of [
+      ['http://crochets.lume-qa.test/entrant', '“The address” must start with https://.'],
+      ['not an address', '“The address” must start with https://.'],
+      ['https://localhost/internal', '“The address” cannot target an internal address.'],
+    ]) {
+      await champ(p, 'The address', true, true).fill(saisie);
+      await expect(boutonEnregistrer(p, true), `“${saisie}”: “Save action”`).toBeDisabled();
+      await expect(p.getByText(raison, { exact: true }), `“${saisie}”: la raison écrite`).toHaveCount(2);
+    }
+    await page.screenshot({ path: `${CAPTURES}/en-refus-panneau.png` });
+    expect(francais(await texteInterface(p)), 'français dans le panneau qui refuse l’adresse').toEqual([]);
+    await laisserPasserLEnregistrementAuto(page);
+    expect(ecritures, 'requêtes d’écriture parties pendant que le panneau refusait la saisie').toEqual([]);
+    await expect(page.getByRole('region', { name: /Notifications/ }).getByRole('listitem')).toHaveCount(0);
+
+    // On renonce (la question est en anglais), puis le nombre hors bornes : même refus, en anglais.
+    await p.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Close without saving', exact: true }).click();
+    await expect(p).toBeHidden();
+    await carte(page, 'Create a task').click();
+    p = panneauEtape(page);
+    await champ(p, 'Due in (days)', false, true).fill('999');
+    await expect(boutonEnregistrer(p, true)).toBeDisabled();
+    await expect(p.getByText('“Due in (days)” must be at most 365.', { exact: true })).toHaveCount(2);
+    await champ(p, 'Due in (days)', false, true).fill('-5');
+    await expect(p.getByText('“Due in (days)” must be at least 0.', { exact: true })).toHaveCount(2);
+    expect(francais(await texteInterface(p)), 'français dans le panneau qui refuse le nombre').toEqual([]);
+    await laisserPasserLEnregistrementAuto(page);
+    expect(ecritures, 'requêtes d’écriture parties pendant que le panneau refusait la saisie').toEqual([]);
+    expect((await etapesEnBase(bureau, regle.id)).map((e) => configDe([e]))).toEqual([{ url: 'https://crochets.lume-qa.test/avant' }, { title: 'Call [client_name] back' }]);
+
+    // Le serveur, appelé à côté de l'écran avec la langue de l'interface (Accept-Language: en) : refus en anglais.
+    const r = await fetch(`${baseURL ?? BASE}/api/automations/rules/${regle.id}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${await jetonDe('proprioA')}`, 'x-org-id': bureau.orgA, 'Content-Type': 'application/json',
+        'x-requested-with': 'XMLHttpRequest', 'Accept-Language': 'en',
+      },
+      body: JSON.stringify({
+        steps: [
+          { id: 'e1', type: 'action', action: { type: 'webhook', config: { url: 'http://crochets.lume-qa.test/entrant' } }, suivant: 'e2' },
+          { id: 'e2', type: 'action', action: { type: 'create_task', config: { title: 'Call [client_name] back', echeance_jours: '999' } }, suivant: null },
+        ],
+      }),
+    });
+    expect(r.status).toBe(400);
+    const texte = String(((await r.json()) as { error?: string }).error ?? '');
+    expect.soft(texte, 'le serveur nomme l’étape et la faute, en anglais').toContain('Step 1 (“Call a webhook”): “The address” must start with https://.');
+    expect.soft(texte, 'le serveur nomme l’étape et la borne, en anglais').toContain('Step 2 (“Create a task”): “Due in (days)” must be at most 365.');
+    expect.soft(francais(texte), `français dans le refus du serveur : ${texte}`).toEqual([]);
   });
 });

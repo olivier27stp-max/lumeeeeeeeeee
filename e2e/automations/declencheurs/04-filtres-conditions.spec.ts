@@ -415,7 +415,7 @@ test.describe('conditions de champs — l’éditeur', () => {
     await expect(panneau.getByText(/incompl|sans valeur|valeur manquante|à compléter/i)).toBeVisible({ timeout: 5_000 });
   });
 
-  test('[EDT-091] valeur numérique tapée au clavier : « 12.5 » reste 12,5 (le point ne disparaît pas), une lettre n’affiche pas « NaN » @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-091] valeur numérique tapée au clavier : « 12.5 » reste 12,5 (le point ne disparaît pas), une lettre n’affiche pas « NaN »', async ({ page, bureau, marque }) => {
     const d = await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, { name: `${marque} décimale`, trigger_event: 'lead.created', conditions: {}, steps: ETAPE_NOTIF });
     await ouvrirEditeur(page, regle.id);
@@ -436,6 +436,41 @@ test.describe('conditions de champs — l’éditeur', () => {
     await v2.fill('');
     await v2.pressSequentially('abc');
     expect.soft(await v2.inputValue(), 'des lettres dans un champ numérique').not.toBe('NaN');
+
+    // ── Au vrai clavier, les autres frappes d'un utilisateur : effacer, des lettres, un nombre négatif, la virgule. ──
+    const enregistre = async () => (((await lireRegle(bureau, regle.id))?.conditions as { champs_perso?: Array<Record<string, unknown>> }).champs_perso ?? []).map(sansNuls);
+    const vider = async () => { await v2.click(); await v2.press('ControlOrMeta+a'); await v2.press('Backspace'); };
+    // Des lettres seules : rien ne s'écrit dans le champ (ni « NaN », ni les lettres).
+    await expect(v2).toHaveValue('');
+    // Des lettres au milieu d'un nombre : seules les touches d'un nombre comptent.
+    await v2.pressSequentially('1a2b');
+    await expect(v2).toHaveValue('12');
+    // Une valeur négative, avec décimale : le signe et le point restent à l'écran pendant la frappe.
+    await vider();
+    await v2.pressSequentially('-');
+    await expect(v2).toHaveValue('-');
+    await v2.pressSequentially('3.');
+    await expect(v2).toHaveValue('-3.');
+    await v2.pressSequentially('75');
+    await expect(v2).toHaveValue('-3.75');
+    await enregistrerPanneauDeclencheur(page);
+    expect(await enregistre(), '« -3.75 » tapé au clavier').toEqual([{ field_id: d.champs.qa_nombre.id, op: 'eq', value: -3.75 }]);
+    // La virgule, celle du pavé numérique d'un clavier français : « 12,5 » vaut 12,5 — pas 125, pas 12.
+    await ouvrirPanneauDeclencheur(page);
+    await expect(v2).toHaveValue('-3.75');
+    await vider();
+    await v2.pressSequentially('12,5');
+    await expect(v2).toHaveValue('12,5');
+    await enregistrerPanneauDeclencheur(page);
+    expect(await enregistre(), '« 12,5 » tapé au clavier, avec la virgule').toEqual([{ field_id: d.champs.qa_nombre.id, op: 'eq', value: 12.5 }]);
+    // Relu après rechargement : le nombre enregistré, et « NaN » nulle part dans la section (ni en texte, ni dans un champ).
+    await page.reload();
+    await expect(carteDeclencheur(page)).toBeVisible({ timeout: 90_000 });
+    await ouvrirPanneauDeclencheur(page);
+    await expect(ligne(page, 0).getByLabel('Valeur', { exact: true })).toHaveValue('12.5', { timeout: 30_000 });
+    // Sensible à la casse et au mot entier : « NaN », pas les lettres « nan » d'un libellé.
+    await expect(filtres(page).getByText(/\bNaN\b/)).toHaveCount(0);
+    expect(await filtres(page).locator('input').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value))).toEqual(['12.5']);
   });
 
   test('[EDT-093] une option ARCHIVÉE d’une liste n’est plus proposée dans « est l’un de » @defaut', async ({ page, bureau, marque }) => {

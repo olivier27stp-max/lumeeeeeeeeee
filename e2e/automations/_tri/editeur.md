@@ -1,4 +1,14 @@
-# editeur — 70 échecs à la passe, après tri : 47 défauts, 20 specs réparées, 0 environnement, 3 fragiles
+# editeur — après les correctifs « majeurs » (2026-10-02) : 186 tests, 150 verts, 35 rouges `@defaut`, 1 rouge sans marque (régression)
+
+**Revérification du 2026-10-02**, sur `D:/lume-uiaudit/wt-verif` (branche de correction `mission/auto-finale-u` à a80b2c25 + `main`),
+pile locale. Les 12 lignes « majeur » de ce lot et les deux constats prioritaires (A-01, A-09) sont FERMÉS au vrai navigateur ;
+deux mineurs le sont du même coup (12:161 → 198, 14:80). Quatorze marqueurs `@defaut` retirés : il en reste 35, tous mineurs ou
+cosmétiques, tous rouges sur leur attente. **Un test sans marque est rouge : une régression du correctif EDT-166** (voir
+« Régression relevée à la revérification »). Le dossier compte 186 tests : deux ont été ajoutés (A-01 ; l'étape en cours
+d'ajout à la sortie). Détail : sections « Défauts corrigés depuis », « Specs adaptées le 2026-10-02 » et « Dernière relance ».
+
+Ce qui suit, jusqu'à la section « Régression », est l'état du TRI du 2026-10-01, tenu à jour (lignes déplacées, numéros de
+ligne actuels).
 
 Passe d'origine : 183 tests du dossier, 113 verts, 70 rouges (`sorties/e2e-local/passe1.txt`).
 Dernière relance : voir « Dernière relance » en bas.
@@ -15,11 +25,15 @@ Dernière relance : voir « Dernière relance » en bas.
 
 ## Défauts du produit encore ouverts
 
-49 tests, tous marqués `@defaut`, rouges sur l'attente qui décrit le défaut (pas sur un sélecteur vieilli). Aucun n'a de numéro
-au tableau des constats (§ 8 de `AUTOMATIONS_UI_AUDIT.md`) : ce sont les « pistes » de la carte (S-xx), confirmées ici par une exécution.
-Les numéros de ligne sont ceux des fichiers APRÈS réparation.
+35 tests (49 au tri du 2026-10-01), tous marqués `@defaut`, rouges sur l'attente qui décrit le défaut (pas sur un sélecteur
+vieilli). Aucun n'a de numéro au tableau des constats (§ 8 de `AUTOMATIONS_UI_AUDIT.md`) : ce sont les « pistes » de la carte
+(S-xx), confirmées ici par une exécution. Les numéros de ligne sont ceux des fichiers au 2026-10-02.
 
-### Perte de travail ou envoi qui ne correspond pas à l'écran (majeurs)
+### Perte de travail ou envoi qui ne correspond pas à l'écran (majeurs) — TOUS FERMÉS le 2026-10-02
+
+Les douze lignes ci-dessous sont gardées pour mémoire (ce qu'on voyait AVANT) ; chacune est reprise, avec son commit et la
+ligne actuelle du test vert, dans « Défauts corrigés depuis — revérification du 2026-10-02 ». Les numéros de ligne de ce
+tableau sont ceux du tri.
 
 | Identifiants | Spec:ligne | Écran | Ce qu'on fait | Ce qu'on voit | Ce qu'on devrait voir | Gravité |
 |---|---|---|---|---|---|---|
@@ -40,16 +54,14 @@ Les numéros de ligne sont ceux des fichiers APRÈS réparation.
 
 | Identifiants | Spec:ligne | Écran | Ce qu'on fait | Ce qu'on voit | Ce qu'on devrait voir | Gravité |
 |---|---|---|---|---|---|---|
-| EDT-164, S-05 | 11-dialogues-gardes-panneaux:195 (cas « onglet Réglages ») | Panneau d'étape, saisie en cours | On tape un message, puis on va sur l'onglet « Réglages » et on revient | Le texte tapé a disparu, sans question | La question « Fermer l'étape sans enregistrer ? », ou la saisie gardée au retour | mineur |
-| EDT-164, S-05 | 11-dialogues-gardes-panneaux:195 (cas « dupliquer ») | Panneau d'étape, saisie en cours | On tape un message, puis menu « ··· » d'une autre carte → « Dupliquer l'action » | Le panneau passe à la copie : le texte tapé a disparu, sans question | La même question que pour un changement d'étape | mineur |
-| EDT-032, S-06 | 11-dialogues-gardes-panneaux:233 | Panneau « Réglages du déclencheur » | On tape une étiquette dans « Seulement si le client a l'étiquette », puis la croix « Fermer » | Le panneau se ferme, la saisie est jetée sans question (le panneau d'étape, lui, demande) | La question « Fermer les réglages sans enregistrer ? » | mineur — même défaut que declencheurs 03:62 |
-| EDT-023, S-14 | 07-clavardage-lumi:340 | Éditeur, forfait sans Lumi, carte « Construire avec Lumi — inclus dans Autopilot » | Une étape incomplète est en cours ; on clique « Voir Autopilot » | L'éditeur est quitté pour la facturation sans question : l'étape est perdue (toast après coup) | « Quitter sans enregistrer ? » | mineur |
+| EDT-164, S-05 | 11-dialogues-gardes-panneaux:250 (cas « onglet Réglages ») | Panneau d'étape, saisie en cours | On tape un message, puis on va sur l'onglet « Réglages » et on revient | Le texte tapé a disparu, sans question | La question « Fermer l'étape sans enregistrer ? », ou la saisie gardée au retour | mineur |
+| EDT-164, S-05 | 11-dialogues-gardes-panneaux:250 (cas « dupliquer ») | Panneau d'étape, saisie en cours | On tape un message, puis menu « ··· » d'une autre carte → « Dupliquer l'action » | Le panneau passe à la copie : le texte tapé a disparu, sans question | La même question que pour un changement d'étape | mineur |
+| EDT-032, S-06 | 11-dialogues-gardes-panneaux:288 | Panneau « Réglages du déclencheur » | On tape une étiquette dans « Seulement si le client a l'étiquette », puis la croix « Fermer » | Le panneau se ferme, la saisie est jetée sans question (le panneau d'étape, lui, demande) | La question « Fermer les réglages sans enregistrer ? » | mineur — même défaut que declencheurs 03:62 |
+| EDT-023, S-14 | 07-clavardage-lumi:461 | Éditeur, forfait sans Lumi, carte « Construire avec Lumi — inclus dans Autopilot » | Le parcours porte une étape incomplète et un texto vient d'être réécrit (« 1 étape(s) à compléter ») ; on clique « Voir Autopilot » | L'éditeur est quitté pour la facturation sans question : le texto réécrit est perdu (toast après coup). Revu le 2026-10-02 : toujours ouvert — « Mes automatisations » et « Précédent » demandent, ce bouton non | « Quitter sans enregistrer ? » | mineur |
 | EDT-018 | 04-onglets-apercu-publication:221 | Interrupteur « Publier l'automatisation » | Double-clic | La confirmation s'ouvre et se referme aussitôt (le 2e clic tombe sur le voile) : rien ne se passe, rien ne l'explique | La confirmation reste à l'écran | mineur |
 | EDT-021, S-45 | 05b-canevas-outils-origine:77 | Canevas, outil main actif | On glisse le canevas en partant d'une carte | Le canevas se déplace ET le panneau de la carte s'ouvre | Le canevas se déplace, rien ne s'ouvre | mineur |
-| EDT-008, S-17 | 02-barre-du-haut:118 | Barre du haut, nom en cours de modification | On tape un nouveau nom, puis Échap | La saisie est gardée (et enregistrée) | Échap annule et rend l'ancien nom | mineur |
-| EDT-012 | 14-long-parcours:80 | Éditeur d'un parcours de 50 étapes (données d'avant la limite de 30) | On corrige un texte | « Enregistrement impossible pour le moment — nouvel essai automatique. (Un parcours compte au plus 30 étapes.) » : la correction ne sera jamais enregistrée, et l'écran promet le contraire | Un message qui dit la limite et quoi faire, sans promesse de nouvel essai | mineur |
-| EDT-047, EDT-012, S-04 | 12-enregistrement:161 | Éditeur d'une automatisation publiée née dans l'éditeur | On supprime sa seule étape | Le serveur refuse (la base est protégée), mais le toast dit « Enregistrement impossible pour le moment — nouvel essai automatique. (Cette automatisation est publiée : cette modification l'empêcherait de fonctionner…) » | Le refus seul, sans « pour le moment — nouvel essai automatique » | mineur |
-| EDT-137 (nouveau) | 07-clavardage-lumi:120 | `/automations/nouvelle?lumi=1`, demande envoyée à Lumi qui échoue | On envoie une demande ; Lumi ne construit rien | L'éditeur redevient bien un brouillon local et aucun brouillon vivant ne reste dans la liste, mais une « Nouvelle automatisation » vide est partie à la corbeille (suppression douce) : l'onglet « Corbeille » en montre une de plus à chaque demande qui échoue | Rien dans la corbeille que l'utilisateur n'y ait mis | cosmétique — à décider (voir note 1) |
+| EDT-008, S-17 | 02-barre-du-haut:119 | Barre du haut, nom en cours de modification | On tape un nouveau nom, puis Échap | La saisie est gardée (et enregistrée) | Échap annule et rend l'ancien nom | mineur |
+| EDT-137 (nouveau) | 07-clavardage-lumi:121 | `/automations/nouvelle?lumi=1`, demande envoyée à Lumi qui échoue | On envoie une demande ; Lumi ne construit rien | L'éditeur redevient bien un brouillon local et aucun brouillon vivant ne reste dans la liste, mais une « Nouvelle automatisation » vide est partie à la corbeille (suppression douce) : l'onglet « Corbeille » en montre une de plus à chaque demande qui échoue | Rien dans la corbeille que l'utilisateur n'y ait mis | cosmétique — à décider (voir note 1) |
 
 ### Clavier, focus, lecteur d'écran (mineurs)
 
@@ -63,19 +75,19 @@ Les numéros de ligne sont ceux des fichiers APRÈS réparation.
 | EDT-100, EDT-037, S-43 | 13-clavier-focus:137 | Panneau d'étape | On ferme le panneau | Le focus n'est plus nulle part : au clavier on repart du début de la page | Le focus revient à la carte | mineur |
 | EDT-013 à EDT-016, S-43 | 13-clavier-focus:147 | Onglets Parcours / Réglages / Historique / Journaux | Flèche droite sur « Parcours » | Rien (les onglets portent `role="tab"`, qui annonce cette navigation) | Le focus passe à « Réglages » | mineur |
 | EDT-055, S-43 | 13-clavier-focus:156 | Fenêtre « Ce qui partirait » | On ouvre l'aperçu | Il recouvre le canevas sans être annoncé comme un dialogue ni retenir le focus : Tab continue dans les cartes masquées | Un dialogue (rôle, focus retenu) | mineur |
-| EDT-154 | 11-dialogues-gardes-panneaux:305 | Dialogue de confirmation (« Supprimer cette étape ? ») | Tab plusieurs fois | Le focus sort du dialogue et atteint les boutons de l'app masquée derrière | Le focus tourne dans le dialogue | mineur |
-| EDT-004, S-44 | 02-barre-du-haut:46 | Barre du haut, fenêtre de 600 px | On réduit la fenêtre | Le bouton de retour n'est plus qu'une flèche, sans nom : « bouton » pour un lecteur d'écran | Un nom (« Mes automatisations ») même quand le texte est masqué | mineur |
+| EDT-154 | 11-dialogues-gardes-panneaux:360 | Dialogue de confirmation (« Supprimer cette étape ? ») | Tab plusieurs fois | Le focus sort du dialogue et atteint les boutons de l'app masquée derrière | Le focus tourne dans le dialogue | mineur |
+| EDT-004, S-44 | 02-barre-du-haut:47 | Barre du haut, fenêtre de 600 px | On réduit la fenêtre | Le bouton de retour n'est plus qu'une flèche, sans nom : « bouton » pour un lecteur d'écran | Un nom (« Mes automatisations ») même quand le texte est masqué | mineur |
 
 ### Ce que l'écran dit mal (mineurs et cosmétiques)
 
 | Identifiants | Spec:ligne | Écran | Ce qu'on fait | Ce qu'on voit | Ce qu'on devrait voir | Gravité |
 |---|---|---|---|---|---|---|
-| EDT-042, S-39 | 05-canevas-edition:244 | Canevas, menu « ··· » de la 5e carte | On ouvre le menu | Il s'ouvre en haut au centre du canevas, à 419 px de la carte : rien ne dit à quelle étape il se rapporte | À côté de la carte cliquée | mineur |
-| EDT-037, EDT-038, S-38 | 05-canevas-edition:377 | Canevas, cartes sans texte de message | On regarde les cartes « Ajouter une étiquette », « Attendre » (mode « réponse du client »), « Appeler un webhook » | Les trois sont muettes : « Ajouter une étiquette » ne dit pas laquelle ; l'attente de la réponse du client s'affiche « Attendre · 2 jour(s) », comme une attente simple ; « Appeler un webhook » ne montre pas l'adresse | Chaque carte dit ce qu'elle fera : l'étiquette, « la réponse du client », l'adresse | mineur |
+| EDT-042, S-39 | 05-canevas-edition:245 | Canevas, menu « ··· » de la 5e carte | On ouvre le menu | Il s'ouvre en haut au centre du canevas, à 419 px de la carte : rien ne dit à quelle étape il se rapporte | À côté de la carte cliquée | mineur |
+| EDT-037, EDT-038, S-38 | 05-canevas-edition:426 | Canevas, cartes sans texte de message | On regarde les cartes « Ajouter une étiquette », « Attendre » (mode « réponse du client »), « Appeler un webhook » | Les trois sont muettes : « Ajouter une étiquette » ne dit pas laquelle ; l'attente de la réponse du client s'affiche « Attendre · 2 jour(s) », comme une attente simple ; « Appeler un webhook » ne montre pas l'adresse | Chaque carte dit ce qu'elle fera : l'étiquette, « la réponse du client », l'adresse | mineur |
 | EDT-041 | 05b-canevas-outils-origine:286 | Bandeau « Parcours au format d'origine », parcours NON convertible | On lit le bandeau | « Cliquez sur une étape pour la modifier… » et, dessous, « … il reste en lecture seule » | Une seule des deux phrases | cosmétique |
-| EDT-137, S-30 | 07-clavardage-lumi:84 | Carte « Décris ton automatisation à Lumi » | On tape moins de 10 caractères, puis Entrée | Bouton « Construire » grisé, Entrée sans effet, sans un mot : on croit Lumi en panne | La raison (« décris-la en une phrase ») | mineur |
+| EDT-137, S-30 | 07-clavardage-lumi:85 | Carte « Décris ton automatisation à Lumi » | On tape moins de 10 caractères, puis Entrée | Bouton « Construire » grisé, Entrée sans effet, sans un mot : on croit Lumi en panne | La raison (« décris-la en une phrase ») | mineur |
 | EDT-017, S-28 | 04-onglets-apercu-publication:105 | Bouton « Aperçu » pendant une préparation lente | On clique | Le bouton est désactivé mais strictement identique (ni grisé, ni roue) | Un état visible | cosmétique |
-| EDT-006 | 02-barre-du-haut:103 | Barre du haut, nom | On vide le nom, Entrée, puis on reclique le nom | Le titre affiche l'ancien nom, le champ rouvert est vide | Le champ rouvert montre le nom affiché | cosmétique |
+| EDT-006 | 02-barre-du-haut:104 | Barre du haut, nom | On vide le nom, Entrée, puis on reclique le nom | Le titre affiche l'ancien nom, le champ rouvert est vide | Le champ rouvert montre le nom affiché | cosmétique |
 | EDT-148, S-34 | 09-onglet-historique:106 | Onglet « Historique », filtre « Statut » | Une tâche est « En cours » dans le tableau | Le filtre n'offre pas « En cours » (Tous, En attente, Terminés, Échoués, Annulés) | « En cours » dans le filtre | mineur |
 | EDT-149, S-34 | 09-onglet-historique:141 | Onglet « Historique », colonne « Étape en cours » | Une attente en cours (sans action), une étape « Texto » | « (e3) » seul pour l'attente, « Texto(e2) » : identifiants techniques, colonne vide pour l'attente | Le nom de l'étape, sans « (e2) » | mineur |
 | EDT-149 | 09-onglet-historique:124 | Onglet « Historique », ligne en échec dont la cause n'est pas connue du traducteur | On lit la ligne | « TypeError: fetch failed (ECONNREFUSED 10.0.0.4:443) » | Une phrase en français (« erreur technique, réessayée N fois ») | mineur (voir note 2) |
@@ -136,6 +148,84 @@ un bouton « Plus » (rubrique du menu). `lireJournaux` plafonne toujours à 200
 maintenant bornée à l'éditeur (`ecranEditeur`) : le test est rouge, sur son attente. Les neuf autres verts ont été relus un par
 un contre le code pour écarter le même piège.
 
+### Défauts corrigés depuis — revérification du 2026-10-02 (correctifs de `mission/auto-finale-u`)
+
+Quatorze marqueurs retirés. Commits : ceux de la table `D:/lume-final/notes/U-corrections.md`. « Tel quel » = le test
+d'origine est passé au vert sans qu'on y touche (seul le marqueur est retiré ; quand des attentes ont été AJOUTÉES derrière les
+siennes, c'est dit). « Geste adapté » = le test butait sur l'ancien parcours avant d'arriver à son attente : le geste est
+réécrit, l'attente qui prouve le défaut fermé est gardée (détail dans « Specs adaptées le 2026-10-02 »).
+
+| Ligne du triage | Spec:ligne aujourd'hui | Ce qui est corrigé (vu au vrai navigateur, base relue) | Par | Comment |
+|---|---|---|---|---|
+| S-01 — 07:274 | 07-clavardage-lumi:313 | « Ouvrir » la 2e automatisation, chargement ralenti à 6 s : la 2e garde SON nom, SON déclencheur et SON parcours (une étape, « Texto de la DEUXIÈME », rien de Lumi) ; la 1re garde son nom et porte le parcours de Lumi ; 6 s plus tard aucune écriture retardataire n'est arrivée dans la 2e (`updated_at` identique) | `073e719f` | tel quel + attentes ajoutées |
+| S-03 — 07:251 | 07-clavardage-lumi:252 | Automatisation publiée : la question « Appliquer les changements de Lumi ? » est affichée avec le résumé de la proposition ; tant qu'on n'a pas répondu, 6 s sans aucune écriture, canevas et base inchangés (`updated_at` identique) ; « Annuler » → « Changements de Lumi non appliqués… », rien d'écrit ; « Appliquer » → parcours de Lumi en ligne, message sans « en pause » | `8174ff74` | tel quel + attentes ajoutées (réponse de Lumi simulée) |
+| 12:86 (429) | 12-enregistrement:86 | Après un 429, un nouvel essai part : « Enregistré », la modification est en base, jamais « Too many requests » | `dbc83989` | tel quel |
+| S-04 — 12:122 | 12-enregistrement:122 | « Attendre » en dernière étape : UN seul envoi refusé (400), jamais renvoyé ; « Refusé — à corriger », bandeau « Enregistrement refusé : rien n'est enregistré tant que ce n'est pas corrigé. » avec la raison, aucun « nouvel essai automatique » ; une étape ajoutée après l'attente et tout s'enregistre | `27939ff8` | geste adapté (400 déclaré, indicateur) + attentes ajoutées |
+| S-04 — 12:144 | 12-enregistrement:167 | Pendant le refus, l'écran dit que RIEN ne s'enregistre (« Refusé — à corriger » + bandeau) ; l'attente retirée, le texto réécrit entre-temps arrive en base | `27939ff8` | geste adapté + attentes ajoutées |
+| S-13 — 12:186 (= A-09) | 12-enregistrement:223 | Deux onglets : l'écriture périmée de l'onglet 2 est refusée (409 `modifiee_ailleurs`, une seule fois, rien d'écrit) ; bandeau « Cette automatisation a été modifiée ailleurs (par Lumi ou dans un autre onglet). », indicateur « Modifiée ailleurs », « Recharger » → version de l'onglet 1 ; l'onglet 2 enregistre ensuite normalement (les deux modifications en base, aucun faux conflit) ; l'onglet 1, au retour sur sa fenêtre, se recharge sans question | `f01f2393` | geste adapté (409 déclaré sur l'onglet 2) + attentes ajoutées |
+| 05b:303 | 05b-canevas-outils-origine:304 | Parcours converti : supprimer la dernière étape laisse un canevas vide, elle ne revient pas sous « format d'origine » | `4e29c110` | tel quel |
+| S-12 — 05:365 | 05-canevas-edition:393 | « Arrêter ici » au milieu : question « Arrêter ici et retirer la suite ? » qui dit « les 2 étapes qui suivent… seront retirées » ; « Annuler » ne retire rien ; confirmé et enregistré, la suite est retirée de l'écran ET de la base (rien d'orphelin) | `0db8ce18` | tel quel + attentes ajoutées |
+| S-12 — 05:347 | 05-canevas-edition:363 | Supprimer une condition : le dialogue dit « La branche « si non » (1 étape) sera retirée avec la condition. », et c'est vrai en base (4 étapes, toutes reliées), relu après rechargement | `0db8ce18` | geste adapté (le texte du dialogue attendu était l'ancienne promesse, fausse) |
+| S-32 — 15:20 | 15-pause-globale:20 | Bureau en pause : l'éditeur d'une automatisation publiée affiche « Vos automatisations sont en pause. » | `9e6dc36f` | tel quel |
+| S-08 — 08:174 | 08-onglet-reglages:174 | Basculer « Jours ouvrables seulement » garde `arreter_si_resolu: false` | `d5a5a231` | tel quel |
+| EDT-166 — 11:113 | 11-dialogues-gardes-panneaux:161 | « Précédent » avec une étape incomplète et un texto réécrit : « Quitter sans enregistrer ? » est posée AVANT ; « Annuler » garde le travail à l'écran, et « Précédent » redemande | `6ce9a1cb` | geste adapté (l'état incomplet ne s'obtient plus par le tiroir) — **mais ce correctif a une régression, voir ci-dessous** |
+| S-04 (mineur) — 12:161 | 12-enregistrement:198 | Casser une automatisation publiée : le refus seul (« Enregistrement refusé — Cette automatisation est publiée… »), sans « nouvel essai automatique » ; la base est protégée | `27939ff8` | tel quel |
+| EDT-012 (mineur) — 14:80 | 14-long-parcours:80 | 50 étapes : le refus est dit comme un refus (« Refusé — à corriger », bandeau avec « Un parcours compte au plus 30 étapes »), envoyé une seule fois, sans promesse de nouvel essai | `27939ff8` | geste adapté (le test attendait 60 s l'un des deux anciens états) |
+
+Constats prioritaires de la table, sans `@defaut` dans ce dossier au tri :
+
+| Constat | Spec:ligne | Ce qui est vérifié | Par |
+|---|---|---|---|
+| A-01 — panneau d'étape périmé (« Lumi dit avoir changé le message, rien ne change ») | 07-clavardage-lumi:369 (test AJOUTÉ, réponse de Lumi simulée) | Panneau ouvert, rien de tapé : il prend le texte de Lumi, et son « Enregistrer » n'écrase pas Lumi (base relue). Saisie en cours : bandeau « Lumi a modifié cette étape pendant que vous l'éditiez. », la saisie est gardée, « Enregistrer » désactivé (« Choisissez d'abord quelle version garder. ») ; « Voir la version de Lumi » et « Garder ma version » font chacun ce qu'ils disent (base relue) | `2b27e032` |
+| A-09 — écrasement silencieux | 12-enregistrement:223 | voir S-13 ci-dessus | `f01f2393` |
+
+## Régression relevée à la revérification du 2026-10-02 (test SANS marque, rouge)
+
+`11-dialogues-gardes-panneaux:125` — « [EDT-166] bouton « Précédent » du navigateur juste après une modification : elle est
+enregistrée en partant ». Vert au tri du 2026-10-01 (alors ligne 87), rouge trois fois de suite depuis le correctif EDT-166
+(`6ce9a1cb`) : passe « tel quel », relance ciblée, passe finale. Le test n'a pas été modifié.
+
+- **Étapes** (un seul onglet, aucune écriture par le côté) : ouvrir une automatisation DEPUIS la liste ; cliquer une carte ;
+  taper dans « Texte du message » ; « Enregistrer » du panneau ; bouton « Précédent » du navigateur.
+- **Ce qu'on voit** : rien. L'adresse reste celle de l'éditeur, aucune question, aucun message ; l'indicateur passe à
+  « Enregistré » (le travail n'est pas perdu : l'enregistrement automatique l'écrit sur place). Il faut appuyer une DEUXIÈME
+  fois sur « Précédent » pour revenir à la liste.
+- **Erreur** : `expect(page).toHaveURL(/\/automations$/)` — reçu `…/automations/<id>` pendant 60 s.
+- **Cause, lue dans le code et mesurée** (sonde jetable, supprimée) : dès qu'une saisie commence dans un panneau, la garde
+  pose une entrée d'historique en double (`history.length` 3 → 4, état `lumeGardeEditeur`). Quand il n'y a plus rien à
+  perdre (panneau enregistré), l'effet retire son écouteur `popstate` mais laisse l'entrée en double : le premier
+  « Précédent » la consomme en silence. Sans aucune saisie (carte ouverte puis refermée), un seul « Précédent » suffit.
+  `AutomationBuilderPage.tsx`, effet `aPerdreEnPartant` (« LE BOUTON RETOUR DU NAVIGATEUR »).
+- Même mécanique attendue après un ajout par le tiroir enregistré, ou une étape incomplète complétée (non rejoué séparément).
+
+Aucun 409 `modifiee_ailleurs` n'a été rencontré dans un parcours ordinaire (un onglet, aucune écriture par le côté) : sur les
+186 tests, le seul 409 est celui que 12:223 provoque exprès dans son second onglet ; le moniteur n'en a relevé aucun autre.
+
+## Specs adaptées le 2026-10-02 (comportements décidés)
+
+Aides communes ajoutées dans `editeur/_aides.ts` (rien de retiré) : `ajouterParLeTiroir` (choisir dans le tiroir PUIS
+« Enregistrer » du panneau), `enregistrerPanneau`, `aucuneEcriture` (preuve qu'aucune écriture de règle ne part pendant N s),
+`etiquetteVide` / `troisTextosEtUneIncomplete` / `rendreIncomplet` (l'état « 1 étape(s) à compléter » obtenu à partir d'un
+parcours qui PORTE une étape incomplète, posée avant d'ouvrir l'éditeur), `bandeauModifieeAilleurs` ; `indicateur()` connaît
+« Refusé — à corriger » et « Modifiée ailleurs ».
+
+| Test (ligne au tri → aujourd'hui) | Ce qui a changé dans le produit | Ce que j'ai fait |
+|---|---|---|
+| 02:247 → 253 | `3b739958` : une étape du tiroir n'entre dans le parcours qu'à « Enregistrer » de son panneau, qui refuse un champ obligatoire vide. Une étape ne peut plus NAÎTRE incomplète | Deux moitiés. (1) Par le tiroir : « Ajouter une étiquette » → « Enregistrer » désactivé, « « L'étiquette » est vide. », 6 s sans écriture, indicateur « Enregistré », base intacte ; remplie et enregistrée → en base. (2) Parcours qui porte une étape incomplète + texto réécrit : toutes les attentes d'origine (« 1 étape(s) à compléter », bandeau cliquable, rien en base, compléter relance l'enregistrement) |
+| 03:84 → 84 | idem : la ligne ne naît plus au clic dans le tiroir | Après le choix dans le tiroir : 6 s sans écriture, adresse toujours `/nouvelle`, « Pas encore enregistrée », rien en base. La naissance est vérifiée après « Enregistrer » du panneau (mêmes attentes qu'avant) |
+| 05:332 → 333 (cité par la table) | idem : « Annuler » du panneau d'une étape neuve l'abandonne, après question | « Annuler » → « Fermer sans ajouter cette étape ? » → « Ne pas l'ajouter » : canevas et base intacts ; puis l'ajout est refait et enregistré, mêmes attentes qu'avant (la suite sous « si oui », 4 étapes) |
+| 06:154 → 155 | idem | Attentes ajoutées : 6 s sans écriture et base intacte avant « Enregistrer » du panneau |
+| 06:171 → 176 | idem | Les trois étapes sont enregistrées dans leur panneau (avant : « Annuler ») ; attentes inchangées |
+| 11:31 → 34, 11:70 → 106 | idem : l'aide `rendreIncomplet` (cité par la table) ne peut plus produire une étape incomplète par le tiroir | Parcours de départ avec une étape incomplète + texto réécrit ; attentes d'origine gardées, la base est comparée par `updated_at` (jamais réécrite) |
+| 11 (nouveau) → 56 | idem — le GESTE de l'ancienne aide (étape du tiroir, panneau refermé) | Test AJOUTÉ : « Fermer sans ajouter cette étape ? » (Annuler la garde) ; « Mes automatisations » → « Abandonner l'étape en cours d'ajout ? » (Annuler reste, « Ne pas l'ajouter » part) ; base jamais écrite |
+| 11:101 → 143 | `6ce9a1cb` (EDT-166) : « Précédent » demande AVANT ; le toast d'après coup ne vaut plus quand on a répondu « Quitter » | Le test fixait l'ancien comportement (toast après coup). Il vérifie maintenant : la question, « Quitter » ramène à la liste, AUCUN toast « quittée sans enregistrer », base intacte |
+| 07:340 → 461 (`@defaut`, toujours rouge) | `3b739958` | Geste adapté (parcours qui porte une étape incomplète) pour que le test arrive à SON attente ; elle échoue toujours : « Voir Autopilot » quitte sans question |
+| 12:122, 12:144, 12:186, 14:80, 05:347, 11:113 | voir le tableau des défauts corrigés | 400 / 409 déclarés au moniteur, là où le refus existe toujours et où le test vérifie ce que l'écran en dit |
+
+Aucune adaptation refusée. Rien n'a été sauté, toléré ni assoupli ; aucune attente d'origine n'a été retirée sans être
+remplacée par celle du nouveau comportement (les deux remplacements : le texte du dialogue de 05:347, et le toast d'après
+coup de 11:101).
+
 ## Specs réparées (ce qui avait changé dans le produit, et le commit ou le fichier qui le prouve)
 
 ### Le produit a changé exprès (15)
@@ -187,7 +277,8 @@ environnement où Lumi répond, ils tomberaient — il faudrait y simuler l'éch
 
 ## Encore rouge sans conclusion (et pourquoi)
 
-Aucun. Les 49 rouges sont les défauts des tableaux.
+Aucun. Au tri du 2026-10-01 : les 49 rouges étaient les défauts des tableaux. Au 2026-10-02 : 35 rouges `@defaut` (les
+tableaux ci-dessus) et un rouge sans marque, la régression 11:125 décrite plus haut.
 
 Aides partagées (`e2e/automations/_outils/`) : rien de fautif pour ce dossier, je n'y ai pas touché. Une remarque sans gravité :
 `creerRegle` / `creerParcours` (ce dernier dans `editeur/_aides.ts`) posent dans `actions` le VRAI premier message, alors qu'une
@@ -241,7 +332,25 @@ Deux remarques sur le produit, vues en instruisant, qui ne sont portées par auc
   (04:59, 04:87). Je n'ai pas cherché d'autres faux verts parmi les 113 tests sans marque déjà verts à la passe, hors le motif
   précis qui a trompé 10:241 (un sélecteur de page entière qui attrape la barre latérale) — relu dans tout le dossier.
 
-## Dernière relance
+## Dernière relance — revérification du 2026-10-02
+
+Pile locale (proxy 48425, API 48306, Vite 5197), bureaux du jeu `editeur`, un worker, arbre `D:/lume-uiaudit/wt-verif`
+(b575a7ad : `mission/auto-finale-u` à a80b2c25 + `main`). Sorties : `D:/lume-uiaudit/sorties/verif-editeur/`.
+
+**Passe complète finale (24,6 min)** — `passe-finale-2.txt`, JSON `passe-finale-2.json` :
+
+    E2E_PORT_PROXY=48425 E2E_PORT_API=48306 E2E_PORT_VITE=5197 PLAYWRIGHT_BROWSERS_PATH=D:/lume-uiaudit/pw-browsers E2E_SORTIES=D:/lume-uiaudit/sorties/verif-editeur E2E_JEU=editeur E2E_WORKERS=1 node scripts/qa/automations-e2e/lancer.mjs editeur/ --project=bureau
+
+→ **186 tests : 150 passés, 36 échoués** = 35 `@defaut` (chacun rouge sur l'attente de son défaut) + 1 sans marque
+(11:125, régression). Aucun `@defaut` n'est vert. Aucune panne du poste, aucun problème relevé par le moniteur.
+
+Avant elle : `passe0.txt` (le dossier TEL QUEL sur le produit corrigé, avant toute retouche : 184 tests, 135 verts, 49 rouges —
+8 `@defaut` déjà verts, 8 tests sans marque rouges ; les deux derniers commits de la branche sont arrivés pendant cette passe,
+vers le test 137, tout a été rejoué depuis) ; `run1.txt` (26 tests retouchés : 24 verts, S-14 et 11:125 rouges) ; `run2.txt`
+(A-01, vert) ; `sonde.txt` (mesure de la régression). `passe-finale.txt` est une passe coupée par un redémarrage du poste :
+elle ne compte pas.
+
+## Relance du tri (2026-10-01)
 
 Pile locale du tri (proxy 48422, API 48303, Vite 5194), bureaux du jeu `editeur`, un worker. Après les relances, les deux
 bureaux sont propres : aucune règle de test, aucun client, pause globale levée (relu en base).

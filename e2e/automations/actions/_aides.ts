@@ -272,9 +272,10 @@ function memeConfig(a: Record<string, unknown> | null, b: Record<string, unknown
 
 /**
  * Attend que l'étape porte EXACTEMENT cette configuration en base.
- * (Une action choisie dans le tiroir est d'abord enregistrée avec ses valeurs
- * de départ, 3 s plus tard ; ce qu'on saisit ensuite suit à l'enregistrement
- * de l'étape.) En cas d'écart, l'erreur montre la dernière valeur lue.
+ * (Une action choisie dans le tiroir n'est PAS dans le parcours tant que son
+ * panneau n'a pas été enregistré — correctif 3b739958 ; c'est « Enregistrer »
+ * qui l'y fait entrer, et l'enregistrement automatique l'écrit 3 s plus tard.)
+ * En cas d'écart, l'erreur montre la dernière valeur lue.
  */
 export async function attendreConfig(bureau: Bureau, id: string, config: Record<string, unknown>, idEtape = 'e1', delaiMs = 150_000): Promise<EtapeBase[]> {
   return attendre(() => etapesEnBase(bureau, id), (e) => memeConfig(configDe(e, idEtape), config), delaiMs, 500);
@@ -308,13 +309,50 @@ export async function ouvrirTiroir(page: Page, en = false): Promise<Locator> {
   return t;
 }
 
-/** Ajoute une action par le tiroir : son panneau s'ouvre. */
+/**
+ * Choisit une action dans le tiroir : son panneau s'ouvre, le canevas montre sa carte.
+ * L'étape n'est PAS encore dans le parcours (ni en base) : elle n'y entre qu'au clic
+ * sur « Enregistrer » de ce panneau — voir `enregistrerEtape`.
+ */
 export async function ajouterAction(page: Page, titre: string, en = false): Promise<Locator> {
   await ouvrirTiroir(page, en);
   await itemTiroir(page, titre).click();
   const p = panneauEtape(page);
   await expect(p).toBeVisible();
   return p;
+}
+
+/**
+ * « Enregistrer » dans le panneau d'une étape : le panneau se ferme. Pour une étape
+ * choisie dans le tiroir, c'est CE clic qui la fait entrer dans le parcours.
+ */
+export async function enregistrerEtape(p: Locator, en = false): Promise<void> {
+  await expect(boutonEnregistrer(p, en)).toBeEnabled();
+  await boutonEnregistrer(p, en).click();
+  await expect(p).toBeHidden();
+}
+
+/**
+ * Écoute les ÉCRITURES de l'éditeur sur une règle (PATCH de l'enregistrement automatique,
+ * POST de publication…). Rend la liste, qui se remplit au fil des requêtes : un test qui
+ * affirme « rien ne part au serveur » la lit après avoir laissé passer le délai de
+ * l'enregistrement automatique (3 s).
+ */
+export function ecrituresVers(page: Page, idRegle: string): string[] {
+  const vues: string[] = [];
+  page.on('request', (r) => {
+    if (r.method() !== 'GET' && r.url().includes(`/api/automations/rules/${idRegle}`)) vues.push(`${r.method()} ${new URL(r.url()).pathname}`);
+  });
+  return vues;
+}
+
+/**
+ * Laisse passer le temps de l'enregistrement automatique (3 s après une modification du
+ * parcours), avec de la marge. Seul délai fixe du lot : il sert à prouver une ABSENCE
+ * (aucune écriture ne part), ce qu'aucun état d'écran ne permet d'attendre.
+ */
+export async function laisserPasserLEnregistrementAuto(page: Page, ms = 5_500): Promise<void> {
+  await page.waitForTimeout(ms);
 }
 
 /** Un champ du panneau par son libellé de catalogue (« * » si obligatoire, « (facultatif) » sinon). */

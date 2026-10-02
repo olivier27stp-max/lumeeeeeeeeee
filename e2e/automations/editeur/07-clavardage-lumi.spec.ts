@@ -15,6 +15,7 @@ import {
   test, expect, DELAI_TEST,
   CAPTURES, creerParcours, troisTextos, texto, ouvrirEditeur, cartes, barre, indicateur, attendreEnregistre,
   attendreRegle, corpsDuFil, toasts, dialogue, tiroirActions, panneauEtape,
+  aucuneEcriture, rendreIncomplet, troisTextosEtUneIncomplete, carte,
 } from './_aides';
 
 test.describe.configure({ timeout: DELAI_TEST });
@@ -248,7 +249,7 @@ test.describe('Lumi — ce que l’éditeur fait d’une proposition (réponse s
     expect(base.is_active).toBe(false);
   });
 
-  test('[EDT-137] sur une automatisation PUBLIÉE, Lumi ne remplace pas le parcours en ligne sans question, et ne dit pas « en pause » (S-03) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-137] sur une automatisation PUBLIÉE, Lumi ne remplace pas le parcours en ligne sans question, et ne dit pas « en pause » (S-03)', async ({ page, bureau, marque }) => {
     const r = await creerParcours(bureau, `${marque} lumi publiée`, troisTextos(), { is_active: true });
     await page.route('**/api/automations/rules/generer', (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(proposition(marque, { nom: `${marque} lumi publiée` })) }));
@@ -269,9 +270,47 @@ test.describe('Lumi — ce que l’éditeur fait d’une proposition (réponse s
     expect.soft(texte, 'le toast dit « en pause, à publier » alors que l’automatisation est publiée').not.toContain('en pause');
     expect(remplace && base?.is_active === true && !aDemande,
       'le parcours d’une automatisation PUBLIÉE a été remplacé et enregistré sans aucune confirmation').toBe(false);
+
+    /* AJOUTÉ à la revérification du 2026-10-02 (correctif 8174ff74) — les attentes ci-dessus sont celles
+       d'origine, inchangées. Ce qui suit prouve la question elle-même : son texte, que RIEN n'est écrit tant
+       qu'on n'a pas répondu, que « Annuler » laisse le parcours en ligne intact, et que « Appliquer » le
+       remplace en le disant sans « en pause ». */
+    const TROIS = ['Envoyer un texto | Texto ALPHA', 'Envoyer un texto | Texto BRAVO', 'Envoyer un texto | Texto CHARLIE'];
+    await expect(dialogue(page).getByRole('heading', { name: 'Appliquer les changements de Lumi ?' })).toBeVisible();
+    await expect(dialogue(page)).toContainText('Cette automatisation est en ligne : appliquer les changements de Lumi ?');
+    await expect(dialogue(page)).toContainText('Relance de devis : un texto après 2 jours.');
+    await expect(dialogue(page)).toContainText('Ils s’appliqueront dès le prochain déclenchement. Sans votre accord, le parcours en ligne ne change pas.');
+    // Question à l'écran, sans réponse : 6 s (deux fois le délai de l'enregistrement automatique) sans aucune écriture.
+    await aucuneEcriture(page);
+    expect(await cartes(page), 'la proposition est déjà sur le canevas avant la réponse').toEqual(TROIS);
+    expect((await lireRegle(bureau, r.id))?.updated_at, 'la règle a été écrite avant la réponse à la question').toBe(r.updated_at);
+    expect(await corpsDuFil(bureau, r.id)).toEqual(['Texto ALPHA', 'Texto BRAVO', 'Texto CHARLIE']);
+
+    // « Annuler » : rien n'est appliqué, c'est dit, le parcours en ligne est intact.
+    await dialogue(page).getByRole('button', { name: 'Annuler' }).click();
+    await expect(toasts(page).filter({ hasText: 'Changements de Lumi non appliqués : le parcours en ligne est inchangé.' })).toBeVisible();
+    expect(await cartes(page)).toEqual(TROIS);
+    await aucuneEcriture(page);
+    await expect(indicateur(page)).toHaveText('Enregistré');
+    const apresRefus = await lireRegle(bureau, r.id);
+    expect(apresRefus?.updated_at).toBe(r.updated_at);
+    expect(apresRefus?.is_active).toBe(true);
+
+    // Même demande, « Appliquer » : le parcours de Lumi est mis en ligne, et le message ne dit pas « en pause ».
+    await champ(page).fill(DEMANDE);
+    await page.getByRole('button', { name: /^(Construire|Envoyer)$/ }).click();
+    await expect(dialogue(page).getByRole('heading', { name: 'Appliquer les changements de Lumi ?' })).toBeVisible({ timeout: 30_000 });
+    await dialogue(page).getByRole('button', { name: 'Appliquer', exact: true }).click();
+    await expect(toasts(page).filter({ hasText: 'Changements de Lumi appliqués — l’automatisation est en ligne : ils valent dès le prochain déclenchement.' })).toBeVisible();
+    await expect(toasts(page).filter({ hasText: /en pause/ })).toHaveCount(0);
+    expect(await cartes(page)).toEqual(['Attendre | 2 jour(s)', 'Envoyer un texto | Texto de LUMI']);
+    await attendreEnregistre(page, 90_000);
+    const applique = await attendreRegle(bureau, r.id, (x) => JSON.stringify(x.steps).includes('Texto de LUMI'), 60_000);
+    expect(applique.is_active).toBe(true);
+    expect(JSON.stringify(applique.steps)).not.toContain('Texto ALPHA');
   });
 
-  test('[EDT-139] « Ouvrir » sur le toast de la 2e automatisation, réseau lent : chacune garde SON parcours et SON nom (S-01) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-139] « Ouvrir » sur le toast de la 2e automatisation, réseau lent : chacune garde SON parcours et SON nom (S-01)', async ({ page, bureau, marque }) => {
     const r = await creerParcours(bureau, `${marque} première`, [texto('e1', 'Texto ALPHA', null)]);
     await page.route('**/api/automations/rules/generer', (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(proposition(marque, {
@@ -307,6 +346,88 @@ test.describe('Lumi — ce que l’éditeur fait d’une proposition (réponse s
     expect(JSON.stringify(deuxiemeApres?.steps)).not.toContain('Texto de LUMI');
     expect(JSON.stringify(premiereApres?.steps), 'le parcours que Lumi venait de poser dans la 1re n’a jamais été enregistré').toContain('Texto de LUMI');
     expect(await cartes(page)).toEqual(['Envoyer un texto | Texto de la DEUXIÈME']);
+    // AJOUTÉ à la revérification du 2026-10-02 (073e719f) : la 1re garde aussi SON nom, SON déclencheur, et rien de la 2e.
+    expect(premiereApres?.name).toBe(`${marque} première`);
+    expect(premiereApres?.trigger_event).toBe('quote.sent');
+    expect(JSON.stringify(premiereApres?.steps)).not.toContain('Texto de la DEUXIÈME');
+    expect(deuxiemeApres?.trigger_event).toBe('client.replied');
+    expect((deuxiemeApres?.steps ?? []).length).toBe(1);
+    // … et l'éditeur de la 2e reste utilisable : aucune écriture retardataire de la 1re n'y arrive après coup.
+    await aucuneEcriture(page);
+    const deuxiemeEnfin = await lireRegle(bureau, deuxieme.id);
+    expect(deuxiemeEnfin?.name).toBe(`${marque} deuxième`);
+    expect(deuxiemeEnfin?.updated_at).toBe(deuxiemeApres?.updated_at);
+  });
+
+  /*
+   * AJOUTÉ à la revérification du 2026-10-02 — constat A-01 (correctif 2b27e032), le « bug n° 1 » du
+   * propriétaire : « Lumi dit avoir changé le message, rien ne change ». Aucun test du dossier ne le portait.
+   * Le panneau d'étape resté ouvert gardait l'ancien texte, et son « Enregistrer » le remettait par-dessus
+   * celui de Lumi. Comportement décidé : rien de tapé → le panneau prend la version de Lumi ; saisie en cours
+   * → un bandeau le dit, laisse choisir, et « Enregistrer » attend ce choix.
+   */
+  test('[EDT-137][EDT-037] Lumi réécrit le message d’une étape dont le panneau est OUVERT : sans saisie le panneau prend son texte ; avec une saisie en cours il le dit et laisse choisir (A-01)', async ({ page, bureau, marque }) => {
+    const nom = `${marque} lumi panneau ouvert`;
+    const r = await creerParcours(bureau, nom, [texto('e1', 'Texto ALPHA', null)]);
+    const versions = ['Texto de LUMI un', 'Texto de LUMI deux', 'Texto de LUMI trois'];
+    let demandes = 0;
+    await page.route('**/api/automations/rules/generer', (route) => {
+      const corps = versions[Math.min(demandes, versions.length - 1)];
+      demandes += 1;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        nom, trigger_event: 'quote.sent', resume: `Message du texto changé (${demandes}).`,
+        steps: [{ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: corps } }, suivant: null }],
+      }) });
+    });
+    await ouvrirEditeur(page, r.id);
+    const zone = panneauEtape(page).getByLabel(/Texte du message/);
+    const enregistrer = panneauEtape(page).getByRole('button', { name: 'Enregistrer' });
+    const alerte = panneauEtape(page).getByRole('alert');
+    const demander = async () => {
+      await champ(page).fill('Change le message du texto, plus chaleureux.');
+      await page.getByRole('button', { name: /^(Construire|Envoyer)$/ }).click();
+    };
+
+    // ── 1. Le geste exact du propriétaire : panneau ouvert, rien de tapé, on demande à Lumi, puis « Enregistrer ».
+    await carte(page, 'Texto ALPHA').click();
+    await expect(zone).toHaveValue('Texto ALPHA');
+    await demander();
+    await expect(zone, 'le panneau resté ouvert garde l’ancien texte alors que Lumi l’a changé').toHaveValue('Texto de LUMI un', { timeout: 30_000 });
+    expect(await cartes(page)).toEqual(['Envoyer un texto | Texto de LUMI un']);
+    await expect(alerte).toHaveCount(0);
+    await enregistrer.click();
+    await attendreEnregistre(page, 90_000);
+    expect(await corpsDuFil(bureau, r.id), '« Enregistrer » du panneau a remis l’ancien texte par-dessus celui de Lumi').toEqual(['Texto de LUMI un']);
+
+    // ── 2. Une saisie est en cours dans le panneau quand Lumi change la même étape : rien n'est écrasé, on choisit.
+    await carte(page, 'Texto de LUMI un').click();
+    await zone.fill('Ma version tapée à la main');
+    await demander();
+    await expect(alerte).toContainText('Lumi a modifié cette étape pendant que vous l’éditiez.', { timeout: 30_000 });
+    await expect(alerte).toContainText('Rien n’est écrasé : choisissez la version à garder.');
+    await page.screenshot({ path: `${CAPTURES}/edt-a01-lumi-pendant-la-saisie.png` });
+    await expect(zone).toHaveValue('Ma version tapée à la main');
+    expect(await cartes(page)).toEqual(['Envoyer un texto | Texto de LUMI deux']);
+    await expect(enregistrer).toBeDisabled();
+    await expect(panneauEtape(page).getByText('Choisissez d’abord quelle version garder.')).toBeVisible();
+    await alerte.getByRole('button', { name: 'Voir la version de Lumi' }).click();
+    await expect(zone).toHaveValue('Texto de LUMI deux');
+    await expect(alerte).toHaveCount(0);
+    await expect(enregistrer).toBeEnabled();
+
+    // ── 3. Même situation, « Garder ma version » : c'est elle qui s'enregistre, en connaissance de cause.
+    await zone.fill('Ma version, gardée');
+    await demander();
+    await expect(alerte).toContainText('Lumi a modifié cette étape pendant que vous l’éditiez.', { timeout: 30_000 });
+    expect(await cartes(page)).toEqual(['Envoyer un texto | Texto de LUMI trois']);
+    await alerte.getByRole('button', { name: 'Garder ma version' }).click();
+    await expect(alerte).toHaveCount(0);
+    await expect(zone).toHaveValue('Ma version, gardée');
+    await enregistrer.click();
+    expect(await cartes(page)).toEqual(['Envoyer un texto | Ma version, gardée']);
+    await attendreEnregistre(page, 90_000);
+    expect(await corpsDuFil(bureau, r.id)).toEqual(['Ma version, gardée']);
+    expect(demandes).toBe(3);
   });
 });
 
@@ -338,14 +459,13 @@ test.describe('Lumi — forfait sans Lumi', () => {
   });
 
   test('[EDT-023] « Voir Autopilot » avec une étape incomplète en cours : on demande avant de quitter (S-14) @defaut', async ({ page, bureau, marque }) => {
-    const r = await creerParcours(bureau, `${marque} sans lumi incomplet`, troisTextos());
+    /* L'état « étape incomplète » ne s'obtient plus par le tiroir (3b739958) : le parcours de départ en porte
+       une, et un texto réécrit ne peut pas s'enregistrer (voir `rendreIncomplet`). L'attente est inchangée. */
+    const r = await creerParcours(bureau, `${marque} sans lumi incomplet`, troisTextosEtUneIncomplete());
     await sansLumi(page);
     await ouvrirEditeur(page, r.id);
     await expect(page.getByText('Construire avec Lumi — inclus dans Autopilot')).toBeVisible({ timeout: 60_000 });
-    await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
-    await tiroirActions(page).getByRole('button', { name: /^Ajouter une étiquette/ }).click();
-    await panneauEtape(page).getByRole('button', { name: 'Fermer le panneau' }).click();
-    await expect(indicateur(page)).toHaveText('1 étape(s) à compléter');
+    await rendreIncomplet(page);
     await page.getByRole('button', { name: 'Voir Autopilot' }).click();
     await page.screenshot({ path: `${CAPTURES}/edt-s14-voir-autopilot-incomplet.png` });
     await expect(dialogue(page).getByRole('heading', { name: 'Quitter sans enregistrer ?' }),

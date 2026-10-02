@@ -17,7 +17,7 @@ test.describe('pause globale du bureau', () => {
       .update({ automations_paused: false, automations_paused_at: null, automations_paused_by: null }).eq('org_id', bureau.orgA);
   });
 
-  test('[EDT-018][EDT-019] bureau en pause : l’éditeur d’une automatisation publiée le signale (S-32) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-018][EDT-019] bureau en pause : l’éditeur d’une automatisation publiée le signale (S-32)', async ({ page, bureau, marque }) => {
     const r = await creerParcours(bureau, `${marque} pause globale`, troisTextos(), { is_active: true });
     const { data: pose, error } = await bureau.admin.from('company_settings')
       .update({ automations_paused: true, automations_paused_at: new Date().toISOString(), automations_paused_by: bureau.comptes.proprioA.id })

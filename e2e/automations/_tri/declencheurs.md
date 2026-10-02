@@ -1,7 +1,14 @@
-# declencheurs — 47 échecs à la passe, après tri : 28 défauts, 13 specs réparées, 0 environnement, 6 fragiles
+# declencheurs — 123 tests : 109 verts, 14 rouges `@defaut` (revérification du 2026-10-02, après les correctifs de `mission/auto-finale-u`)
+
+État au 2026-10-02 (arbre `D:/lume-uiaudit/wt-verif`, produit corrigé jusqu'à `b575a7ad`) : **109 verts / 14 rouges `@defaut` / 0 rouge sans
+marque**. La passe complète a donné 108 / 14 / 1 : le rouge sans marque (`07-libelles-declencheurs:73`) était une panne du poste
+(`ERR_NO_BUFFER_SPACE` sur l'image d'un avatar), vert rejoué seul. 14 défauts sont fermés par les correctifs (les 10 « majeurs »
+du lot et 4 mineurs) — voir « Revérification du 2026-10-02 » en bas, et « Défauts corrigés depuis ».
+
+Avant les correctifs (tri du 2026-10-01) : 47 échecs à la passe, après tri : 28 défauts, 13 specs réparées, 0 environnement, 6 fragiles.
 
 Passe d'origine : 123 tests du dossier, 76 verts, 47 rouges (`sorties/e2e-local/passe1.txt`).
-Dernière relance (dossier entier, un worker, pile locale du tri, bureaux du jeu `declencheurs`) : voir « Dernière relance » en bas.
+Dernière relance (dossier entier, un worker, pile locale, bureaux du jeu `declencheurs`) : voir « Revérification du 2026-10-02 » en bas.
 
 À savoir avant de lire : ce matin, 6 des 123 tests seulement avaient tourné jusqu'au bout (`sorties/declencheurs/a-relancer.md` :
 « 123 tests écrits, 6 exécutés »). Les tests SANS marque qui tombaient n'avaient donc jamais été vus verts, et les tests
@@ -10,46 +17,58 @@ qu'il fait réellement aujourd'hui.
 
 ## Défauts du produit encore ouverts
 
-28 tests, tous marqués `@defaut`, rouges à la passe ET à ma relance, sur l'attente qui décrit le défaut (pas sur un
-sélecteur vieilli). Aucun n'a de numéro au tableau des constats (§ 8 de `AUTOMATIONS_UI_AUDIT.md`), sauf le dernier (liste-12).
+14 tests, tous marqués `@defaut`, rouges à la passe du 2026-10-02 sur l'attente qui décrit le défaut (pas sur un
+sélecteur vieilli). Tous « mineur » ou « cosmétique » : les 10 « majeurs » du tri du 2026-10-01 sont fermés (section suivante).
+Aucun n'a de numéro au tableau des constats (§ 8 de `AUTOMATIONS_UI_AUDIT.md`), sauf le dernier (liste-12).
+Les numéros de ligne sont ceux des specs au 2026-10-02 (ils ont bougé avec les tests adaptés).
 
 | Identifiants | Spec:ligne | Écran | Ce qu'on fait | Ce qu'on voit | Ce qu'on devrait voir | Gravité |
 |---|---|---|---|---|---|---|
-| EDT-064, EDT-073 | 03-panneau-declencheur:62 | Éditeur › panneau « Réglages du déclencheur » | On tape dans « Quelle étiquette », puis on clique la croix « Fermer » | Le panneau se ferme, la saisie est perdue, aucune question | La question « Fermer sans enregistrer ? », comme le panneau d'étape | mineur |
-| EDT-074 | 03-panneau-declencheur:90 | Même panneau, bouton « Enregistrer » | On clique « Enregistrer » pendant que le serveur tarde à répondre | Le bouton reste actif et identique : rien ne dit que ça enregistre, on peut recliquer | Bouton désactivé (ou « Enregistrement… ») le temps de l'appel, une seule écriture | mineur |
-| EDT-082, EDT-072, DEC-25 | 03-panneau-declencheur:166 | Panneau de « Date atteinte » | On ouvre les réglages d'une automatisation dont le champ date surveillé a été supprimé | La carte dit « champ supprimé », mais le panneau montre « — Choisir une date — » sans un mot | Le panneau dit que le champ n'existe plus (ou affiche l'avertissement « Sans « Quelle date surveiller »… ») | mineur |
-| EDT-081, DEC-26 | 03-panneau-declencheur:193 | Panneau de « Opportunité entre dans une étape » | On ouvre les réglages d'une automatisation dont l'étape visée a été supprimée | La carte dit « étape supprimée », le panneau affiche « — Toutes les étapes — » | Le panneau signale que l'étape n'existe plus | mineur |
-| EDT-084 | 03-panneau-declencheur:262 | Panneau du déclencheur, champs « Quelle étiquette », « Seulement si le client a / n'a PAS l'étiquette » | On tape une étiquette de plus de 200 caractères | La saisie n'est pas bornée (pas de longueur maximale) ; le refus n'arrive qu'à l'enregistrement (message du serveur, clair et en français) | Une saisie bornée à ce que le serveur accepte | cosmétique |
-| EDT-077, DEC-02 | 03-panneau-declencheur:316 | Panneau de « Devis ouvert par le client » | On saisit un montant minimum de 5 000 $ et un maximum de 100 $ (ou un minimum de −5 $), puis « Enregistrer » | « Réglages enregistrés » : la plage impossible est enregistrée telle quelle — l'automatisation ne partira jamais, sans un mot | Un refus qui explique (minimum plus grand que le maximum ; montant négatif) | majeur |
-| EDT-077, DEC-25 | 03-panneau-declencheur:335 | Panneau de « Date atteinte », champ « Combien de jours avant » | On saisit 9999 puis « Enregistrer » | Le panneau ne dit rien et laisse « Enregistrer » actif : la saisie part au serveur, qui la refuse (400, message « … entre -365 et 365 » en toast). Rien n'est enregistré | Le panneau refuse lui-même, avec la borne dite en clair (« entre -365 et 365 »), avant tout envoi au serveur — règle tranchée par la session qui corrige les écrans | mineur |
-| EDT-074, DEC-18, S-02 | 03-panneau-declencheur:533 | Panneau de « Étiquette ajoutée », sur une automatisation qui porte encore les réglages d'un ancien déclencheur (« mois », « au plus par heure ») | On remplit « Quelle étiquette » et on enregistre | Les réglages invisibles de l'ancien déclencheur restent dans la règle (`mois`, `max_par_heure`) | Après enregistrement, la règle ne porte que ce que le panneau montre | mineur — à décider (voir note 1) |
-| EDT-077, DEC-20 | 03-panneau-declencheur:581 | Panneau de « Client inactif » (bureau au drapeau `auto_client_inactif`) | On saisit 0, 61 ou 2,5 dans « Aucun job terminé depuis (mois) », puis « Enregistrer » | Les trois valeurs sont enregistrées telles quelles | Un refus avec l'explication (nombre entier de mois, bornes annoncées 1 à 60) | majeur (sous drapeau) |
-| EDT-071, DEC-06, S-08 | 03-panneau-declencheur:647 | Onglet « Réglages » d'une automatisation « Facture envoyée » dont la case « Arrêter si la facture est payée ou annulée » est DÉCOCHÉE (bureau au drapeau `auto_sortie_parcours`) | On bascule « Jours ouvrables seulement » | En base, le réglage de la case a disparu (`settings.arreter_si_resolu` absent) : elle redevient « cochée par défaut » | La case reste décochée : un changement dans « Réglages » ne touche pas aux réglages du déclencheur | majeur (sous drapeau) |
+| EDT-064, EDT-073 | 03-panneau-declencheur:77 | Éditeur › panneau « Réglages du déclencheur » | On tape dans « Quelle étiquette », puis on clique la croix « Fermer » | Le panneau se ferme, la saisie est perdue, aucune question | La question « Fermer sans enregistrer ? », comme le panneau d'étape | mineur |
+| EDT-074 | 03-panneau-declencheur:105 | Même panneau, bouton « Enregistrer » | On clique « Enregistrer » pendant que le serveur tarde à répondre | Le bouton reste actif et identique : rien ne dit que ça enregistre, on peut recliquer | Bouton désactivé (ou « Enregistrement… ») le temps de l'appel, une seule écriture | mineur |
+| EDT-082, EDT-072, DEC-25 | 03-panneau-declencheur:181 | Panneau de « Date atteinte » | On ouvre les réglages d'une automatisation dont le champ date surveillé a été supprimé | La carte dit « champ supprimé », mais le panneau montre « — Choisir une date — » sans un mot | Le panneau dit que le champ n'existe plus (ou affiche l'avertissement « Sans « Quelle date surveiller »… ») | mineur |
+| EDT-081, DEC-26 | 03-panneau-declencheur:208 | Panneau de « Opportunité entre dans une étape » | On ouvre les réglages d'une automatisation dont l'étape visée a été supprimée | La carte dit « étape supprimée », le panneau affiche « — Toutes les étapes — » | Le panneau signale que l'étape n'existe plus | mineur |
+| EDT-084 | 03-panneau-declencheur:277 | Panneau du déclencheur, champs « Quelle étiquette », « Seulement si le client a / n'a PAS l'étiquette » | On tape une étiquette de plus de 200 caractères | La saisie n'est pas bornée (pas de longueur maximale) ; le refus n'arrive qu'à l'enregistrement (message du serveur, clair et en français) | Une saisie bornée à ce que le serveur accepte | cosmétique |
+| EDT-074, DEC-18, S-02 | 03-panneau-declencheur:566 | Panneau de « Étiquette ajoutée », sur une automatisation qui porte encore les réglages d'un ancien déclencheur (« mois », « au plus par heure ») | On remplit « Quelle étiquette » et on enregistre | Les réglages invisibles de l'ancien déclencheur restent dans la règle (`mois`, `max_par_heure`) | Après enregistrement, la règle ne porte que ce que le panneau montre | mineur — à décider (voir note 1) |
 | EDT-090, EDT-074 | 04-filtres-conditions:406 | Panneau du déclencheur › section « Filtres » | On ajoute une condition « QA Nombre = » sans valeur, puis « Enregistrer » | « Réglages enregistrés » ; la ligne a été retirée sans que rien ne le dise | Un signalement de la ligne incomplète avant que le panneau se ferme | mineur |
-| EDT-091 | 04-filtres-conditions:418 | Section « Filtres », valeur d'un champ nombre | On tape au clavier 1, 2, point, 5 ; plus tard, des lettres | Le champ affiche « 125 » (le point disparaît) et c'est 125 qui est enregistré ; des lettres affichent « NaN » | « 12.5 » reste 12,5 ; des lettres ne donnent jamais « NaN » | majeur |
-| EDT-093 | 04-filtres-conditions:441 | Section « Filtres », opérateur « est l'un de » sur une liste | On choisit un champ liste dont une option a été archivée | L'option archivée (« Retirée ») est encore proposée | Seules les options actives | mineur |
+| EDT-093 | 04-filtres-conditions:476 | Section « Filtres », opérateur « est l'un de » sur une liste | On choisit un champ liste dont une option a été archivée | L'option archivée (« Retirée ») est encore proposée | Seules les options actives | mineur |
 | EDT-120 | 05-etapes-controle:220 | Canevas, carte d'une étape « Attendre » en mode « La réponse du client » | On regarde la carte | « Attendre 3 jour(s) », comme une attente simple | La carte dit qu'on attend la réponse du client (le parcours s'arrête s'il répond) | mineur |
 | EDT-118, EDT-119, EDT-120, DEC-11 | 05-etapes-controle:276 | Carte d'une étape « Attendre », mode « Ce délai AVANT le rendez-vous » | On règle 45 minutes avant le rendez-vous et on enregistre | La carte dit « 1 heure(s) avant le rendez-vous » (la base porte bien 45 minutes) | « 45 minute(s) avant le rendez-vous » | mineur |
-| EDT-118, EDT-119 | 05-etapes-controle:290 | Panneau d'une étape « Attendre » réglée à 3 jours | On efface le 3 et on tape 5 | Le champ montre « 05 », l'unité est passée à « minutes », et c'est 5 minutes qui sont enregistrées | 5 jours : l'unité choisie reste | majeur |
-| EDT-119 | 05-etapes-controle:313 | Panneau d'une étape « Attendre » | À 0, on choisit l'unité « jours » ; sur une attente de 1 heure, on tape 24 | À 0, l'unité revient à « minutes » ; « 24 heures » devient « 1 » « jours » | L'unité et le nombre restent ceux qu'on a saisis | mineur |
-| EDT-118 | 05-etapes-controle:338 | Panneau d'une étape « Attendre » | On saisit 400 jours, ou 45 jours « avant le rendez-vous » | « Enregistrer » reste offert, aucune limite n'est annoncée ; le parcours entier est refusé plus tard par le serveur | Le panneau retient la saisie et dit la limite (un an ; 30 jours avant un rendez-vous) | mineur |
-| EDT-118 | 05-etapes-controle:373 | Panneau d'une étape « Attendre », automatisation dont la fenêtre d'envoi est réglée de 9 h à 17 h | On lit l'aide sous le délai | « Les messages ne partent jamais entre 20 h et 8 h… » | L'aide suit la fenêtre réglée pour cette automatisation (« entre 17 h et 9 h ») | mineur |
-| EDT-125 | 05-etapes-controle:470 | Panneau d'une étape « Si… », zone « Conditions » | On écrit « montant 5000 » (sans signe) et « statut = » (sans valeur) | Rien n'est signalé, « Enregistrer » reste offert : les lignes sont jetées, la condition part vide et le parcours suit toujours « si oui » | La ligne illisible est signalée, ou l'enregistrement est retenu | majeur |
-| EDT-125 | 05-etapes-controle:486 | Même zone | On écrit 11 conditions, ou une valeur de 300 caractères | « Enregistrer » reste offert (le serveur en accepte 10, et 200 caractères) | Le panneau retient la saisie et dit la limite | mineur |
-| EDT-125 | 05-etapes-controle:501 | Panneau d'une étape « Si… » dont les conditions sont du type « est l'un de » (posées par Lumi ou un modèle) | On ouvre l'étape (la carte annonce « 2 condition(s) »), on ajoute une condition, on enregistre | La zone « Conditions » est vide ; après enregistrement, les deux conditions d'origine ont disparu de la règle | Les conditions existantes sont affichées, et survivent à une modification | majeur |
+| EDT-118 | 05-etapes-controle:396 | Panneau d'une étape « Attendre », automatisation dont la fenêtre d'envoi est réglée de 9 h à 17 h | On lit l'aide sous le délai | « Les messages ne partent jamais entre 20 h et 8 h… » | L'aide suit la fenêtre réglée pour cette automatisation (« entre 17 h et 9 h ») | mineur |
+| EDT-125 | 05-etapes-controle:529 | Panneau d'une étape « Si… », zone « Conditions » | On écrit 11 conditions, ou une valeur de 300 caractères | « Enregistrer » reste offert (le serveur en accepte 10, et 200 caractères) | Le panneau retient la saisie et dit la limite | mineur |
 | EDT-018, EDT-022, DEC-25 | 06-publication-declencheur:70 | Éditeur, bandeau « 1 chose à corriger avant de publier » | On clique le problème du déclencheur (« Date atteinte » : « Quelle date surveiller » doit être rempli…) | C'est un texte, pas un bouton : rien ne s'ouvre | Le clic ouvre les réglages du déclencheur, comme un problème d'étape ouvre l'étape | mineur |
-| EDT-018, EDT-082, DEC-25 | 06-publication-declencheur:109 | Éditeur, interrupteur « Publier l'automatisation », « Date atteinte » sur un champ date supprimé | On clique l'interrupteur | La question « Publier cette automatisation ? » s'ouvre, alors que la carte dit « champ supprimé » | Un refus qui dit quoi corriger : cette automatisation ne partirait jamais | majeur |
-| EDT-018, DEC-25, S-09 | 06-publication-declencheur:149 | Éditeur, « Date atteinte » sur un champ date du PIPELINE + étape « Assigner l'opportunité » | On ouvre le tiroir d'actions, l'étape, puis on veut publier | Le tiroir offre l'action et le panneau ne lui reproche rien, mais un bandeau rouge dit « … ne peut pas suivre ce déclencheur » et la publication est refusée | Ce que l'éditeur laisse bâtir se publie : pas de bandeau, la question « Publier cette automatisation ? » | majeur |
-| EDT-018, DEC-25, S-09 | 06-publication-declencheur:181 | Même cas, par l'API de publication | `POST …/publication { actif: true }` | 422 « Publication refusée : « Assigner l'opportunité » ne peut pas suivre ce déclencheur. » | 200 : c'est bien une opportunité que ce déclencheur fait arriver | majeur (même défaut que la ligne du dessus, côté serveur) |
-| DEC-24, S-09 | 06-publication-declencheur:191 | Tiroir « Actions » d'une automatisation « Appel reçu de l'extérieur » | On ouvre le tiroir | « Envoyer la facture », « Envoyer le devis », « Changer le statut du rendez-vous », « Déplacer / Modifier / Assigner l'opportunité » sont offertes | Ces six actions grisées, avec la raison (l'appel n'apporte ni facture, ni devis, ni rendez-vous, ni opportunité) | mineur |
 | LST-070, DEC-15 (liste-12) | 07-libelles-declencheurs:53 | Liste des automatisations, ligne « Anniversaire client » | On lit la ligne sous le nom | « Nouveau prospect · 12 mois après » | Un nom ou un déclencheur qui dise ce qui se passe vraiment | mineur — décision de produit, « NON FAIT » au tableau des constats |
 
-Note 1 — 03:533. `PanneauDeclencheur.enregistrer` repart exprès des conditions existantes (commentaire du 2026-09-24 : « une règle
+Note 1 — 03:566 (03:533 au tri du 2026-10-01). `PanneauDeclencheur.enregistrer` repart exprès des conditions existantes (commentaire du 2026-09-24 : « une règle
 peut porter des conditions qui ne viennent pas de ce panneau »). Depuis #859, changer de déclencheur nettoie ces clés (les deux
 tests voisins sont verts) : il ne reste que les règles déjà polluées AVANT #859, que le panneau ne répare pas. Dans le doute,
 laissé en défaut.
 
 ## Défauts corrigés depuis (marqueur @defaut retiré)
+
+### Fermés par les correctifs de `mission/auto-finale-u` — revérifiés au vrai navigateur le 2026-10-02 (14)
+
+« Ligne d'alors » = la ligne du tri du 2026-10-01 (celle de `D:/lume-final/notes/U-corrections.md`) ; « ligne » = celle de la spec aujourd'hui.
+Chacun était vert dès la passe « tel quel » (specs non modifiées, produit corrigé), sauf 05:501 et 05:338 (voir « Comment »).
+
+| Ligne d'alors → ligne | Gravité d'alors | Ce qui est corrigé (vu à l'écran et en base) | Par | Comment le marqueur est tombé |
+|---|---|---|---|---|
+| 03-panneau-declencheur:316 → :333 | majeur | Minimum 5 000 $ / maximum 100 $, minimum de −5 $, maximum de −0,01 $ : « Enregistrer » reste cliquable, le clic n'envoie rien, le panneau écrit « « Montant minimum ($) » est plus grand que « Montant maximum ($) » : rien ne peut remplir les deux… » ou « … doit être au moins 0. » ; base inchangée ; la plage remise à l'endroit s'enregistre | f6a70824 | Vert tel quel. Attentes durcies ensuite (phrase exacte, aucune écriture, base égale à celle d'avant) : vert |
+| 03-panneau-declencheur:335 → :365 | mineur | 9999, −366 et 2,5 « jours avant » : refus écrit dans le panneau (« … doit être un nombre entier, entre -365 et 365. »), aucun PATCH, base inchangée ; −365 passe | f6a70824 | Vert tel quel (aucun 400 : le moniteur ne relève plus rien). Attentes durcies : vert |
+| 03-panneau-declencheur:581 → :631 | majeur (sous drapeau) | « Client inactif » : 0, 61, 2,5 mois refusés dans le panneau (« … doit être un nombre entier, entre 1 et 60. »), comme 0 « par heure » (« … entre 1 et 1000. ») ; aucun PATCH, base inchangée ; 60 mois / 1 par heure passent | f6a70824 | Vert tel quel. Attentes durcies ; le test affirme maintenant que le drapeau `auto_client_inactif` est posé et que le serveur offre « client.inactive » au bureau B : vert |
+| 03-panneau-declencheur:647 → :710 | majeur (sous drapeau) | Basculer « Jours ouvrables seulement » ne touche plus `settings.arreter_si_resolu = false` ; la case se relit décochée ; et, dans l'autre sens, « Enregistrer » du panneau garde `jours_ouvrables` | d5a5a231 | Vert tel quel. Ajouts : drapeau `auto_sortie_parcours` affirmé en base, case visible avant « décochée », enregistrement du panneau après coup : vert |
+| 04-filtres-conditions:418 → :418 | majeur | Au vrai clavier : « 12.5 » reste « 12.5 » et vaut 12,5 ; « abc » n'écrit rien (ni « NaN ») ; « 1a2b » donne « 12 » ; « - », « -3. », « -3.75 » restent à l'écran pendant la frappe et −3,75 est enregistré ; « 12,5 » (virgule) reste « 12,5 » et vaut 12,5 ; relu « 12.5 » après rechargement | 7ed78a42 | Vert tel quel. Étendu (virgule, négatif, lettres au milieu, rechargement) : vert |
+| 05-etapes-controle:290 → :290 | majeur | « Attendre » 3 jours, effacer, taper 5 : « 5 », « jours », 432 000 s en base | cf1620d4 | Vert tel quel : marqueur retiré, rien d'autre |
+| 05-etapes-controle:313 → :313 | mineur | À 0, « jours » reste « jours » ; « 24 » « heures » reste « 24 » « heures » | cf1620d4 | Vert tel quel : marqueur retiré, rien d'autre |
+| 05-etapes-controle:338 → :338 | mineur | 400 jours, 367 jours, 45 et 31 jours « avant le rendez-vous » : « Enregistrer » désactivé, « Une attente ne peut pas dépasser 366 jours (un an). » / « On peut envoyer au plus 30 jours avant le rendez-vous. » ; 366 jours et 30 jours avant passent | 59ed48b5 | Rouge tel quel sur la SPEC seulement : les deux « Enregistrer » désactivés passaient, la dernière attente tombait en « localisateur strict » (la limite est écrite deux fois : liste à corriger et à côté du bouton). Attente remplacée par la phrase exacte + les bornes 366 / 367 et 30 / 31 : vert |
+| 05-etapes-controle:470 → :513 | majeur | « montant 5000 » et « statut = » : ligne signalée, « Enregistrer » retenu | df770cbc | Vert tel quel : marqueur retiré, rien d'autre |
+| 05-etapes-controle:501 → :544 | majeur | Les deux conditions « est l'un de » / « n'est aucun de » sont affichées (« source est l’un de web, facebook », « statut n’est aucun de perdu ») ; une ligne ajoutée à la fin, elles sont INTACTES en base, champ par champ (`source.in`, `statut.not_in`), la troisième est ajoutée en nombre ; relu après rechargement | df770cbc | Rouge tel quel par construction (le test tapait au DÉBUT de la zone : ligne illisible, « Enregistrer » retenu — ce qui est le comportement décidé). Geste réécrit (clic, fin de zone, Entrée, frappe) : vert |
+| 06-publication-declencheur:109 → :109 | majeur | « Date atteinte » sur un champ date supprimé : la publication est refusée par un message, aucune question « Publier ? », règle restée en brouillon | a8bc4036 | Vert tel quel : marqueur retiré, rien d'autre |
+| 06-publication-declencheur:149 → :149 | majeur | Champ date du PIPELINE + « Assigner l'opportunité » : plus de bandeau rouge, la question « Publier cette automatisation ? » s'ouvre | 163e541c | Vert tel quel : marqueur retiré, rien d'autre |
+| 06-publication-declencheur:181 → :181 | majeur | Le même cas par l'API de publication : 200 | 163e541c | Vert tel quel : marqueur retiré, rien d'autre |
+| 06-publication-declencheur:191 → :191 | mineur | « Appel reçu de l'extérieur » : les six actions sont grisées, avec « Ne va pas avec ce déclencheur » écrit dessous | 09dc78f8 | Vert tel quel. Le titre disait « avec la raison » sans la vérifier : attente ajoutée, vert |
+
+### Fermés avant le tri du 2026-10-01
 
 Neuf étaient verts à la passe (`passe1.txt`) ; je les ai revus verts à ma relance. Seul le marqueur a été retiré du titre.
 
@@ -72,9 +91,9 @@ passe : le défaut est corrigé, le marqueur est retiré (il est compté dans le
 |---|---|---|
 | 01-tiroir-declencheurs:240 | Deux choix de déclencheur rapprochés : c'est le dernier choisi qui reste | #870 (declencheurs-02) |
 
-`03-panneau-declencheur:335` (jours avant hors bornes) n'est PAS dans cette liste : 3bf534a0 a bien fait refuser « 9999 » par le
-serveur (plus rien n'est enregistré), mais la règle du produit demande un refus DANS le panneau, avant l'envoi. Il reste un
-défaut ouvert (tableau du haut), marqueur gardé.
+`03-panneau-declencheur:335` (jours avant hors bornes) n'était PAS dans cette liste au 2026-10-01 : 3bf534a0 avait fait refuser
+« 9999 » par le serveur, mais la règle du produit demande un refus DANS le panneau, avant l'envoi. C'est fait depuis f6a70824
+(tableau du 2026-10-02 ci-dessus).
 
 ## Specs réparées (ce qui avait changé dans le produit, et le commit ou le fichier qui le prouve)
 
@@ -118,9 +137,9 @@ de la passe se sont tous reproduits ou expliqués à l'identique sur les serveur
 
 ## Encore rouge sans conclusion (et pourquoi)
 
-Aucun. Les 28 rouges restants sont les défauts du tableau.
+Aucun. Les 14 rouges restants (2026-10-02) sont les défauts du tableau.
 
-Sur `03-panneau-declencheur:335` : à la passe, il tombait seulement parce que le moniteur relevait le 400 du serveur (ses
+Sur `03-panneau-declencheur:335`, tel qu'écrit le 2026-10-01 (fermé depuis, voir plus haut) : à la passe, il tombait seulement parce que le moniteur relevait le 400 du serveur (ses
 attentes passaient toutes). Il affirme maintenant la règle du produit — avec 9999 jours, « Enregistrer » inactif ou la borne
 « entre -365 et 365 » écrite dans le panneau, aucune écriture partie, base inchangée — et il est rouge sur ces attentes-là
 (le panneau ne refuse pas ; un PATCH part), plus le 400 que le moniteur relève toujours puisqu'il n'est plus déclaré attendu.
@@ -138,7 +157,7 @@ Trois remarques sur le produit, vues en instruisant, qui ne sont portées par au
 3. **03:90 ne va pas au bout de ce qu'il annonce** : il s'arrête à « le bouton n'est pas désactivé » et ne mesure donc pas si
    deux clics produisent deux écritures. Le défaut « rien ne dit que ça enregistre » est établi ; « double écriture » ne l'est pas.
 
-## Dernière relance
+## Relance du tri du 2026-10-01 (avant les correctifs — pour mémoire)
 
 Dossier entier, après toutes les réparations, depuis `D:/lume-uiaudit/wt-e2e` :
 
@@ -155,7 +174,7 @@ est redevenu un `@defaut`. Relancé seul (même commande, `declencheurs/03-panne
 Avant elle : chaque fichier relancé une fois (01 : 11/11 ; 02 : 28/28 ; 03 : 28 passés / 9 ; 04 + 06 : 15 passés / 8 ;
 05 : 9 passés / 9 ; 07 : 5 passés / 1), puis les 10 tests sensibles aux données rejoués avec les données d'un autre lot (10/10).
 
-## Ce que je n'ai pas pu vérifier
+## Ce que je n'ai pas pu vérifier (tri du 2026-10-01 — pour mémoire)
 
 - **Rien n'a tourné sur staging ni en prod** : tout est établi sur la pile locale, code de la PR #889.
 - **01:240 mord-il encore ?** Je n'ai pas le droit de remettre le défaut dans le produit pour le voir retomber. Le raisonnement
@@ -169,3 +188,68 @@ Avant elle : chaque fichier relancé une fois (01 : 11/11 ; 02 : 28/28 ; 03 : 28
   `auto_sortie_parcours` y sont actifs ; je n'ai pas regardé l'état de ces drapeaux en prod.
 - L'en-tête de `01-tiroir-declencheurs.spec.ts` (commentaire, ligne 3) parle encore de « Choisir le déclencheur » : je ne l'ai
   pas retouché après la dernière relance, pour que le fichier sur disque soit celui qui a tourné.
+
+## Revérification du 2026-10-02 (après les correctifs de `mission/auto-finale-u`)
+
+Arbre `D:/lume-uiaudit/wt-verif` (la branche de correction avec `main` fusionné), pile locale, jeu de bureaux `declencheurs`,
+un worker. Table des correctifs : `D:/lume-final/notes/U-corrections.md`. Rien n'a été modifié dans le produit.
+
+### Les trois passes
+
+| Passe | Specs | Produit | Résultat | Journal (`D:/lume-uiaudit/sorties/verif-declencheurs/`) |
+|---|---|---|---|---|
+| « tel quel » | non modifiées | `7a31fa99` (avant 59ed48b5) | 105 verts / 18 rouges : 16 `@defaut` + 2 sans marque (03:297 et 05:394, les deux specs annoncées « à mettre à jour ») ; 12 `@defaut` verts | `passe-0-tel-quel.txt` |
+| fichiers adaptés, un par un | adaptées | `b575a7ad` | 03 (7 tests visés) 7 / 7 ; 04:418 vert ; 05 entier 13 verts / 5 `@defaut` puis 05:338 et 05:544 verts | `passe-1-03.txt`, `passe-1-04.txt`, `passe-1-05.txt`, `passe-2-05.txt` |
+| finale, dossier entier | adaptées | `b575a7ad` | **108 verts / 14 rouges `@defaut` / 1 rouge sans marque** (19,0 min) ; le rouge sans marque, `07-libelles-declencheurs:73`, est une panne du poste (`net::ERR_NO_BUFFER_SPACE` sur l'avatar `api.dicebear.com`), **vert rejoué seul** → 109 / 14 / 0 | `passe-finale.txt`, `passe-finale-rejeu-07.txt` |
+
+Commande de la passe finale :
+
+    E2E_PORT_PROXY=48424 E2E_PORT_API=48305 E2E_PORT_VITE=5196 PLAYWRIGHT_BROWSERS_PATH=D:/lume-uiaudit/pw-browsers E2E_SORTIES=D:/lume-uiaudit/sorties/verif-declencheurs E2E_JEU=declencheurs E2E_WORKERS=1 node scripts/qa/automations-e2e/lancer.mjs declencheurs/ --project=bureau
+
+Aucun test vert avant les correctifs n'est devenu rouge, hors les deux specs annoncées (adaptées, vertes).
+
+### Specs adaptées (ni `@defaut` ni défaut : des tests que le comportement décidé faisait tomber)
+
+| Test | Ce qui a changé | Ce qu'il prouve toujours |
+|---|---|---|
+| 03-panneau-declencheur:312 « montants : une valeur valide est gardée en NOMBRE » (03:297 avant) | Il saisissait minimum 1 250,50 $ / maximum 0 $ — une plage impossible, refusée depuis f6a70824 (le test attendait 60 s une écriture qui ne part plus). Plage retournée : minimum 0 $, maximum 1 250,50 $ | 1250.50 est enregistré en nombre (1250.5) ; 0 est une vraie borne, pas « vide » ; vider les deux champs retire le filtre |
+| 05-etapes-controle:417 « les quatre exemples cliquables » (05:394 avant) | Il enregistrait avec « source = » et « created_at >= » sans valeur et attendait que ces lignes soient jetées — ce que 05:470 interdit. Il affirme maintenant le signalement (« Ligne illisible « source = » : il manque la valeur. », idem « created_at >= », « Enregistrer » désactivé, rien d'écrit), puis COMPLÈTE les deux lignes au clavier (fin de zone ; flèche haut + Fin) et enregistre | Chaque exemple ajoute sa ligne à la FIN de la zone (les quatre lignes, dans l'ordre) ; les quatre conditions sont enregistrées dans la forme du moteur ; la carte dit « Si… 4 condition(s) » |
+| 05-etapes-controle:544 (05:501 avant) | Geste : clic dans la zone, Ctrl+Fin, Entrée, puis « montant > 100 » (avant : frappe au début de la zone). Attentes ajoutées : les deux lignes affichées en clair, comparaison champ par champ en base, le moteur juge encore les conditions d'origine, relecture après rechargement | Voir le tableau des défauts fermés |
+| 05-etapes-controle:338 | Dernière attente : la phrase exacte de la limite (au lieu d'un motif large que deux éléments satisfont), plus les bornes 366 / 367 jours et 30 / 31 jours avant | Voir le tableau des défauts fermés |
+
+Aucune demande d'adaptation refusée : aucune des trois n'affaiblit une preuve (chaque attente retirée est remplacée par celle du
+nouveau comportement, plus stricte).
+
+### Le drapeau des tests « sous drapeau » (03:631, 03:710)
+
+`donnees()` (`_donnees.ts`) pose les 4 drapeaux du bureau B dans `org_features`, puis ATTEND (60 s au plus, sinon le test tombe) que
+le catalogue servi par l'API au bureau B porte `payment.failed`, `invoice.viewed` et `client.inactive`. Le serveur garde les
+drapeaux d'un bureau 30 s, tous ensemble (`server/lib/automations-drapeaux.ts`, une seule entrée de cache par bureau) : quand ces
+trois déclencheurs sont offerts, `auto_sortie_parcours` est appliqué aussi. Les deux tests l'affirment maintenant eux-mêmes
+(`drapeauApplique` : ligne `enabled` en base ; pour « Client inactif », déclencheur offert par l'API) ; pour la case « Arrêter si… »,
+c'est l'écran qui le prouve (la case n'existe que sous drapeau : le test exige qu'elle soit visible, puis décochée).
+
+### Ce que je n'ai pas pu vérifier (2026-10-02)
+
+- **Que les tests retombent si l'on remet le défaut** : je ne touche pas au produit. La preuve « rouge sans le correctif » est celle
+  de la session qui corrige (`sans-correctif.sh`, tests jsdom), pas la mienne. Ce que j'ai : 28 rouges avant (tri du 2026-10-01,
+  sur l'ancien produit), 14 de ces tests verts sur le produit corrigé, sans changer leur attente de fond.
+- **Rien sur staging ni en prod** ; un seul navigateur (Chromium 1440 × 900) ; français seulement pour les messages de refus (la
+  version anglaise des phrases existe dans le code, aucun test de ce dossier ne la lit).
+- **Les filtres du pipeline**, qui partagent `EditeurConditions.tsx` avec la section « Filtres » : hors de ce dossier, non rejoués ici.
+- **La passe finale n'est pas « propre » d'un seul tenant** : un test est tombé sur une panne du poste et n'est vert que rejoué seul.
+  Je n'ai pas relancé le dossier entier une seconde fois.
+- **05:470 n'a pas été durci** (vert tel quel, marqueur retiré, rien d'autre) : il accepte encore « signalé OU bouton désactivé ».
+  La phrase exacte du signalement est affirmée par 05:417 (« il manque la valeur ») ; celle du signe manquant (« il manque un
+  signe… ») n'est affirmée par aucun test de ce dossier.
+
+### Remarques sur le produit vues en vérifiant (aucune n'est portée par un test rouge)
+
+1. **Le panneau du déclencheur écrit le refus dès la saisie**, pas seulement au clic — lu dans `PanneauDeclencheur.tsx` (l'encadré
+   suit le brouillon ; le clic y ramène par défilement et focus). À l'écran, les tests voient l'encadré après le clic, et le voient
+   disparaître dès que la saisie est corrigée, avant tout clic. Conforme à la règle décidée ; « avant le clic » n'est pas affirmé.
+2. **Dans un filtre, « - » seul** reste affiché pendant la frappe (vu à l'écran) ; d'après `EditeurConditions.tsx`, la valeur vaut
+   alors « rien » : une ligne laissée ainsi serait une ligne incomplète, retirée sans un mot à l'enregistrement — le défaut mineur
+   04:406, toujours ouvert. Non rejoué avec ce cas précis.
+3. **L'étape « Attendre » écrit la limite deux fois** (liste à corriger et à côté du bouton) — vu à l'écran (les deux éléments
+   relevés par le localisateur strict de 05:338).

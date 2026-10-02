@@ -11,7 +11,7 @@ import { lireRegle } from '../_outils/banc';
 import {
   test, expect, DELAI_TEST,
   CAPTURES, creerParcours, texto, attente, ouvrirEditeur, cartes, carte, indicateur, attendreEnregistre, corpsDuFil,
-  panneauEtape, toasts, type EtapeBase,
+  panneauEtape, toasts, aucuneEcriture, type EtapeBase,
 } from './_aides';
 
 test.describe.configure({ timeout: DELAI_TEST });
@@ -77,18 +77,36 @@ test.describe('parcours longs', () => {
     expect((await lireRegle(bureau, r.id))?.updated_at).toBe(r.updated_at);
   });
 
-  test('[EDT-012] 50 étapes : modifier un texte n’aboutit pas à un échec d’enregistrement présenté comme une panne @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-012] 50 étapes : modifier un texte n’aboutit pas à un échec d’enregistrement présenté comme une panne', async ({ page, bureau, marque, moniteur }) => {
     const r = await creerParcours(bureau, `${marque} cinquante modif`, parcours(50));
     await ouvrirEditeur(page, r.id);
+    // Le serveur refuse toujours un parcours de plus de 30 étapes : le refus est attendu, et ce que l'écran en dit est vérifié.
+    moniteur.attendu(/400 PATCH .*\/api\/automations\/rules\//, 'le serveur refuse un parcours de plus de 30 étapes');
+    const reponses: number[] = [];
+    page.on('response', (resp) => {
+      if (resp.request().method() === 'PATCH' && resp.url().includes(`/api/automations/rules/${r.id}`)) reponses.push(resp.status());
+    });
     await carte(page, 'Texto numéro 1').first().click();
     await panneauEtape(page).getByLabel(/Texte du message/).fill('Premier texto corrigé');
     await panneauEtape(page).getByRole('button', { name: 'Enregistrer' }).click();
     const panne = toasts(page).filter({ hasText: /nouvel essai automatique/ });
     const fini = indicateur(page).filter({ hasText: 'Enregistré' });
-    await expect(panne.or(fini).first()).toBeVisible({ timeout: 60_000 });
+    /* Troisième issue possible depuis 27939ff8 (S-04) : le refus dit comme un refus (« Refusé — à corriger »).
+       Sans elle, le test attendait 60 s l'une des deux autres, qui ne viennent plus, et tombait sur son délai. */
+    const refuse = indicateur(page).filter({ hasText: 'Refusé — à corriger' });
+    await expect(panne.or(fini).or(refuse).first()).toBeVisible({ timeout: 60_000 });
     await page.screenshot({ path: `${CAPTURES}/edt-50-etapes-enregistrement.png` });
     const message = (await panne.isVisible()) ? await panne.innerText() : '';
     const enBase = (await corpsDuFil(bureau, r.id))[0];
     expect(message, `le serveur refuse (plus de 30 étapes) et l’écran dit : « ${message} » — la correction (« ${enBase} » en base) ne sera jamais enregistrée`).toBe('');
+    // Ce que l'écran dit à la place : un refus, avec la limite, qui reste affiché — et aucun nouvel essai.
+    await expect(refuse).toBeVisible();
+    const bandeau = page.getByRole('alert').filter({ hasText: 'Enregistrement refusé : rien n’est enregistré tant que ce n’est pas corrigé.' });
+    await expect(bandeau).toBeVisible();
+    await expect(bandeau).toContainText('Un parcours compte au plus 30 étapes');
+    await expect(page.getByText(/nouvel essai automatique/)).toHaveCount(0);
+    await aucuneEcriture(page, 8000);
+    expect(reponses, 'le parcours refusé n’est envoyé qu’UNE fois').toEqual([400]);
+    expect(enBase).toBe('Texto numéro 1');
   });
 });
