@@ -138,7 +138,9 @@ describe('publier une automatisation, une à la fois', () => {
   it('un parcours sain est publié', async () => {
     const r = await appeler('POST', `/automations/rules/${SAINE}/publication`, { actif: true });
     expect(r.status).toBe(200);
-    expect(r.json).toEqual({ id: SAINE, is_active: true });
+    // La réponse porte aussi la version de la règle après publication
+    // (`updated_at`, garde de version de l'éditeur — constat A-09).
+    expect(r.json).toEqual({ id: SAINE, is_active: true, updated_at: expect.any(String) });
     expect(ecritures.some((e) => e.patch.is_active === true)).toBe(true);
   });
 

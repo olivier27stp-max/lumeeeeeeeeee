@@ -45,6 +45,7 @@ const api = vi.hoisted(() => ({
   publier: vi.fn(),
   stats: vi.fn(),
   lumi: vi.fn(),
+  version: vi.fn(),
 }));
 const confirmerMock = vi.hoisted(() => vi.fn(async (_o: unknown) => true));
 const toasts = vi.hoisted(() => ({ erreur: [] as string[], succes: [] as string[], info: [] as string[] }));
@@ -60,7 +61,8 @@ vi.mock('../../../src/lib/automationBuilderApi', async (orig) => ({
   ...(await orig<typeof import('../../../src/lib/automationBuilderApi')>()),
   chargerEditeur: (id: string | null) => api.editeur(id),
   creerAutomatisation: (b: unknown) => api.creer(b),
-  modifierAutomatisation: (id: string, p: unknown) => api.modifier(id, p),
+  modifierAutomatisation: (id: string, p: unknown, version?: string | null) => api.modifier(id, p, version),
+  lireVersionAutomatisation: (id: string) => api.version(id),
   genererParcoursAvecLumi: (...a: unknown[]) => api.lumi(...a),
   chargerMembres: vi.fn(async () => { if (etat.membres instanceof Error) throw etat.membres; return etat.membres; }),
   chargerEtiquettes: vi.fn(async () => []),
@@ -138,6 +140,8 @@ beforeEach(() => {
   api.stats.mockReset();
   api.stats.mockImplementation(async () => ({ par_regle: {}, par_etape: {} }));
   api.lumi.mockReset();
+  api.version.mockReset();
+  api.version.mockImplementation(async () => null);
   confirmerMock.mockReset();
   confirmerMock.mockImplementation(async () => true);
   toasts.erreur = []; toasts.succes = []; toasts.info = [];
@@ -325,6 +329,223 @@ describe('A-01 — Lumi modifie l’étape dont le panneau est ouvert : le panne
     cliquer(container.querySelector('button[aria-label="Annuler"]'));
     await attendre(2);
     expect(zone()?.value).toBe('Bonjour [client_first_name]');
+  });
+});
+
+// ─── Priorité — constat A-09 ────────────────────────────────────
+
+describe('A-09 — l’éditeur ouvert et une écriture venue d’ailleurs (Lumi, un second onglet) ne s’écrasent plus en silence', () => {
+  const V1 = '2026-09-01T12:00:00Z';
+  /** Ce que `automationBuilderApi` lève quand le serveur refuse une écriture périmée. */
+  const modifieeAilleurs = () => Object.assign(
+    new Error('Cette automatisation a été modifiée ailleurs (par Lumi ou dans un autre onglet).'),
+    { status: 409, code: 'modifiee_ailleurs' },
+  );
+  const alertes = () => Array.from(container.querySelectorAll('[role="alert"]')).map((a) => a.textContent ?? '');
+  /** Chaque enregistrement réussi rend une NOUVELLE version, comme le serveur. */
+  function serveurQuiVersionne() {
+    let n = 1;
+    api.modifier.mockImplementation(async (id: string, patch: Record<string, unknown>) => {
+      n += 1;
+      return { ...(etat.regles.find((r) => r.id === id) ?? regle({ id })), ...patch, updated_at: `V${n}` };
+    });
+  }
+  const versionsEnvoyees = () => api.modifier.mock.calls.map((c) => c[2]);
+  async function renommer(nom: string) {
+    // Le nom s'édite sur place : un clic sur lui ouvre le champ (qui reste ouvert tant qu'on n'en sort pas).
+    const champNom = () => container.querySelector('input[aria-label="Nom de l’automatisation"]');
+    if (!champNom()) cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(champNom(), nom);
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+  }
+
+  it('chaque enregistrement envoie la version LUE, puis celle que le serveur vient de rendre', async () => {
+    serveurQuiVersionne();
+    await ouvrir();
+    vi.useFakeTimers();
+    await renommer('Relance devis v2');
+    await renommer('Relance devis v3');
+    expect(versionsEnvoyees()).toEqual([V1, 'V2']);
+  });
+
+  it('refus « modifiée ailleurs » (409) : l’écran le dit, n’annonce aucun nouvel essai, et n’en fait aucun', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw modifieeAilleurs(); });
+    await renommer('Relance devis v2');
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+
+    expect(alertes().join('\n')).toContain('Cette automatisation a été modifiée ailleurs (par Lumi ou dans un autre onglet).');
+    expect(alertes().join('\n')).toContain('vos dernières modifications n’ont pas été enregistrées');
+    expect(boutonExact('Recharger')).toBeDefined();
+    expect(barreDuHaut()).toContain('Modifiée ailleurs');
+    expect(barreDuHaut()).not.toContain('Enregistré');
+    expect(toasts.erreur.join('\n')).not.toContain('nouvel essai automatique');
+
+    await act(async () => { vi.advanceTimersByTime(120_000); });
+    await attendre();
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+  });
+
+  it('« Recharger » prend la version en base : le canevas la montre, le bandeau part, et l’enregistrement suivant porte SA version', async () => {
+    const DE_LUMI = 'Bonjour [client_first_name], votre facture est en retard.';
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw modifieeAilleurs(); });
+    await renommer('Mon nom périmé');
+
+    // Entre-temps, Lumi a réécrit le texto : c'est ce que la base contient.
+    etat.regles = [regle({
+      updated_at: 'V-lumi',
+      steps: [{ id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: DE_LUMI } }, suivant: null }],
+    })];
+    serveurQuiVersionne();
+    api.modifier.mockClear();
+    cliquer(boutonExact('Recharger'));
+    await attendre(12);
+
+    expect(alertes()).toEqual([]);
+    expect(carteEtape('Envoyer un texto')?.textContent).toContain('votre facture est en retard');
+    expect(cartes()).toEqual(['Envoyer un texto']);
+    expect(barreDuHaut()).toContain('Enregistré');
+    // Le nom périmé n'a rien écrasé : aucune écriture n'est partie au rechargement.
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    await attendre();
+    expect(api.modifier).not.toHaveBeenCalled();
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Nom de l’automatisation"]')?.value).toBe('Relance devis');
+
+    await renommer('Relance devis v2');
+    expect(versionsEnvoyees()).toEqual(['V-lumi']);
+  });
+
+  it('deux écritures rapprochées (déclencheur, puis parcours) ne se refusent pas entre elles : une à la fois, chacune avec la version de la précédente', async () => {
+    const enVol: Array<{ version: unknown; repondre: (v: string) => void }> = [];
+    api.modifier.mockImplementation((id: string, patch: Record<string, unknown>, version: unknown) => new Promise((ok) => {
+      enVol.push({ version, repondre: (v) => ok({ ...regle({ id }), ...patch, updated_at: v }) });
+    }));
+    await ouvrir();
+    vi.useFakeTimers();
+    // 1re écriture : le nom (enregistrement automatique). Elle reste en vol.
+    await renommer('Relance devis v2');
+    expect(enVol).toHaveLength(1);
+    // 2e écriture pendant ce temps : un autre nom.
+    await renommer('Relance devis v3');
+    // Elle ATTEND la réponse de la première (sinon : même version, donc un 409 contre nous-mêmes).
+    expect(enVol).toHaveLength(1);
+    await act(async () => { enVol[0].repondre('V2'); });
+    await attendre();
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    expect(enVol.map((e) => e.version)).toEqual([V1, 'V2']);
+  });
+
+  it('publier touche la règle : l’enregistrement suivant porte la version rendue par la publication', async () => {
+    serveurQuiVersionne();
+    api.publier.mockImplementation(async () => 'V-publiee');
+    await ouvrir();
+    vi.useFakeTimers();
+    cliquer(container.querySelector('button[role="switch"]'));
+    await attendre(12);
+    expect(api.publier).toHaveBeenCalledTimes(1);
+    await renommer('Relance devis v2');
+    expect(versionsEnvoyees()).toEqual(['V-publiee']);
+  });
+
+  it('Lumi garde la conversation dans la règle : l’enregistrement qui suit porte la version rendue par Lumi', async () => {
+    serveurQuiVersionne();
+    api.lumi.mockImplementation(async (_d: string, _l: string, contexte: { parcoursActuel?: { steps?: unknown[] } | null }) => ({
+      nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Fait.', steps: contexte.parcoursActuel?.steps ?? [], autre: null, updated_at: 'V-conversation',
+    }));
+    await ouvrir();
+    vi.useFakeTimers();
+    saisir(container.querySelector('textarea[id$="-prompt"]'), 'change le message de l’automatisation');
+    cliquer(boutonExact('Construire') ?? boutonExact('Envoyer'));
+    await attendre(12);
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    // (Le déclencheur proposé par Lumi part d'abord, puis le parcours : la 1re écriture porte la version de Lumi.)
+    expect(versionsEnvoyees()[0]).toBe('V-conversation');
+  });
+
+  describe('la fenêtre reprend le focus', () => {
+    const revenir = async () => {
+      await act(async () => { window.dispatchEvent(new Event('focus')); });
+      await attendre(12);
+    };
+
+    it('la règle a changé en base et rien n’attend ici : elle est rechargée en silence', async () => {
+      await ouvrir();
+      expect(api.editeur).toHaveBeenCalledTimes(1);
+      etat.regles = [regle({
+        updated_at: 'V-lumi',
+        steps: [{ id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Texte de Lumi' } }, suivant: null }],
+      })];
+      api.version.mockImplementation(async () => 'V-lumi');
+      await revenir();
+      expect(api.version).toHaveBeenCalledWith(ID);
+      expect(api.editeur).toHaveBeenCalledTimes(2);
+      expect(carteEtape('Envoyer un texto')?.textContent).toContain('Texte de Lumi');
+      expect(confirmerMock).not.toHaveBeenCalled();
+      expect(toasts.erreur).toEqual([]);
+      expect(alertes()).toEqual([]);
+    });
+
+    it('même version en base : rien n’est rechargé', async () => {
+      await ouvrir();
+      api.version.mockImplementation(async () => V1);
+      await revenir();
+      expect(api.editeur).toHaveBeenCalledTimes(1);
+    });
+
+    it('une modification attend d’être enregistrée : on ne recharge PAS par-dessus (on ne lit même pas)', async () => {
+      await ouvrir();
+      vi.useFakeTimers();
+      api.version.mockImplementation(async () => 'V-lumi');
+      cliquer(bouton('Relance devis'));
+      saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'En cours de frappe');
+      await revenir();
+      expect(api.version).not.toHaveBeenCalled();
+      expect(api.editeur).toHaveBeenCalledTimes(1);
+    });
+
+    it('une saisie non enregistrée dans le panneau d’étape : pareil', async () => {
+      await ouvrir();
+      api.version.mockImplementation(async () => 'V-lumi');
+      cliquer(carteEtape('Envoyer un texto'));
+      await attendre(2);
+      saisir(panneauEtape()?.querySelector('textarea'), 'Ma saisie en cours');
+      await revenir();
+      expect(api.editeur).toHaveBeenCalledTimes(1);
+      expect(panneauEtape()?.querySelector('textarea')?.value).toBe('Ma saisie en cours');
+    });
+
+    it('panneau d’étape ouvert et intact : il suit la version rechargée', async () => {
+      await ouvrir();
+      cliquer(carteEtape('Envoyer un texto'));
+      await attendre(2);
+      etat.regles = [regle({
+        updated_at: 'V-lumi',
+        steps: [{ id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Texte de Lumi' } }, suivant: null }],
+      })];
+      api.version.mockImplementation(async () => 'V-lumi');
+      await revenir();
+      expect(panneauEtape()?.querySelector('textarea')?.value).toBe('Texte de Lumi');
+    });
+  });
+
+  it('en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw Object.assign(new Error('This automation was changed elsewhere (by Lumi or in another tab).'), { status: 409, code: 'modifiee_ailleurs' }); });
+    cliquer(bouton('Relance devis'));
+    saisir(container.querySelector('input[aria-label="Automation name"]'), 'Quote follow-up v2');
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    expect(alertes().join('\n')).toContain('This automation was changed elsewhere (by Lumi or in another tab).');
+    expect(boutonExact('Reload')).toBeDefined();
+    expect(barreDuHaut()).toContain('Changed elsewhere');
   });
 });
 

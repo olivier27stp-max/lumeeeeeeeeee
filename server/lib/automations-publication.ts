@@ -26,7 +26,8 @@ import { MESSAGES_EN } from './automations-langue';
 import { getServiceClient } from './supabase';
 
 export type ResultatPublication =
-  | { ok: true; id: string; is_active: boolean; name: string }
+  /** `updated_at` : la version de la règle APRÈS ce changement (garde de version de l'éditeur, A-09). */
+  | { ok: true; id: string; is_active: boolean; name: string; updated_at?: string }
   | { ok: false; id: string; statut: 403 | 404 | 422 | 500; erreur: string; problemes?: string[] };
 
 /** Le message affiché quand la publication est refusée — il NOMME les problèmes. */
@@ -66,14 +67,18 @@ export function definirClientDeServicePourTests(client: SupabaseClient | null): 
  * par les contrôles de publication : la copie vers d'autres bureaux reprend
  * l'état de l'original, sans le rejuger.
  */
-export async function activerApresEcritureUtilisateur(orgId: string, id: string): Promise<{ error: { message: string; code?: string } | null }> {
-  const { error } = await ecrireParService()
+export async function activerApresEcritureUtilisateur(orgId: string, id: string): Promise<{ error: { message: string; code?: string } | null; updated_at?: string }> {
+  const { data, error } = await ecrireParService()
     .from('automation_rules')
     .update({ is_active: true, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('org_id', orgId)
-    .is('deleted_at', null);
-  return { error };
+    .is('deleted_at', null)
+    .select('updated_at');
+  // La version APRÈS activation : la réponse de la route doit porter celle-ci
+  // (garde de version de l'éditeur, A-09), pas celle de l'écriture d'avant.
+  const version = ((data ?? []) as Array<{ updated_at?: string | null }>)[0]?.updated_at;
+  return { error, ...(version ? { updated_at: String(version) } : {}) };
 }
 
 export async function changerPublication(
@@ -148,7 +153,7 @@ export async function changerPublication(
         .eq('id', id)
         .eq('org_id', orgId)
         .is('deleted_at', null)
-        .select('id, name, is_active');
+        .select('id, name, is_active, updated_at');
     })()
     // `.select()` : une ligne filtrée par la RLS ne doit pas passer pour un succès.
     : await client
@@ -156,7 +161,7 @@ export async function changerPublication(
       .update({ is_active: false, updated_at: horodatage })
       .eq('id', id)
       .eq('org_id', orgId)
-      .select('id, name, is_active');
+      .select('id, name, is_active, updated_at');
   const { data, error } = ecriture;
 
   if (error) {
@@ -166,14 +171,14 @@ export async function changerPublication(
     logger.error('[publication] écriture échouée', { rule_id: id, message: error.message, code: error.code });
     return { ok: false, id, statut: 500, erreur: t('Impossible de changer le statut de l’automatisation.') };
   }
-  const ligne = (data ?? [])[0] as { id: string; name: string; is_active: boolean } | undefined;
+  const ligne = (data ?? [])[0] as { id: string; name: string; is_active: boolean; updated_at?: string | null } | undefined;
   if (!ligne) {
     return { ok: false, id, statut: 403, erreur: t('Votre rôle ne permet pas de publier une automatisation.') };
   }
   if (ligne.is_active !== actif) {
     return { ok: false, id, statut: 500, erreur: t('La modification n’a pas été appliquée — réessayez.') };
   }
-  return { ok: true, id: ligne.id, is_active: ligne.is_active, name: ligne.name };
+  return { ok: true, id: ligne.id, is_active: ligne.is_active, name: ligne.name, ...(ligne.updated_at ? { updated_at: String(ligne.updated_at) } : {}) };
 }
 
 /**

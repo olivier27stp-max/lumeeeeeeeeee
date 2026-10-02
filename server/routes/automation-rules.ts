@@ -501,6 +501,7 @@ router.post('/automations/rules/generer', async (req, res) => {
   const ruleId = typeof (req.body as { rule_id?: unknown })?.rule_id === 'string'
     ? String((req.body as { rule_id: string }).rule_id)
     : null;
+  let versionApresConversation: string | null = null;
   if (ruleId && /^[0-9a-f-]{36}$/i.test(ruleId)) {
     const { data: actuelle, error: lectureErr } = await auth.client
       .from('automation_rules')
@@ -523,14 +524,17 @@ router.post('/automations/rules/generer', async (req, res) => {
           ).slice(0, 2000),
         },
       ].slice(-40);
-      const { error: ecritureErr } = await auth.client
+      const { data: gardee, error: ecritureErr } = await auth.client
         .from('automation_rules')
         .update({ lumi_conversation: conversation })
         .eq('id', ruleId)
-        .eq('org_id', auth.orgId);
+        .eq('org_id', auth.orgId)
+        .select('updated_at')
+        .maybeSingle();
       if (ecritureErr) {
         logger.error('[lumi/parcours] conversation non gardée', { rule_id: ruleId, message: ecritureErr.message });
       }
+      versionApresConversation = gardee?.updated_at ? String(gardee.updated_at) : null;
     }
   }
 
@@ -540,10 +544,28 @@ router.post('/automations/rules/generer', async (req, res) => {
     resume: resultat.parcours.resume,
     steps: verdict.data,
     autre,
+    // Garder la conversation a touché la règle : l'éditeur, qui envoie la
+    // version qu'il a lue (garde A-09), doit connaître celle-ci.
+    ...(versionApresConversation ? { updated_at: versionApresConversation } : {}),
   });
 });
 
 // ── Modifier ────────────────────────────────────────────────
+
+/**
+ * Le refus d'une écriture PÉRIMÉE (garde de version, constat A-09) : la règle
+ * a changé depuis que l'appelant l'a lue. `code` permet à l'éditeur de le
+ * distinguer du 409 de la corbeille ; `updated_at` est la version en base.
+ */
+function refusModifieeAilleurs(fr: boolean, versionEnBase: string) {
+  return {
+    error: fr
+      ? 'Cette automatisation a été modifiée ailleurs (par Lumi ou dans un autre onglet).'
+      : 'This automation was changed elsewhere (by Lumi or in another tab).',
+    code: 'modifiee_ailleurs',
+    updated_at: versionEnBase,
+  };
+}
 
 router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), async (req, res) => {
   const auth = await requireAuthedClient(req, res);
@@ -554,7 +576,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
 
   const { data: existante, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('id, is_preset, is_active, trigger_event, delay_seconds, modele_id, conditions, steps, actions, deleted_at')
+    .select('id, is_preset, is_active, trigger_event, delay_seconds, modele_id, conditions, steps, actions, deleted_at, updated_at')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .is('purged_at', null)
@@ -586,7 +608,26 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     return res.status(STATUT_CORBEILLE).json({ error: messageCorbeille(langueDe(req) === 'fr') });
   }
 
+  /*
+   * GARDE DE VERSION (constat A-09). L'éditeur envoie son parcours EN ENTIER :
+   * resté ouvert pendant que Lumi (clavardage général) ou un autre onglet
+   * modifiait la même automatisation, il réécrivait sa version périmée
+   * par-dessus, sans un mot — le texte de Lumi disparaissait.
+   *
+   * `version_lue` = le `updated_at` que l'appelant a lu. Si la règle a changé
+   * depuis : 409, RIEN n'est écrit, et l'éditeur propose de recharger. Un
+   * appelant qui n'envoie pas la garde (outils de Lumi, scripts) garde le
+   * comportement d'avant.
+   */
+  const versionLue = typeof req.body.version_lue === 'string' ? req.body.version_lue : null;
+  const versionEnBase = String(existante.updated_at ?? '');
+  if (versionLue && versionLue !== versionEnBase) {
+    return res.status(409).json(refusModifieeAilleurs(langueDe(req) === 'fr', versionEnBase));
+  }
+
   const patch = { ...req.body };
+  delete patch.version_lue;
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'Rien à modifier.' });
   const contenuModifie = CHAMPS_CONTENU.some((k) => k in patch);
   // Modifier une copie liée la détache de son modèle : sinon la prochaine
   // modification du modèle écraserait ce qu'on vient d'écrire ici.
@@ -669,16 +710,18 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   // Déjà publiée : rien à écrire non plus — l'utilisateur n'envoie JAMAIS `is_active: true`.
   if (patch.is_active === true) delete patch.is_active;
 
-  const { data, error } = await auth.client
+  let ecriture = auth.client
     .from('automation_rules')
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', req.params.id)
-    .eq('org_id', auth.orgId)
-    .select(COLONNES)
-    .single();
+    .eq('org_id', auth.orgId);
+  // Avec la garde, l'écriture elle-même ne passe que sur la version lue :
+  // une modification arrivée entre la lecture ci-dessus et ici n'est pas écrasée.
+  if (versionLue) ecriture = ecriture.eq('updated_at', versionEnBase);
+  const { data, error } = await ecriture.select(COLONNES).single();
 
   if (!error && aPublier) {
-    const { error: ePub } = await activerApresEcritureUtilisateur(auth.orgId, req.params.id);
+    const { error: ePub, updated_at: versionPubliee } = await activerApresEcritureUtilisateur(auth.orgId, req.params.id);
     if (ePub) {
       logger.error('[automation-rules] publication par modification échouée', { rule_id: req.params.id, message: ePub.message });
       return res.status(500).json({
@@ -688,6 +731,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
       });
     }
     (data as unknown as { is_active: boolean }).is_active = true;
+    if (versionPubliee) (data as unknown as { updated_at: string }).updated_at = versionPubliee;
   }
 
   if (error) {
@@ -700,7 +744,18 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
      * une panne : répondre 500 faisait réessayer sans fin un enregistrement
      * qui ne pouvait jamais réussir (audit du 2026-10-01).
      */
-    if (error.code === 'PGRST116') return res.status(404).json({ error: 'Automatisation introuvable.' });
+    if (error.code === 'PGRST116') {
+      // Sous garde de version : la règle existe-t-elle encore, changée entre-temps ?
+      if (versionLue) {
+        const { data: encore } = await auth.client
+          .from('automation_rules').select('updated_at')
+          .eq('id', req.params.id).eq('org_id', auth.orgId).is('purged_at', null).maybeSingle();
+        if (encore && String(encore.updated_at ?? '') !== versionEnBase) {
+          return res.status(409).json(refusModifieeAilleurs(langueDe(req) === 'fr', String(encore.updated_at ?? '')));
+        }
+      }
+      return res.status(404).json({ error: 'Automatisation introuvable.' });
+    }
     logger.error('[automation-rules] modification échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de modifier l\'automatisation.' });
   }

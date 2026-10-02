@@ -43,6 +43,7 @@ import {
   chargerEtiquettes,
   apercuAutomatisation,
   changerPublication,
+  lireVersionAutomatisation,
   chargerStatistiques,
   restaurerAutomatisation,
   type StatsEtape,
@@ -112,6 +113,17 @@ function estIntrouvable(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { status?: unknown }).status === 404;
 }
 
+/**
+ * Le serveur a-t-il refusé une écriture PÉRIMÉE (409 `modifiee_ailleurs`,
+ * constat A-09) ? La règle a changé depuis que l'éditeur l'a lue — par Lumi
+ * ou dans un autre onglet. Réessayer ne servira à rien : il faut recharger.
+ */
+function estModifieeAilleurs(e: unknown): boolean {
+  return typeof e === 'object' && e !== null
+    && (e as { status?: unknown }).status === 409
+    && (e as { code?: unknown }).code === 'modifiee_ailleurs';
+}
+
 /** Bornes du zoom. Au-delà, on ne lit plus rien ; en deçà, on se perd. */
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.6;
@@ -157,6 +169,29 @@ export default function AutomationBuilderPage() {
    * et s'arrête.
    */
   const [disparue, setDisparue] = useState(false);
+  /*
+   * ELLE A ÉTÉ MODIFIÉE AILLEURS (constat A-09). L'éditeur envoie son parcours
+   * en entier : resté ouvert pendant que Lumi (clavardage général) ou un autre
+   * onglet changeait la même automatisation, il réécrivait sa version périmée
+   * par-dessus, sans un mot. Il envoie donc la version qu'il a LUE
+   * (`versionLue`, le `updated_at` de la règle) ; le serveur refuse si elle a
+   * changé (409), et l'éditeur le dit et propose de recharger — ni écrasement
+   * silencieux, ni boucle de nouveaux essais.
+   */
+  const [modifieeAilleurs, setModifieeAilleurs] = useState(false);
+  const versionLue = useRef<string | null>(null);
+  /*
+   * UNE écriture à la fois : chacune part avec la version rendue par la
+   * précédente. Deux écritures parties en parallèle (l'enregistrement
+   * automatique et un changement de déclencheur) porteraient la même version,
+   * et la seconde se ferait refuser par notre propre garde.
+   */
+  const fileEcritures = useRef<Promise<unknown>>(Promise.resolve());
+  const enFile = useCallback(<T,>(tache: () => Promise<T>): Promise<T> => {
+    const suite = fileEcritures.current.then(tache, tache);
+    fileEcritures.current = suite.catch(() => undefined);
+    return suite;
+  }, []);
 
   /**
    * Toute écriture de la règle passe par ici. Brouillon jamais enregistré :
@@ -164,10 +199,14 @@ export default function AutomationBuilderPage() {
    * attendent cette création puis modifient.
    */
   const ecrire = useCallback(async (patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => {
-    const modifier = (idRegle: string) => modifierAutomatisation(idRegle, patch).catch((e: unknown) => {
+    const modifier = (idRegle: string) => enFile(() => modifierAutomatisation(idRegle, patch, versionLue.current).then((maj) => {
+      if (maj?.updated_at) versionLue.current = maj.updated_at;
+      return maj;
+    }, (e: unknown) => {
       if (estIntrouvable(e)) setDisparue(true);
+      if (estModifieeAilleurs(e)) setModifieeAilleurs(true);
       throw e;
-    });
+    }));
     if (idReel.current) return modifier(idReel.current);
     if (creationEnVol.current) {
       const creee = await creationEnVol.current;
@@ -190,6 +229,7 @@ export default function AutomationBuilderPage() {
       is_active: false,
     }).then((creee) => {
       idReel.current = creee.id;
+      versionLue.current = creee.updated_at ?? null;
       passageALaRegleCreee.current = true;
       setRegle((r) => (r ? { ...r, id: creee.id, org_id: creee.org_id, created_at: creee.created_at, updated_at: creee.updated_at } : creee));
       navigate(`/automations/${creee.id}${parametres.get('lumi') === '1' ? '?lumi=1' : ''}`, { replace: true });
@@ -200,7 +240,7 @@ export default function AutomationBuilderPage() {
     });
     creationEnVol.current = enCreation;
     return enCreation;
-  }, [fr, navigate, parametres, sortieALaCreation]);
+  }, [fr, navigate, parametres, sortieALaCreation, enFile]);
   /*
    * Interrupteur martelé (Rafba, 2026-09-28) : chaque clic envoyait sa
    * requête calculée sur un état périmé, et la dernière réponse ARRIVÉE
@@ -212,8 +252,12 @@ export default function AutomationBuilderPage() {
   const confirmationPublication = useRef(false);
   const [, setVersionBascule] = useState(0);
   const [fileBascule] = useState(() => creerFileBascule({
-    // La route serveur de publication (M8), la même que la liste.
-    envoyer: changerPublication,
+    // La route serveur de publication (M8), la même que la liste. Dans la
+    // file des écritures : publier touche la règle, donc sa version (A-09).
+    envoyer: (id, actif) => enFile(async () => {
+      const version = await changerPublication(id, actif);
+      if (typeof version === 'string' && id === idReel.current) versionLue.current = version;
+    }),
     surFin: (id, actif) => {
       setRegle((r) => (r && r.id === id ? { ...r, is_active: actif } : r));
       setVersionBascule((v) => v + 1);
@@ -728,6 +772,8 @@ export default function AutomationBuilderPage() {
           ? { trigger_event: regle?.trigger_event, steps: parcoursALEcran }
           : null,
       });
+      // Garder la conversation a touché la règle : sa version est celle-ci.
+      if (propose.updated_at && idReel.current) versionLue.current = propose.updated_at;
       // Le panneau d'étape resté ouvert saura QUI vient de changer son étape.
       setModifieePar('lumi');
       memoriser(propose.steps as Etape[]);
@@ -901,6 +947,10 @@ export default function AutomationBuilderPage() {
           } satisfies AutomationRule
           : d.rule;
         setRegle(trouvee);
+        // La version LUE : chaque enregistrement la renvoie au serveur (garde A-09).
+        versionLue.current = estNouvelle ? null : (trouvee?.updated_at ?? null);
+        // Un panneau d'étape resté ouvert pendant un RECHARGEMENT : ce qui change sous lui vient d'ailleurs.
+        setModifieePar('autre');
         /*
          * Le nom des préréglages est stocké en ANGLAIS en base
          * (« Appointment Confirmation ») — 275 des 500 règles actives en
@@ -941,6 +991,54 @@ export default function AutomationBuilderPage() {
 
     return () => { vivant = false; };
   }, [id, essaiChargement]);
+
+  /**
+   * RECHARGER la version en base (constat A-09) : après un refus « modifiée
+   * ailleurs », ou en silence quand la fenêtre reprend le focus et que rien
+   * n'attend d'être enregistré. Ce que l'éditeur avait en mémoire est remplacé.
+   */
+  const recharger = useCallback(() => {
+    setModifieeAilleurs(false);
+    setEtapeEnAttente(null);
+    echecsSauvegarde.current = 0;
+    setEtatSauvegarde('a_jour');
+    setEssaiChargement((n) => n + 1);
+  }, []);
+
+  /*
+   * LA FENÊTRE REPREND LE FOCUS : une lecture légère de la version. Si la
+   * règle a changé en base (Lumi dans le clavardage général, un autre onglet)
+   * et que l'éditeur n'a RIEN de non enregistré, il la recharge sans rien
+   * demander — on revient sur l'onglet, on voit ce qui est vrai. S'il a une
+   * saisie en cours, il ne touche à rien : c'est son prochain enregistrement
+   * qui sera refusé (409) et qui le dira.
+   */
+  const rienANePasPerdre = useRef(false);
+  rienANePasPerdre.current = etatSauvegarde === 'a_jour' && !declencheurEnVol && !genere && !chargement
+    && !disparue && !modifieeAilleurs && !etapeEnAttente && !!regle?.id && !regle.deleted_at;
+  useEffect(() => {
+    let vivant = true;
+    const auRetour = () => {
+      if (document.visibilityState === 'hidden') return;
+      const idRegle = idReel.current;
+      const propre = () => rienANePasPerdre.current && !brouillonEtapeModifie.current && !brouillonDeclencheurModifie.current;
+      if (!idRegle || !versionLue.current || !propre()) return;
+      lireVersionAutomatisation(idRegle)
+        .then((version) => {
+          // Relu APRÈS la lecture : une saisie commencée entre-temps n'est pas écrasée.
+          if (!vivant || !version || version === versionLue.current || idRegle !== idReel.current || !propre()) return;
+          recharger();
+        })
+        .catch((e: unknown) => console.error('[builder] version de l’automatisation illisible', e instanceof Error ? e.message : String(e)));
+    };
+    window.addEventListener('focus', auRetour);
+    document.addEventListener('visibilitychange', auRetour);
+    return () => {
+      vivant = false;
+      window.removeEventListener('focus', auRetour);
+      document.removeEventListener('visibilitychange', auRetour);
+    };
+  }, [recharger]);
 
   /*
    * « Construire avec Lumi » ouvre l'éditeur avec `?lumi=1` : le curseur
@@ -1242,7 +1340,10 @@ export default function AutomationBuilderPage() {
   const echecsSauvegarde = useRef(0);
   useEffect(() => {
     // Règle disparue (404) : plus rien à enregistrer, donc plus d'essai.
-    if (etatSauvegarde !== 'modifie' || !regle || disparue) return;
+    // Modifiée ailleurs (409) : pareil — on attend « Recharger », on n'écrase rien.
+    // Lumi travaille : sa réponse touche la règle (la conversation y est gardée),
+    // on enregistre après elle, avec la bonne version.
+    if (etatSauvegarde !== 'modifie' || !regle || disparue || modifieeAilleurs || genere) return;
     if (etapesIncompletes > 0) { setEtatSauvegarde('incomplet'); return; }
     let annule = false;
     const delai = 3000 * 2 ** Math.min(echecsSauvegarde.current, 4);
@@ -1292,7 +1393,8 @@ export default function AutomationBuilderPage() {
            * 404 : l'automatisation n'existe plus. Ni toast « nouvel essai
            * automatique », ni reprise — `ecrire` a déjà basculé l'écran.
            */
-          if (estIntrouvable(e)) {
+          // 409 « modifiée ailleurs » : même règle — le bandeau le dit et offre de recharger.
+          if (estIntrouvable(e) || estModifieeAilleurs(e)) {
             setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
             return;
           }
@@ -1320,7 +1422,7 @@ export default function AutomationBuilderPage() {
       }
     }, delai);
     return () => { annule = true; clearTimeout(minuterie); };
-  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire, disparue]);
+  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire, disparue, modifieeAilleurs, genere]);
 
   // Dès que la dernière étape vide est remplie, on repart en enregistrement.
   useEffect(() => {
@@ -1526,7 +1628,8 @@ export default function AutomationBuilderPage() {
     }
     setConversionEnCours(true);
     try {
-      const maj = await modifierAutomatisation(regle.id, { steps: conversion.etapes });
+      // Par `ecrire` : la conversion porte la garde de version comme toute écriture.
+      const maj = await ecrire({ steps: conversion.etapes });
       setRegle(maj);
       setSteps((maj.steps as Etape[] | undefined) ?? []);
       if (ouvrir) montrerEtape(ouvrir);
@@ -1536,7 +1639,7 @@ export default function AutomationBuilderPage() {
     } finally {
       setConversionEnCours(false);
     }
-  }, [regle, conversion, fr, montrerEtape]);
+  }, [regle, conversion, fr, montrerEtape, ecrire]);
 
   /**
    * Y a-t-il du travail NON ENREGISTRÉ ?
@@ -1581,8 +1684,8 @@ export default function AutomationBuilderPage() {
    */
   const sortieGeree = useRef(false);
   // Une règle disparue (404) n'a plus rien à enregistrer au départ.
-  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue });
-  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue };
+  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue && !modifieeAilleurs });
+  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue && !modifieeAilleurs };
   useEffect(() => () => {
     const d = etatAuDepart.current;
     if (sortieGeree.current || !d.aRegle) return;
@@ -1936,6 +2039,7 @@ export default function AutomationBuilderPage() {
               setRestauration(true);
               restaurerAutomatisation(regle.id)
                 .then((maj) => {
+                  if (maj?.updated_at) versionLue.current = maj.updated_at;
                   setRegle((r) => (r ? { ...r, deleted_at: null, is_active: maj.is_active } : maj));
                   toast.success(fr ? 'Automatisation restaurée, en brouillon.' : 'Automation restored, as a draft.');
                 })
@@ -2026,7 +2130,13 @@ export default function AutomationBuilderPage() {
 
           {/* L'état d'enregistrement, toujours visible — comme le « Saved » de GHL. */}
           <span className="ml-1 inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-text-tertiary">
-            {etatSauvegarde === 'incomplet' ? (
+            {modifieeAilleurs ? (
+              // Ni « Modifié » (rien ne partira) ni « Enregistré » (ce serait faux).
+              <span className="inline-flex items-center gap-1.5 text-warning">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                {fr ? 'Modifiée ailleurs' : 'Changed elsewhere'}
+              </span>
+            ) : etatSauvegarde === 'incomplet' ? (
               <span className="inline-flex items-center gap-1.5 text-warning">
                 <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
                 {fr
@@ -2127,6 +2237,32 @@ export default function AutomationBuilderPage() {
           />
         </div>
       </div>
+
+      {/* ══ Modifiée ailleurs (A-09) : dit sur tous les onglets, avec la seule
+          issue qui n'écrase rien — recharger la version en base. ══ */}
+      {modifieeAilleurs && (
+        <div role="alert" className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-warning/40 bg-warning-light px-4 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-warning">
+              {fr
+                ? 'Cette automatisation a été modifiée ailleurs (par Lumi ou dans un autre onglet).'
+                : 'This automation was changed elsewhere (by Lumi or in another tab).'}
+            </p>
+            <p className="mt-0.5 text-[12px] text-text-secondary">
+              {fr
+                ? 'Pour ne rien écraser, vos dernières modifications n’ont pas été enregistrées. Rechargez pour repartir de la version à jour.'
+                : 'To avoid overwriting anything, your latest changes were not saved. Reload to start again from the current version.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={recharger}
+            className="shrink-0 rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Recharger' : 'Reload'}
+          </button>
+        </div>
+      )}
 
       {/* ══ Le contenu ══ */}
       {/* Une RANGEE : le canevas a gauche, le panneau d'edition a droite —
@@ -2692,6 +2828,7 @@ export default function AutomationBuilderPage() {
               ruleId={regle.id}
               reglages={(regle.settings ?? null) as ReglagesAutomatisation | null}
               fr={fr}
+              enregistrer={ecrire}
               onChange={(r) => setRegle((x) => (x ? { ...x, settings: r as Record<string, unknown> | null } : x))}
             />
           </div>

@@ -6,7 +6,7 @@
  *   (sans argument : tous les scénarios)
  */
 import type { Page } from '@playwright/test';
-import { carte, creerRegle, fermer, lireRegle, ouvrirEditeur, ouvrirPage, panneau, pause, tiroir, verifier } from './banc.mts';
+import { admin, carte, creerRegle, fermer, lireRegle, ouvrirEditeur, ouvrirPage, panneau, pause, tiroir, verifier } from './banc.mts';
 
 type Etapes = Array<{ id: string; action?: { config?: Record<string, unknown> } } & Record<string, unknown>>;
 const etapes = async (id: string): Promise<Etapes> => ((await lireRegle(id)).steps ?? []) as Etapes;
@@ -88,6 +88,79 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await enregistrer(page).click();
     await pause(6000);
     verifier((await etapes(regle.id))[0]?.action?.config?.body === 'Mon texte à moi.', '« Garder ma version » puis « Enregistrer » : la base porte ma version');
+    await page.context().close();
+  },
+
+  /** A-09 — l'éditeur ouvert n'écrase pas ce qui a été écrit ailleurs : 409, bandeau, « Recharger ». */
+  async a09() {
+    const regle = await creerRegle({ trigger_event: 'invoice.overdue', steps: [action('send_sms', { body: 'Texte d’origine' })] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    // « Lumi », ailleurs (clavardage général, autre onglet) : le texto est réécrit en base.
+    await admin.from('automation_rules').update({ steps: [action('send_sms', { body: DE_LUMI })] }).eq('id', regle.id);
+    // L'éditeur, qui n'en sait rien, enregistre une modification : son parcours en mémoire repart en entier.
+    await carte(page, 'Envoyer un texto').click();
+    await panneau(page).getByLabel('Nom de l’action (facultatif)', { exact: true }).fill('Relance');
+    await enregistrer(page).click();
+    await page.getByRole('alert').filter({ hasText: 'Cette automatisation a été modifiée ailleurs' }).waitFor({ timeout: 20_000 });
+    verifier(true, 'le bandeau « modifiée ailleurs (par Lumi ou dans un autre onglet) » s’affiche');
+    await pause(8000);
+    verifier((await etapes(regle.id))[0]?.action?.config?.body === DE_LUMI, 'rien n’a été écrasé : la base garde le texte de Lumi');
+    verifier(await page.getByText('nouvel essai automatique').count() === 0, 'aucun « nouvel essai automatique »');
+    await page.getByRole('button', { name: 'Recharger', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'modifiée ailleurs' }).waitFor({ state: 'hidden', timeout: 20_000 });
+    verifier(((await carte(page, 'Envoyer un texto').textContent()) ?? '').includes('Bonjour [client_first_name], votre facture'), '« Recharger » : la carte montre le texte de Lumi');
+    // Et l'éditeur rechargé enregistre de nouveau normalement.
+    await carte(page, 'Envoyer un texto').click();
+    await panneau(page).getByLabel('Nom de l’action (facultatif)', { exact: true }).fill('Relance');
+    await enregistrer(page).click();
+    await pause(6000);
+    const relue = (await etapes(regle.id))[0];
+    verifier(relue?.nom === 'Relance' && relue?.action?.config?.body === DE_LUMI, 'après rechargement, l’enregistrement passe et garde le texte de Lumi');
+    await page.context().close();
+  },
+
+  /** A-09 — au retour sur la fenêtre, une règle modifiée ailleurs est rechargée en silence (rien de non enregistré ici). */
+  async a09b() {
+    const regle = await creerRegle({ trigger_event: 'invoice.overdue', steps: [action('send_sms', { body: 'Texte d’origine' })] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    await admin.from('automation_rules').update({ steps: [action('send_sms', { body: DE_LUMI })] }).eq('id', regle.id);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForFunction(() => document.body.innerText.includes('Bonjour [client_first_name], votre facture'), null, { timeout: 20_000 });
+    verifier(true, 'la carte montre le texte écrit ailleurs, sans rechargement de la page');
+    verifier(await page.getByRole('alert').count() === 0 && await page.getByRole('dialog').count() === 0, 'sans bandeau ni question');
+    await page.context().close();
+  },
+
+  /** A-09 — la garde ne se retourne pas contre l'éditeur lui-même : publier, régler, puis enregistrer. */
+  async a09c() {
+    const regle = await creerRegle({ trigger_event: 'client.untagged', steps: [action('create_task', { title: 'Tâche' })] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    const renommerEtape = async (nom: string) => {
+      await carte(page, nom === 'Un' ? 'Créer une tâche' : 'Un').click();
+      await panneau(page).getByLabel('Nom de l’action (facultatif)', { exact: true }).fill(nom);
+      await enregistrer(page).click();
+      await pause(6000);
+    };
+    // 1. Publier (la publication touche la règle), puis modifier le parcours.
+    await page.getByRole('switch', { name: 'Publier l’automatisation' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Publier', exact: true }).click();
+    await pause(3000);
+    verifier((await lireRegle(regle.id)).is_active === true, 'publiée');
+    await renommerEtape('Un');
+    verifier((await etapes(regle.id))[0]?.nom === 'Un', 'après la publication, l’enregistrement du parcours passe');
+    // 2. Un réglage (autre écriture de l'éditeur), puis le parcours de nouveau.
+    await page.getByRole('tab', { name: 'Réglages' }).click();
+    await page.getByText('Jours ouvrables seulement').first().click();
+    await pause(3000);
+    verifier(((await lireRegle(regle.id)).settings as { jours_ouvrables?: boolean } | null)?.jours_ouvrables === true, 'le réglage est en base');
+    await page.getByRole('tab', { name: 'Parcours' }).click();
+    await renommerEtape('Deux');
+    verifier((await etapes(regle.id))[0]?.nom === 'Deux', 'après un réglage, l’enregistrement du parcours passe');
+    verifier(await page.getByRole('alert').filter({ hasText: 'modifiée ailleurs' }).count() === 0, 'aucun faux « modifiée ailleurs »');
+    await admin.from('automation_rules').update({ is_active: false }).eq('id', regle.id);
     await page.context().close();
   },
 

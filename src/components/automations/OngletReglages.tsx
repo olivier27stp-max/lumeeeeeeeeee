@@ -30,6 +30,13 @@ interface Props {
   fr: boolean;
   /** Prévenir le parent pour qu'il garde l'objet à jour. */
   onChange: (r: ReglagesAutomatisation | null) => void;
+  /**
+   * L'écriture de l'ÉDITEUR, quand l'onglet y vit : même file et même garde de
+   * version que le parcours (constat A-09) — un réglage changé ici ne fait pas
+   * passer pour « à jour » un éditeur dont le parcours est périmé. Absente :
+   * l'écriture directe, comme avant.
+   */
+  enregistrer?: (patch: { settings: Record<string, unknown> | null }) => Promise<unknown>;
 }
 
 /** Un interrupteur avec son explication — le défaut du moteur est annoncé. */
@@ -68,7 +75,7 @@ function Interrupteur({
   );
 }
 
-export default function OngletReglages({ ruleId, reglages, fr, onChange }: Props) {
+export default function OngletReglages({ ruleId, reglages, fr, onChange, enregistrer }: Props) {
   const ids = useId();
   const [local, setLocal] = useState<ReglagesAutomatisation>(reglages ?? {});
   const [enregistre, setEnregistre] = useState(false);
@@ -106,7 +113,8 @@ export default function OngletReglages({ ruleId, reglages, fr, onChange }: Props
       if (aEnvoyer === confirme.current) return; // déjà envoyé par un passage précédent
       const vide = Object.keys(aEnvoyer).length === 0;
       try {
-        await modifierAutomatisation(ruleId, { settings: vide ? null : (aEnvoyer as Record<string, unknown>) });
+        const patch = { settings: vide ? null : (aEnvoyer as Record<string, unknown>) };
+        await (enregistrer ? enregistrer(patch) : modifierAutomatisation(ruleId, patch));
         confirme.current = aEnvoyer;
         onChange(vide ? null : aEnvoyer);
         if (voulu.current === aEnvoyer) { setAJour(true); setEnregistre(false); }

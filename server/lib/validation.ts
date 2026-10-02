@@ -1356,7 +1356,15 @@ export const automationCopieBureauxSchema = z.object({
   lier: z.boolean().optional(),
 });
 
-const majAutomatisation = corpsAutomatisation.partial().superRefine(plafondActions);
+const majAutomatisation = corpsAutomatisation
+  .partial()
+  /*
+   * Garde de version (constat A-09) : le `updated_at` que l'appelant a lu.
+   * La route refuse (409) si la règle a changé depuis. Facultative : sans
+   * elle, la modification s'écrit comme avant.
+   */
+  .extend({ version_lue: z.string().trim().min(1).max(64).optional() })
+  .superRefine(plafondActions);
 export const automationRuleUpdateSchema = z
   .record(z.string(), z.unknown())
   .refine((o) => Object.keys(o).length > 0, { message: 'Rien à modifier.', params: { en: 'Nothing to change.' } })
