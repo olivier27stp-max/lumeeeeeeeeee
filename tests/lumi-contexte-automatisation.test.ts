@@ -37,6 +37,7 @@ const client = {
 import { automatisationsCitees, contexteDeLaPage, estUneSuite, sujetDeLaConversation } from '../server/lib/lumi/contexte-automatisation';
 import { parleDAutomatisations, sujetParRegle } from '../server/lib/lumi/sujet-par-regle';
 import { TEXTES_ACTION_PROVISOIRE } from '../src/lib/sequenceTypes';
+import { trouverAction } from '../src/lib/automationCatalogue';
 
 const o = { client, orgId: 'org', espaceRefs: 'espace', langue: 'fr' as const };
 const texto = (body: string) => [{ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body } }, suivant: null }];
@@ -160,6 +161,14 @@ describe('homonymes : UNE question, puis la réponse désigne la bonne (C08)', (
 });
 
 describe('ce qui empêche d’activer est dit AVEC le contenu (C12)', () => {
+  it('une étape qui porte le texte d’exemple d’une étape ajoutée à la main : pareil (avertissement à l’écran, refus pour Lumi)', async () => {
+    const exemple = trouverAction('send_sms')!.champs.find((c) => c.cle === 'body')!.defaut_fr!;
+    base.regles = [regle('ex', 'Relance facture en retard', 'invoice.overdue', exemple)];
+    const r = await automatisationsCitees('active l’automatisation « Relance facture en retard »', o);
+    expect(r.contexte).toMatch(/NE PEUT PAS être activée telle quelle/);
+    expect(r.contexte).toMatch(/texte d’exemple/);
+  });
+
   it('une automatisation qui porte encore le texte d’exemple de l’éditeur : « ne peut pas être activée telle quelle »', async () => {
     base.regles = [regle('ex', 'Relance facture en retard', 'invoice.overdue', TEXTES_ACTION_PROVISOIRE[0], { steps: [] })];
     const r = await automatisationsCitees('active l’automatisation « Relance facture en retard »', o);
