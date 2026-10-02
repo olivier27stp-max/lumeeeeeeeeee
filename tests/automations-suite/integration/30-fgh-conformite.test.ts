@@ -172,16 +172,43 @@ describe('G — désabonnement courriel et STOP texto respectés', () => {
     expect(logs.map((l) => (l.result_data as { saute?: string } | null)?.saute ? 'saute' : String(l.result_success))).toEqual(['saute', 'saute', 'saute', 'saute']);
   });
 
-  it('[G-011] drapeau allumé : désabonné + STOP → le commercial est sauté, le transactionnel part', async () => {
+  /*
+   * Mission finale (E-11, décision prise) : un numéro de la liste STOP ne
+   * reçoit AUCUN texto, que le drapeau « désabonnement par canal » soit
+   * allumé ou non. Avant, ce test affirmait que le texto transactionnel
+   * (« Rappel ») partait sous le drapeau. Le courriel n'est pas touché par
+   * cette décision : sous le drapeau, un désabonné du courriel reçoit encore
+   * le transactionnel strict (« Reçu ») — c'est le sens du drapeau.
+   */
+  it('[G-011] drapeau allumé : désabonné + STOP → AUCUN texto (commercial ni transactionnel) ; courriel : le commercial est sauté, le transactionnel part', async () => {
     await drapeauParCanal(true);
     try {
       const client = await unClient();
       await desabonner(client);
       const regle = await regleMixte();
       const { logs, envois } = await declencher(regle, client, 4);
-      const sujets = envois.map((e) => (e.canal === 'courriel' ? String(e.sujet) : String(e.corps)).split(' ')[0]).sort();
-      expect(sujets, JSON.stringify(logs)).toEqual(['Rappel', 'Reçu']);
+      expect(envois.filter((e) => e.canal === 'sms'), `aucun texto vers un numéro STOP — ${JSON.stringify(logs)}`).toHaveLength(0);
+      const sujets = envois.map((e) => String(e.sujet).split(' ')[0]).sort();
+      expect(sujets, JSON.stringify(logs)).toEqual(['Reçu']);
+      // Les deux textos sont des sauts « désabonné », pas des échecs.
+      const textos = logs.filter((l) => l.action_type === 'send_sms');
+      expect(textos.map((l) => [l.result_success, (l.result_data as { saute_code?: string } | null)?.saute_code])).toEqual([[true, 'desabonne'], [true, 'desabonne']]);
     } finally { await drapeauParCanal(false); }
+  });
+
+  it('[G-011b] STOP seul (pas de désabonnement courriel), drapeau allumé PUIS éteint : aucun texto ne part, dans les deux cas', async () => {
+    const seulementTextos = () => uneRegle({ actions: [texto('Promo', 'marketing'), texto('Rappel', 'transactionnel')] });
+    for (const allume of [true, false]) {
+      await drapeauParCanal(allume);
+      try {
+        const client = await unClient();
+        await ok(b.admin.from('sms_opt_outs').insert({ org_id: b.orgA, phone: client.phone, reason: m }).select('id'), 'STOP');
+        const regle = await seulementTextos();
+        const { logs, envois } = await declencher(regle, client, 2);
+        expect(envois.filter((e) => e.canal === 'sms'), `drapeau ${allume ? 'allumé' : 'éteint'} — ${JSON.stringify(logs)}`).toHaveLength(0);
+        expect(logs.map((l) => (l.result_data as { saute_code?: string } | null)?.saute_code)).toEqual(['desabonne', 'desabonne']);
+      } finally { await drapeauParCanal(false); }
+    }
   });
 
   it('[G-012] texto commercial : l’entreprise est nommée et « Répondez STOP » est ajouté (drapeau éteint, immédiat)', async () => {

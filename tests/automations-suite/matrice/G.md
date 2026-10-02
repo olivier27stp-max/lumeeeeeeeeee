@@ -9,7 +9,8 @@ Fichier : `integration/30-fgh-conformite.test.ts`.
 | G-003 | courriel transactionnel immédiat | — | aucun lien de désabonnement (voulu) | PASS |
 | G-004 | courriel marketing immédiat | drapeau allumé | lien + en-têtes | PASS |
 | G-010 | désabonné courriel + STOP | drapeau éteint | aucun courriel ni texto, commercial ET transactionnel (étapes « sautées ») | PASS |
-| G-011 | désabonné courriel + STOP | drapeau allumé | commercial sauté, transactionnel part | PASS |
+| G-011 | désabonné courriel + STOP | drapeau allumé | aucun texto (commercial ni transactionnel) ; courriel : commercial sauté, transactionnel part | PASS |
+| G-011b | STOP seul | drapeau allumé puis éteint | aucun texto ne part, les deux sont sautés « désabonné » | PASS |
 | G-012 | texto marketing immédiat | drapeau éteint | « <Entreprise> - Répondez STOP pour ne plus recevoir. » ajouté | PASS |
 | G-013 | request_review | client désabonné + STOP | rien ne part | PASS |
 | G-014 | courriel marketing immédiat, client sans consentement ni relation | drapeau éteint | mesure (alimente G-015) : une ligne de journal | PASS (mesure) |

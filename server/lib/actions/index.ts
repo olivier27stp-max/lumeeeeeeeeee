@@ -1651,19 +1651,28 @@ export async function executeSendSms(
   // CASL compliance — manual sends already blocked opted-out recipients, but
   // automations bypassed the list entirely and kept texting after a STOP.
   const optOutPhone = normalizeE164(to);
-  const { data: optOut } = await ctx.supabase
+  // `limit(1)` et non `maybeSingle()` : deux lignes pour le même numéro
+  // rendaient une erreur, lue comme « pas de STOP » — et le texto partait.
+  const { data: retraits, error: erreurStop } = await ctx.supabase
     .from('sms_opt_outs')
     .select('id')
     .eq('org_id', ctx.orgId)
     .eq('phone', optOutPhone)
-    .maybeSingle();
-  if (optOut) {
-    // Désabonnement par canal : seul le marketing est sauté. Un texto
-    // transactionnel est tenté — si l'opérateur le bloque (STOP géré par
-    // Twilio, erreur 21610), il est sauté plus bas avec le même motif.
-    if (!ctx.parCanal) return saute(motifSaut('texto'));
-    if (ctx.commercial) return saute(motifSaut('texto'));
-  }
+    .limit(1);
+  // Liste STOP illisible : on ne sait PAS si ce client a dit STOP. On
+  // n'envoie pas — vrai échec, repris plus tard (comme le consentement).
+  if (erreurStop) return { success: false, error: 'Lecture de la liste STOP impossible (erreur technique) — envoi suspendu' };
+  /*
+   * Un numéro de la liste STOP ne reçoit AUCUN texto — commercial ou
+   * transactionnel, drapeau « désabonnement par canal » allumé ou non (E-11,
+   * décision de la mission : « désabonnés / STOP toujours exclus »).
+   *
+   * Avant, sous le drapeau, un texto dit transactionnel (confirmation,
+   * rappel) était tenté, en comptant sur le blocage de l'opérateur (Twilio,
+   * erreur 21610). Or un retrait fait sur la page de désabonnement écrit
+   * `sms_opt_outs` sans que Twilio en sache rien : ce texto-là arrivait.
+   */
+  if (Array.isArray(retraits) ? retraits.length > 0 : !!retraits) return saute(motifSaut('texto'));
 
   // Consentement (F7) : le STOP ci-dessus traite le retrait ; ici on vérifie
   // qu'une base légale existe — exprès, ou la relation d'affaires (LCAP).

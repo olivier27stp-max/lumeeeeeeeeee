@@ -178,14 +178,23 @@ describe('moteur — drapeau ON', () => {
     expect(s.ecritures.some((w: any) => w.table === 'automation_scheduled_tasks' && w.valeur?.status === 'completed')).toBe(true);
   });
 
-  it('rappel TRANSACTIONNEL (rendez-vous − 1 jour) vers un désabonné du texto : envoyé', async () => {
+  /*
+   * Mission finale (E-11, décision prise) : un numéro de la liste STOP ne
+   * reçoit AUCUN texto, drapeau « par canal » allumé ou non. Ce test
+   * affirmait l'inverse pour le transactionnel (« envoyé ») : sous le
+   * drapeau, le moteur tentait l'envoi en comptant sur le blocage de
+   * l'opérateur — or un retrait fait sur la page de désabonnement n'est pas
+   * connu de Twilio, et ce texto-là arrivait.
+   */
+  it('rappel TRANSACTIONNEL (rendez-vous − 1 jour) vers un désabonné du texto : sauté lui aussi, motif journalisé', async () => {
     const s: any = await jouer(
       { id: 'r-trx', trigger_event: 'appointment.created', delay_seconds: -86400, actions: [{ type: 'send_sms', config: { body: 'Rappel : rendez-vous demain.' } }] },
       evenementPour('appointment.created'), etat.e, { ...DRAPEAU_ON, ...STOP_TEXTO },
     );
-    expect(s.envois.filter((e: any) => e.canal === 'sms')).toHaveLength(1);
-    expect(journalDe(s, 'send_sms')[0].result_success).toBe(true);
-    expect(journalDe(s, 'send_sms')[0].result_data?.saute).toBeUndefined();
+    expect(s.envois.filter((e: any) => e.canal === 'sms')).toHaveLength(0);
+    const [log] = journalDe(s, 'send_sms');
+    expect(log.result_success).toBe(true);
+    expect(log.result_data).toMatchObject({ saute_code: 'desabonne', saute: 'Client désabonné (texto)' });
   });
 
   it('courriel MARKETING vers un désabonné du courriel : sauté ; le parcours continue avec l\'étape suivante', async () => {
