@@ -116,7 +116,8 @@ describe('le coût reste celui du chemin bon marché', () => {
 
   it('la sortie est plafonnée — assez haut pour Sonnet, et une réponse coupée est dite, pas déguisée', () => {
     // 1 500 coupait 2 réponses sur 3 de Sonnet (JSON illisible → « Lumi n'a pas compris »), mesuré le 2026-09-30.
-    expect(GEN).toMatch(/MAX_TOKENS\s*=\s*4_000/);
+    // 8 000 depuis la mission finale (F-03) : 4 000 coupait la réécriture des parcours de 17 et 23 étapes du pack de base.
+    expect(GEN).toMatch(/MAX_TOKENS\s*=\s*8_000/);
     expect(GEN).toMatch(/stop_reason === 'max_tokens'/);
     expect(GEN, 'le JSON compact faisait 2/10 JSON illisibles').not.toMatch(/JSON, COMPACT/);
   });
