@@ -91,6 +91,42 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await page.context().close();
   },
 
+  /** S-01 — « Ouvrir » la 2e automatisation sur réseau lent : rien de la 1re n'est écrit dans la 2e. */
+  async s01() {
+    const marque = `U-S01-${Date.now()}`;
+    const regle = await creerRegle({ name: `${marque} première`, steps: [action('send_sms', { body: 'Texto ALPHA' })] });
+    const page = await ouvrirPage();
+    await page.route('**/api/automations/rules/generer', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({
+        nom: `${marque} première`, trigger_event: 'quote.sent', resume: 'Relance : un texto.',
+        steps: [action('send_sms', { body: 'Texto de LUMI' })],
+        autre: { nom: `${marque} deuxième`, trigger_event: 'client.replied', resume: 'Quand le client répond.', steps: [action('send_sms', { body: 'Texto de la DEUXIÈME' })] },
+      }),
+    }));
+    await ouvrirEditeur(page, regle.id);
+    // Réseau lent : charger une AUTRE automatisation prend 6 s (plus que les 3 s de l'enregistrement automatique).
+    await page.route((url) => url.pathname.endsWith('/api/automations/editeur') && !!url.searchParams.get('rule_id') && url.searchParams.get('rule_id') !== regle.id, async (route) => {
+      await pause(6000);
+      await route.continue();
+    });
+    await page.getByLabel('Décris ton automatisation').fill('relance mon devis, et réponds au client quand il écrit');
+    await page.getByRole('button', { name: /^(Construire|Envoyer)$/ }).click();
+    const toast = page.getByRole('region', { name: /Notifications/ }).getByRole('listitem').filter({ hasText: 'créée en brouillon' });
+    await toast.getByRole('button', { name: 'Ouvrir' }).click();
+    await page.waitForURL((url) => /\/automations\/[0-9a-f-]{36}$/.test(url.pathname) && !url.pathname.endsWith(regle.id), { timeout: 20_000 });
+    const idDeuxieme = new URL(page.url()).pathname.split('/').pop() as string;
+    await carte(page, 'Envoyer un texto').waitFor({ timeout: 60_000 });
+    await pause(6000);
+    const premiere = await lireRegle(regle.id);
+    const deuxieme = await lireRegle(idDeuxieme);
+    verifier(deuxieme.name === `${marque} deuxième`, `la 2e garde son nom (${String(deuxieme.name)})`);
+    verifier(JSON.stringify(deuxieme.steps).includes('Texto de la DEUXIÈME') && !JSON.stringify(deuxieme.steps).includes('Texto de LUMI'), 'la 2e garde son parcours');
+    verifier(JSON.stringify(premiere.steps).includes('Texto de LUMI') && premiere.name === `${marque} première`, 'ce que Lumi a posé dans la 1re y est enregistré, sous son nom');
+    verifier(((await carte(page, 'Envoyer un texto').textContent()) ?? '').includes('Texto de la DEUXIÈME'), 'l’écran montre le parcours de la 2e');
+    await page.context().close();
+  },
+
   /** A-09 — l'éditeur ouvert n'écrase pas ce qui a été écrit ailleurs : 409, bandeau, « Recharger ». */
   async a09() {
     const regle = await creerRegle({ trigger_event: 'invoice.overdue', steps: [action('send_sms', { body: 'Texte d’origine' })] });

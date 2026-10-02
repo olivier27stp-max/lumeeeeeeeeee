@@ -179,7 +179,14 @@ export default function AutomationBuilderPage() {
    * silencieux, ni boucle de nouveaux essais.
    */
   const [modifieeAilleurs, setModifieeAilleurs] = useState(false);
-  const versionLue = useRef<string | null>(null);
+  /** La version lue, PAR règle : l'éditeur peut passer d'une automatisation à une autre sans se démonter. */
+  const versionsLues = useRef(new Map<string, string>());
+  const versionLue = useCallback((idRegle: string | null | undefined): string | null => (
+    idRegle ? versionsLues.current.get(idRegle) ?? null : null
+  ), []);
+  const noterVersion = useCallback((idRegle: string | null | undefined, version: unknown) => {
+    if (idRegle && typeof version === 'string' && version) versionsLues.current.set(idRegle, version);
+  }, []);
   /*
    * UNE écriture à la fois : chacune part avec la version rendue par la
    * précédente. Deux écritures parties en parallèle (l'enregistrement
@@ -198,15 +205,36 @@ export default function AutomationBuilderPage() {
    * la PREMIÈRE écriture le crée (avec le contenu demandé), les suivantes
    * attendent cette création puis modifient.
    */
-  const ecrire = useCallback(async (patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => {
-    const modifier = (idRegle: string) => enFile(() => modifierAutomatisation(idRegle, patch, versionLue.current).then((maj) => {
-      if (maj?.updated_at) versionLue.current = maj.updated_at;
+  /** Écrit dans UNE règle, nommée : à sa place dans la file, avec SA version lue. */
+  const ecrireRegle = useCallback((idRegle: string, patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => (
+    enFile(() => modifierAutomatisation(idRegle, patch, versionLue(idRegle)).then((maj) => {
+      noterVersion(idRegle, maj?.updated_at);
       return maj;
     }, (e: unknown) => {
-      if (estIntrouvable(e)) setDisparue(true);
-      if (estModifieeAilleurs(e)) setModifieeAilleurs(true);
+      // Seulement si c'est encore la règle à l'écran (une écriture de départ vise l'ancienne).
+      if (idRegle === idReel.current) {
+        if (estIntrouvable(e)) setDisparue(true);
+        if (estModifieeAilleurs(e)) setModifieeAilleurs(true);
+      }
       throw e;
-    }));
+    }))
+  ), [enFile, versionLue, noterVersion]);
+
+  const ecrire = useCallback(async (patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => {
+    const modifier = (idRegle: string) => ecrireRegle(idRegle, patch);
+    /*
+     * CE QUI EST À L'ÉCRAN NE S'ÉCRIT QUE DANS SA RÈGLE (triage éditeur, S-01).
+     * L'éditeur passe d'une automatisation à une autre sans se démonter (le
+     * lien « Ouvrir » d'un toast) : pendant que la 2e charge, l'état à l'écran
+     * est encore celui de la 1re. Une écriture née de cet état ne doit JAMAIS
+     * partir vers la 2e — elle y écrivait le nom et le parcours de la 1re.
+     */
+    const aLEcran = regleCourante.current?.id;
+    if (idReel.current && aLEcran && aLEcran !== idReel.current) {
+      throw new Error(fr
+        ? 'Écriture annulée : l’éditeur est en train de changer d’automatisation.'
+        : 'Write cancelled: the editor is switching to another automation.');
+    }
     if (idReel.current) return modifier(idReel.current);
     if (creationEnVol.current) {
       const creee = await creationEnVol.current;
@@ -229,7 +257,7 @@ export default function AutomationBuilderPage() {
       is_active: false,
     }).then((creee) => {
       idReel.current = creee.id;
-      versionLue.current = creee.updated_at ?? null;
+      noterVersion(creee.id, creee.updated_at);
       passageALaRegleCreee.current = true;
       setRegle((r) => (r ? { ...r, id: creee.id, org_id: creee.org_id, created_at: creee.created_at, updated_at: creee.updated_at } : creee));
       navigate(`/automations/${creee.id}${parametres.get('lumi') === '1' ? '?lumi=1' : ''}`, { replace: true });
@@ -240,7 +268,7 @@ export default function AutomationBuilderPage() {
     });
     creationEnVol.current = enCreation;
     return enCreation;
-  }, [fr, navigate, parametres, sortieALaCreation, enFile]);
+  }, [fr, navigate, parametres, sortieALaCreation, ecrireRegle, noterVersion]);
   /*
    * Interrupteur martelé (Rafba, 2026-09-28) : chaque clic envoyait sa
    * requête calculée sur un état périmé, et la dernière réponse ARRIVÉE
@@ -255,8 +283,7 @@ export default function AutomationBuilderPage() {
     // La route serveur de publication (M8), la même que la liste. Dans la
     // file des écritures : publier touche la règle, donc sa version (A-09).
     envoyer: (id, actif) => enFile(async () => {
-      const version = await changerPublication(id, actif);
-      if (typeof version === 'string' && id === idReel.current) versionLue.current = version;
+      noterVersion(id, await changerPublication(id, actif));
     }),
     surFin: (id, actif) => {
       setRegle((r) => (r && r.id === id ? { ...r, is_active: actif } : r));
@@ -773,7 +800,7 @@ export default function AutomationBuilderPage() {
           : null,
       });
       // Garder la conversation a touché la règle : sa version est celle-ci.
-      if (propose.updated_at && idReel.current) versionLue.current = propose.updated_at;
+      noterVersion(idReel.current, propose.updated_at);
       // Le panneau d'étape resté ouvert saura QUI vient de changer son étape.
       setModifieePar('lumi');
       memoriser(propose.steps as Etape[]);
@@ -907,9 +934,58 @@ export default function AutomationBuilderPage() {
     // `/nouvelle` vient d'être remplacé par l'id du brouillon créé : l'écran
     // EST déjà la règle — relire la base écraserait ce qu'on tape.
     if (passageALaRegleCreee.current) { passageALaRegleCreee.current = false; return; }
-    // Une AUTRE règle ouverte dans le même éditeur (lien « Ouvrir » d'un
-    // toast) : les écritures doivent la viser, elle.
-    idReel.current = estNouvelle ? null : (id ?? null);
+    /*
+     * UNE AUTRE RÈGLE OUVERTE DANS LE MÊME ÉDITEUR (lien « Ouvrir » d'un toast).
+     *
+     * Triage éditeur, S-01 — une corruption de données : dès ce moment les
+     * écritures visaient la NOUVELLE règle, alors que l'écran portait encore
+     * le nom et le parcours de l'ancienne tant que la nouvelle chargeait. Sur
+     * un réseau lent, l'enregistrement automatique (3 s) partait donc dans la
+     * 2e automatisation avec le contenu de la 1re.
+     *
+     *   1. ce qui attendait d'être enregistré part dans SA règle, nommée ;
+     *   2. l'écran quitte l'ancienne règle tout de suite (« Chargement… ») :
+     *      plus rien d'elle ne reste en mémoire pour être écrit ailleurs.
+     * (`ecrire` refuse en plus toute écriture dont l'état n'est pas celui de
+     * la règle visée.)
+     */
+    const precedente = idReel.current;
+    const suivante = estNouvelle ? null : (id ?? null);
+    if (precedente && precedente !== suivante) {
+      const d = etatAuDepart.current;
+      if (d.aRegle && d.etat === 'incomplet') {
+        toast.error(d.fr
+          ? 'Automatisation quittée sans enregistrer : une étape était incomplète.'
+          : 'Automation left without saving: a step was incomplete.');
+      } else if (d.aRegle && d.incompletes === 0 && (d.etat === 'modifie' || d.etat === 'en_cours')) {
+        ecrireRegle(precedente, { name: d.nom, steps: d.steps }).catch((e: unknown) => {
+          console.error('[automatisations] enregistrement au changement d’automatisation impossible', e);
+          captureClientException(e, { where: 'AutomationBuilderPage.changementDeRegle' });
+          toast.error(d.fr
+            ? `Les dernières modifications de l’automatisation précédente n’ont pas pu être enregistrées : ${e instanceof Error ? e.message : String(e)}`
+            : `The previous automation’s latest changes could not be saved: ${e instanceof Error ? e.message : String(e)}`);
+        });
+      }
+      setChargement(true);
+      setRegle(null);
+      setNom('');
+      setSteps([]);
+      setHistorique([]);
+      setPosition(-1);
+      setEtatSauvegarde('a_jour');
+      echecsSauvegarde.current = 0;
+      setEtapeChoisie(null);
+      setEtapeEnAttente(null);
+      setAjoutEnCours(null);
+      setTiroirDeclencheur(false);
+      setReglageDeclencheur(false);
+      setMenuEtape(null);
+      setApercu(null);
+      setResumeLumi(null);
+      setModifieeAilleurs(false);
+      autreCreee.current = null;
+    }
+    idReel.current = suivante;
     creationEnVol.current = null;
     setDisparue(false);
     // La langue au moment du chargement, lue par ref : changer de langue en
@@ -948,7 +1024,7 @@ export default function AutomationBuilderPage() {
           : d.rule;
         setRegle(trouvee);
         // La version LUE : chaque enregistrement la renvoie au serveur (garde A-09).
-        versionLue.current = estNouvelle ? null : (trouvee?.updated_at ?? null);
+        if (!estNouvelle) noterVersion(trouvee?.id, trouvee?.updated_at);
         // Un panneau d'étape resté ouvert pendant un RECHARGEMENT : ce qui change sous lui vient d'ailleurs.
         setModifieePar('autre');
         /*
@@ -1022,11 +1098,11 @@ export default function AutomationBuilderPage() {
       if (document.visibilityState === 'hidden') return;
       const idRegle = idReel.current;
       const propre = () => rienANePasPerdre.current && !brouillonEtapeModifie.current && !brouillonDeclencheurModifie.current;
-      if (!idRegle || !versionLue.current || !propre()) return;
+      if (!idRegle || !versionLue(idRegle) || !propre()) return;
       lireVersionAutomatisation(idRegle)
         .then((version) => {
           // Relu APRÈS la lecture : une saisie commencée entre-temps n'est pas écrasée.
-          if (!vivant || !version || version === versionLue.current || idRegle !== idReel.current || !propre()) return;
+          if (!vivant || !version || version === versionLue(idRegle) || idRegle !== idReel.current || !propre()) return;
           recharger();
         })
         .catch((e: unknown) => console.error('[builder] version de l’automatisation illisible', e instanceof Error ? e.message : String(e)));
@@ -2039,7 +2115,7 @@ export default function AutomationBuilderPage() {
               setRestauration(true);
               restaurerAutomatisation(regle.id)
                 .then((maj) => {
-                  if (maj?.updated_at) versionLue.current = maj.updated_at;
+                  noterVersion(maj?.id ?? regle.id, maj?.updated_at);
                   setRegle((r) => (r ? { ...r, deleted_at: null, is_active: maj.is_active } : maj));
                   toast.success(fr ? 'Automatisation restaurée, en brouillon.' : 'Automation restored, as a draft.');
                 })

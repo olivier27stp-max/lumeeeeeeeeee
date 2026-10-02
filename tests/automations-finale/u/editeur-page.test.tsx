@@ -48,12 +48,19 @@ const api = vi.hoisted(() => ({
   version: vi.fn(),
 }));
 const confirmerMock = vi.hoisted(() => vi.fn(async (_o: unknown) => true));
-const toasts = vi.hoisted(() => ({ erreur: [] as string[], succes: [] as string[], info: [] as string[] }));
+const toasts = vi.hoisted(() => ({
+  erreur: [] as string[], succes: [] as string[], info: [] as string[],
+  /** Les boutons d'action des toasts de succès (« Ouvrir »…), par libellé. */
+  actions: [] as Array<{ label: string; onClick: () => void }>,
+}));
 
 vi.mock('sonner', () => ({
   toast: Object.assign(vi.fn(), {
     error: (m: string) => { toasts.erreur.push(String(m)); },
-    success: (m: string) => { toasts.succes.push(String(m)); },
+    success: (m: string, o?: { action?: { label: string; onClick: () => void } }) => {
+      toasts.succes.push(String(m));
+      if (o?.action) toasts.actions.push(o.action);
+    },
     info: (m: string) => { toasts.info.push(String(m)); },
   }),
 }));
@@ -144,7 +151,7 @@ beforeEach(() => {
   api.version.mockImplementation(async () => null);
   confirmerMock.mockReset();
   confirmerMock.mockImplementation(async () => true);
-  toasts.erreur = []; toasts.succes = []; toasts.info = [];
+  toasts.erreur = []; toasts.succes = []; toasts.info = []; toasts.actions = [];
   vi.spyOn(console, 'error').mockImplementation(() => {});
   localStorage.setItem('lume-language', 'fr');
   container = document.createElement('div');
@@ -329,6 +336,105 @@ describe('A-01 — Lumi modifie l’étape dont le panneau est ouvert : le panne
     cliquer(container.querySelector('button[aria-label="Annuler"]'));
     await attendre(2);
     expect(zone()?.value).toBe('Bonjour [client_first_name]');
+  });
+});
+
+// ─── Triage « éditeur », S-01 ───────────────────────────────────
+
+describe('S-01 — « Ouvrir » une 2e automatisation sur réseau lent : chacune garde SON nom et SON parcours', () => {
+  const DEUXIEME = 'bbbbbbbb-0000-4000-8000-000000000002';
+  const deuxieme = () => regle({
+    id: DEUXIEME, name: 'Réponse du client', trigger_event: 'client.replied',
+    steps: [{ id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Texto de la DEUXIÈME' } }, suivant: null }],
+  });
+  const texteDe = (steps: unknown) => JSON.stringify(steps ?? null);
+
+  /** Lumi pose un parcours dans la 1re ET crée une 2e automatisation (toast « Ouvrir »). */
+  function lumiCreeUneDeuxieme() {
+    api.lumi.mockImplementation(async () => ({
+      nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Fait.',
+      steps: [{ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Texto de LUMI' } }, suivant: null }],
+      autre: { nom: 'Réponse du client', trigger_event: 'client.replied', resume: 'Quand le client répond.', steps: deuxieme().steps },
+    }));
+    api.creer.mockImplementation(async (b: Record<string, unknown>) => ({ ...deuxieme(), ...b, id: DEUXIEME }));
+  }
+
+  it('l’enregistrement automatique de la 1re ne part JAMAIS dans la 2e pendant qu’elle charge — il part dans la 1re', async () => {
+    lumiCreeUneDeuxieme();
+    // Réseau lent : la 2e automatisation ne finit de charger que quand le test le décide.
+    let finirChargement: () => void = () => {};
+    api.editeur.mockImplementation((id: string | null) => {
+      const reponse = { rule: id === DEUXIEME ? deuxieme() : (etat.regles.find((r) => r.id === id) ?? null), catalogue: { declencheurs: DECLENCHEURS.filter((d) => !d.drapeau), actions: ACTIONS }, autres: [] };
+      if (id !== DEUXIEME) return Promise.resolve(reponse);
+      return new Promise((ok) => { finirChargement = () => ok(reponse); });
+    });
+    await ouvrir();
+    vi.useFakeTimers();
+    saisir(container.querySelector('textarea[id$="-prompt"]'), 'relance mon devis et réponds au client');
+    cliquer(boutonExact('Construire') ?? boutonExact('Envoyer'));
+    await attendre(12);
+    expect(toasts.succes.join('\n')).toContain('« Réponse du client » créée en brouillon');
+    api.modifier.mockClear();
+
+    // « Ouvrir », tout de suite : le parcours de Lumi n'est pas encore enregistré dans la 1re.
+    await act(async () => { toasts.actions.find((a) => a.label === 'Ouvrir')?.onClick(); });
+    await attendre();
+    expect(lieu()).toBe(`/automations/${DEUXIEME}`);
+    // L'écran a quitté la 1re : il dit qu'il charge, il ne montre plus son parcours.
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Chargement de l’automatisation…');
+    expect(container.textContent).not.toContain('Texto de LUMI');
+
+    // Les 3 s de l'enregistrement automatique passent, et bien plus, pendant que la 2e charge.
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    await attendre();
+    const ecrits = api.modifier.mock.calls.map((c) => ({ id: c[0] as string, patch: c[1] as { name?: string; steps?: unknown } }));
+    // Rien n'est parti dans la 2e…
+    expect(ecrits.filter((e) => e.id === DEUXIEME)).toEqual([]);
+    // … et ce que Lumi venait de poser dans la 1re y est bien enregistré, sous SON nom.
+    const dansLaPremiere = ecrits.filter((e) => e.id === ID && e.patch.steps);
+    expect(dansLaPremiere).toHaveLength(1);
+    expect(dansLaPremiere[0].patch.name).toBe('Relance devis');
+    expect(texteDe(dansLaPremiere[0].patch.steps)).toContain('Texto de LUMI');
+
+    // La 2e finit de charger : elle a SON nom et SON parcours, et rien n'attend d'être écrit.
+    await act(async () => { finirChargement(); });
+    await attendre(12);
+    expect(container.querySelector('header')?.textContent).toContain('Réponse du client');
+    expect(cartes()).toEqual(['Envoyer un texto']);
+    expect(carteEtape('Envoyer un texto')?.textContent).toContain('Texto de la DEUXIÈME');
+    expect(barreDuHaut()).toContain('Enregistré');
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    await attendre();
+    expect(api.modifier.mock.calls.filter((c) => c[0] === DEUXIEME)).toEqual([]);
+  });
+
+  it('une modification faite ENSUITE dans la 2e s’écrit dans la 2e, avec sa version à elle', async () => {
+    lumiCreeUneDeuxieme();
+    api.editeur.mockImplementation(async (id: string | null) => ({
+      rule: id === DEUXIEME ? { ...deuxieme(), updated_at: 'V-deuxieme' } : (etat.regles.find((r) => r.id === id) ?? null),
+      catalogue: { declencheurs: DECLENCHEURS.filter((d) => !d.drapeau), actions: ACTIONS }, autres: [],
+    }));
+    await ouvrir();
+    vi.useFakeTimers();
+    saisir(container.querySelector('textarea[id$="-prompt"]'), 'relance mon devis et réponds au client');
+    cliquer(boutonExact('Construire') ?? boutonExact('Envoyer'));
+    await attendre(12);
+    await act(async () => { toasts.actions.find((a) => a.label === 'Ouvrir')?.onClick(); });
+    await attendre(12);
+    api.modifier.mockClear();
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    saisir(panneauEtape()?.querySelector('textarea'), 'Texto de la DEUXIÈME, corrigé');
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    const [id, patch, version] = api.modifier.mock.calls[0] as [string, { name: string; steps: unknown }, string];
+    expect(id).toBe(DEUXIEME);
+    expect(patch.name).toBe('Réponse du client');
+    expect(texteDe(patch.steps)).toContain('Texto de la DEUXIÈME, corrigé');
+    expect(version).toBe('V-deuxieme');
   });
 });
 
