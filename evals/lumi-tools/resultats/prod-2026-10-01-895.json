@@ -1,0 +1,215 @@
+{
+ "date": "2026-10-01T23:18:50.194Z",
+ "api": "https://lumecrm.net",
+ "bilan": {
+  "global": {
+   "cas": 3,
+   "exactitude_outil_pct": 66.7,
+   "partiels": 0,
+   "rates": 1,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 4.28,
+   "cout_par_1000_dollars": 14.26
+  },
+  "sensibles": {
+   "cas": 0,
+   "exactitude_outil_pct": 0,
+   "partiels": 0,
+   "rates": 0,
+   "erreurs": 0,
+   "exactitude_params_pct": null,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 0,
+   "cout_par_1000_dollars": 0
+  },
+  "par_type": {
+   "action": {
+    "cas": 1,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 1.84,
+    "cout_par_1000_dollars": 18.37
+   },
+   "lecture": {
+    "cas": 2,
+    "exactitude_outil_pct": 50,
+    "partiels": 0,
+    "rates": 1,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 2.44,
+    "cout_par_1000_dollars": 12.21
+   },
+   "clarification": {
+    "cas": 0,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 0,
+    "cout_par_1000_dollars": 0
+   }
+  },
+  "par_section": {
+   "clients": {
+    "cas": 2,
+    "exactitude_outil_pct": 50,
+    "partiels": 0,
+    "rates": 1,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 2.23,
+    "cout_par_1000_dollars": 11.14
+   },
+   "equipe": {
+    "cas": 1,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 2.05,
+    "cout_par_1000_dollars": 20.51
+   }
+  }
+ },
+ "resultats": [
+  {
+   "id": "accent-note",
+   "section": "clients",
+   "outil": "add_note",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Ajoute une note au dossier de Nathalie Cote : préfère qu’on passe le matin.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "add_note",
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "entity_type": "client",
+    "entity_id": "09b4b76c-ce45-5661-86a7-0bb9e8275025",
+    "note": "Préfère qu'on passe le matin."
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Client",
+       "en": "Client"
+      },
+      "valeur": "Nathalie Côté · 67 rue De Montbrun, Boucherville, QC J4B 4T8, Boucherville · 514-555-0113"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Note",
+       "en": "Note"
+      },
+      "valeur": "Préfère qu'on passe le matin."
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "Je vais ajouter cette note au dossier de Nathalie Côté.",
+   "cout_cents": 1.8366,
+   "conversation_id": "f28dac07-582d-43e9-9bce-3790e63c5a1f",
+   "modele": "claude-haiku-4-5",
+   "etage": 6,
+   "duree_ms": 6711
+  },
+  {
+   "id": "accent-recherche",
+   "section": "clients",
+   "outil": "search_clients",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Cherche la fiche de Chantal Levesque et donne-moi son téléphone.",
+   "verdict_outil": "rate",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Le téléphone de Chantal Lévesque est **514-555-0119**.",
+   "cout_cents": 0.3905,
+   "conversation_id": "72252fee-9cdc-46aa-aa19-f6b5542a6613",
+   "modele": "claude-haiku-4-5",
+   "etage": 6,
+   "duree_ms": 4063
+  },
+  {
+   "id": "lot-pointages",
+   "section": "equipe",
+   "outil": "list_time_entries",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Liste les pointages de la dernière semaine, entrée par entrée.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_time_entries"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Je vais chercher les pointages de la dernière semaine.Voici les pointages de la dernière semaine (24 septembre au 1er octobre) :\n\n**Jeudi 24 septembre**\n- **Mathieu Lavoie** : 13 h à 15 h (2 heures) — Projet Fournier Gouttières\n- **Karine Bélanger** : 13 h à 15 h (2 heures) — Projet Fournier Gouttières\n\n**Mardi 29 septembre**\n- **Olivier Gauthier** : 8 h à 11 h (3 heures) — Projet LeBlanc Clinique\n\nAucun pointage n'a encore été approuvé. Les trois entrées sont fermées (complètes).",
+   "cout_cents": 2.0508,
+   "conversation_id": "722466a0-0cd5-4f92-9075-eaf6b88a4c19",
+   "modele": "claude-haiku-4-5",
+   "etage": 6,
+   "duree_ms": 7216
+  }
+ ]
+}

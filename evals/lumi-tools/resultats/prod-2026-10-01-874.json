@@ -1,0 +1,200 @@
+{
+ "date": "2026-10-01T19:24:16.522Z",
+ "api": "https://lumecrm.net",
+ "bilan": {
+  "global": {
+   "cas": 2,
+   "exactitude_outil_pct": 100,
+   "partiels": 0,
+   "rates": 0,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 3.11,
+   "cout_par_1000_dollars": 15.53
+  },
+  "sensibles": {
+   "cas": 1,
+   "exactitude_outil_pct": 100,
+   "partiels": 0,
+   "rates": 0,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 1.42,
+   "cout_par_1000_dollars": 14.17
+  },
+  "par_type": {
+   "action": {
+    "cas": 2,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 3.11,
+    "cout_par_1000_dollars": 15.53
+   },
+   "lecture": {
+    "cas": 0,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 0,
+    "cout_par_1000_dollars": 0
+   },
+   "clarification": {
+    "cas": 0,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 0,
+    "cout_par_1000_dollars": 0
+   }
+  },
+  "par_section": {
+   "clients": {
+    "cas": 1,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 1.69,
+    "cout_par_1000_dollars": 16.89
+   },
+   "devis": {
+    "cas": 1,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 1.42,
+    "cout_par_1000_dollars": 14.17
+   }
+  }
+ },
+ "resultats": [
+  {
+   "id": "prod-add_note",
+   "section": "clients",
+   "outil": "add_note",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Ajoute une note au dossier de Sophie Tremblay : elle préfère qu’on l’appelle le matin.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "add_note",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "entity_type": "client",
+    "entity_id": "b3759523-58b1-4a3e-9da6-d5e3ab95b372",
+    "note": "Elle préfère qu'on l'appelle le matin."
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Client",
+       "en": "Client"
+      },
+      "valeur": "Sophie Tremblay · 56 boul. Témoin, Longueuil · 514-555-0103 · qa3@lume.test"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Note",
+       "en": "Note"
+      },
+      "valeur": "Elle préfère qu'on l'appelle le matin."
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "Je vais ajouter cette note au dossier de Sophie Tremblay.",
+   "cout_cents": 1.6891,
+   "conversation_id": "0a2f7e31-5e57-46ab-bbc8-1498ca8048b4",
+   "duree_ms": 49618
+  },
+  {
+   "id": "prod-delete_quote",
+   "section": "devis",
+   "outil": "delete_quote",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime la soumission 3, c’est un doublon.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "delete_quote",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "23dfa179-9e8d-4540-8d2a-14a05f105e4e"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Devis",
+       "en": "Quote"
+      },
+      "valeur": "#3 · Devis pour Sophie Tremblay · Sophie Tremblay · 100,00 $ · brouillon",
+      "valeur_en": "#3 · Devis pour Sophie Tremblay · Sophie Tremblay · $100.00 · draft"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "Je vais supprimer le devis 3 (doublon pour Sophie Tremblay).",
+   "cout_cents": 1.4166,
+   "conversation_id": "0c1ce6f4-3aa8-48f9-977c-c234b91e164c",
+   "duree_ms": 34049
+  }
+ ]
+}

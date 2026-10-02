@@ -1,0 +1,155 @@
+{
+ "date": "2026-10-01T22:38:23.517Z",
+ "api": "https://lumecrm.net",
+ "bilan": {
+  "global": {
+   "cas": 2,
+   "exactitude_outil_pct": 100,
+   "partiels": 0,
+   "rates": 0,
+   "erreurs": 0,
+   "exactitude_params_pct": null,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 5.01,
+   "cout_par_1000_dollars": 25.05
+  },
+  "sensibles": {
+   "cas": 0,
+   "exactitude_outil_pct": 0,
+   "partiels": 0,
+   "rates": 0,
+   "erreurs": 0,
+   "exactitude_params_pct": null,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 0,
+   "cout_par_1000_dollars": 0
+  },
+  "par_type": {
+   "action": {
+    "cas": 0,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 0,
+    "cout_par_1000_dollars": 0
+   },
+   "lecture": {
+    "cas": 2,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 5.01,
+    "cout_par_1000_dollars": 25.05
+   },
+   "clarification": {
+    "cas": 0,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 0,
+    "cout_par_1000_dollars": 0
+   }
+  },
+  "par_section": {
+   "equipe": {
+    "cas": 1,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 2.04,
+    "cout_par_1000_dollars": 20.44
+   },
+   "rapports": {
+    "cas": 1,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 2.97,
+    "cout_par_1000_dollars": 29.65
+   }
+  }
+ },
+ "resultats": [
+  {
+   "id": "lot-modeles-automatisation",
+   "section": "rapports",
+   "outil": "list_automation_templates",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Montre-moi les modèles d’automatisation de la bibliothèque pour les rappels de rendez-vous.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_automation_templates"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Je te montre les modèles de rappels de rendez-vous.Voici les 6 modèles de rappels de rendez-vous disponibles :\n\n1. **Confirmation de rendez-vous** — Texto et courriel dès que le rendez-vous est pris.\n\n2. **Rappel de rendez-vous — 7 jours avant** — Texto et courriel une semaine avant.\n\n3. **Rappel de rendez-vous — la veille** — Texto et courriel la veille du rendez-vous.\n\n4. **Rappel de rendez-vous — 2 h avant** — Texto 2 heures avant l'arrivée de l'équipe.\n\n5. **Suivi après rendez-vous annulé** — Propose de reprendre un rendez-vous manqué et notifie l'équipe (texto et notification interne).\n\n6. **Rendez-vous — confirmation et rappels** — Le pack complet : confirmation à la réservation, puis rappels 7 jours avant, la veille et 2 h avant (texto et courriel).\n\nLequel veux-tu utiliser, ou tu cherches quelque chose de plus spécifique ?",
+   "cout_cents": 2.9654,
+   "conversation_id": "ea0e5ad5-266d-49dd-b6c5-999de61f15ab",
+   "duree_ms": 8677
+  },
+  {
+   "id": "lot-pointages",
+   "section": "equipe",
+   "outil": "list_time_entries",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Liste les pointages de la dernière semaine, entrée par entrée.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_time_entries"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Je regarde les pointages de la dernière semaine.Voici les pointages de la semaine du 24 au 30 septembre :\n\n**Lundi 24 septembre**\n- **Mathieu Lavoie** : 13 h à 15 h (2 heures) — Fournier Gouttières\n- **Karine Bélanger** : 13 h à 15 h (2 heures) — Fournier Gouttières\n\n**Lundi 29 septembre**\n- **Olivier Gauthier** : 8 h à 11 h (3 heures) — LeBlanc Clinique\n\nAucun pointage n'a encore été approuvé. C'est tout ce qu'il y a pour cette période.",
+   "cout_cents": 2.0438,
+   "conversation_id": "206cea92-6eb8-4cc8-893a-b2bb2c1e6cc4",
+   "duree_ms": 7343
+  }
+ ]
+}
