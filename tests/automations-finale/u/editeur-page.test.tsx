@@ -46,6 +46,7 @@ const api = vi.hoisted(() => ({
   stats: vi.fn(),
   lumi: vi.fn(),
   version: vi.fn(),
+  pause: vi.fn(),
 }));
 const confirmerMock = vi.hoisted(() => vi.fn(async (_o: unknown) => true));
 const toasts = vi.hoisted(() => ({
@@ -81,6 +82,10 @@ vi.mock('../../../src/lib/automationBuilderApi', async (orig) => ({
   changerPublication: (id: string, a: boolean) => api.publier(id, a),
   chargerStatistiques: (id?: string) => api.stats(id),
   restaurerAutomatisation: vi.fn(),
+}));
+vi.mock('../../../src/lib/automationWebhooksApi', async (orig) => ({
+  ...(await orig<typeof import('../../../src/lib/automationWebhooksApi')>()),
+  lireEtatPause: () => api.pause(),
 }));
 vi.mock('../../../src/lib/supabase', () => {
   const chaine: unknown = new Proxy(function () {}, {
@@ -153,6 +158,8 @@ beforeEach(() => {
   api.lumi.mockReset();
   api.version.mockReset();
   api.version.mockImplementation(async () => null);
+  api.pause.mockReset();
+  api.pause.mockImplementation(async () => ({ paused: false, pausedAt: null }));
   confirmerMock.mockReset();
   confirmerMock.mockImplementation(async () => true);
   toasts.erreur = []; toasts.succes = []; toasts.info = []; toasts.actions = [];
@@ -439,6 +446,63 @@ describe('S-01 — « Ouvrir » une 2e automatisation sur réseau lent : chacune
     expect(patch.name).toBe('Réponse du client');
     expect(texteDe(patch.steps)).toContain('Texto de la DEUXIÈME, corrigé');
     expect(version).toBe('V-deuxieme');
+  });
+});
+
+// ─── Triage « éditeur », S-32 ───────────────────────────────────
+
+describe('S-32 — la pause globale du bureau (« Tout arrêter ») se voit dans l’éditeur', () => {
+  const bandeau = () => container.querySelector('[role="status"]')?.textContent ?? null;
+
+  it('bureau en pause, automatisation publiée : un bandeau dit qu’elle n’envoie rien, et où lever la pause', async () => {
+    etat.regles = [regle({ is_active: true })];
+    api.pause.mockImplementation(async () => ({ paused: true, pausedAt: '2026-10-01T12:00:00Z' }));
+    await ouvrir();
+    expect(bandeau()).toContain('Vos automatisations sont en pause.');
+    expect(bandeau()).toContain('Cette automatisation est publiée, mais elle n’envoie rien tant que la pause dure. La pause se lève depuis « Mes automatisations ».');
+    // Sur tous les onglets, pas seulement « Parcours ».
+    cliquer(boutons().find((b) => b.getAttribute('role') === 'tab' && b.textContent === 'Journaux'));
+    await attendre(2);
+    expect(bandeau()).toContain('Vos automatisations sont en pause.');
+  });
+
+  it('bureau en pause, brouillon : le bandeau prévient avant de publier', async () => {
+    api.pause.mockImplementation(async () => ({ paused: true, pausedAt: '2026-10-01T12:00:00Z' }));
+    await ouvrir();
+    expect(bandeau()).toContain('Même publiée, cette automatisation n’enverra rien tant que la pause dure.');
+  });
+
+  it('bureau en marche : aucun bandeau', async () => {
+    etat.regles = [regle({ is_active: true })];
+    await ouvrir();
+    expect(bandeau()).toBeNull();
+    expect(container.textContent).not.toContain('en pause');
+  });
+
+  it('la pause est levée ailleurs : au retour sur la fenêtre, le bandeau part', async () => {
+    api.pause.mockImplementation(async () => ({ paused: true, pausedAt: '2026-10-01T12:00:00Z' }));
+    await ouvrir();
+    expect(bandeau()).not.toBeNull();
+    api.pause.mockImplementation(async () => ({ paused: false, pausedAt: null }));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await attendre();
+    expect(bandeau()).toBeNull();
+  });
+
+  it('l’état de la pause est illisible : l’éditeur s’ouvre quand même, sans bandeau inventé', async () => {
+    api.pause.mockImplementation(async () => { throw new Error('panne'); });
+    await ouvrir();
+    expect(bandeau()).toBeNull();
+    expect(cartes()).toEqual(['Envoyer un texto', 'Créer une tâche']);
+  });
+
+  it('en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    etat.regles = [regle({ is_active: true })];
+    api.pause.mockImplementation(async () => ({ paused: true, pausedAt: '2026-10-01T12:00:00Z' }));
+    await ouvrir();
+    expect(bandeau()).toContain('Your automations are paused.');
+    expect(bandeau()).toContain('This automation is published, but it sends nothing while the pause lasts.');
   });
 });
 

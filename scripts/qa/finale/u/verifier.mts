@@ -6,7 +6,7 @@
  *   (sans argument : tous les scénarios)
  */
 import type { Page } from '@playwright/test';
-import { admin, carte, creerRegle, fermer, lireRegle, ouvrirEditeur, ouvrirPage, panneau, pause, tiroir, verifier } from './banc.mts';
+import { admin, carte, creerRegle, fermer, leBureau, lireRegle, ouvrirEditeur, ouvrirPage, panneau, pause, tiroir, verifier } from './banc.mts';
 
 type Etapes = Array<{ id: string; action?: { config?: Record<string, unknown> } } & Record<string, unknown>>;
 const etapes = async (id: string): Promise<Etapes> => ((await lireRegle(id)).steps ?? []) as Etapes;
@@ -124,6 +124,29 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     verifier(JSON.stringify(deuxieme.steps).includes('Texto de la DEUXIÈME') && !JSON.stringify(deuxieme.steps).includes('Texto de LUMI'), 'la 2e garde son parcours');
     verifier(JSON.stringify(premiere.steps).includes('Texto de LUMI') && premiere.name === `${marque} première`, 'ce que Lumi a posé dans la 1re y est enregistré, sous son nom');
     verifier(((await carte(page, 'Envoyer un texto').textContent()) ?? '').includes('Texto de la DEUXIÈME'), 'l’écran montre le parcours de la 2e');
+    await page.context().close();
+  },
+
+  /** S-32 — bureau en pause globale : l'éditeur d'une automatisation publiée le dit. */
+  async s32() {
+    const b = await leBureau();
+    const regle = await creerRegle({ trigger_event: 'client.untagged', steps: [action('create_task', { title: 'Tâche' })], is_active: true });
+    const page = await ouvrirPage();
+    try {
+      const { data: pose } = await admin.from('company_settings')
+        .update({ automations_paused: true, automations_paused_at: new Date().toISOString(), automations_paused_by: b.users.proprioA })
+        .eq('org_id', b.orgA).select('org_id');
+      verifier((pose ?? []).length === 1, 'la pause globale est posée en base pour le bureau de test');
+      await ouvrirEditeur(page, regle.id);
+      await page.getByRole('status').filter({ hasText: 'Vos automatisations sont en pause.' }).waitFor({ timeout: 20_000 });
+      verifier(await page.getByText('elle n’envoie rien tant que la pause dure').isVisible(), 'le bandeau dit que l’automatisation publiée n’envoie rien');
+    } finally {
+      await admin.from('company_settings').update({ automations_paused: false, automations_paused_at: null, automations_paused_by: null }).eq('org_id', b.orgA);
+      await admin.from('automation_rules').update({ is_active: false }).eq('id', regle.id);
+    }
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.getByRole('status').filter({ hasText: 'Vos automatisations sont en pause.' }).waitFor({ state: 'hidden', timeout: 20_000 });
+    verifier(true, 'pause levée : au retour sur la fenêtre, le bandeau part');
     await page.context().close();
   },
 

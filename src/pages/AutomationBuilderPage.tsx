@@ -98,6 +98,7 @@ import OngletReglages, { type ReglagesAutomatisation } from '../components/autom
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { creerFileBascule } from '../lib/fileBascule';
 import { captureClientException } from '../lib/sentry';
+import { lireEtatPause } from '../lib/automationWebhooksApi';
 
 type Onglet = 'parcours' | 'reglages' | 'historique' | 'journaux';
 
@@ -1218,6 +1219,27 @@ export default function AutomationBuilderPage() {
     echecsSauvegarde.current = 0;
     setEtatSauvegarde('a_jour');
     setEssaiChargement((n) => n + 1);
+  }, []);
+
+  /*
+   * LA PAUSE GLOBALE DU BUREAU (« Tout arrêter », posée depuis la liste) —
+   * triage éditeur, S-32. L'éditeur d'une automatisation publiée affichait
+   * « Publiée », en vert, sans un mot : rien ne disait qu'elle n'envoyait plus
+   * rien. La liste, elle, l'affiche. Lue à l'ouverture, et relue quand la
+   * fenêtre reprend le focus (on a pu la lever dans un autre onglet).
+   */
+  const [bureauEnPause, setBureauEnPause] = useState(false);
+  useEffect(() => {
+    let vivant = true;
+    const lire = () => {
+      if (document.visibilityState === 'hidden') return;
+      lireEtatPause()
+        .then((e) => { if (vivant) setBureauEnPause(e?.paused === true); })
+        .catch((e: unknown) => console.error('[builder] état de la pause illisible', e instanceof Error ? e.message : String(e)));
+    };
+    lire();
+    window.addEventListener('focus', lire);
+    return () => { vivant = false; window.removeEventListener('focus', lire); };
   }, []);
 
   /*
@@ -2591,6 +2613,28 @@ export default function AutomationBuilderPage() {
           />
         </div>
       </div>
+
+      {/* ══ Le bureau a tout mis en pause (S-32) : « Publiée » ne veut pas
+          dire « envoie ». Dit sur tous les onglets, tant que la pause dure. ══ */}
+      {bureauEnPause && (
+        <div role="status" className="flex shrink-0 items-start gap-2 border-b border-warning/40 bg-warning-light px-4 py-2.5">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-warning">
+              {fr ? 'Vos automatisations sont en pause.' : 'Your automations are paused.'}
+            </p>
+            <p className="mt-0.5 text-[12px] text-text-secondary">
+              {regle.is_active
+                ? (fr
+                  ? 'Cette automatisation est publiée, mais elle n’envoie rien tant que la pause dure. La pause se lève depuis « Mes automatisations ».'
+                  : 'This automation is published, but it sends nothing while the pause lasts. Lift the pause from “My automations”.')
+                : (fr
+                  ? 'Même publiée, cette automatisation n’enverra rien tant que la pause dure. La pause se lève depuis « Mes automatisations ».'
+                  : 'Even once published, this automation will send nothing while the pause lasts. Lift the pause from “My automations”.')}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ══ Modifiée ailleurs (A-09) : dit sur tous les onglets, avec la seule
           issue qui n'écrase rien — recharger la version en base. ══ */}
