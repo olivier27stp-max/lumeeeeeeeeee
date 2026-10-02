@@ -1238,12 +1238,51 @@ export default function Automations() {
     : onglet === 'corbeille' ? supprimees
     : vivantes.filter((r) => !r.is_preset || r.is_active || resteIci(r));
 
+  /**
+   * Le déclencheur d'une ligne, tel qu'il est écrit sous son nom. Le libellé du CATALOGUE d'abord —
+   * celui de l'éditeur : « Lead créé » ici, « Nouveau prospect » là-bas, pour le même déclencheur
+   * (audit V2, A-16). La table locale ne sert plus qu'aux événements hors catalogue.
+   */
+  const libelleDeclencheur = (r: AutomationRule): string => {
+    const d = trouverDeclencheur(r.trigger_event) ?? TRIGGER_DISPLAY[r.trigger_event];
+    return d ? (fr ? d.fr : d.en) : r.trigger_event;
+  };
+  /** Le sous-titre d'une ligne : le déclencheur, puis le délai ou le nombre d'étapes. */
+  const sousTitre = (r: AutomationRule): string => {
+    const n = Array.isArray(r.steps) ? r.steps.length : 0;
+    const suite = n > 0
+      // « 1 étapes » (QA 2026-09-25, P2-11).
+      ? (fr ? `${n} étape${n > 1 ? 's' : ''}` : `${n} step${n > 1 ? 's' : ''}`)
+      : formatDelay(r.delay_seconds, language);
+    return `${libelleDeclencheur(r)} · ${suite}`;
+  };
+
   /** Ce qu'on cherche, tel qu'on le compare (vide = pas de recherche, même si le champ ne contient que des espaces). */
   const recherche = pourRecherche(search);
+  /*
+   * ON TROUVE CE QU'ON VOIT, ET ON VOIT POURQUOI (triage `04-filtres-recherche-tri:113` et `:123`).
+   * La recherche fouillait le nom et la description interne — que la liste n'affiche nulle part —
+   * mais pas le sous-titre (« Facture payée · 30 min après »), écrit sous chaque nom. Elle fouille
+   * maintenant les trois ; une ligne trouvée par sa SEULE description montre l'extrait qui l'a fait
+   * trouver (`extraitTrouve`).
+   */
+  const extraitTrouve = (r: AutomationRule): string | null => {
+    if (!recherche || !r.description) return null;
+    if (pourRecherche(localizeAutomationName(r.name, language)).includes(recherche)) return null;
+    if (pourRecherche(sousTitre(r)).includes(recherche)) return null;
+    const i = pourRecherche(r.description).indexOf(recherche);
+    if (i < 0) return null;
+    // Les positions sont celles du texte comparé (sans accents) : à quelques caractères près, la fenêtre suffit.
+    const debut = Math.max(0, i - 40);
+    const fin = Math.min(r.description.length, i + recherche.length + 60);
+    return `${debut > 0 ? '… ' : ''}${r.description.slice(debut, fin).trim()}${fin < r.description.length ? ' …' : ''}`;
+  };
   const filtrees = sourceOnglet.filter((r) => {
     if (recherche) {
-      const nom = pourRecherche(localizeAutomationName(r.name, language));
-      if (!nom.includes(recherche) && !pourRecherche(r.description || '').includes(recherche)) return false;
+      const trouve = pourRecherche(localizeAutomationName(r.name, language)).includes(recherche)
+        || pourRecherche(sousTitre(r)).includes(recherche)
+        || pourRecherche(r.description || '').includes(recherche);
+      if (!trouve) return false;
     }
     if (filterCategory !== 'all' && getCategory(r) !== filterCategory) return false;
     if (filterStatut === 'publiee' && !r.is_active && !resteIci(r)) return false;
@@ -2225,11 +2264,7 @@ export default function Automations() {
                     const rule = r;
                     const echecs = stats?.[rule.id]?.echouees ?? 0;
                     const causeEchec = raisonLisible(stats?.[rule.id]?.dernier_echec?.erreur ?? null, fr);
-                    // Le libellé du CATALOGUE d'abord — celui de l'éditeur :
-                    // « Lead créé » ici, « Nouveau prospect » là-bas, pour le
-                    // même déclencheur (audit V2, A-16). La table locale ne
-                    // sert plus qu'aux événements hors catalogue.
-                    const decl = trouverDeclencheur(rule.trigger_event) ?? TRIGGER_DISPLAY[rule.trigger_event];
+                    const extrait = extraitTrouve(rule);
                     const meta = PRESET_META[rule.preset_key || ''];
                     const Icone = meta?.icon ?? Zap;
                     return (
@@ -2262,16 +2297,12 @@ export default function Automations() {
                                 <span className={cn('block font-medium text-primary', peutModifier && 'hover:underline')}>
                                   {localizeAutomationName(rule.name, language)}
                                 </span>
-                                <span className="block text-[11px] text-text-tertiary">
-                                  {decl ? (fr ? decl.fr : decl.en) : rule.trigger_event}
-                                  {' · '}
-                                  {Array.isArray(rule.steps) && rule.steps.length > 0
-                                    ? (fr
-                                      // « 1 étapes » (QA 2026-09-25, P2-11).
-                                      ? `${rule.steps.length} étape${rule.steps.length > 1 ? 's' : ''}`
-                                      : `${rule.steps.length} step${rule.steps.length > 1 ? 's' : ''}`)
-                                    : formatDelay(rule.delay_seconds, language)}
-                                </span>
+                                <span className="block text-[11px] text-text-tertiary">{sousTitre(rule)}</span>
+                                {extrait && (
+                                  <span className="block text-[11px] text-text-tertiary">
+                                    {fr ? 'Description : ' : 'Description: '}{extrait}
+                                  </span>
+                                )}
                                 {avisOk === false && rule.is_active && !rule.deleted_at && demandeUnAvis(rule) && (
                                   <span className="mt-0.5 inline-flex items-start gap-1 text-[11px] text-amber-700 dark:text-amber-400">
                                     <AlertTriangle size={11} className="mt-px shrink-0" aria-hidden="true" />

@@ -702,6 +702,65 @@ describe('04-filtres-recherche-tri:99 et :106 — la recherche ignore les accent
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('04-filtres-recherche-tri:113 et :123 — on trouve ce qu’on voit, et on voit pourquoi une ligne est trouvée', () => {
+  const chercher = async (q: string) => {
+    await act(async () => {
+      const champ = conteneur.querySelector('#rech-automations') as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(champ, q);
+      champ.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await laisser();
+  };
+  const noms = () => Array.from(conteneur.querySelectorAll('tbody tr td:nth-child(2) span.font-medium')).map((n) => n.textContent);
+  const ligne = () => (conteneur.querySelector('tbody tr td:nth-child(2)')?.textContent || '');
+
+  it('chercher « Facture payée » (écrit sous le nom) trouve la ligne', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([
+      regle({ name: 'Merci', trigger_event: 'invoice.paid' }), regle({ name: 'Autre', trigger_event: 'lead.created' }),
+    ]);
+    await rendre();
+    expect(texte()).toContain('Facture payée · Immédiat');
+    await chercher('Facture payée');
+    expect(noms()).toEqual(['Merci']);
+    // Le délai aussi est écrit sous le nom.
+    await chercher('immediat');
+    expect(noms()).toEqual(['Autre', 'Merci']);
+  });
+
+  it('une ligne trouvée par sa description interne MONTRE l’extrait qui contient le mot', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([
+      regle({ name: 'Sans rapport', description: 'Description interne motcache42, pour l’équipe.' }),
+    ]);
+    await rendre();
+    // Sans recherche, la description n'encombre pas la liste.
+    expect(ligne()).not.toContain('motcache42');
+    await chercher('motcache42');
+    expect(noms()).toEqual(['Sans rapport']);
+    expect(ligne()).toContain('Description : Description interne motcache42, pour l’équipe.');
+  });
+
+  it('trouvée par son nom ou son sous-titre : pas d’extrait (on voit déjà pourquoi)', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([
+      regle({ name: 'Relance de devis', description: 'Relance de devis, version longue.' }),
+    ]);
+    await rendre();
+    await chercher('relance');
+    expect(noms()).toEqual(['Relance de devis']);
+    expect(ligne()).not.toContain('Description :');
+  });
+
+  it('une longue description est réduite à un extrait autour du mot', async () => {
+    const longue = `${'Avant. '.repeat(30)}Le motrare ici. ${'Après. '.repeat(30)}`;
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Longue', description: longue })]);
+    await rendre();
+    await chercher('motrare');
+    expect(ligne()).toContain('motrare');
+    expect(ligne()).toMatch(/Description : … .*motrare.* …/);
+    expect(ligne().length).toBeLessThan(260);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
