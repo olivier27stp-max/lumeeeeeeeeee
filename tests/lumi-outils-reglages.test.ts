@@ -109,9 +109,10 @@ beforeEach(() => {
 });
 
 describe('manifestes : les trois exports couvrent exactement les outils du module', () => {
-  it('33 outils, noms uniques, aucune collision avec le registre existant', () => {
+  it('35 outils, noms uniques, aucune collision avec le registre existant', () => {
     // 32 depuis create_automation_from_text (Lumi sait créer une automatisation).
-    expect(TOUS.length).toBe(33);  // + get_lumi_credits (2026-09-30)
+    // 33 : + get_lumi_credits (2026-09-30). 35 : + get_automation et update_automation_from_text (mission finale, 2026-10-02).
+    expect(TOUS.length).toBe(35);
     expect(new Set(TOUS).size).toBe(TOUS.length);
     // Intégrés dans AGENT_TOOLS via outils-domaines.ts : chacun est enregistré une fois, sous son nom.
     for (const n of TOUS) expect(TOOLS_BY_NAME[n]?.declaration.name, `${n} absent de TOOLS_BY_NAME`).toBe(n);

@@ -714,6 +714,115 @@ const createAutomationFromText: AgentTool = {
 };
 
 /**
+ * Modifier la STRUCTURE d'une automatisation existante, à partir d'une phrase
+ * (F-14, A-14) : un délai, une étape, une condition, un filtre, le déclencheur.
+ *
+ * Avant, le clavardage ne savait que créer : « ajoute un délai de 3 jours » sur
+ * une automatisation existante finissait par un DOUBLON sans le filtre, que
+ * « active-la » publiait pour tous les clients. Ici la MÊME règle est modifiée :
+ *  · on part de son parcours en base (`etapesDeLaRegle`), nom compris ;
+ *  · la génération est celle du panneau de l'éditeur (`genererParcours` avec
+ *    `parcoursActuel`) : une demande qu'elle ne sait pas faire (cibler un type
+ *    de client, une action qui n'existe pas) ne change RIEN et le dit ;
+ *  · l'écriture passe par la route de l'éditeur (PATCH) : mêmes validations,
+ *    même refus d'une automatisation à la corbeille, et une automatisation
+ *    PUBLIÉE que la modification casserait reste comme elle était (422) ;
+ *  · rien n'est activé ; la ligne est relue et son état rendu.
+ */
+const updateAutomationFromText: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'update_automation_from_text',
+    description:
+      'Change the STRUCTURE of an EXISTING automation from a plain-language instruction, in place: add, remove or change a wait ("add a 3-day delay before the text"), '
+      + 'add or remove a step ("add an email 2 days after the text"), add or remove a condition ("only if the invoice is over $500", "only clients tagged VIP"), change the trigger. '
+      + 'Same rule, nothing is enabled. Pass the user\'s own words; one change per call unless they asked for several. '
+      + 'NOT possible yet: targeting by client TYPE (commercial, residential): do not call - ask ONE question instead ("Do these clients carry a tag such as Commercial? I can filter on a tag."). '
+      + 'Actions that exist: text message, email, internal notification, task, tag, review request, wait, condition. An automatic phone call, WhatsApp or voicemail does NOT exist: say so, do not call. '
+      + 'A new WORDING only: update_automation_message. A new name: rename_automation_rule.',
+    parameters: {
+      type: 'object',
+      properties: {
+        rule_id: { type: 'string', description: 'Automation rule id (from get_automation or list_automations).' },
+        instruction: { type: 'string', description: 'What to change, in the user\'s own words, with every number they gave ("ajoute un delai de 3 jours avant le texto").' },
+      },
+      required: ['rule_id', 'instruction'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'update_automation_from_text', args, async () => {
+      const id = champRequis(args.rule_id, 'L’automatisation');
+      const demande = champRequis(args.instruction, 'La modification demandée').trim();
+      if (demande.length < 6) throw new Error('Dis ce qu’il faut changer dans l’automatisation (ex. : « ajoute un délai de 3 jours avant le texto »).');
+      const langueTour = langueDuTour();
+      const fr = langueTour === 'fr';
+
+      // AVANT de payer la génération : la règle existe, et n'est pas à la corbeille.
+      const avant = await lireAutomatisation(ctx, id);
+      refuserCorbeille(avant);
+      const etapesAvant = etapesDeLaRegle(avant);
+      if (!etapesAvant.length) {
+        throw new Error('Cette automatisation n’a encore aucune étape : décris ce qu’elle doit faire au complet, je la bâtis.');
+      }
+
+      const { genererParcours } = await import('../lumi/generer-parcours');
+      const { data: reglages } = await ctx.client
+        .from('company_settings').select('default_language').eq('org_id', ctx.orgId).maybeSingle();
+      const langueMessages: 'fr' | 'en' = reglages?.default_language === 'en' ? 'en' : 'fr';
+      const resultat = await genererParcours({
+        admin: getServiceClient(),
+        orgId: ctx.orgId,
+        userId: ctx.userId ?? null,
+        demande,
+        langue: langueMessages,
+        parcoursActuel: { nom: avant.name, trigger_event: avant.trigger_event, steps: etapesAvant as unknown[] },
+        canal: 'clavardage',
+        ruleId: avant.id,
+      });
+      if (!resultat.parcours) {
+        throw new Error(`${fr ? 'Rien n’a été modifié.' : 'Nothing was changed.'} ${resultat.erreur ?? ''}`.trim());
+      }
+      const p = resultat.parcours;
+      // Une question, un refus, une demande que Lume ne sait pas faire : RIEN n'est écrit, et Lumi le dit.
+      const declencheurChange = p.trigger_event !== avant.trigger_event;
+      const etapesChangees = JSON.stringify(etapesAvant) !== JSON.stringify(p.steps);
+      if (!etapesChangees && !declencheurChange && !p.renomme) {
+        throw new Error(`${fr ? 'Rien n’a été modifié dans l’automatisation.' : 'Nothing was changed in the automation.'} ${p.resume}`.trim());
+      }
+
+      // UNE seule porte pour écrire (`ecrireRegle`) : les contrôles de la route de l'éditeur, le refus
+      // d'une automatisation à la corbeille, `actions` remis en accord, une automatisation PUBLIÉE que
+      // la modification casserait laissée intacte — puis la ligne RELUE (A-05).
+      const ecrite = await ecrireRegle({
+        client: ctx.client, orgId: ctx.orgId, ruleId: avant.id, auteurId: ctx.userId ?? null, origine: 'lumi', fr,
+        changements: {
+          ...(etapesChangees ? { steps: p.steps } : {}),
+          ...(declencheurChange ? { trigger_event: p.trigger_event } : {}),
+          ...(p.renomme ? { name: p.nom } : {}),
+        },
+      });
+      if (!ecrite.ok) throw new Error(`${fr ? 'Rien n’a été modifié.' : 'Nothing was changed.'} ${ecrite.erreur}`);
+      const relue = ecrite.regle;
+      const publiee = relue.is_active === true;
+      return {
+        updated: true,
+        rule_id: relue.id,
+        name: relue.name,
+        is_active: publiee,
+        ce_qui_a_change: p.resume,
+        automatisation: etatRelu(relue, langueTour),
+        recu: fr
+          ? `${p.resume}\n\nElle fait maintenant (${publiee ? 'publiée : ça s’applique dès le prochain déclenchement' : 'en brouillon : rien ne part tant qu’elle n’est pas activée'}) :\n${etapesPourRecu(relue, 'fr')}`
+          : `${p.resume}\n\nIt now does (${publiee ? 'published: this applies from the next trigger' : 'draft: nothing is sent until it is enabled'}):\n${etapesPourRecu(relue, 'en')}`,
+        note: publiee
+          ? 'Modifiée, et toujours PUBLIÉE : le nouveau parcours s’applique dès le prochain déclenchement.'
+          : 'Modifiée, toujours en brouillon : rien ne part tant qu’elle n’est pas activée.',
+      };
+    }),
+};
+
+/**
  * Réécrit le corps (et l'objet, pour un courriel) d'UN message d'envoi d'une
  * règle — lecture-modification-écriture, le reste est intact.
  *
@@ -1880,7 +1989,7 @@ export const OUTILS_REGLAGES: AgentTool[] = [
   // Automatisations
   createAutomationFromText, toggleAutomationRule, updateAutomationMessage, updateAutomationSmsBody, setAutomationLanguage,
   // Automatisations — mission finale (2026-10-02) : lire le contenu, modifier la structure d'une règle existante.
-  getAutomation,
+  getAutomation, updateAutomationFromText,
   // Taxes
   getTaxConfig, setupTaxes, createTaxConfig, updateTaxConfig, deleteTaxConfig, setDefaultTaxGroup,
   // Catalogue
@@ -1915,6 +2024,8 @@ export const REGISTRE_REGLAGES: Record<string, { sensible: boolean; reversible: 
   update_automation_message:   { sensible: true,  reversible: true,  vers_client: false },
   update_automation_sms_body:  { sensible: true,  reversible: true,  vers_client: false },
   set_automation_language:     { sensible: true,  reversible: true,  vers_client: false },
+  // Modifie ce que les clients recevront (toujours une carte) ; n'active rien.
+  update_automation_from_text: { sensible: true,  reversible: true,  vers_client: false },
   setup_taxes:                 { sensible: true,  reversible: true,  vers_client: false },
   create_tax_config:           { sensible: true,  reversible: true,  vers_client: false },
   update_tax_config:           { sensible: true,  reversible: true,  vers_client: false },
@@ -1949,6 +2060,7 @@ export const PERMISSIONS_REGLAGES: Record<string, { cle: PermissionKey; capacite
   update_automation_sms_body:  { cle: 'automations.update',     capacite: 'la modification des automatisations' },
   set_automation_language:     { cle: 'automations.update',     capacite: 'la langue des automatisations' },
   get_automation:              { cle: 'automations.read',       capacite: 'la consultation des automatisations' },
+  update_automation_from_text: { cle: 'automations.update',     capacite: 'la modification des automatisations' },
   get_tax_config:              { cle: 'settings.read',          capacite: 'la consultation des taxes' },
   setup_taxes:                 { cle: 'settings.update',        capacite: 'la configuration des taxes' },
   create_tax_config:           { cle: 'settings.update',        capacite: 'la configuration des taxes' },
@@ -1984,7 +2096,7 @@ export const TOPICS_REGLAGES: Partial<Record<IdTopic, string[]>> = {
   ],
   rapports: [
     'create_automation_from_text', 'toggle_automation_rule', 'update_automation_message', 'update_automation_sms_body', 'set_automation_language',
-    'get_automation',
+    'get_automation', 'update_automation_from_text',
     'list_goals', 'set_goal', 'delete_goal',
     'list_scheduled_reports', 'create_scheduled_report', 'update_scheduled_report', 'delete_scheduled_report', 'send_scheduled_report_now',
     'list_notifications', 'mark_notifications_read', 'delete_notification',
