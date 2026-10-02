@@ -17,6 +17,7 @@ import { appelApi, lireRegle } from '../_outils/banc';
 import {
   CAPTURES, donnees, creerBrouillon, creerBrouillonAvecAction, ouvrirEditeur, ouvrirTiroir, itemTiroir, panneauEtape, champ,
   boutonEnregistrer, attendreConfig, attendreEnregistre, carte, optionChoisie,
+  ajouterAction, ecrituresVers, laisserPasserLEnregistrementAuto,
 } from './_aides';
 import type { Locator, Page } from '@playwright/test';
 
@@ -126,7 +127,7 @@ test.describe('publication — action incompatible ou indisponible', () => {
     expect((await lireRegle(bureau, regle.id))?.is_active).toBe(false);
   });
 
-  test('[ACT-16][CHA-35][EDT-059][EDT-018] « Date atteinte » sur un champ du pipeline : une action que le tiroir a laissé ajouter n’est pas ensuite déclarée impossible à publier (S-09) @defaut', async ({ page, bureau, marque }) => {
+  test('[ACT-16][CHA-35][EDT-059][EDT-018] « Date atteinte » sur un champ du pipeline : une action que le tiroir a laissé ajouter n’est pas ensuite déclarée impossible à publier (S-09)', async ({ page, bureau, marque }) => {
     const d = await donnees(bureau);
     const regle = await creerBrouillonAvecAction(bureau, marque, 'date.reached', 'send_sms', { body: 'Bonjour [client_name]' }, {
       conditions: { champ_id: d.champs.qa_fermeture.id, jours_avant: 7 },
@@ -151,7 +152,7 @@ test.describe('publication — action incompatible ou indisponible', () => {
 });
 
 test.describe('publication — automatisation déjà publiée', () => {
-  test('[EDT-059][EDT-130][ACT-02][CHA-07] sur une automatisation PUBLIÉE, une action choisie dans le tiroir n’est pas mise en ligne avec son texte de départ tant que son panneau n’est pas enregistré @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-059][EDT-130][ACT-02][CHA-07] sur une automatisation PUBLIÉE, une action choisie dans le tiroir n’est pas mise en ligne avec son texte de départ tant que son panneau n’est pas enregistré', async ({ page, bureau, marque }) => {
     // Publiée, interne (une tâche), sur un déclencheur que rien ne provoque ici.
     const regle = await creerBrouillonAvecAction(bureau, marque, 'client.untagged', 'create_task', { title: 'Tâche existante' }, { is_active: true });
     await ouvrirEditeur(page, regle.id);
@@ -168,6 +169,62 @@ test.describe('publication — automatisation déjà publiée', () => {
     await page.screenshot({ path: `${CAPTURES}/publication-publiee-action-par-defaut.png` });
     const enBase = ((await lireRegle(bureau, regle.id))?.steps ?? []) as Array<{ id: string }>;
     expect(enBase.map((e) => e.id), 'le texto de départ est déjà dans le parcours EN LIGNE alors que son panneau n’a pas été enregistré').toEqual(['e1']);
+  });
+
+  /*
+   * Le même défaut, regardé de plus près (ligne 1 du tri, correctif 3b739958) : pendant que le panneau de l'étape
+   * choisie reste ouvert, la LIGNE de la règle ne change pas du tout (ni parcours, ni actions, ni date de
+   * modification) et aucune écriture ne part ; fermer le panneau sans enregistrer demande confirmation, et l'étape
+   * n'existe alors nulle part — ni sur le canevas, ni en base, ni après rechargement.
+   */
+  test('[EDT-059][EDT-130][EDT-129][ACT-02] publiée : une action choisie dans le tiroir puis laissée 5 s ne change rien en base ; fermer son panneau sans enregistrer la fait disparaître de partout', async ({ page, bureau, marque }) => {
+    const regle = await creerBrouillonAvecAction(bureau, marque, 'client.untagged', 'create_task', { title: 'Tâche existante' }, { is_active: true });
+    const ligne = async () => {
+      const r = await lireRegle(bureau, regle.id);
+      return { steps: r?.steps, actions: r?.actions, is_active: r?.is_active, updated_at: r?.updated_at, conditions: r?.conditions, name: r?.name };
+    };
+    const ecritures = ecrituresVers(page, regle.id);
+    await ouvrirEditeur(page, regle.id);
+    await expect(interrupteur(page)).toHaveAttribute('aria-checked', 'true');
+    const avant = await ligne();
+    expect(avant.is_active).toBe(true);
+
+    // Choisir « Envoyer un texto » : sa carte et son panneau apparaissent ; on ne touche à rien d'autre.
+    const p = await ajouterAction(page, 'Envoyer un texto');
+    await expect(champ(p, 'Texte du message', true)).toHaveValue('Bonjour [client_name], c’est [company_name]. Merci !');
+    await expect(carte(page, 'Envoyer un texto')).toBeVisible();
+    await laisserPasserLEnregistrementAuto(page);
+    expect(ecritures, 'écritures parties alors que « Enregistrer » n’a pas été cliqué').toEqual([]);
+    expect(await ligne(), 'la ligne de la règle PUBLIÉE, panneau ouvert et non enregistré').toEqual(avant);
+    await expect(interrupteur(page)).toHaveAttribute('aria-checked', 'true');
+
+    // Fermer le panneau : la question dit ce qui se passe ; « Annuler » garde l'étape en cours d'ajout.
+    await p.getByRole('button', { name: 'Fermer le panneau' }).click();
+    const d = page.getByRole('dialog');
+    await expect(d.getByRole('heading', { name: 'Fermer sans ajouter cette étape ?' })).toBeVisible();
+    await expect(d.getByText('Cette étape n’a pas été enregistrée : elle ne sera pas ajoutée au parcours.')).toBeVisible();
+    await page.screenshot({ path: `${CAPTURES}/publication-publiee-fermer-sans-ajouter.png` });
+    await d.getByRole('button', { name: 'Annuler', exact: true }).click();
+    await expect(d).toBeHidden();
+    await expect(p).toBeVisible();
+    await expect(carte(page, 'Envoyer un texto')).toBeVisible();
+
+    // Confirmer : le panneau se ferme, la carte disparaît du canevas, rien n'a été écrit.
+    await p.getByRole('button', { name: 'Fermer le panneau' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Ne pas l’ajouter', exact: true }).click();
+    await expect(p).toBeHidden();
+    await expect(carte(page, 'Envoyer un texto')).toHaveCount(0);
+    await expect(carte(page, 'Créer une tâche')).toBeVisible();
+    await laisserPasserLEnregistrementAuto(page);
+    expect(ecritures, 'écritures parties après l’abandon de l’étape').toEqual([]);
+    expect(await ligne(), 'la ligne de la règle après l’abandon').toEqual(avant);
+
+    // Après rechargement : une seule étape, celle d'avant.
+    await page.reload();
+    await expect(carte(page, 'Créer une tâche')).toBeVisible({ timeout: 180_000 });
+    await expect(carte(page, 'Envoyer un texto')).toHaveCount(0);
+    await expect(interrupteur(page)).toHaveAttribute('aria-checked', 'true');
+    expect(await ligne(), 'la ligne de la règle après rechargement').toEqual(avant);
   });
 });
 

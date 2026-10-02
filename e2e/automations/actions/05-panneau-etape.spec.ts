@@ -322,7 +322,7 @@ test.describe('panneau d’étape — attendre', () => {
     await attendreEnregistre(page);
   });
 
-  test('[EDT-118][EDT-119] retaper le nombre garde l’unité choisie (3 jours → effacer → 5 = 5 jours) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-118][EDT-119] retaper le nombre garde l’unité choisie (3 jours → effacer → 5 = 5 jours)', async ({ page, bureau, marque }) => {
     const regle = await creerBrouillon(bureau, marque, 'lead.created', {
       steps: [
         { id: 'e1', type: 'attendre', delai_secondes: 259200, suivant: 'e2' },
@@ -342,7 +342,7 @@ test.describe('panneau d’étape — attendre', () => {
     await expect.soft(nombre).toHaveValue('5');
   });
 
-  test('[EDT-118][EDT-126] une attente au-delà du plafond (plus d’un an) est refusée dans le panneau, avec la limite @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-118][EDT-126] une attente au-delà du plafond (plus d’un an) est refusée dans le panneau, avec la limite', async ({ page, bureau, marque }) => {
     const regle = await creerBrouillon(bureau, marque, 'lead.created', {
       steps: [
         { id: 'e1', type: 'attendre', delai_secondes: 86400, suivant: 'e2' },

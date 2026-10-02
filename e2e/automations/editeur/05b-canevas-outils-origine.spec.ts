@@ -299,8 +299,9 @@ test.describe('parcours au format d’origine', () => {
    * PUBLIÉE ») : « Convertir » n'écrit que `steps` — `actions` garde l'ancien message. Dès que `steps`
    * redevient vide, l'éditeur ET le serveur relisent la règle comme « au format d'origine » : l'étape qu'on
    * vient de supprimer est de retour, en lecture seule, et (règle publiée) continue de partir aux clients.
+   * CORRIGÉ par 4e29c110 (revérifié le 2026-10-02 : vert, marqueur retiré).
    */
-  test('[EDT-047][EDT-028] parcours converti du format d’origine : supprimer la dernière étape la retire vraiment (elle ne revient pas en « format d’origine ») @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-047][EDT-028] parcours converti du format d’origine : supprimer la dernière étape la retire vraiment (elle ne revient pas en « format d’origine »)', async ({ page, bureau, marque }) => {
     const r = await creerRegle(bureau, bureau.orgA, {
       name: `${marque} convertie vidée`, trigger_event: 'quote.sent',
       steps: null, delay_seconds: 0, actions: [{ type: 'send_sms', config: { body: 'Texto d’origine' } }],

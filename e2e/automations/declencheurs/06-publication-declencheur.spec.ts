@@ -106,7 +106,7 @@ test.describe('publier avec un déclencheur incomplet', () => {
     expect((await attendre(() => lireRegle(bureau, regle.id), (r) => r?.is_active === false))?.is_active).toBe(false);
   });
 
-  test('[EDT-018][EDT-082][DEC-25] « Date atteinte » sur un champ date SUPPRIMÉ : la publication est refusée (la règle ne partirait jamais) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-018][EDT-082][DEC-25] « Date atteinte » sur un champ date SUPPRIMÉ : la publication est refusée (la règle ne partirait jamais)', async ({ page, bureau, marque }) => {
     await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, {
       name: `${marque} pub champ mort`, trigger_event: 'date.reached', conditions: { champ_id: randomUUID(), jours_avant: 7 }, steps: ETAPE_NOTIF,
@@ -146,7 +146,7 @@ test.describe('publier avec un déclencheur incomplet — bureau aux drapeaux ac
 });
 
 test.describe('compatibilité déclencheur ↔ actions (S-09)', () => {
-  test('[EDT-018][DEC-25] « Date atteinte » sur un champ date du PIPELINE + « Assigner l’opportunité » : ce que le tiroir et le panneau acceptent se publie (pas de bandeau rouge contradictoire) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-018][DEC-25] « Date atteinte » sur un champ date du PIPELINE + « Assigner l’opportunité » : ce que le tiroir et le panneau acceptent se publie (pas de bandeau rouge contradictoire)', async ({ page, bureau, marque }) => {
     const d = await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, {
       name: `${marque} S-09 pipeline`, trigger_event: 'date.reached', conditions: { champ_id: d.champs.qa_deal_date.id, jours_avant: 3 },
@@ -178,7 +178,7 @@ test.describe('compatibilité déclencheur ↔ actions (S-09)', () => {
     }
   });
 
-  test('[EDT-018][DEC-25] le serveur accepte de publier « Date atteinte » (champ du pipeline) + « Assigner l’opportunité » : c’est bien une opportunité que ce déclencheur fait arriver @defaut', async ({ bureau, marque, jetonDe }) => {
+  test('[EDT-018][DEC-25] le serveur accepte de publier « Date atteinte » (champ du pipeline) + « Assigner l’opportunité » : c’est bien une opportunité que ce déclencheur fait arriver', async ({ bureau, marque, jetonDe }) => {
     const d = await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, {
       name: `${marque} S-09 api`, trigger_event: 'date.reached', conditions: { champ_id: d.champs.qa_deal_date.id, jours_avant: 3 },
@@ -188,7 +188,7 @@ test.describe('compatibilité déclencheur ↔ actions (S-09)', () => {
     expect(r.status, `réponse : ${JSON.stringify(r.json).slice(0, 200)}`).toBe(200);
   });
 
-  test('[DEC-24] « Appel reçu de l’extérieur » n’apporte ni facture, ni devis, ni rendez-vous, ni opportunité : les actions qui en ont besoin sont grisées, avec la raison @defaut', async ({ page, bureau, marque }) => {
+  test('[DEC-24] « Appel reçu de l’extérieur » n’apporte ni facture, ni devis, ni rendez-vous, ni opportunité : les actions qui en ont besoin sont grisées, avec la raison', async ({ page, bureau, marque }) => {
     await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, { name: `${marque} S-09 webhook`, trigger_event: 'webhook.received', conditions: {}, steps: ETAPE_NOTIF });
     await ouvrirEditeur(page, regle.id);
@@ -200,6 +200,8 @@ test.describe('compatibilité déclencheur ↔ actions (S-09)', () => {
     for (const action of ['Envoyer la facture', 'Envoyer le devis', 'Changer le statut du rendez-vous', 'Déplacer l’opportunité', 'Modifier l’opportunité', 'Assigner l’opportunité']) {
       const item = tiroir.getByRole('button', { name: new RegExp(`^${action}`) });
       await expect.soft(item, `« ${action} » après un appel de l’extérieur`).toBeDisabled();
+      // « avec la raison » : elle est écrite sous le nom de l'action, à la place de son aide.
+      await expect.soft(item, `la raison écrite sous « ${action} »`).toContainText('Ne va pas avec ce déclencheur');
     }
   });
 });

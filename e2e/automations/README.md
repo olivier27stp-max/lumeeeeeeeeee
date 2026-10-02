@@ -43,7 +43,7 @@ L'API doit tourner sans tâche de fond (`LUME_TACHES_DE_FOND=off`), avec `BAC_A_
   que le défaut existe. On ne l'affaiblit pas, on ne le désactive pas (`skip`, `fixme`, `fail`, `retries` interdits).
   Le défaut corrigé, le test passe : on retire la marque, rien d'autre.
 - Les fiches de `_tri/` décrivent chaque défaut ouvert (écran, geste, ce qu'on voit, ce qu'on devrait voir,
-  spec et ligne). État au 2026-10-02 : 822 verts, 236 rouges `@defaut`.
+  spec et ligne). État au 2026-10-02, avec les correctifs majeurs de l’éditeur, des actions et des déclencheurs : 1 066 tests, 871 verts, 194 rouges `@defaut`, 1 rouge sans marque (régression signalée, `editeur/11-dialogues-gardes-panneaux`).
 - Un test ne dépend ni de l'heure (les textos respectent la fenêtre 8 h – 20 h), ni de ce qu'un autre test a
   laissé : une liste « égale à celle du bureau » se compare à la base au moment du test.
 - Le serveur garde les droits d'un membre 60 s et un drapeau 30 s : attendre l'état, pas un délai fixe.

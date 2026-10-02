@@ -36,6 +36,21 @@ async function tenterEnregistrement(page: Page): Promise<number | null> {
   return ecriture;
 }
 
+/**
+ * Le refus d'une saisie invalide, tel que le panneau du DÉCLENCHEUR le fait (règle tranchée le 2026-10-02) :
+ * « Enregistrer » reste cliquable, le clic n'envoie RIEN au serveur, le panneau reste ouvert et dit quoi
+ * corriger — `message` est la phrase exacte, borne comprise. Aucun 4xx n'est donc à déclarer au moniteur.
+ */
+async function attendreRefusDansLePanneau(page: Page, message: string): Promise<void> {
+  const panneau = panneauDeclencheur(page);
+  expect(await tenterEnregistrement(page), `« Enregistrer » cliqué : aucune écriture ne part (${message})`).toBeNull();
+  await expect(panneau, 'le panneau reste ouvert sur la saisie refusée').toBeVisible();
+  const refus = panneau.getByRole('alert');
+  await expect(refus).toContainText('À corriger avant d’enregistrer :');
+  await expect(refus).toContainText(message);
+  await expect(page.getByText('Réglages enregistrés', { exact: true })).toHaveCount(0);
+}
+
 test.describe('panneau du déclencheur — fermer, annuler, changer, enregistrer', () => {
   test('[EDT-064][EDT-073] « Annuler » et la croix ferment le panneau sans rien écrire ; rouvert, il montre ce qui est enregistré', async ({ page, bureau, marque }) => {
     await donnees(bureau);
@@ -299,40 +314,55 @@ test.describe('panneau du déclencheur — nombres et choix', () => {
     const regle = await creerRegle(bureau, bureau.orgA, { name: `${marque} montants`, trigger_event: 'quote.viewed', conditions: { ouverture: 'premiere' }, steps: ETAPE_NOTIF });
     await ouvrirEditeur(page, regle.id);
     let panneau = await ouvrirPanneauDeclencheur(page);
-    await champParLibelle(panneau, 'Montant minimum ($)').fill('1250.50');
-    await champParLibelle(panneau, 'Montant maximum ($)').fill('0');
+    // Une plage POSSIBLE (de 0 $ à 1 250,50 $) : l'inverse — minimum 1 250,50 $, maximum 0 $ — est une plage
+    // impossible, que le panneau refuse depuis f6a70824 (c'est le test suivant).
+    await champParLibelle(panneau, 'Montant minimum ($)').fill('0');
+    await champParLibelle(panneau, 'Montant maximum ($)').fill('1250.50');
     await enregistrerPanneauDeclencheur(page);
-    // 1250.50 → 1250.5 (nombre) ; 0 est une vraie borne, pas « vide ».
-    expect((await lireRegle(bureau, regle.id))?.conditions).toEqual({ ouverture: 'premiere', montant__gte: 1250.5, montant__lte: 0 });
+    // 1250.50 → 1250.5 (nombre, pas la chaîne « 1250.50 ») ; 0 est une vraie borne, pas « vide ».
+    expect((await lireRegle(bureau, regle.id))?.conditions).toEqual({ ouverture: 'premiere', montant__gte: 0, montant__lte: 1250.5 });
     panneau = await ouvrirPanneauDeclencheur(page);
-    await expect(champParLibelle(panneau, 'Montant minimum ($)')).toHaveValue('1250.5');
-    await expect(champParLibelle(panneau, 'Montant maximum ($)')).toHaveValue('0');
+    await expect(champParLibelle(panneau, 'Montant minimum ($)')).toHaveValue('0');
+    await expect(champParLibelle(panneau, 'Montant maximum ($)')).toHaveValue('1250.5');
     await champParLibelle(panneau, 'Montant minimum ($)').fill('');
     await champParLibelle(panneau, 'Montant maximum ($)').fill('');
     await enregistrerPanneauDeclencheur(page);
     expect((await lireRegle(bureau, regle.id))?.conditions).toEqual({ ouverture: 'premiere' });
   });
 
-  test('[EDT-077][DEC-02] montants incohérents (minimum négatif ; minimum plus grand que le maximum) : refusés avec une explication, pas enregistrés tels quels @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-077][DEC-02] montants incohérents (minimum négatif ; minimum plus grand que le maximum) : refusés avec une explication, pas enregistrés tels quels', async ({ page, bureau, marque }) => {
     await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, { name: `${marque} montants faux`, trigger_event: 'quote.viewed', conditions: { ouverture: 'premiere' }, steps: ETAPE_NOTIF });
     await ouvrirEditeur(page, regle.id);
     const panneau = await ouvrirPanneauDeclencheur(page);
+    const ecritures = compterEcritures(page);
+    const enBase = async () => (await lireRegle(bureau, regle.id))?.conditions;
     // Minimum 5000 $ et maximum 100 $ : aucun devis ne peut satisfaire les deux — la règle ne partirait jamais.
     await champParLibelle(panneau, 'Montant minimum ($)').fill('5000');
     await champParLibelle(panneau, 'Montant maximum ($)').fill('100');
-    await tenterEnregistrement(page);
-    const c = (await lireRegle(bureau, regle.id))?.conditions ?? {};
-    expect(c, 'une plage impossible n’est pas enregistrée').not.toMatchObject({ montant__gte: 5000, montant__lte: 100 });
-    await expect(panneau.getByText(/minimum.*(plus grand|supérieur|dépasse)|maximum.*(plus petit|inférieur)/i)).toBeVisible({ timeout: 5_000 });
-    // Un minimum négatif n'a pas plus de sens (l'attribut min=0 n'est qu'indicatif).
+    await attendreRefusDansLePanneau(page, '« Montant minimum ($) » est plus grand que « Montant maximum ($) » : rien ne peut remplir les deux, l’automatisation ne partirait jamais.');
+    expect(await enBase(), 'une plage impossible n’est pas enregistrée : la base est inchangée').toEqual({ ouverture: 'premiere' });
+    // Un minimum négatif n'a pas plus de sens (l'attribut min=0 n'est qu'indicatif) : refusé, avec la borne.
     await champParLibelle(panneau, 'Montant minimum ($)').fill('-5');
     await champParLibelle(panneau, 'Montant maximum ($)').fill('');
-    await tenterEnregistrement(page);
-    expect((await lireRegle(bureau, regle.id))?.conditions?.montant__gte, 'un minimum négatif n’est pas enregistré').not.toBe(-5);
+    await attendreRefusDansLePanneau(page, '« Montant minimum ($) » doit être au moins 0.');
+    await expect(panneau.getByRole('alert'), 'le refus de la plage est parti avec la plage').not.toContainText('plus grand que');
+    expect(await enBase(), 'un minimum négatif n’est pas enregistré : la base est inchangée').toEqual({ ouverture: 'premiere' });
+    // Un maximum négatif non plus.
+    await champParLibelle(panneau, 'Montant minimum ($)').fill('');
+    await champParLibelle(panneau, 'Montant maximum ($)').fill('-0.01');
+    await attendreRefusDansLePanneau(page, '« Montant maximum ($) » doit être au moins 0.');
+    expect(await enBase()).toEqual({ ouverture: 'premiere' });
+    expect(ecritures.liste.map((e) => e.split(' ')[0]), 'aucune écriture n’est partie pendant les trois refus').toEqual([]);
+    // La même plage remise à l'endroit : le refus disparaît, et l'enregistrement passe.
+    await champParLibelle(panneau, 'Montant minimum ($)').fill('100');
+    await champParLibelle(panneau, 'Montant maximum ($)').fill('5000');
+    await expect(panneau.getByRole('alert')).toHaveCount(0);
+    await enregistrerPanneauDeclencheur(page);
+    expect(await enBase()).toEqual({ ouverture: 'premiere', montant__gte: 100, montant__lte: 5000 });
   });
 
-  test('[EDT-077][DEC-25] « Combien de jours avant » : 0, négatif et positif dans les bornes sont gardés ; hors bornes (−365 à 365), la saisie est refusée @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-077][DEC-25] « Combien de jours avant » : 0, négatif et positif dans les bornes sont gardés ; hors bornes (−365 à 365), la saisie est refusée', async ({ page, bureau, marque }) => {
     const d = await donnees(bureau);
     const regle = await creerRegle(bureau, bureau.orgA, {
       name: `${marque} jours avant`, trigger_event: 'date.reached', conditions: { champ_id: d.champs.qa_date.id }, steps: ETAPE_NOTIF,
@@ -346,22 +376,22 @@ test.describe('panneau du déclencheur — nombres et choix', () => {
       await expect(carteDeclencheur(page)).toContainText(`Combien de jours avant : ${valide}`);
     }
     // Hors bornes : 9999 jours avant (27 ans) n'a aucun sens. La règle du produit : le PANNEAU refuse lui-même, avec la
-    // borne dite en clair, AVANT tout envoi au serveur. (Aujourd'hui la saisie part, et c'est le serveur qui la refuse — 400.)
+    // borne dite en clair, AVANT tout envoi au serveur — « Enregistrer » reste cliquable, le refus est écrit dans le panneau.
+    // Une demi-journée (2,5 jours) non plus : le balayage ne vise que des jours entiers.
     const panneau = await ouvrirPanneauDeclencheur(page);
     const ecritures = compterEcritures(page);
-    await champParLibelle(panneau, 'Combien de jours avant').fill('9999');
-    const bouton = panneau.getByRole('button', { name: 'Enregistrer', exact: true });
-    const borne = panneau.getByText(/entre -365 et 365/);
-    const doux = expect.configure({ soft: true });
-    await doux.poll(async () => (await bouton.isDisabled()) || (await borne.count()) > 0, {
-      message: 'avec 9999 jours, le panneau refuse de lui-même : « Enregistrer » inactif, ou la borne « entre -365 et 365 » écrite dans le panneau',
-      timeout: 5_000,
-    }).toBe(true);
-    // Si le bouton est encore offert, on clique comme le ferait l'utilisateur : rien ne doit partir vers le serveur.
-    if (await bouton.isEnabled()) await tenterEnregistrement(page);
-    doux(ecritures.liste.map((e) => e.split(' ')[0]), 'aucune écriture ne part vers le serveur pour 9999 jours').toEqual([]);
-    // Rien n'est écrit : la règle garde la dernière valeur valable.
-    expect((await lireRegle(bureau, regle.id))?.conditions, '9999 jours avant n’est pas enregistré').toEqual({ champ_id: d.champs.qa_date.id, jours_avant: 365 });
+    for (const faux of ['9999', '-366', '2.5']) {
+      await champParLibelle(panneau, 'Combien de jours avant').fill(faux);
+      await attendreRefusDansLePanneau(page, '« Combien de jours avant » doit être un nombre entier, entre -365 et 365.');
+      // Rien n'est écrit : la règle garde la dernière valeur valable.
+      expect((await lireRegle(bureau, regle.id))?.conditions, `« ${faux} » jours avant n’est pas enregistré`).toEqual({ champ_id: d.champs.qa_date.id, jours_avant: 365 });
+    }
+    expect(ecritures.liste.map((e) => e.split(' ')[0]), 'aucune écriture ne part vers le serveur pour une valeur hors bornes').toEqual([]);
+    // La borne elle-même (−365) est acceptée : le refus disparaît et l'enregistrement passe.
+    await champParLibelle(panneau, 'Combien de jours avant').fill('-365');
+    await expect(panneau.getByRole('alert')).toHaveCount(0);
+    await enregistrerPanneauDeclencheur(page);
+    expect((await lireRegle(bureau, regle.id))?.conditions).toEqual({ champ_id: d.champs.qa_date.id, jours_avant: -365 });
   });
 
   test('[EDT-076][DEC-02] « Quand déclencher » : l’option vide dit ce qu’elle fait (pas « — Inchangé — », qui ne veut rien dire pour un déclencheur)', async ({ page, bureau, marque }) => {
@@ -550,6 +580,23 @@ test.describe('changer de déclencheur — les réglages de l’ancien (S-02)', 
   });
 });
 
+/**
+ * Le drapeau est POSÉ en base pour le bureau B, et — pour un drapeau qui ouvre un déclencheur — le serveur
+ * l'APPLIQUE déjà (il garde les drapeaux d'un bureau 30 s en mémoire, tous ensemble : `donnees()` les pose puis
+ * attend que le catalogue servi au bureau B porte les déclencheurs sous drapeau). Affirmé ici pour qu'un test
+ * « sous drapeau » ne puisse pas passer ou tomber pour une raison de drapeau sans le dire.
+ */
+async function drapeauApplique(bureau: Parameters<typeof lireRegle>[0], jetonB: string, drapeau: string, declencheur?: string): Promise<void> {
+  const { data, error } = await bureau.admin.from('org_features').select('enabled').eq('org_id', bureau.orgB).eq('feature', drapeau).maybeSingle();
+  expect(error, `lecture du drapeau ${drapeau}`).toBeNull();
+  expect(data?.enabled, `le drapeau ${drapeau} est posé (enabled) pour le bureau B`).toBe(true);
+  if (!declencheur) return;
+  const r = await appelApi(BASE, jetonB, bureau.orgB, 'GET', '/api/automations/editeur');
+  expect(r.status).toBe(200);
+  const offerts = ((r.json as { catalogue?: { declencheurs?: Array<{ cle: string }> } }).catalogue?.declencheurs ?? []).map((x) => x.cle);
+  expect(offerts, `le serveur offre « ${declencheur} » au bureau B (drapeau ${drapeau} appliqué)`).toContain(declencheur);
+}
+
 test.describe('panneau du déclencheur — bureau aux drapeaux actifs', () => {
   test.use({ compte: 'proprioB' });
 
@@ -581,18 +628,31 @@ test.describe('panneau du déclencheur — bureau aux drapeaux actifs', () => {
     await expect(panneau.getByText('Sans « Aucun job terminé depuis (mois) », l’automatisation ne partirait jamais.')).toBeVisible();
   });
 
-  test('[EDT-077][DEC-20] « Client inactif » : 0 mois, 61 mois ou 2,5 mois sont refusés avec une explication (bornes annoncées : 1 à 60) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-077][DEC-20] « Client inactif » : 0 mois, 61 mois ou 2,5 mois sont refusés avec une explication (bornes annoncées : 1 à 60)', async ({ page, bureau, marque, jetonDe }) => {
     await donnees(bureau);
+    await drapeauApplique(bureau, await jetonDe('proprioB'), 'auto_client_inactif', 'client.inactive');
     const regle = await creerRegle(bureau, bureau.orgB, { name: `${marque} inactif bornes`, trigger_event: 'client.inactive', conditions: { mois: 6, max_par_heure: 25 }, steps: ETAPE_NOTIF });
     await ouvrirEditeur(page, regle.id);
     const panneau = await ouvrirPanneauDeclencheur(page);
+    const ecritures = compterEcritures(page);
     // 0 mois = « tous les clients, tout de suite » à l'écran, alors que le moteur prendra une autre valeur : à refuser.
     for (const faux of ['0', '61', '2.5']) {
       await champParLibelle(panneau, 'Aucun job terminé depuis (mois)').fill(faux);
-      await tenterEnregistrement(page);
-      expect.soft((await lireRegle(bureau, regle.id))?.conditions?.mois, `« ${faux} » mois n’est pas enregistré`).not.toBe(Number(faux));
-      if (!(await panneau.isVisible())) await ouvrirPanneauDeclencheur(page);
+      await attendreRefusDansLePanneau(page, '« Aucun job terminé depuis (mois) » doit être un nombre entier, entre 1 et 60.');
+      expect((await lireRegle(bureau, regle.id))?.conditions, `« ${faux} » mois n’est pas enregistré : la base est inchangée`).toEqual({ mois: 6, max_par_heure: 25 });
     }
+    // Le second nombre du panneau a ses bornes aussi (1 à 1000 par heure).
+    await champParLibelle(panneau, 'Aucun job terminé depuis (mois)').fill('12');
+    await champParLibelle(panneau, 'Au plus, par heure').fill('0');
+    await attendreRefusDansLePanneau(page, '« Au plus, par heure » doit être un nombre entier, entre 1 et 1000.');
+    expect((await lireRegle(bureau, regle.id))?.conditions).toEqual({ mois: 6, max_par_heure: 25 });
+    expect(ecritures.liste.map((e) => e.split(' ')[0]), 'aucune écriture n’est partie pendant les refus').toEqual([]);
+    // Les bornes elles-mêmes passent : 60 mois, 1 par heure.
+    await champParLibelle(panneau, 'Aucun job terminé depuis (mois)').fill('60');
+    await champParLibelle(panneau, 'Au plus, par heure').fill('1');
+    await expect(panneau.getByRole('alert')).toHaveCount(0);
+    await enregistrerPanneauDeclencheur(page);
+    expect((await lireRegle(bureau, regle.id))?.conditions).toEqual({ mois: 60, max_par_heure: 1 });
   });
 
   const CASES: Array<{ titre: string; cle: string; libelle: string; cochee: boolean }> = [
@@ -647,8 +707,9 @@ test.describe('panneau du déclencheur — bureau aux drapeaux actifs', () => {
     expect((await lireRegle(bureau, regle.id))?.settings).toEqual({ arreter_si_resolu: true });
   });
 
-  test('[EDT-071][DEC-06] la case décochée le reste après un changement dans l’onglet « Réglages » (S-08) @defaut', async ({ page, bureau, marque }) => {
+  test('[EDT-071][DEC-06] la case décochée le reste après un changement dans l’onglet « Réglages » (S-08)', async ({ page, bureau, marque, jetonDe }) => {
     await donnees(bureau);
+    await drapeauApplique(bureau, await jetonDe('proprioB'), 'auto_sortie_parcours');
     const regle = await creerRegle(bureau, bureau.orgB, {
       name: `${marque} S-08`, trigger_event: 'invoice.sent', conditions: {}, settings: { arreter_si_resolu: false }, steps: ETAPE_NOTIF,
     });
@@ -665,6 +726,14 @@ test.describe('panneau du déclencheur — bureau aux drapeaux actifs', () => {
     expect(s?.arreter_si_resolu, 'settings.arreter_si_resolu après un changement dans Réglages').toBe(false);
     await page.getByRole('tab', { name: 'Parcours', exact: true }).click();
     const panneau = await ouvrirPanneauDeclencheur(page);
-    await expect(panneau.getByRole('checkbox', { name: /^Arrêter si la facture est payée ou annulée/ })).not.toBeChecked();
+    // La case n'est offerte que si le drapeau est appliqué à l'écran : visible d'abord, décochée ensuite.
+    const coche = panneau.getByRole('checkbox', { name: /^Arrêter si la facture est payée ou annulée/ });
+    await expect(coche).toBeVisible();
+    await expect(coche).not.toBeChecked();
+    // Et l'autre sens : la case restée décochée s'enregistre encore telle quelle depuis le panneau (false, pas « absent »).
+    await enregistrerPanneauDeclencheur(page);
+    const apres = (await lireRegle(bureau, regle.id))?.settings as Record<string, unknown> | null;
+    expect(apres?.arreter_si_resolu).toBe(false);
+    expect(apres?.jours_ouvrables, 'le réglage de l’onglet « Réglages » n’est pas effacé par le panneau du déclencheur').toBe(true);
   });
 });
