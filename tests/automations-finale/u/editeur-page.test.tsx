@@ -442,6 +442,114 @@ describe('S-01 — « Ouvrir » une 2e automatisation sur réseau lent : chacune
   });
 });
 
+// ─── Triage « éditeur », S-12 ───────────────────────────────────
+
+describe('S-12 — ce qui quitte le parcours est annoncé, et quitte vraiment la base', () => {
+  const texto = (id: string, body: string, suivant: string | null) => ({ id, type: 'action', nom: null, action: { type: 'send_sms', config: { body } }, suivant });
+  const troisTextos = () => [texto('e1', 'Texto ALPHA', 'e2'), texto('e2', 'Texto BRAVO', 'e3'), texto('e3', 'Texto CHARLIE', null)];
+  const avecBranches = () => [
+    texto('e1', 'Texto ALPHA', 'e2'),
+    { id: 'e2', type: 'si', conditions: { statut: 'envoye' }, alors: 'e3', sinon: 'e4' },
+    texto('e3', 'Texto OUI', 'e5'),
+    texto('e4', 'Texto NON', null),
+    texto('e5', 'Texto APRÈS OUI', null),
+  ];
+  const question = () => confirmerMock.mock.calls.at(-1)?.[0] as { title: string; message: string; confirmLabel: string };
+  const avancer = async (ms: number) => {
+    await act(async () => { vi.advanceTimersByTime(ms); });
+    await attendre();
+  };
+  /** Les textes des cartes « texto » à l'écran, dans l'ordre. */
+  const textes = () => boutons()
+    .filter((b) => b.parentElement?.className.includes('w-[260px]') && b.parentElement?.className.includes('relative') && !b.getAttribute('aria-label'))
+    .map((b) => b.querySelector('.truncate')?.textContent ?? '');
+
+  it('« Arrêter ici » au milieu : on demande d’abord, en disant combien d’étapes partent — refusé, rien ne bouge', async () => {
+    etat.regles = [regle({ steps: troisTextos() })];
+    await ouvrir();
+    // Le « + » entre le 1er et le 2e texto.
+    cliquer(container.querySelectorAll('button[aria-label="Ajouter une étape ici"]')[1]);
+    await attendre(2);
+    confirmerMock.mockImplementationOnce(async () => false);
+    cliquer(bouton('Arrêter ici', tiroirActions() ?? undefined));
+    await attendre();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(question().title).toBe('Arrêter ici et retirer la suite ?');
+    expect(question().message).toBe('Le parcours s’arrêtera à cet endroit : les 2 étapes qui suivent ne seront plus jamais atteintes et seront retirées du parcours.');
+    // Refusé : le parcours est entier, et le tiroir est resté ouvert pour choisir autre chose.
+    expect(textes()).toEqual(['Texto ALPHA', 'Texto BRAVO', 'Texto CHARLIE']);
+    expect(panneaux()).toEqual(['Actions']);
+  });
+
+  it('… accepté puis enregistré : la suite est retirée du parcours ET de ce qui part en base (aucune étape orpheline)', async () => {
+    etat.regles = [regle({ steps: troisTextos() })];
+    await ouvrir();
+    vi.useFakeTimers();
+    cliquer(container.querySelectorAll('button[aria-label="Ajouter une étape ici"]')[1]);
+    await attendre(2);
+    cliquer(bouton('Arrêter ici', tiroirActions() ?? undefined));
+    await attendre();
+    expect(cartes()).toEqual(['Envoyer un texto', 'Arrêter ici']);
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    await avancer(3000);
+    expect(derniersSteps()).toEqual([
+      texto('e1', 'Texto ALPHA', 'e4'),
+      { id: 'e4', type: 'arreter' },
+    ]);
+  });
+
+  it('« Arrêter ici » à la FIN : rien ne part, donc aucune question', async () => {
+    etat.regles = [regle({ steps: troisTextos() })];
+    await ouvrir();
+    await ajouterParLeTiroir('Arrêter ici');
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(cartes()).toEqual(['Envoyer un texto', 'Envoyer un texto', 'Envoyer un texto', 'Arrêter ici']);
+  });
+
+  it('supprimer une condition : le dialogue dit que la branche « si non » part avec elle, et elle part vraiment', async () => {
+    etat.regles = [regle({ steps: avecBranches() })];
+    await ouvrir();
+    vi.useFakeTimers();
+    expect(textes()).toContain('Texto NON');
+    cliquer(container.querySelector('button[aria-label="Options de l’étape Si…"]'));
+    cliquer(bouton('Supprimer l’étape'));
+    await attendre();
+    expect(question().title).toBe('Supprimer cette étape ?');
+    expect(question().message).toBe('La branche « si oui » reste dans le parcours et se rebranche. La branche « si non » (1 étape) sera retirée avec la condition.');
+
+    // À l'écran : la branche « si oui » a pris la suite ; « Texto NON » n'y est plus.
+    expect(textes()).toEqual(['Texto ALPHA', 'Texto OUI', 'Texto APRÈS OUI']);
+    await avancer(3000);
+    const enBase = derniersSteps() ?? [];
+    // En base : exactement ce qui est à l'écran — aucune étape reliée à rien.
+    expect(JSON.stringify(enBase)).not.toContain('Texto NON');
+    expect(enBase.map((e) => [e.id, e.suivant])).toEqual([['e1', 'e3'], ['e3', 'e5'], ['e5', null]]);
+  });
+
+  it('supprimer une étape ordinaire : le dialogue d’avant (tout se rebranche), rien d’autre ne part', async () => {
+    etat.regles = [regle({ steps: troisTextos() })];
+    await ouvrir();
+    vi.useFakeTimers();
+    cliquer(container.querySelectorAll('button[aria-label="Options de l’étape Envoyer un texto"]')[1]);
+    cliquer(bouton('Supprimer l’action'));
+    await attendre();
+    expect(question().message).toBe('Ce qui venait après reste dans le parcours et se rebranche tout seul.');
+    await avancer(3000);
+    expect((derniersSteps() ?? []).map((e) => [e.id, e.suivant])).toEqual([['e1', 'e3'], ['e3', null]]);
+  });
+
+  it('en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    etat.regles = [regle({ steps: avecBranches() })];
+    await ouvrir();
+    cliquer(container.querySelector('button[aria-label="Options for If…"]'));
+    cliquer(bouton('Delete step'));
+    await attendre();
+    expect(question().message).toBe('The “if yes” branch stays in the journey and reconnects. The “if no” branch (1 step) will be removed with the condition.');
+  });
+});
+
 // ─── Triage « éditeur », S-03 ───────────────────────────────────
 
 describe('S-03 — sur une automatisation PUBLIÉE, Lumi ne remplace pas le parcours en ligne sans question', () => {

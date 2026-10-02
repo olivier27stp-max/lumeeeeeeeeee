@@ -136,6 +136,50 @@ function estRefus(e: unknown): boolean {
   return typeof statut === 'number' && [400, 403, 409, 410, 413, 422].includes(statut);
 }
 
+/**
+ * Les étapes que le parcours ATTEINT, en partant de sa tête (`steps[0]`) : par
+ * la suite, les deux branches d'une condition, la réponse du client et le
+ * moment dépassé d'une attente. Ce que le moteur exécute, et ce que le canevas
+ * dessine — une étape hors de cet ensemble existe en base sans jamais servir.
+ */
+function etapesAtteintes(steps: Etape[]): Set<string> {
+  const parId = new Map(steps.map((e) => [e.id, e]));
+  const vues = new Set<string>();
+  const pile: string[] = steps[0] ? [steps[0].id] : [];
+  while (pile.length) {
+    const id = pile.pop() as string;
+    const e = parId.get(id);
+    if (!e || vues.has(id)) continue;
+    vues.add(id);
+    const suites = e.type === 'si' ? [e.alors, e.sinon]
+      : e.type === 'arreter' ? []
+      : e.type === 'attendre' ? [e.suivant, e.si_reponse, e.si_depasse]
+      : [e.suivant];
+    for (const s of suites) if (s) pile.push(s);
+  }
+  return vues;
+}
+
+/**
+ * Ce qu'une modification du parcours laisserait ORPHELIN (triage éditeur,
+ * S-12) : les étapes qu'on atteignait `avant` et qu'on n'atteint plus `apres`.
+ * « Arrêter ici » posé au milieu coupe la suite ; supprimer une condition ne
+ * rebranche que sa branche « si oui ». Ces étapes disparaissaient de l'écran
+ * et restaient en base, reliées à rien.
+ */
+function etapesPerdues(avant: Etape[], apres: Etape[]): Etape[] {
+  const avantAtteintes = etapesAtteintes(avant);
+  const apresAtteintes = etapesAtteintes(apres);
+  return apres.filter((e) => avantAtteintes.has(e.id) && !apresAtteintes.has(e.id));
+}
+
+/** Le parcours sans ces étapes — ce qui n'est plus à l'écran n'est plus en base. */
+function sansEtapes(steps: Etape[], retirees: Etape[]): Etape[] {
+  if (retirees.length === 0) return steps;
+  const ids = new Set(retirees.map((e) => e.id));
+  return steps.filter((e) => !ids.has(e.id));
+}
+
 /** Bornes du zoom. Au-delà, on ne lit plus rien ; en deçà, on se perd. */
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.6;
@@ -605,7 +649,7 @@ export default function AutomationBuilderPage() {
    * évite l'aller-retour « ajouter un message » puis « choisir lequel » —
    * c'est ce que fait leur tiroir, et c'est un clic de moins à chaque étape.
    */
-  const confirmerAjout = (cle: string) => {
+  const confirmerAjout = async (cle: string) => {
     if (!ajoutEnCours) return;
     if (steps.length >= ETAPES_MAX) {
       toast.error(fr
@@ -623,6 +667,29 @@ export default function AutomationBuilderPage() {
       // au rechargement (signalé le 2026-09-25). Le texte proposé est un vrai
       // brouillon, envoyable tel quel et réécrit en un clic.
       : { ...etapeVierge('action', id), action: { type: cle, config: configParDefaut(cle, fr) } };
+    /*
+     * « ARRÊTER ICI » AU MILIEU COUPE LA SUITE (triage éditeur, S-12). Les
+     * étapes qui suivaient disparaissaient du canevas sans un mot — et
+     * restaient en base, reliées à rien. On le DEMANDE d'abord, en disant
+     * combien d'étapes partent ; elles seront vraiment retirées quand
+     * l'arrêt sera enregistré.
+     */
+    if (cle === 'arreter') {
+      const perdues = etapesPerdues(steps, insererEtape(steps, nouvelle, ajoutEnCours.apresId, ajoutEnCours.branche));
+      if (perdues.length > 0) {
+        const n = perdues.length;
+        const ok = await confirmer({
+          title: fr ? 'Arrêter ici et retirer la suite ?' : 'Stop here and remove what follows?',
+          message: fr
+            ? `Le parcours s’arrêtera à cet endroit : ${n > 1 ? `les ${n} étapes qui suivent ne seront plus jamais atteintes et seront retirées` : 'l’étape qui suit ne sera plus jamais atteinte et sera retirée'} du parcours.`
+            : `The journey will stop at this point: ${n > 1 ? `the ${n} steps after it will never be reached and will be removed` : 'the step after it will never be reached and will be removed'} from the journey.`,
+          confirmLabel: fr ? 'Arrêter ici' : 'Stop here',
+          danger: true,
+        });
+        // Refusé : le tiroir reste ouvert, on peut choisir autre chose.
+        if (!ok) return;
+      }
+    }
     // Pas dans `steps` : rien n'est écrit tant que son panneau n'est pas
     // enregistré (voir `etapeEnAttente`).
     montrerEtape(nouvelle.id);
@@ -1334,7 +1401,10 @@ export default function AutomationBuilderPage() {
     if (ajoutEnAttente && ajoutEnAttente.etape.id === modifiee.id) {
       // « Enregistrer » dans le panneau d'une étape neuve : c'est MAINTENANT
       // qu'elle entre dans le parcours (et que l'enregistrement auto la verra).
-      memoriser(insererEtape(steps, modifiee, ajoutEnAttente.apresId, ajoutEnAttente.branche));
+      // … et ce qu'elle coupe du parcours (un « Arrêter ici » au milieu,
+      // déjà annoncé au choix) en sort avec : rien ne reste orphelin en base.
+      const inseree = insererEtape(steps, modifiee, ajoutEnAttente.apresId, ajoutEnAttente.branche);
+      memoriser(sansEtapes(inseree, etapesPerdues(steps, inseree)));
       setEtapeEnAttente(null);
     } else {
       memoriser(steps.map((e) => (e.id === modifiee.id ? modifiee : e)));
@@ -1427,16 +1497,34 @@ export default function AutomationBuilderPage() {
       setEtapeChoisie(null);
       return;
     }
+    /*
+     * CE QUI NE SE REBRANCHE PAS EST DIT, ET RETIRÉ (triage éditeur, S-12).
+     * Supprimer une condition ne rebranche que sa branche « si oui » : la
+     * branche « si non » quittait l'écran et restait en base, reliée à rien —
+     * sous un dialogue qui promettait que tout « se rebranche tout seul ».
+     */
+    const recousu = retirerEtape(steps, idEtape);
+    const perdues = etapesPerdues(steps, recousu);
+    const n = perdues.length;
+    const cible = steps.find((e) => e.id === idEtape);
     const ok = await confirmer({
       title: fr ? 'Supprimer cette étape ?' : 'Delete this step?',
-      message: fr
-        ? 'Ce qui venait après reste dans le parcours et se rebranche tout seul.'
-        : 'What came after stays in the journey and reconnects on its own.',
+      message: n === 0
+        ? (fr
+          ? 'Ce qui venait après reste dans le parcours et se rebranche tout seul.'
+          : 'What came after stays in the journey and reconnects on its own.')
+        : cible?.type === 'si'
+          ? (fr
+            ? `La branche « si oui » reste dans le parcours et se rebranche. La branche « si non » (${n} étape${n > 1 ? 's' : ''}) sera retirée avec la condition.`
+            : `The “if yes” branch stays in the journey and reconnects. The “if no” branch (${n} step${n > 1 ? 's' : ''}) will be removed with the condition.`)
+          : (fr
+            ? `La suite reste dans le parcours et se rebranche. ${n > 1 ? `${n} étapes que plus rien n’atteindrait seront retirées` : 'Une étape que plus rien n’atteindrait sera retirée'} avec elle.`
+            : `What follows stays in the journey and reconnects. ${n > 1 ? `${n} steps that nothing would reach will be removed` : 'One step that nothing would reach will be removed'} with it.`),
       confirmLabel: fr ? 'Supprimer' : 'Delete',
       danger: true,
     });
     if (!ok) return;
-    memoriser(retirerEtape(steps, idEtape));
+    memoriser(sansEtapes(recousu, perdues));
     setEtapeChoisie(null);
   }, [steps, memoriser, fr, ajoutEnAttente]);
 

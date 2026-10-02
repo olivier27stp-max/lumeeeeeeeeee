@@ -127,6 +127,41 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await page.context().close();
   },
 
+  /** S-12 — « Arrêter ici » au milieu et suppression d'une condition : annoncé, et rien d'orphelin en base. */
+  async s12() {
+    const texto = (id: string, body: string, suivant: string | null) => action('send_sms', { body }, id, suivant);
+    const page = await ouvrirPage();
+    // (a) « Arrêter ici » entre le 1er et le 2e texto.
+    const trois = await creerRegle({ steps: [texto('e1', 'Texto ALPHA', 'e2'), texto('e2', 'Texto BRAVO', 'e3'), texto('e3', 'Texto CHARLIE', null)] });
+    await ouvrirEditeur(page, trois.id);
+    await page.getByRole('button', { name: 'Ajouter une étape ici' }).nth(1).click();
+    await tiroir(page).getByRole('button', { name: /^Arrêter ici/ }).click();
+    const d = page.getByRole('dialog');
+    await d.getByText('les 2 étapes qui suivent ne seront plus jamais atteintes').waitFor({ timeout: 10_000 });
+    verifier(true, '« Arrêter ici » au milieu : la question dit que 2 étapes seront retirées');
+    await d.getByRole('button', { name: 'Arrêter ici', exact: true }).click();
+    await enregistrer(page).click();
+    await pause(6000);
+    const apres = await etapes(trois.id);
+    verifier(apres.length === 2 && !JSON.stringify(apres).includes('Texto BRAVO'), `la suite est retirée de la base (${apres.map((e) => e.id).join(', ')})`);
+    // (b) Supprimer une condition dont la branche « si non » porte une étape.
+    const branches = await creerRegle({ steps: [
+      texto('e1', 'Texto ALPHA', 'e2'),
+      { id: 'e2', type: 'si', conditions: { statut: 'envoye' }, alors: 'e3', sinon: 'e4' },
+      texto('e3', 'Texto OUI', null), texto('e4', 'Texto NON', null),
+    ] });
+    await ouvrirEditeur(page, branches.id);
+    await page.getByRole('button', { name: 'Options de l’étape Si…' }).click();
+    await page.getByRole('button', { name: 'Supprimer l’étape', exact: true }).click();
+    await page.getByRole('dialog').getByText('La branche « si non » (1 étape) sera retirée avec la condition.').waitFor({ timeout: 10_000 });
+    verifier(true, 'supprimer une condition : le dialogue annonce le retrait de la branche « si non »');
+    await page.getByRole('dialog').getByRole('button', { name: 'Supprimer', exact: true }).click();
+    await pause(6000);
+    const reste = await etapes(branches.id);
+    verifier(reste.length === 2 && !JSON.stringify(reste).includes('Texto NON'), `aucune étape orpheline en base (${reste.map((e) => e.id).join(', ')})`);
+    await page.context().close();
+  },
+
   /** S-03 — automatisation PUBLIÉE : la proposition de Lumi demande une confirmation avant d'être appliquée. */
   async s03() {
     const regle = await creerRegle({ trigger_event: 'client.untagged', steps: [action('send_sms', { body: 'Texto EN LIGNE' })], is_active: true });
