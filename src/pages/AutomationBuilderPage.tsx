@@ -33,7 +33,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import type { AutomationRule } from '../lib/automationRulesApi';
+import { getAutomationLanguage, type AutomationRule } from '../lib/automationRulesApi';
 import {
   chargerEditeur,
   creerAutomatisation,
@@ -1249,6 +1249,20 @@ export default function AutomationBuilderPage() {
    * rien. La liste, elle, l'affiche. Lue à l'ouverture, et relue quand la
    * fenêtre reprend le focus (on a pu la lever dans un autre onglet).
    */
+  /*
+   * La langue dans laquelle le bureau ENVOIE ses messages (« Messages en FR /
+   * EN ») : le panneau d'une étape montre CE texte-là dans son champ
+   * principal (`body` ou `body_en`). Lecture ratée : on ne sait pas — le
+   * panneau garde le français, le défaut du moteur.
+   */
+  const [langueEnvoi, setLangueEnvoi] = useState<'fr' | 'en'>('fr');
+  useEffect(() => {
+    let vivant = true;
+    getAutomationLanguage()
+      .then((langue) => { if (vivant) setLangueEnvoi(langue); })
+      .catch((e) => { console.error('[éditeur] langue des messages du bureau illisible', e); });
+    return () => { vivant = false; };
+  }, []);
   const [bureauEnPause, setBureauEnPause] = useState(false);
   useEffect(() => {
     let vivant = true;
@@ -3406,6 +3420,7 @@ export default function AutomationBuilderPage() {
           etapesPipeline={etapesPipeline}
           champsPerso={champsPerso}
           objetChamps={objetRegle}
+          langueEnvoi={langueEnvoi}
           stats={statsEtapes?.[etapeOuverte.id] ?? null}
           nouvelle={ajoutEnAttente?.etape.id === etapeOuverte.id}
           modifieePar={modifieePar}

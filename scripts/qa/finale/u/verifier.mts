@@ -520,22 +520,81 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
 
   /** Ligne 2 — la version anglaise d'un texto est visible, modifiable, et ne reste pas périmée en silence. */
   async l2() {
-    const regle = await creerRegle({ steps: [action('send_sms', { body: 'Rabais de 10 % jusqu’au 1er mai.', body_en: '10% off until May 1st.' })] });
-    const page = await ouvrirPage();
-    await ouvrirEditeur(page, regle.id);
-    await carte(page, 'Envoyer un texto').click();
-    const p = panneau(page);
-    const anglais = p.getByLabel('Texte du message — version anglaise (facultatif)', { exact: true });
-    verifier(await anglais.inputValue() === '10% off until May 1st.', 'le texte anglais est dans un champ du panneau');
-    await p.getByLabel('Texte du message *', { exact: true }).fill('Rabais de 20 % jusqu’au 1er juin.');
-    verifier(await enregistrer(page).isDisabled(), 'français corrigé, anglais intact : « Enregistrer » est refusé');
-    verifier(await p.getByText('a changé, pas sa version anglaise').first().isVisible(), 'le panneau dit pourquoi');
-    await anglais.fill('20% off until June 1st.');
-    await enregistrer(page).click();
-    await pause(6000);
-    const config = (await etapes(regle.id))[0]?.action?.config ?? {};
-    verifier(config.body === 'Rabais de 20 % jusqu’au 1er juin.' && config.body_en === '20% off until June 1st.', 'les deux textes sont en base');
-    await page.context().close();
+    const FR = 'Rabais de 10 % jusqu’au 1er mai.';
+    const EN = '10% off until May 1st.';
+    const b = await leBureau();
+    const mettreLangue = async (langue: 'fr' | 'en') => {
+      const { error } = await admin.from('company_settings').update({ default_language: langue }).eq('org_id', b.orgA);
+      if (error) throw new Error(`langue du bureau : ${error.message}`);
+    };
+    const configDe = async (id: string) => ((await etapes(id))[0]?.action?.config ?? {}) as Record<string, string>;
+    const TITRE_EN = 'Version anglaise (Texte du message) — utilisée seulement si vos messages partent en anglais';
+    const TITRE_FR = 'Version française (Texte du message) — utilisée seulement si vos messages partent en français';
+    try {
+      // ── Bureau qui envoie en FRANÇAIS ──
+      await mettreLangue('fr');
+      let regle = await creerRegle({ steps: [action('send_sms', { body: FR, body_en: EN })] });
+      let page = await ouvrirPage();
+      await ouvrirEditeur(page, regle.id);
+      await carte(page, 'Envoyer un texto').click();
+      let p = panneau(page);
+      const principal = () => p.getByLabel('Texte du message *', { exact: true });
+      verifier(await principal().inputValue() === FR, 'bureau FR : le champ principal montre le français');
+      const blocEn = p.getByRole('button', { name: TITRE_EN });
+      verifier(await blocEn.getAttribute('aria-expanded') === 'false', 'bureau FR : la version anglaise est dans un bloc replié');
+      await principal().fill('Rabais de 20 % jusqu’au 1er juin.');
+      verifier(await enregistrer(page).isEnabled(), 'français corrigé, anglais intact : « Enregistrer » reste offert');
+      verifier(await blocEn.getAttribute('aria-expanded') === 'true' && await p.getByText('Cette version n’est plus à jour.').isVisible(), 'le bloc se déplie et dit « Cette version n’est plus à jour. »');
+      verifier(await p.getByLabel('La retirer (vos clients recevront le texte ci-dessus)').isChecked(), '« La retirer » est coché d’office');
+      await enregistrer(page).click();
+      await pause(6000);
+      let config = await configDe(regle.id);
+      verifier(config.body === 'Rabais de 20 % jusqu’au 1er juin.' && !('body_en' in config), `un clic : la version anglaise est retirée de l’étape (${JSON.stringify(config)})`);
+      // « La garder telle quelle ».
+      regle = await creerRegle({ steps: [action('send_sms', { body: FR, body_en: EN })] });
+      await ouvrirEditeur(page, regle.id);
+      await carte(page, 'Envoyer un texto').click();
+      await principal().fill('Rabais de 20 % jusqu’au 1er juin.');
+      await p.getByLabel('La garder telle quelle').check();
+      await enregistrer(page).click();
+      await pause(6000);
+      config = await configDe(regle.id);
+      verifier(config.body === 'Rabais de 20 % jusqu’au 1er juin.' && config.body_en === EN, '« La garder telle quelle » : elle reste en base');
+      // La mettre à jour soi-même.
+      regle = await creerRegle({ steps: [action('send_sms', { body: FR, body_en: EN })] });
+      await ouvrirEditeur(page, regle.id);
+      await carte(page, 'Envoyer un texto').click();
+      await principal().fill('Rabais de 20 % jusqu’au 1er juin.');
+      await p.getByLabel('Texte du message — version anglaise (facultatif)', { exact: true }).fill('20% off until June 1st.');
+      verifier(await p.getByText('Cette version n’est plus à jour.').count() === 0, 'anglais mis à jour : les deux choix disparaissent');
+      await enregistrer(page).click();
+      await pause(6000);
+      config = await configDe(regle.id);
+      verifier(config.body === 'Rabais de 20 % jusqu’au 1er juin.' && config.body_en === '20% off until June 1st.', 'les deux textes sont en base');
+      await page.context().close();
+
+      // ── Bureau qui envoie en ANGLAIS ──
+      await mettreLangue('en');
+      regle = await creerRegle({ steps: [action('send_sms', { body: FR, body_en: EN })] });
+      page = await ouvrirPage();
+      await ouvrirEditeur(page, regle.id);
+      await carte(page, 'Envoyer un texto').click();
+      p = panneau(page);
+      const principalEn = p.getByLabel('Texte du message *', { exact: true });
+      await page.waitForFunction((attendu) => Array.from(document.querySelectorAll('textarea')).some((t) => t.value === attendu), EN, { timeout: 15_000 }).catch(() => undefined);
+      verifier(await principalEn.inputValue() === EN, `bureau EN : le champ principal montre l’anglais (${await principalEn.inputValue()})`);
+      const blocFr = p.getByRole('button', { name: TITRE_FR });
+      verifier(await blocFr.getAttribute('aria-expanded') === 'false', 'bureau EN : la version française est dans un bloc replié');
+      await principalEn.fill('20% off until June 1st.');
+      verifier(await enregistrer(page).isEnabled() && await p.getByLabel('La retirer (vos clients recevront le texte ci-dessus)').isChecked(), 'anglais corrigé : « Enregistrer » offert, « La retirer » coché');
+      await enregistrer(page).click();
+      await pause(6000);
+      config = await configDe(regle.id);
+      verifier(config.body === '20% off until June 1st.' && !('body_en' in config), `bureau EN, un clic : il ne reste qu’un texte, sous body (${JSON.stringify(config)})`);
+      await page.context().close();
+    } finally {
+      await mettreLangue('fr');
+    }
   },
 
   /** Ligne 3 — le courriel d'une automatisation fournie, converti au clic, s'ouvre en texte lisible. */
