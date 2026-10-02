@@ -60,7 +60,10 @@ describe('[A-09] l’éditeur ouvert n’écrase pas en silence ce que Lumi vien
 
     // 3. L'éditeur enregistre SA modification (une attente ajoutée devant), avec son parcours en mémoire.
     const perime = [{ id: 'e0', type: 'attendre', delai_secondes: 86400, suivant: 'e1' }, ...enMemoire.steps];
-    const ecrit = await api.appeler('PATCH', `/api/automations/rules/${r.id}`, { name: enMemoire.name, steps: perime });
+    // L'éditeur envoie la version qu'il a LUE (`version_lue`, garde A-09) : c'est elle que la route compare.
+    const ecrit = await api.appeler('PATCH', `/api/automations/rules/${r.id}`, { name: enMemoire.name, steps: perime, version_lue: enMemoire.updated_at });
+    expect(ecrit.status, JSON.stringify(ecrit.json).slice(0, 200)).toBe(409);
+    expect(ecrit.json.code).toBe('modifiee_ailleurs');
 
     const relu = await ok<{ steps: Array<{ type: string; action?: { config?: { body?: string } } }> }>(
       b.admin.from('automation_rules').select('steps').eq('id', r.id).single(), 'relecture');
