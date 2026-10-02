@@ -184,7 +184,7 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
 
   async function supprimer(a: AdresseDAppel) {
     const ok = await confirmer({
-      title: fr ? 'Supprimer cette adresse ?' : 'Delete this endpoint?',
+      title: fr ? 'Supprimer cette adresse ?' : 'Delete this address?',
       // On dit la CONSÉQUENCE, pas l'action : ce qui compte, c'est que le
       // service branché dessus cessera de fonctionner.
       message: fr

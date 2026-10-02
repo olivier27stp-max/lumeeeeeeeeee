@@ -120,6 +120,17 @@ describe('06-reglages-globaux:299 — « Active / En pause » : ce que l’écra
     expect(serveur.adresses[0].enabled).toBe(true);
   });
 
+  it('06:329 — le bouton d’état dit son rôle : `aria-pressed` et ce qu’un clic fera', async () => {
+    await monter(<AdressesDAppel fr />);
+    const active = bouton('Active');
+    expect(active.getAttribute('aria-pressed')).toBe('true');
+    expect(active.getAttribute('title')).toBe('Cliquer pour mettre en pause');
+    await cliquer(active);
+    await jusqua(() => boutonPresent('En pause'));
+    expect(bouton('En pause').getAttribute('aria-pressed')).toBe('false');
+    expect(bouton('En pause').getAttribute('title')).toBe('Cliquer pour remettre en service');
+  });
+
   it('interface anglaise : le croisement est dit en anglais', async () => {
     await monter(<AdressesDAppel fr={false} />);
     serveur.retenir = 0;
@@ -130,5 +141,77 @@ describe('06-reglages-globaux:299 — « Active / En pause » : ce que l’écra
     await jusqua(() => toasts.erreurs.length === 1);
     expect(toasts.erreurs).toEqual(['Your clicks crossed: the address is paused. Click again to turn it back on.']);
     expect(texteEcran()).toContain('Paused');
+  });
+});
+
+describe('06-reglages-globaux:467 — adresses illisibles : la carte ne dit pas « Aucune adresse pour l’instant »', () => {
+  it('lecture en panne : c’est dit dans la carte, avec « Réessayer » — qui relit et montre les adresses', async () => {
+    serveur.lectureEnPanne = true;
+    await monter(<AdressesDAppel fr />);
+    await jusqua(() => toasts.erreurs.length === 1);
+    expect(toasts.erreurs).toEqual(['Impossible de lire vos adresses d’appel.']);
+    expect(texteEcran()).not.toContain('Aucune adresse pour l’instant');
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('Vos adresses d’appel n’ont pas pu être lues pour le moment');
+    // « Créer une adresse » reste offert.
+    expect(boutonPresent('Créer une adresse')).toBe(true);
+    serveur.lectureEnPanne = false;
+    await cliquer(bouton('Réessayer'));
+    await jusqua(() => texteEcran().includes('Formulaire de mon site'));
+    expect(document.body.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('aucune adresse, lecture réussie : « Aucune adresse pour l’instant », comme avant', async () => {
+    serveur.adresses = [];
+    await monter(<AdressesDAppel fr />);
+    await jusqua(() => texteEcran().includes('Aucune adresse pour l’instant'));
+    expect(document.body.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+describe('06-reglages-globaux:183 — « Créer une adresse » refusée : la raison du serveur est affichée', () => {
+  it('« Votre rôle ne permet pas… », pas seulement « Impossible de créer l’adresse. »', async () => {
+    serveur.adresses = [];
+    await monter(<AdressesDAppel fr />);
+    serveur.refus = 'Votre rôle ne permet pas de créer une adresse d’appel.';
+    await cliquer(bouton('Créer une adresse'));
+    await jusqua(() => toasts.erreurs.length === 1);
+    expect(toasts.erreurs).toEqual(['Votre rôle ne permet pas de créer une adresse d’appel.']);
+    expect(serveur.adresses).toHaveLength(0);
+  });
+});
+
+describe('06-reglages-globaux:198 — trois adresses créées se distinguent par leur nom', () => {
+  it('« Formulaire de mon site », puis « (2) », puis « (3) »', async () => {
+    serveur.adresses = [];
+    await monter(<AdressesDAppel fr />);
+    for (let i = 1; i <= 3; i += 1) {
+      await cliquer(bouton('Créer une adresse'));
+      await jusqua(() => serveur.adresses.length === i);
+      await jusqua(() => !bouton('Créer une adresse').disabled);
+    }
+    expect(serveur.adresses.map((a) => a.name)).toEqual(['Formulaire de mon site', 'Formulaire de mon site (2)', 'Formulaire de mon site (3)']);
+  });
+
+  it('une adresse supprimée libère son numéro seulement s’il n’est plus à l’écran', async () => {
+    serveur.adresses = [adresse({ id: 'a1', name: 'Formulaire de mon site' }), adresse({ id: 'a3', name: 'Formulaire de mon site (3)' })];
+    await monter(<AdressesDAppel fr />);
+    await jusqua(() => texteEcran().includes('Formulaire de mon site (3)'));
+    await cliquer(bouton('Créer une adresse'));
+    await jusqua(() => serveur.adresses.length === 3);
+    expect(serveur.adresses[2].name).toBe('Formulaire de mon site (2)');
+  });
+});
+
+describe('06-reglages-globaux:544 — en anglais, un seul mot : « address »', () => {
+  it('ni le message de création, ni la confirmation de suppression, ni les pannes ne disent « endpoint »', async () => {
+    serveur.adresses = [];
+    await monter(<AdressesDAppel fr={false} />);
+    await cliquer(bouton('Create an address'));
+    await jusqua(() => toasts.succes.length === 1);
+    expect(toasts.succes).toEqual(['Address created.']);
+    const source = (await import('node:fs')).readFileSync('src/components/automations/AdressesDAppel.tsx', 'utf8');
+    // Aucun texte montré à l'utilisateur ne porte « endpoint » (les commentaires du code, eux, peuvent).
+    const textes = [...source.matchAll(/'([^'\n]*)'/g)].map((m) => m[1]).filter((t) => /endpoint/i.test(t));
+    expect(textes).toEqual([]);
   });
 });
