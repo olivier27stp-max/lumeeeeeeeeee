@@ -2106,6 +2106,14 @@ export default function Automations() {
           </div>
         )}
 
+        {/*
+          LE FIL D'ARIANE ET LA BARRE DE LOT PARTAGENT UNE RANGÉE, de hauteur réservée.
+          La barre s'insérait AU-DESSUS du tableau à la première case cochée : toutes les lignes
+          descendaient de 70 px sous la souris, et le clic suivant tombait sur une autre ligne
+          (triage `07-lot:97`). Elle apparaît maintenant à droite du fil d'Ariane, dans une rangée
+          qui a déjà sa hauteur : le tableau ne bouge pas.
+        */}
+        <div data-rangee-lot className="flex min-h-[48px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
         {/* ══ 5. Fil d'Ariane ══
             C'était « Accueil », texte fixe : il ne disait pas où l'on est et ne ramenait nulle part
             (triage `02-dossiers:150`). Il nomme le dossier ouvert, et « Accueil » en fait sortir. */}
@@ -2137,7 +2145,7 @@ export default function Automations() {
           et « Supprimer définitivement ».
         */}
         {reglesCochees.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-1">
             <span className="text-[13px] font-medium text-text-primary">
               {fr
                 ? `${reglesCochees.length} sélectionnée(s)`
@@ -2225,6 +2233,7 @@ export default function Automations() {
             </div>
           </div>
         )}
+        </div>
 
         {/* ══ 6. Le tableau ══ — le panneau des onglets du haut. */}
         <div role="tabpanel" id={`${idOnglets}-panneau`} aria-labelledby={`${idOnglets}-${onglet}`}>

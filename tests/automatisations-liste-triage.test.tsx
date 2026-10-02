@@ -1231,6 +1231,34 @@ describe('02-dossiers:150 — le fil d’Ariane dit le dossier ouvert et permet 
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('07-lot:97 — cocher une ligne ne fait pas descendre le tableau', () => {
+  // jsdom ne calcule pas de mise en page : on prouve la STRUCTURE (rien n'est inséré au-dessus du tableau ;
+  // la barre naît dans une rangée déjà là, de hauteur réservée). Les pixels sont mesurés par la spec Playwright.
+  const blocs = () => Array.from(conteneur.querySelector('[role="tabpanel"]')!.parentElement!.children);
+
+  it('aucun bloc n’est ajouté au-dessus du tableau : la barre de lot apparaît dans la rangée du fil d’Ariane', async () => {
+    await rendre();
+    const avant = blocs();
+    const rangee = conteneur.querySelector('[data-rangee-lot]') as HTMLElement;
+    expect(rangee.className).toContain('min-h-[48px]');
+    expect(rangee.querySelector('nav[aria-label="Fil d’Ariane"]')).not.toBeNull();
+    expect(rangee.textContent).not.toContain('sélectionnée(s)');
+
+    await cliquer(caseDe(/^Cocher Relance 1$/));
+    const apres = blocs();
+    expect(apres.length).toBe(avant.length);
+    apres.forEach((b, i) => expect(b, `bloc ${i}`).toBe(avant[i]));
+    expect(rangee.textContent).toContain('1 sélectionnée(s)');
+    // Le fil d'Ariane reste là, à côté.
+    expect(rangee.querySelector('nav[aria-label="Fil d’Ariane"]')).not.toBeNull();
+
+    await cliquer(bouton(/^Tout décocher$/));
+    expect(blocs().length).toBe(avant.length);
+    expect(rangee.textContent).not.toContain('sélectionnée(s)');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
