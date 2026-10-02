@@ -13,6 +13,17 @@ const api = {
   regles: vi.fn(async (): Promise<any[]> => []),
   echecs: vi.fn(async (): Promise<any[]> => []),
 };
+// Mission du 2026-10-01 : les échecs ne sont plus lus à part (200 lignes au plus, depuis le
+// navigateur) — ils viennent de la route de statistiques, comptés en base. `api.echecs` reste la
+// donnée de ces tests : `versStatistiques` la met dans la forme d'aujourd'hui.
+vi.mock('../src/lib/automationStatsApi', async () => {
+  const { versStatistiques } = await import('./aides/stats-automatisations');
+  return {
+    chargerStatistiquesBureau: async () => versStatistiques({}, await api.echecs(), 7),
+    lirePeriodeChoisie: () => 7,
+    retenirPeriode: () => undefined,
+  };
+});
 const naviguer = vi.fn();
 vi.mock('react-router-dom', async (orig) => ({
   ...(await orig<typeof import('react-router-dom')>()),
@@ -20,13 +31,9 @@ vi.mock('react-router-dom', async (orig) => ({
 }));
 vi.mock('../src/lib/automationRulesApi', () => ({
   getAutomationRules: () => api.regles(),
-  getRecentAutomationFailures: () => api.echecs(),
   getAutomationLanguage: vi.fn(async () => 'fr'),
 }));
 vi.mock('../src/components/automations/AdressesDAppel', () => ({ default: () => null }));
-vi.mock('../src/lib/automationJournauxApi', () => ({
-  activiteParSemaine: vi.fn(async () => ({ total: 0, parSemaine: [] })),
-}));
 vi.mock('../src/components/PermissionGate', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -83,6 +90,24 @@ describe('A-08 — des journaux illisibles ne deviennent pas « Aucune erreur »
     await rendre();
     expect(tuile('Total des automatisations')).toBe('—');
     expect(tuile('Automatisations publiées')).toBe('—');
+  });
+
+  it('des chiffres illisibles donnent « — » dans les quatre tuiles de la période, et un message — jamais 0', async () => {
+    api.echecs.mockImplementation(async () => { throw new Error('500'); });
+    await rendre();
+    for (const libelle of ['Déclenchées', 'Envoyées', 'Échouées', 'Ignorées']) expect(tuile(libelle), libelle).toBe('—');
+    expect(container.textContent).toContain('Les chiffres n’ont pas pu être lus');
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  });
+
+  it('la période choisie est écrite sur chaque chiffre', async () => {
+    await rendre();
+    const select = container.querySelector('select') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['7 derniers jours', '30 derniers jours', '90 derniers jours']);
+    expect(select.value).toBe('7');
+    expect(tuile('Déclenchées')).toBe('0');
+    const sousTitres = Array.from(container.querySelectorAll('.section-card p')).map((p) => p.textContent ?? '').filter((t) => t.startsWith('7 derniers jours ·'));
+    expect(sousTitres).toHaveLength(4);
   });
 });
 
