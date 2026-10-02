@@ -304,6 +304,28 @@ describe('03-onglets-etats:229 et 10-volume:210 — « À vérifier » ne dit «
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('03-onglets-etats:130 — le chargement est ANNONCÉ (role="status"), pas une roue muette', () => {
+  it('pendant la lecture : « Chargement… » dans un role="status" ; il disparaît quand la liste arrive', async () => {
+    let liberer: (v: api.AutomationRule[]) => void = () => undefined;
+    vi.mocked(api.getAutomationRules).mockReturnValue(new Promise((ok) => { liberer = ok; }));
+    await rendre();
+    const annonce = Array.from(conteneur.querySelectorAll('[role="status"]')).find((s) => /Chargement/.test(s.textContent || ''));
+    expect(annonce?.textContent).toBe('Chargement…');
+    expect(conteneur.querySelector('table')).toBeNull();
+    await act(async () => { liberer([regle()]); });
+    await laisser();
+    expect(conteneur.querySelector('table')).not.toBeNull();
+    expect(texte()).not.toContain('Chargement…');
+  });
+
+  it('en anglais : « Loading… »', async () => {
+    vi.mocked(api.getAutomationRules).mockReturnValue(new Promise(() => undefined));
+    await rendre('en');
+    expect(Array.from(conteneur.querySelectorAll('[role="status"]')).map((s) => s.textContent)).toContain('Loading…');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:143 — la liste s’affiche dès qu’elle est lue, sans attendre les chiffres', () => {
   const cellules = () => Array.from(conteneur.querySelectorAll('tbody tr:first-child td')).map((c) => (c.textContent || '').trim());
 

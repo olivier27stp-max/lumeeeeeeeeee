@@ -1936,8 +1936,10 @@ export default function Automations() {
         {/* ══ 6. Le tableau ══ — le panneau des onglets du haut. */}
         <div role="tabpanel" id={`${idOnglets}-panneau`} aria-labelledby={`${idOnglets}-${onglet}`}>
         {loading ? (
-          <div className="section-card flex items-center justify-center py-16">
+          // La roue était muette pour un lecteur d'écran (triage `03-onglets-etats:130`).
+          <div role="status" className="section-card flex items-center justify-center gap-2 py-16 text-[13px] text-text-secondary">
             <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" aria-hidden="true" />
+            {fr ? 'Chargement…' : 'Loading…'}
           </div>
         ) : echecChargement ? (
           <div role="alert" className="section-card flex flex-col items-center justify-center gap-3 py-14 text-center">
