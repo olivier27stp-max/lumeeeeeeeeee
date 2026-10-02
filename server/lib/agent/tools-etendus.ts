@@ -41,6 +41,7 @@ import { adresseInjoignable } from '../mailer';
 import { estPrereglageRetire } from '../../../src/lib/automationCatalogue';
 import { declencheurEnClair } from '../automations-etapes';
 import { langueDuTour } from '../lumi/contexte-appel';
+import { EVENEMENTS_NES_EN_BASE } from './evenements-nes-en-base';
 import type { AgentTool, ToolContext } from './tools';
 
 interface TaxLine { code: string; label: string; rate: number; enabled: boolean }
@@ -2209,6 +2210,7 @@ const assignJobTool: AgentTool = {
  * une erreur (sinon retentative = doublon).
  */
 async function signalerEvenement(ctx: ToolContext, chemin: string, corps: Record<string, any>): Promise<string | null> {
+  if (EVENEMENTS_NES_EN_BASE.has(chemin)) return null; // la base a déjà émis l'événement
   try {
     const { ok, status, json } = await appelInterne(ctx, chemin, corps);
     if (!ok) return `automatisations non déclenchées (${json?.error || status}) — l'écriture est faite, mais les règles (avis, factures, rappels) n'ont pas tourné.`;
