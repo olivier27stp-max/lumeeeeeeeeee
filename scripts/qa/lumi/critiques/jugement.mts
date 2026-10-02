@@ -329,6 +329,12 @@ export interface AttenteCarte {
   textes?: string[];
   montants_cents?: number[];
   telephones?: string[];
+  /**
+   * Quand l'action demandée est impossible par construction (rembourser un chèque : Lume ne rembourse que Stripe),
+   * un refus expliqué vaut la carte. Chaque entrée (« a|b » : l'un ou l'autre) doit se lire dans la réponse ou sur
+   * la carte de l'outil attendu. Une carte d'un AUTRE outil reste un défaut.
+   */
+  refus?: string[];
 }
 
 /** La demande donne UNE CARTE qui montre la cible attendue, et rien n'est exécuté. */
@@ -340,6 +346,12 @@ export function jugerCarte(e: Echange, a: AttenteCarte): Jugement {
   if (pretendFait(e.texte)) constats.push('la réponse dit que c’est fait alors que rien ne doit l’être');
   const cartes = e.propositions.filter((x) => !x.auto);
   const bonnes = cartes.filter((p) => a.outils.includes(p.tool));
+  if (a.refus?.length && !constats.length && bonnes.length === cartes.length) {
+    const visible = plat([e.texte, ...bonnes.map((p) => JSON.stringify({ args: p.args, apercu: p.apercu }))].join(' '));
+    if (a.refus.every((t) => t.split('|').some((v) => visible.includes(plat(v.trim()))))) {
+      return { verdict: 'PASS', constats: [`refus expliqué (${a.refus.join(' ; ')})${bonnes.length ? `, sur la carte « ${bonnes[0].tool} »` : ', sans carte'}`, 'aucune carte pour un autre outil', 'aucun événement d’exécution'] };
+    }
+  }
   if (!cartes.length) constats.push('aucune carte de confirmation');
   else if (!bonnes.length) constats.push(`carte pour « ${cartes.map((p) => p.tool).join(', ')} » au lieu de « ${a.outils.join(' | ')} »`);
   if (bonnes.length) {

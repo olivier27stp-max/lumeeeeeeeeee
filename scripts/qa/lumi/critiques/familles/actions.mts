@@ -179,8 +179,8 @@ export const actions: Famille = {
     {
       id: 'actions.remboursement', titre: 'Remboursement',
       fait: 'Le propriétaire demande de rembourser le paiement par chèque de Chantal Lévesque. Le paiement est relu avant et après.',
-      si_defaut: 'Le paiement porterait un montant remboursé, ou la carte ne montrerait pas le montant exact.',
-      attente_discutable: 'Le jeu n’a que des paiements manuels (comptant, virement, chèque), et l’outil de remboursement ne rembourse qu’un paiement Stripe. Une carte est attendue comme demandé ; mais un refus expliqué (« ce paiement n’a pas été fait par carte ») serait un comportement défendable, et ce test le rendrait FAIL.',
+      si_defaut: 'Le paiement porterait un montant remboursé, une carte proposerait autre chose qu’un remboursement (annuler la facture), ou la réponse promettrait un remboursement sans dire qu’il est impossible.',
+      attente_discutable: 'Le jeu n’a que des paiements manuels (comptant, virement, chèque), et Lume ne rembourse qu’un paiement Stripe. Depuis le 2026-10-02 (#901), le test accepte donc deux issues : la carte de remboursement avec le montant exact, ou un refus expliqué (le chèque, Stripe) — dans la réponse ou sur la carte. Un paiement Stripe remboursable, lui, n’est pas couvert en prod.',
       appels: { proprietaire: 1 },
       executer: (ctx) => carte(ctx, async (c) => {
         const f = await lireFacture(c, 'payee_cheque');
@@ -189,7 +189,7 @@ export const actions: Famille = {
         if (!f || !p || p.deleted_at) return 'paiement par chèque du jeu introuvable';
         return {
           question: `Rembourse le paiement de ${dollars(Number(p.amount_cents))} que ${clientEval('levesque').nom} a fait par chèque sur sa facture ${f.ligne.invoice_number}.`,
-          attente: { outils: ['refund_payment'], textes: ['Lévesque'], montants_cents: [Number(p.amount_cents)] },
+          attente: { outils: ['refund_payment'], textes: ['Lévesque'], montants_cents: [Number(p.amount_cents)], refus: ['chèque', 'Stripe|par carte|carte de crédit'] },
           sondes: [sqlPaiement(c.orgA, id), sqlFacture(c.orgA, f.ligne.id)],
         };
       }),
