@@ -13,6 +13,12 @@ import { lireManifeste, type Manifeste } from '../jeu-connu';
 
 let jeu: Manifeste;
 let jetonB: string;
+/**
+ * Les bureaux dont l'utilisateur B est MEMBRE. Un compte peut en avoir plusieurs (propriétaire de tous les
+ * bureaux de son entreprise) : voir les lignes de SES bureaux n'est pas une fuite. Ce que la preuve interdit,
+ * c'est une ligne d'un bureau dont il n'est pas membre — et, nommément, du bureau A.
+ */
+let bureauxDeB: Set<string>;
 let jetonTechA: string;
 let api: string;
 
@@ -29,7 +35,13 @@ function clientDe(jeton: string, bureau?: string): SupabaseClient {
 beforeAll(async () => {
   jeu = lireManifeste();
   api = inject('uiApi');
-  jetonB = (await sessionComplete(COMPTES.proprioB.email)).access_token;
+  const sessionB = await sessionComplete(COMPTES.proprioB.email);
+  jetonB = sessionB.access_token;
+  const { data: adhesions } = await admin.from('memberships').select('org_id').eq('user_id', sessionB.user.id).eq('status', 'active');
+  bureauxDeB = new Set((adhesions ?? []).map((m) => m.org_id as string));
+  // Témoins : B est bien membre de son bureau, et PAS du bureau A.
+  expect(bureauxDeB.has(lireManifeste().orgB)).toBe(true);
+  expect(bureauxDeB.has(lireManifeste().orgA)).toBe(false);
   jetonTechA = (await sessionComplete(COMPTES.techA.email)).access_token;
 });
 
@@ -52,7 +64,9 @@ describe('D — isolation : PostgREST avec le jeton d’un utilisateur du bureau
         const cible = await c.from(t).select('id, org_id').eq('org_id', jeu.orgA).limit(5);
         expect(cible.data ?? [], `${t} filtré sur le bureau A`).toEqual([]);
         const tout = await c.from(t).select('org_id').limit(1000);
-        expect([...new Set((tout.data ?? []).map((l) => l.org_id as string))].filter((o) => o !== jeu.orgB), `${t} sans filtre`).toEqual([]);
+        const vus = [...new Set((tout.data ?? []).map((l) => l.org_id as string))];
+        expect(vus.filter((o) => !bureauxDeB.has(o)), `${t} sans filtre : bureaux dont B n'est pas membre`).toEqual([]);
+        expect(vus.includes(jeu.orgA), `${t} sans filtre : le bureau A`).toBe(false);
       }
       // Par l'identifiant d'une règle du bureau A, et par celui d'un de ses clients.
       const parRegle = await c.from('automation_execution_logs').select('id').eq('automation_rule_id', jeu.regles.S.id);
@@ -104,8 +118,10 @@ describe('D — isolation : PostgREST avec le jeton d’un utilisateur du bureau
 });
 
 describe('D — isolation : l’API Express avec le jeton d’un utilisateur du bureau B', () => {
+  // Sans bureau nommé, B parle depuis SON bureau du jeu : un compte qui a plusieurs bureaux doit dire lequel
+  // (sans en-tête, l'API répond « quel bureau ? » — et la preuve lisait alors une erreur, pas des données).
   const appel = (chemin: string, bureau?: string) => fetch(`${api}${chemin}`, {
-    headers: { Authorization: `Bearer ${jetonB}`, ...(bureau ? { 'x-org-id': bureau } : {}) },
+    headers: { Authorization: `Bearer ${jetonB}`, 'x-org-id': bureau ?? jeu.orgB },
   });
 
   it('[D-ISO-07] statistiques : aucune règle du bureau A, même demandée par son identifiant', async () => {
@@ -143,7 +159,11 @@ describe('D — isolation : l’écran du bureau B', () => {
     await b.page.locator('#rech-automations').waitFor();
     await b.page.locator('#rech-automations').fill('[QA-D jeu]');
     await b.page.waitForTimeout(800);
-    expect(await b.page.locator('table tbody tr').filter({ hasText: '[QA-D jeu]' }).count()).toBe(0);
+    // Les LIGNES d'automatisation (celles qui portent une case à cocher) : l'état vide, lui, répète la recherche
+    // (« Aucun résultat pour « [QA-D jeu] » », lot « liste », triage 03-onglets-etats:277) et n'est pas une ligne.
+    const lignesDuJeu = b.page.locator('table tbody tr').filter({ has: b.page.locator('input[type="checkbox"]') }).filter({ hasText: '[QA-D jeu]' });
+    expect(await lignesDuJeu.count()).toBe(0);
+    expect(await b.page.locator('table tbody tr input[type="checkbox"]').count()).toBe(0);
 
     await b.page.goto(`${b.base}/automations/${jeu.regles.S.id}`);
     await expect.poll(async () => propre(await b.page.locator('body').innerText())).toContain('introuvable');

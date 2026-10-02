@@ -190,7 +190,12 @@ describe('D — la liste des automatisations contre le jeu connu', () => {
     expect(texte).not.toMatch(/\+1\d{10}|Frequency cap/i);
     expect(texte).toContain('Dernier envoi ignoré : Ce client a déjà reçu le maximum de messages commerciaux sur 24 h');
     await fr.page.getByRole('tab', { name: /^À vérifier/ }).click();
-    expect(await fr.page.locator('table tbody tr').filter({ hasText: jeu.regles.F4.nom }).count()).toBe(0);
+    // L'onglet vit dans l'adresse depuis le lot « liste » (triage 03-onglets-etats:86) : le changement passe par
+    // le routeur et n'est plus rendu dans le même souffle que le clic. On attend l'onglet, puis on regarde.
+    await expect.poll(() => fr.page.getByRole('tab', { name: /^À vérifier/ }).getAttribute('aria-selected')).toBe('true');
+    await expect.poll(() => fr.page.locator('table tbody tr').filter({ hasText: jeu.regles.F4.nom }).count()).toBe(0);
+    // Témoin : l'onglet n'est pas vide (la règle E, en échec, y est) — le « 0 » ci-dessus ne passe pas à vide.
+    expect(await fr.page.locator('table tbody tr').filter({ hasText: jeu.regles.E.nom }).count()).toBe(1);
   });
 
   it('[D-12a] en anglais, le panneau de la liste dit les raisons en anglais', async () => {
@@ -375,7 +380,11 @@ describe('D — l’onglet Journaux contre le jeu connu', () => {
     await expect.poll(async () => { await finDeLecture(fr.page); return total(fr.page); }).toBe(attendu(S, 90).journal);
 
     // Dates : « du » aujourd'hui (fuseau du bureau) ne garde que les exécutions du jour.
-    const aujourdHui = new Intl.DateTimeFormat('en-CA', { timeZone: jeu.fuseau, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    // Le fuseau est lu EN BASE, à l'instant : celui du manifeste est celui du moment où le jeu a été bâti (le
+    // harnais du moteur met le bureau « en journée » — Asie le soir —, puis celui du navigateur le remet à
+    // Toronto). À 23 h, les deux « aujourd'hui » diffèrent : la preuve tombait sur le manifeste, pas sur l'écran.
+    const fuseauActuel = String((await admin.from('company_settings').select('timezone').eq('org_id', jeu.orgA).single()).data?.timezone ?? jeu.fuseau);
+    const aujourdHui = new Intl.DateTimeFormat('en-CA', { timeZone: fuseauActuel, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     await fr.page.getByLabel('Du', { exact: true }).fill(aujourdHui);
     await expect.poll(async () => { await finDeLecture(fr.page); return total(fr.page); }).toBe(S.clients.filter((c) => c.age_jours === 0).length);
   });
