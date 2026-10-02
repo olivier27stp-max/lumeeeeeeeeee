@@ -329,18 +329,29 @@ prod à la fois**, et une seule session qui touche le schéma.
 ## 11. Message à coller dans la nouvelle session Claude Code
 
 > Tu reprends la mission « correction finale de la page Automatisations » de Lume (lancement le 26 octobre). Le
-> travail précédent est sur GitHub, dépôt `olivier27stp-max/lumeeeeeeeeee`, rien n'est sur `main` :
-> - documentation et état exact : branche `mission/automatisations-finale-passation`, dossier
->   `docs/mission-automatisations-finale/` — lis dans l'ordre `PASSATION.md`, `MISSION.md` (la demande complète),
->   la fin de `JOURNAL.md`, puis les `notes/*-corrections.md` du domaine que tu touches ;
-> - code intégré : branche `mission/automatisations-finale` ; branches d'agents à intégrer : `mission/auto-finale-b`
->   (moteur), `mission/auto-finale-d` (statistiques et liste), `mission/auto-finale-p` (ciblage, doublons, champs),
->   `mission/auto-finale-u` (un dernier commit `wip`).
-> Lis aussi `CLAUDE.md` à la racine et respecte-le. Ne crois rien sur parole : vérifie l'état git avant d'agir ; les
-> commits `wip(…)` sont non vérifiés.
-> Première tâche : récupère les branches dans des worktrees (§ 7 de la passation), lance la suite complète
-> (`npx vitest run --maxWorkers=2`) et `npm run lint` sur `mission/automatisations-finale`, et donne-moi le résultat.
+> travail précédent est sur GitHub, dépôt `olivier27stp-max/lumeeeeeeeeee` ; rien n'est sur `main`.
+>
+> **Où lire, dans l'ordre :**
+> 1. `CLAUDE.md` à la racine du dépôt — respecte-le.
+> 2. Branche `mission/automatisations-finale-passation`, dossier `docs/mission-automatisations-finale/` :
+>    `PASSATION.md` (l'état exact), `MISSION.md` (la demande complète), la fin de `JOURNAL.md`,
+>    `PASSATION_AUDIT_AUTOMATISATIONS_session-tests.md` (la session qui tenait les tests navigateur), puis les
+>    `notes/*-corrections.md` du domaine que tu touches.
+> 3. Sur `main` : `docs/passation/reprise-outils-lumi-2026-10-02.md` (la session des outils de Lumi, qui s'arrête
+>    aussi). Son § 9.4 te concerne : le repli `update({ is_active: false })` de
+>    `server/lib/agent/tools-lot-entreprise.ts` doit passer par la porte d'écriture `ecrireRegle` au moment du
+>    durcissement des écritures (non fait).
+>
+> **Où est le code :** intégration = branche `mission/automatisations-finale` ; branches d'agents à intégrer :
+> `mission/auto-finale-b` (moteur), `mission/auto-finale-d` (statistiques et liste), `mission/auto-finale-p` (ciblage,
+> doublons, champs), `mission/auto-finale-u` (un dernier commit `wip`). Ne crois rien sur parole : vérifie l'état git
+> avant d'agir ; les commits `wip(…)` n'ont pas été vérifiés.
+>
+> **Première tâche :** récupère les branches dans des worktrees (§ 7 de la passation), fusionne `origin/main` dans
+> l'intégration, lance la suite complète (`npx vitest run --maxWorkers=2`) et `npm run lint`, et donne-moi le résultat.
 > Ensuite, suis le § 10 : intégrer M, puis S, un à la fois, suite verte après chacun.
-> Règles : rien contre la prod ni staging sans me demander ; tests lourds sur une pile Docker locale seulement ; aucune
-> fusion sur `main` ; aucune migration appliquée, et aucune action sur une vraie entreprise (Coquin lavage, Vision
-> Lavage), sans mon accord ; un commit par correctif, et pousse ta branche de travail régulièrement pour ne rien perdre.
+>
+> **Règles :** rien contre la prod ni staging sans me demander ; tests lourds sur une pile Docker locale seulement ;
+> aucune fusion sur `main` ; aucune migration appliquée, et aucune action sur une vraie entreprise (Coquin lavage,
+> Vision Lavage), sans mon accord ; un commit par correctif, et pousse ta branche de travail régulièrement pour ne
+> rien perdre.
