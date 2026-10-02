@@ -722,41 +722,34 @@ const createAutomationFromText: AgentTool = {
  * « c'est fait », et les clients recevaient l'ANCIEN texte. Il réécrivait aussi
  * TOUS les messages du même type avec le même texte. Maintenant : la bonne
  * liste, un seul message, et s'il y en a plusieurs, on demande lequel.
+ *
+ * Mission finale (2026-10-02) :
+ *  · A-08 : refus sur une automatisation à la corbeille ;
+ *  · A-06 : refus d'un texte aux variables inconnues (le client recevrait un trou) ;
+ *  · A-07 : `actions` est RE-DÉRIVÉ du parcours dans la même écriture — il ne
+ *    garde plus l'ancien texte quand le parcours porte plusieurs messages ;
+ *  · A-05 : la ligne est RELUE et le texte enregistré est rendu ;
+ *  · A-10 : l'objet d'un courriel se change seul (corps gardé tel quel) ;
+ *  · A-18 : un texto de plus d'un SMS est annoncé avec son coût ;
+ *  · A-21 : le corps d'un courriel est enregistré au format de l'éditeur (HTML).
  */
 async function reecrireMessageAutomation(
   ctx: ToolContext,
   ruleId: string,
   actionType: 'send_sms' | 'send_email',
-  body: string,
+  body: string | undefined,
   subject?: string,
   numero?: number,
+  /** L'utilisateur a demandé PLUS COURT : le nouveau texte est compté contre l'actuel. */
+  plusCourt = false,
 ): Promise<Record<string, any>> {
-  const { data: regle, error: lireErr } = await ctx.client
-    .from('automation_rules')
-    .select('id, name, actions, steps')
-    .eq('id', ruleId)
-    .eq('org_id', ctx.orgId)
-    .maybeSingle();
-  if (lireErr) throw lireErr;
-  if (!regle) throw new Error('Automatisation introuvable.');
+  const langue = langueDuTour();
+  const fr = langue === 'fr';
+  const regle = await lireAutomatisation(ctx, ruleId);
+  refuserCorbeille(regle);
   const quoi = actionType === 'send_sms' ? 'texto' : 'courriel';
-  const nouvelleConfig = (config: Record<string, any> | undefined) => ({
-    ...(config || {}), body, ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}),
-  });
 
-  // Une automatisation à ÉTAPES : le moteur exécute `steps` et ignore `actions`,
-  // qui n'en est qu'un reflet (constaté en prod le 2026-09-30, #799 ; audit des
-  // outils). On réécrit l'étape visée ; plusieurs messages du même type → Lumi
-  // demande lequel (message_number) au lieu de tout réécrire ou de refuser.
-  const etapes: any[] = Array.isArray(regle.steps) ? regle.steps : [];
-  const actions: any[] = Array.isArray(regle.actions) ? regle.actions : [];
-  const parcours = etapes.length > 0;
-  // Les messages de ce type, dans l'ordre du parcours (ou de la liste d'actions).
-  const cibles: Array<{ index: number; texte: string; nom: string | null }> = parcours
-    ? etapes.flatMap((e, index) => (e?.type === 'action' && e.action?.type === actionType
-      ? [{ index, texte: String(e.action?.config?.body ?? ''), nom: e.nom ?? null }] : []))
-    : actions.flatMap((a: any, index: number) => (a?.type === actionType
-      ? [{ index, texte: String(a?.config?.body ?? ''), nom: null }] : []));
+  const cibles = messagesDeLaRegle(regle).filter((m) => m.type === actionType);
   if (!cibles.length) throw new Error(`Cette automatisation n’envoie pas de ${quoi} : rien à réécrire.`);
   if (cibles.length > 1 && !numero) {
     const liste = cibles.map((c, i) => `${i + 1}. ${c.nom ? `${c.nom} — ` : ''}« ${c.texte.slice(0, 60)}${c.texte.length > 60 ? '…' : ''} »`).join(' ; ');
@@ -765,58 +758,105 @@ async function reecrireMessageAutomation(
   const cible = cibles[(numero ?? 1) - 1];
   if (!cible) throw new Error(`Il n’y a que ${cibles.length} ${quoi}(s) dans cette automatisation.`);
 
-  // Reflet `actions` tenu à jour quand il n'y a qu'un message de ce type (sans ambiguïté).
-  const refletUnique = parcours && cibles.length === 1 && actions.filter((a) => a?.type === actionType).length === 1;
-  const maj = parcours
-    ? {
-      steps: etapes.map((e, i) => (i === cible.index ? { ...e, action: { ...e.action, config: nouvelleConfig(e.action?.config) } } : e)),
-      ...(refletUnique ? { actions: actions.map((a) => (a?.type === actionType ? { ...a, config: nouvelleConfig(a.config) } : a)) } : {}),
-    }
-    : { actions: actions.map((a, i) => (i === cible.index ? { ...a, config: nouvelleConfig(a.config) } : a)) };
-  const { data, error } = await ctx.client
-    .from('automation_rules')
-    .update({ ...maj, updated_at: new Date().toISOString() })
-    .eq('id', ruleId)
-    .eq('org_id', ctx.orgId)
-    .select('id');
-  if (error) throw error;
-  ligneTouchee(data, 'L’automatisation');
+  refuserVariablesInconnues([body, subject], regle.trigger_event);
+  // Un modèle ne sait pas compter les caractères : « plus court » est vérifié ici (mesuré : 160 → 183).
+  if (plusCourt && body !== undefined && body.length >= cible.texte.length) {
+    throw new Error(`Rien n’a été enregistré : le nouveau ${quoi} (${body.length} caractères) n’est pas plus court que l’actuel (${cible.texte.length}). Réécris-le plus court.`);
+  }
+  const nouvelleConfig = (config: Record<string, any> | undefined) => ({
+    ...(config || {}),
+    ...(body !== undefined ? { body: actionType === 'send_email' ? corpsCourriel(body) : body } : {}),
+    ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}),
+  });
+
+  // Une automatisation à ÉTAPES : le moteur exécute `steps`. On réécrit l'étape
+  // visée, et `actions` est re-dérivé du parcours ENTIER. Au format d'origine
+  // (aucun parcours), `actions` est ce que le moteur exécute : c'est lui qu'on écrit.
+  const parcours = aUnParcours(regle);
+  const etapes: any[] = parcours ? (regle.steps as any[]) : [];
+  const actions: any[] = Array.isArray(regle.actions) ? regle.actions as any[] : [];
+  let changements: ChangementsRegle;
+  if (parcours) {
+    changements = { steps: etapes.map((e, i) => (i === cible.index ? { ...e, action: { ...e.action, config: nouvelleConfig(e.action?.config) } } : e)) };
+  } else {
+    // Le rang parmi les messages de ce type dans `actions` (la projection y ajoute parfois une attente en tête).
+    const rangs = actions.map((a, i) => (a?.type === actionType ? i : -1)).filter((i) => i >= 0);
+    const position = rangs[cible.numero - 1];
+    changements = { actions: actions.map((a, i) => (i === position ? { ...a, config: nouvelleConfig(a.config) } : a)) };
+  }
+  // UNE seule porte pour écrire (`ecrireRegle`) : contrôles de la route, `actions` remis en accord
+  // avec le parcours dans la même écriture (A-07), ligne RELUE — c'est CE texte que Lumi cite (A-05).
+  const ecrite = await ecrireRegle({ client: ctx.client, orgId: ctx.orgId, ruleId, changements, auteurId: ctx.userId ?? null, origine: 'lumi', fr });
+  if (!ecrite.ok) throw new Error(`${ecrite.erreur} ${fr ? 'Rien n’a été enregistré.' : 'Nothing was saved.'}`);
+  const relue = ecrite.regle;
+  const enregistre = messagesDeLaRegle(relue).filter((m) => m.type === actionType)[cible.numero - 1];
+  if (!enregistre) throw new Error('Le message n’a pas été retrouvé après l’enregistrement : vérifie l’automatisation dans Lume.');
+  const avis = actionType === 'send_sms' ? avisSegments(enregistre.texte, fr) : null;
+  const publiee = relue.is_active === true;
+  const cite = enregistre.texte.length > 700 ? `${enregistre.texte.slice(0, 700)}…` : enregistre.texte;
   return {
     updated: true,
-    rule_id: regle.id,
-    name: regle.name,
+    rule_id: relue.id,
+    name: relue.name,
     action_type: actionType,
+    is_active: publiee,
+    ...(actionType === 'send_email' ? { objet_enregistre: enregistre.objet ?? '' } : {}),
+    texte_enregistre: enregistre.texte,
+    caracteres: enregistre.texte.length,
     ancien_texte: cible.texte,
+    ...(avis ? { avis_sms: avis } : {}),
+    recu: (fr
+      ? `${actionType === 'send_sms' ? 'Texto enregistré' : `Courriel enregistré — objet « ${enregistre.objet ?? ''} »`} : « ${cite} »`
+      : `${actionType === 'send_sms' ? 'Text saved' : `Email saved — subject “${enregistre.objet ?? ''}”`}: “${cite}”`)
+      + (avis ? `\n${avis}` : '')
+      + (fr
+        ? (publiee ? '\nL’automatisation est publiée : ce texte part dès le prochain déclenchement.' : '\nL’automatisation est en brouillon : rien ne part tant qu’elle n’est pas activée.')
+        : (publiee ? '\nThe automation is published: this text goes out from the next trigger.' : '\nThe automation is a draft: nothing is sent until it is enabled.')),
     note: actionType === 'send_sms' ? 'Texte du texto de l’automatisation mis à jour.' : 'Texte du courriel de l’automatisation mis à jour.',
   };
 }
+
+/** Les variables à écrire dans un message d'automatisation — dites au modèle AVANT qu'il écrive (A-06). */
+const CONSIGNE_VARIABLES = 'Variables: square brackets, ONLY these - [client_first_name], [client_name], [company_name], [company_phone], '
+  + '[invoice_number], [invoice_total], [invoice_due_date], [invoice_link] (payment link), [quote_number], [quote_total], [quote_link], '
+  + '[appointment_date], [appointment_time], [appointment_address], [job_name], [review_link]. Anything else (e.g. {{lien_paiement}}, [montant]) is refused: the client would get a blank. '
+  + 'Wording: address the client formally (vous) unless asked otherwise, open with "Bonjour [client_first_name]," (or "Hi [client_first_name],"), no emoji, sign [company_name].';
 
 const updateAutomationMessage: AgentTool = {
   kind: 'write',
   needsIdentity: true,
   declaration: {
     name: 'update_automation_message',
-    description: 'Rewrite the text a rule sends to clients (SMS body, or email body and subject). Show the user the new text first. Other actions of the rule are untouched.',
+    description: 'Rewrite the text an automation sends to clients: an SMS body, or an email body and/or subject (subject alone: omit body, the body is kept). '
+      + 'Read the current text first with get_automation when the user says "shorter", "warmer", "change only...". Other steps are untouched. '
+      + 'The result carries the text AS SAVED (texte_enregistre): quote that, never your draft. '
+      + CONSIGNE_VARIABLES,
     parameters: {
       type: 'object',
       properties: {
         rule_id: { type: 'string', description: 'Automation rule id.' },
         action_type: { type: 'string', enum: ['send_sms', 'send_email'], description: 'Which message to rewrite.' },
-        body: { type: 'string', description: 'New message text.' },
+        body: { type: 'string', description: 'New message text (plain text; an SMS should stay short: about 20 words, two sentences). Never count characters yourself: the server counts them and tells you. When the user asks for a shorter text, set must_be_shorter. Optional for an email when only the subject changes.' },
         subject: { type: 'string', description: 'New subject (emails only).' },
         message_number: { type: 'integer', description: 'When the rule sends several messages of this type: which one (1 = first in the flow). Ask the user if unsure.' },
+        must_be_shorter: { type: 'boolean', description: 'true when the user asked for a SHORTER text: the new text is then counted against the current one and refused if not shorter.' },
       },
-      required: ['rule_id', 'action_type', 'body'],
+      required: ['rule_id', 'action_type'],
     },
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'update_automation_message', args, async () => {
       const id = champRequis(args.rule_id, 'L’automatisation');
       const type = args.action_type === 'send_email' ? 'send_email' : 'send_sms';
-      const body = champRequis(args.body, 'Le texte du message').slice(0, 5000);
       const subject = args.subject === undefined || args.subject === null ? undefined : String(args.subject).slice(0, 300);
+      const sansCorps = args.body === undefined || args.body === null || String(args.body).trim() === '';
+      // L'objet d'un courriel se change SEUL (A-10) : le corps reste tel qu'enregistré.
+      if (sansCorps && !(type === 'send_email' && subject !== undefined && subject.trim())) {
+        throw new Error('Le texte du message est requis — précise-le et réessaie.');
+      }
+      const body = sansCorps ? undefined : String(args.body).trim().slice(0, type === 'send_sms' ? 1600 : 5000);
       const numero = Number.isInteger(args.message_number) && Number(args.message_number) > 0 ? Number(args.message_number) : undefined;
-      return reecrireMessageAutomation(ctx, id, type, body, subject, numero);
+      return reecrireMessageAutomation(ctx, id, type, body, subject, numero, args.must_be_shorter === true);
     }),
 };
 
@@ -825,13 +865,16 @@ const updateAutomationSmsBody: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'update_automation_sms_body',
-    description: 'Rewrite only the SMS text of an automation rule. Shortcut for update_automation_message with action_type send_sms.',
+    description: 'Rewrite only the SMS text of an automation. Read the current text first with get_automation when the user says "shorter" or "warmer", then write the new text YOURSELF and call this tool right away: the card shows it and asks the OK. Never ask "what should it say?" or "do you want me to shorten it?": the user already asked, propose your best rewrite. '
+      + 'The result carries the text AS SAVED (texte_enregistre): quote that, never your draft. '
+      + CONSIGNE_VARIABLES,
     parameters: {
       type: 'object',
       properties: {
         rule_id: { type: 'string', description: 'Automation rule id.' },
-        body: { type: 'string', description: 'New SMS text.' },
+        body: { type: 'string', description: 'New SMS text. Keep it short: about 20 words, two sentences (beyond 160 characters each send is billed as several SMS). Never count characters yourself: the server counts them and tells you. When the user asks for a shorter text, set must_be_shorter.' },
         message_number: { type: 'integer', description: 'When the rule sends several SMS: which one (1 = first in the flow).' },
+        must_be_shorter: { type: 'boolean', description: 'true when the user asked for a SHORTER text: the new text is then counted against the current one and refused if not shorter.' },
       },
       required: ['rule_id', 'body'],
     },
@@ -841,7 +884,7 @@ const updateAutomationSmsBody: AgentTool = {
       const id = champRequis(args.rule_id, 'L’automatisation');
       const body = champRequis(args.body, 'Le texte du texto').slice(0, 1600);
       const numero = Number.isInteger(args.message_number) && Number(args.message_number) > 0 ? Number(args.message_number) : undefined;
-      return reecrireMessageAutomation(ctx, id, 'send_sms', body, undefined, numero);
+      return reecrireMessageAutomation(ctx, id, 'send_sms', body, undefined, numero, args.must_be_shorter === true);
     }),
 };
 

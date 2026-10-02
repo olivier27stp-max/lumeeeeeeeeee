@@ -85,6 +85,16 @@ function filtreOrg(appels: Appel[], table: string): boolean {
     || (m === 'insert' && k && typeof k === 'object' && k.org_id === 'org')));
 }
 
+/** La charge utile de l'écriture (`update`) faite sur `automation_rules` — par `ecrireRegle`, après ses lectures. */
+function majAutomatisation(appels: Appel[]): any {
+  const ecritures = appels.filter((a) => a.table === 'automation_rules' && a.ops.some(([m]) => m === 'update'));
+  expect(ecritures.length, 'une seule écriture sur automation_rules').toBe(1);
+  // L'écriture est bornée à l'automatisation ET au bureau.
+  expect(ecritures[0].ops.some(([m, k, v]) => m === 'eq' && k === 'org_id' && v === 'org')).toBe(true);
+  expect(ecritures[0].ops.some(([m, k, v]) => m === 'eq' && k === 'id' && v === 'r1')).toBe(true);
+  return ecritures[0].ops.find(([m]) => m === 'update')![1];
+}
+
 async function executer(nom: string, args: Record<string, any>, reponses: Record<string, any> = {}) {
   const { client, appels } = clientEnregistreur(reponses);
   const r = await OUTIL[nom].handler!(args, { client, orgId: 'org', userId: 'u', accessToken: 'jeton' });
@@ -198,12 +208,13 @@ describe('écritures directes : filtrées par org_id = ctx.orgId, note en franç
     const regle = { id: 'r1', name: 'Avis', actions: [{ type: 'send_sms', config: { body: 'ancien' } }, { type: 'send_email', config: { body: 'ancien courriel', subject: 'Objet' } }, { type: 'create_task' }] };
     const { r, appels } = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_email', body: 'Nouveau', subject: 'Nouvel objet' }, { automation_rules: { data: [regle] } });
     expect(r.error).toBeUndefined();
-    const maj = appels[1].ops.find(([m]) => m === 'update')![1];
-    expect(maj.actions).toEqual([
-      { type: 'send_sms', config: { body: 'ancien' } },
-      { type: 'send_email', config: { body: 'Nouveau', subject: 'Nouvel objet' } },
-      { type: 'create_task' },
-    ]);
+    const maj = majAutomatisation(appels);
+    expect(maj.actions[0]).toEqual({ type: 'send_sms', config: { body: 'ancien' } });
+    expect(maj.actions[2]).toEqual({ type: 'create_task' });
+    expect(maj.actions[1].config.subject).toBe('Nouvel objet');
+    // Le corps d'un courriel est enregistré au format de l'éditeur (HTML) : en texte brut, il partait en un seul bloc (A-21).
+    expect(maj.actions[1].config.body).toContain('Nouveau');
+    expect(maj.actions[1].config.body).toMatch(/<h2|<p/);
     const sans = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_email', body: 'x' }, { automation_rules: { data: [{ id: 'r1', name: 'Avis', actions: [{ type: 'create_task' }] }] } });
     expect(sans.r.error).toMatch(/n’envoie pas de courriel/);
   });
@@ -221,8 +232,9 @@ describe('écritures directes : filtrées par org_id = ctx.orgId, note en franç
 
     const { r, appels } = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_sms', body: 'À demain 9 h', message_number: 2 }, { automation_rules: { data: [regle] } });
     expect(r).toMatchObject({ updated: true, ancien_texte: 'C’est demain' });
-    const maj = appels[1].ops.find(([m]) => m === 'update')![1];
-    expect(maj.actions).toBeUndefined();
+    const maj = majAutomatisation(appels);
+    // `actions` REDIT le parcours (A-07) : il ne garde plus un texte (« vieux ») que le parcours n'envoie pas.
+    expect(maj.actions.map((a: any) => a.config.body)).toEqual(['Confirmé !', 'À demain 9 h']);
     expect(maj.steps[0].action.config.body).toBe('Confirmé !');
     expect(maj.steps[2].action.config.body).toBe('À demain 9 h');
     expect(maj.steps[1]).toEqual(steps[1]);
@@ -238,7 +250,7 @@ describe('écritures directes : filtrées par org_id = ctx.orgId, note en franç
     const regle = { id: 'r1', name: 'Relance devis à 1 jour', actions: [{ type: 'send_sms', config: { body: 'long' } }], steps };
     const { r, appels } = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_sms', body: 'Nouveau texto' }, { automation_rules: { data: [regle] } });
     expect(r.error).toBeUndefined();
-    const maj = appels[1].ops.find(([m]) => m === 'update')![1];
+    const maj = majAutomatisation(appels);
     expect(maj.steps[1].action.config.body).toBe('Nouveau texto');
     expect(maj.steps[2]).toEqual(steps[2]);
     expect(maj.steps[0]).toEqual(steps[0]);
