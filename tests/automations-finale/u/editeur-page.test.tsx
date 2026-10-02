@@ -1455,8 +1455,9 @@ describe('ligne 1 — une étape choisie dans le tiroir n’est écrite qu’une
     await act(async () => { vi.advanceTimersByTime(10_000); });
     await attendre();
     expect(api.modifier).not.toHaveBeenCalled();
-    // Le parcours enregistré n'a pas bougé : l'indicateur ne dit pas « Modifié ».
-    expect(barreDuHaut()).toContain('Enregistré');
+    // Le parcours enregistré n'a pas bougé : l'indicateur ne dit pas « Modifié » — il dit que
+    // l'étape en cours d'ajout n'est pas enregistrée (remarque d'usage (b) : avant, « Enregistré »).
+    expect(barreDuHaut()).toContain('Étape non enregistrée');
     expect(barreDuHaut()).not.toContain('Modifié');
   });
 
@@ -2145,5 +2146,56 @@ describe('S-14 — « Voir Autopilot » passe par la même garde que « Mes auto
     expect(api.modifier).toHaveBeenCalledTimes(1);
     expect((api.modifier.mock.calls[0][1] as { name?: string }).name).toBe('Relance devis v2');
     expect(lieu()).toBe('/settings/billing');
+  });
+});
+
+// ─── Remarque d'usage (b) de la session des specs : une étape en cours d'ajout se VOIT comme telle ───
+
+describe('étape en cours d’ajout (choisie dans le tiroir, pas encore enregistrée) : la carte et l’indicateur le disent', () => {
+  const MENTION = 'En cours d’ajout — pas encore enregistrée';
+  const carteEnAttente = () => Array.from(container.querySelectorAll('div.border-dashed')).find((d) => d.textContent?.includes(MENTION));
+
+  it('pendant l’ajout : carte en pointillé avec sa mention, et l’indicateur dit « Étape non enregistrée » — pas « Enregistré »', async () => {
+    await ouvrir();
+    expect(barreDuHaut()).toContain('Enregistré');
+    await ajouterParLeTiroir('Envoyer un texto');
+    expect(carteEnAttente()).toBeDefined();
+    expect(carteEnAttente()?.textContent).toContain('Envoyer un texto');
+    // Une seule carte est en attente : les étapes du parcours gardent leur bordure pleine.
+    expect(container.querySelectorAll('div.border-dashed.w-\\[260px\\]')).toHaveLength(1);
+    expect(barreDuHaut()).toContain('Étape non enregistrée');
+    expect(barreDuHaut()).not.toContain('Enregistré');
+  });
+
+  it('« Enregistrer » dans le panneau : c’est une étape comme les autres — plus de pointillé, plus de mention, l’indicateur reprend', async () => {
+    await ouvrir();
+    await ajouterParLeTiroir('Envoyer un texto');
+    saisir(panneauEtape()?.querySelector('textarea'), 'Merci [client_first_name]');
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    expect(container.textContent).not.toContain(MENTION);
+    expect(carteEnAttente()).toBeUndefined();
+    expect(barreDuHaut()).not.toContain('Étape non enregistrée');
+    expect(barreDuHaut()).toContain('Modifié');
+  });
+
+  it('ajout abandonné : la carte disparaît, l’indicateur revient à « Enregistré »', async () => {
+    await ouvrir();
+    await ajouterParLeTiroir('Envoyer un texto');
+    cliquer(boutonExact('Annuler', panneauEtape() ?? undefined));
+    await attendre(12);
+    expect(container.textContent).not.toContain(MENTION);
+    expect(barreDuHaut()).toContain('Enregistré');
+  });
+
+  it('en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    await ouvrir();
+    cliquer(boutonExact('Add'));
+    await attendre(2);
+    cliquer(bouton('Send a text message', container.querySelector('aside[aria-label="Actions"]') ?? undefined));
+    await attendre(2);
+    expect(container.textContent).toContain('Being added — not saved yet');
+    expect(barreDuHaut()).toContain('Step not saved');
   });
 });

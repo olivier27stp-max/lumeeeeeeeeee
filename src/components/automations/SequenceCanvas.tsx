@@ -52,6 +52,13 @@ interface Props {
   membres?: Array<{ user_id: string; nom: string }>;
   etapesPipeline?: Array<{ id: string; label: string }>;
   automatisations?: Array<{ id: string; nom: string }>;
+  /**
+   * L'étape EN COURS D'AJOUT : choisie dans le tiroir, pas encore enregistrée
+   * dans son panneau — elle n'existe pas dans le parcours. Sa carte le dit
+   * (bordure pointillée, mention) : elle ressemblait à une étape comme les
+   * autres (remarque d'usage (b) de la session des specs, 2026-10-02).
+   */
+  etapeEnAttenteId?: string | null;
   /** Étape sélectionnée, mise en évidence. */
   selectionId?: string | null;
   onSelection: (id: string) => void;
@@ -287,9 +294,11 @@ function Connecteur({
 
 /** Une carte d'étape. */
 function Carte({
-  etape, fr, langueEnvoi, listes, selectionnee, enErreur, onClick, onMenu, lectureSeule,
+  etape, fr, langueEnvoi, listes, selectionnee, enErreur, enAttente, onClick, onMenu, lectureSeule,
 }: {
   etape: Etape; fr: boolean; langueEnvoi: 'fr' | 'en'; listes: Listes; selectionnee: boolean; enErreur?: boolean;
+  /** En cours d'ajout : pas encore dans le parcours. */
+  enAttente?: boolean;
   onClick: () => void;
   /** Le menu « … » de la carte — dupliquer, supprimer. */
   onMenu?: (id: string) => void;
@@ -314,6 +323,9 @@ function Carte({
    */
   const bordure = enErreur
     ? 'border-danger shadow-md'
+    : enAttente
+      // Pointillée : pas encore une étape du parcours.
+      ? 'border-dashed border-accent shadow-md'
     : selectionnee
       ? 'border-accent shadow-md'
       : 'border-border hover:border-text-tertiary';
@@ -349,6 +361,11 @@ function Carte({
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium text-text-primary">{titreEtape(etape, fr)}</span>
           {detail && <span className="mt-0.5 block truncate text-xs text-text-secondary">{detail}</span>}
+          {enAttente && (
+            <span className="mt-1 block text-[11px] font-medium text-accent">
+              {fr ? 'En cours d’ajout — pas encore enregistrée' : 'Being added — not saved yet'}
+            </span>
+          )}
         </span>
         {/* La place du menu « … », pour que le texte ne passe pas dessous. */}
         {!lectureSeule && onMenu && <span className="w-4 shrink-0" aria-hidden="true" />}
@@ -371,7 +388,7 @@ function Carte({
 }
 
 export default function SequenceCanvas({
-  declencheurLabel, steps, fr, langueEnvoi = 'fr', membres, etapesPipeline, automatisations,
+  declencheurLabel, steps, fr, langueEnvoi = 'fr', membres, etapesPipeline, automatisations, etapeEnAttenteId,
   selectionId, onSelection, onAjouter, onMenu, onDeclencheur,
   declencheurDetail, lectureSeule, etapesEnErreur,
 }: Props) {
@@ -445,7 +462,7 @@ export default function SequenceCanvas({
       const borne = commune ?? arret;
       return (
         <div className="flex flex-col items-center">
-          <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} listes={listes} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
+          <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} listes={listes} enAttente={etapeEnAttenteId === etape.id} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
           {/* Deux branches, côte à côte : c'est le seul endroit où le
               parcours se divise, et ça doit se voir. */}
           <div className="flex items-start gap-6 pt-1">
@@ -478,7 +495,7 @@ export default function SequenceCanvas({
     const suivant = etape.type === 'arreter' ? null : etape.suivant;
     return (
       <div className="flex flex-col items-center">
-        <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} listes={listes} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
+        <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} listes={listes} enAttente={etapeEnAttenteId === etape.id} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
         {etape.type !== 'arreter' && (
           <>
             <Connecteur fr={fr} lectureSeule={lectureSeule} onAjouter={() => onAjouter(etape.id)} />

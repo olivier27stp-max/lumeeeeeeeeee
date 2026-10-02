@@ -2694,6 +2694,16 @@ export default function AutomationBuilderPage() {
                   ? `${etapesIncompletes} étape(s) à compléter`
                   : `${etapesIncompletes} step(s) to complete`}
               </span>
+            ) : ajoutEnAttente ? (
+              /*
+                UNE ÉTAPE EN COURS D'AJOUT n'existe pas dans le parcours tant que
+                son panneau n'est pas enregistré : « Enregistré » à côté d'elle
+                laissait croire le contraire (remarque d'usage (b), 2026-10-02).
+              */
+              <span className="inline-flex items-center gap-1.5 text-warning">
+                <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
+                {fr ? 'Étape non enregistrée' : 'Step not saved'}
+              </span>
             ) : etatSauvegarde === 'en_cours' || declencheurEnVol ? (
               // Le changement de déclencheur compte aussi : « Enregistré »
               // pendant que son PATCH était en vol mentait (audit 2026-10-01).
@@ -3175,6 +3185,7 @@ export default function AutomationBuilderPage() {
                       onDeclencheur={ouvrirDeclencheur}
                       declencheurDetail={declencheurDetail}
                       etapesEnErreur={etapesEnErreur}
+                      etapeEnAttenteId={ajoutEnAttente?.etape?.id ?? null}
                     />
                   )
                 )}

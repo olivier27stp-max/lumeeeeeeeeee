@@ -925,6 +925,31 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     verifier(config.subject === 'Votre soumission' && !('subject_en' in config) && !('body_en' in config), `enregistré : la version anglaise entière est retirée (${Object.keys(config).join(', ')})`);
     await page.context().close();
   },
+
+  /** Remarque (b) — l'étape choisie dans le tiroir, pas encore enregistrée : carte en pointillé, indicateur « Étape non enregistrée ». */
+  async attente() {
+    const regle = await creerRegle({ trigger_event: 'quote.sent', steps: [action('send_sms', { body: 'Bonjour [client_first_name]' })] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    const entete = page.locator('header').filter({ hasText: 'Mes automatisations' }).first();
+    verifier(((await entete.textContent()) ?? '').includes('Enregistré'), 'avant : « Enregistré »');
+    await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+    await tiroir(page).getByRole('button', { name: /^Créer une tâche/ }).click();
+    await panneau(page).waitFor();
+    const enAttente = page.locator('div.border-dashed').filter({ hasText: 'En cours d’ajout — pas encore enregistrée' });
+    verifier(await enAttente.count() === 1 && ((await enAttente.textContent()) ?? '').includes('Créer une tâche'), 'la carte en cours d’ajout est en pointillé, avec sa mention');
+    verifier(await enAttente.evaluate((el) => getComputedStyle(el).borderTopStyle) === 'dashed', 'la bordure est réellement pointillée à l’écran');
+    const pendant = (await entete.textContent()) ?? '';
+    verifier(pendant.includes('Étape non enregistrée') && !pendant.includes('Enregistré'), `l’indicateur dit « Étape non enregistrée » (${pendant.replace(/\s+/g, ' ').slice(-40)})`);
+    await pause(5000);
+    verifier(((await lireRegle(regle.id)).steps as unknown[]).length === 1, 'rien n’est écrit en base pendant l’ajout');
+    await enregistrer(page).click();
+    await pause(500);
+    verifier(await enAttente.count() === 0, 'panneau enregistré : plus de pointillé ni de mention');
+    await pause(5000);
+    verifier(((await lireRegle(regle.id)).steps as unknown[]).length === 2 && ((await entete.textContent()) ?? '').includes('Enregistré'), 'l’étape est en base, l’indicateur dit « Enregistré »');
+    await page.context().close();
+  },
 };
 
 const demandes = process.argv.slice(2);
