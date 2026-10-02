@@ -10,6 +10,11 @@ Fichiers : `integration/30-fgh-langue.test.ts`, `integration/60-contenu-messages
 | H-004 | [appointment_time] / [appointment_date] | entreprise EN | « 02:00 p.m. », pas « 14 h 00 » ; FR garde « 14 h 00 » | PASS après e09f0482 |
 | H-005 | create_notification par courriel | membre `language = en` | titre `title_en` | PASS |
 | H-006 | `default_language = 'en-CA'` | — | refusé (CHECK fr/en, 23514) : l'écart `langueOrg` (=== 'en') / `langueDe` (startsWith) est sans effet | PASS |
+| H-030 | parcours, texto : seulement `body` (anglais), aucune clé `body_en` | entreprise EN | le texte de `body` part | PASS |
+| H-031 | parcours, courriel : seulement `subject` + `body` (anglais) | entreprise EN | objet et corps partent tels quels, `<html lang="en">` | PASS |
+| H-032 | parcours, `body` + `body_en` gardés | entreprise FR | le français part (texto et courriel) | PASS |
+| H-033 | parcours, `body` + `body_en` gardés | entreprise EN | l'anglais part (texto et courriel) | PASS |
+| H-034 | parcours, `body_en` présent mais vide | entreprise EN | le texte de `body` part, jamais un message vide | PASS |
 | H-010 | segmentsSms, accents GSM-7 | é è à ù | GSM-7, 160 puis 153 | PASS |
 | H-011 | segmentsSms, hors GSM-7 | ê ç ’ « » ô î û ë | UCS-2, 70 puis 67 ; caractère d'extension = 2 unités | PASS |
 | H-012 | mention STOP | FR / EN | reste en GSM-7 | PASS |

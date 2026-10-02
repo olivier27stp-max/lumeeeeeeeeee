@@ -8,7 +8,7 @@
  * français à la fin) ; le bureau A reste en français — témoin.
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
-import { demarrerMoteur, marque, envoisSimules, attendre } from '../harnais/moteur';
+import { demarrerMoteur, marque, envoisSimules, attendre, traiterFile } from '../harnais/moteur';
 import { journalDefinitif } from '../harnais/moteur';
 import { COMPTES } from '../harnais/bureau-test';
 
@@ -182,5 +182,98 @@ describe('H — la langue de l’entreprise pour chaque message', () => {
   it('[H-006] une langue « en-CA » ne peut pas être enregistrée (CHECK fr|en) : l’écart langueOrg / langueDe est sans effet', async () => {
     const { error } = await b.admin.from('company_settings').update({ default_language: 'en-CA' }).eq('org_id', b.orgB);
     expect(error?.code).toBe('23514');
+  });
+});
+
+/*
+ * La règle des DEUX LANGUES d'un message (mission finale, demande du
+ * coordinateur). L'éditeur écrit le texte de la langue que le bureau envoie
+ * dans `config.body` / `config.subject`, et retire par défaut l'autre
+ * version : `body_en` / `subject_en` disparaissent de la base, la clé
+ * elle-même. Un bureau ANGLAIS porte donc un texte anglais dans `body`, sans
+ * `body_en`. Ce que le VRAI moteur envoie, dans un parcours (`steps`, ce que
+ * l'éditeur enregistre) — le bureau B est réellement en anglais
+ * (`default_language = 'en'`, posé en tête de fichier), le bureau A en français.
+ */
+describe('H — la règle des deux langues : ce que l’éditeur enregistre, ce que le moteur envoie', () => {
+  const etapes = (actions: Array<{ type: string; config: Record<string, unknown> }>) => actions.map((action, i) => ({
+    id: `e${i + 1}`, type: 'action', action, suivant: i + 1 < actions.length ? `e${i + 2}` : null,
+  }));
+
+  /** Émet l'événement, puis fait passer la file du bureau jusqu'à ce que les `nb` étapes du parcours aient leur ligne de journal. */
+  async function declencherParcours(org: string, regle: string, clientId: string, nb: number) {
+    const depuis = new Date().toISOString();
+    await b.eventBus.emit('client.tagged' as never, { orgId: org, entityType: 'client', entityId: clientId, metadata: { tag: 'qa-secu' } });
+    for (let passe = 0; passe < nb + 2; passe++) {
+      await attendre(async () => (await b.admin.from('automation_scheduled_tasks').select('id').eq('automation_rule_id', regle)).data ?? [], (t) => t.length >= Math.min(passe + 1, nb), 20_000);
+      await b.admin.from('automation_scheduled_tasks').update({ execute_at: new Date(Date.now() - 1000).toISOString() }).eq('automation_rule_id', regle).eq('status', 'pending');
+      await traiterFile(b.admin, org);
+      if (termine(await journaux(regle), nb)) break;
+    }
+    const logs = await attendre(() => journaux(regle), (l) => termine(l, nb), 30_000);
+    return { logs, envois: await envoisSimules(b.admin, org, depuis) };
+  }
+
+  it('[H-030] bureau ANGLAIS, texto : seulement `body` (texte anglais), aucune clé `body_en` → c’est ce texte qui part', async () => {
+    const client = await unClient(b.orgB);
+    const regle = await uneRegle(b.orgB, { actions: [], steps: etapes([{ type: 'send_sms', config: { body: `Thanks for your visit ${m}`, type_envoi: 'transactionnel' } }]) });
+    const ligne = await ok(b.admin.from('automation_rules').select('steps').eq('id', regle).single(), 'relecture');
+    expect(JSON.stringify(ligne.steps), 'la clé `body_en` n’existe pas en base').not.toContain('body_en');
+    const { logs, envois } = await declencherParcours(b.orgB, regle, client.id, 1);
+    const texto = envois.find((e) => e.destinataire === client.phone);
+    expect(texto, JSON.stringify(logs)).toBeTruthy();
+    expect(texto!.corps).toBe(`Thanks for your visit ${m}`);
+  });
+
+  it('[H-031] bureau ANGLAIS, courriel : seulement `subject` + `body` (anglais), aucune clé `_en` → objet et corps partent tels quels', async () => {
+    const client = await unClient(b.orgB);
+    const regle = await uneRegle(b.orgB, { actions: [], steps: etapes([{ type: 'send_email', config: { subject: `Your visit ${m}`, body: '<p>Thanks {client_first_name}, see you soon.</p>', type_envoi: 'transactionnel' } }]) });
+    const ligne = await ok(b.admin.from('automation_rules').select('steps').eq('id', regle).single(), 'relecture');
+    expect(JSON.stringify(ligne.steps)).not.toMatch(/subject_en|body_en/);
+    const { logs, envois } = await declencherParcours(b.orgB, regle, client.id, 1);
+    const courriel = envois.find((e) => e.destinataire === client.email);
+    expect(courriel, JSON.stringify(logs)).toBeTruthy();
+    expect(courriel!.sujet).toBe(`Your visit ${m}`);
+    expect(String(courriel!.corps)).toContain('Thanks Harry, see you soon.');
+    // Ni vide, ni un texte français inventé par un repli.
+    expect(String(courriel!.sujet).trim()).not.toBe('');
+    expect(String(courriel!.corps)).toContain('<html lang="en">');
+  });
+
+  const deuxVersions = () => etapes([
+    { type: 'send_sms', config: { body: `Merci de votre visite ${m}`, body_en: `Thanks for your visit ${m}`, type_envoi: 'transactionnel' } },
+    { type: 'send_email', config: { subject: `Votre visite ${m}`, subject_en: `Your visit ${m}`, body: '<p>Merci {client_first_name}</p>', body_en: '<p>Thanks {client_first_name}</p>', type_envoi: 'transactionnel' } },
+  ]);
+
+  it('[H-032] bureau FRANÇAIS, les deux versions gardées (`body` + `body_en`) : le FRANÇAIS part, texto et courriel', async () => {
+    const client = await unClient(b.orgA);
+    const regle = await uneRegle(b.orgA, { actions: [], steps: deuxVersions() });
+    const { logs, envois } = await declencherParcours(b.orgA, regle, client.id, 2);
+    const texto = envois.find((e) => e.destinataire === client.phone);
+    const courriel = envois.find((e) => e.destinataire === client.email);
+    expect(texto?.corps, JSON.stringify(logs)).toBe(`Merci de votre visite ${m}`);
+    expect(courriel?.sujet, JSON.stringify(logs)).toBe(`Votre visite ${m}`);
+    expect(String(courriel!.corps)).toContain('Merci Harry');
+    expect(String(courriel!.corps)).not.toContain('Thanks Harry');
+  });
+
+  it('[H-033] bureau ANGLAIS, les deux versions gardées : l’ANGLAIS part, texto et courriel', async () => {
+    const client = await unClient(b.orgB);
+    const regle = await uneRegle(b.orgB, { actions: [], steps: deuxVersions() });
+    const { logs, envois } = await declencherParcours(b.orgB, regle, client.id, 2);
+    const texto = envois.find((e) => e.destinataire === client.phone);
+    const courriel = envois.find((e) => e.destinataire === client.email);
+    expect(texto?.corps, JSON.stringify(logs)).toBe(`Thanks for your visit ${m}`);
+    expect(courriel?.sujet, JSON.stringify(logs)).toBe(`Your visit ${m}`);
+    expect(String(courriel!.corps)).toContain('Thanks Harry');
+    expect(String(courriel!.corps)).not.toContain('Merci Harry');
+  });
+
+  it('[H-034] bureau ANGLAIS, `body_en` présent mais VIDE (version retirée à moitié) : le texte de `body` part, jamais un message vide', async () => {
+    const client = await unClient(b.orgB);
+    const regle = await uneRegle(b.orgB, { actions: [], steps: etapes([{ type: 'send_sms', config: { body: `Thanks again ${m}`, body_en: '   ', type_envoi: 'transactionnel' } }]) });
+    const { logs, envois } = await declencherParcours(b.orgB, regle, client.id, 1);
+    const texto = envois.find((e) => e.destinataire === client.phone);
+    expect(texto?.corps, JSON.stringify(logs)).toBe(`Thanks again ${m}`);
   });
 });
