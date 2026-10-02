@@ -145,3 +145,13 @@ describe('branchement', () => {
     expect(outilsDuSousAgent('devis')).toContain('get_quote');
   });
 });
+
+describe('pointer sur un job : l’outil de pointage est chargé avec les jobs', () => {
+  it('le sous-agent « planification » porte punch_in et punch_out (terrain-05, 2026-10-01)', () => {
+    // « Punch-moi in sur la job du restaurant » est classé « job » : sans l'outil dans ce jeu,
+    // Lumi répondait « pas d'outil punch_in dans Lume ».
+    expect(outilsDuSousAgent('planification')).toEqual(expect.arrayContaining(['list_jobs', 'punch_in', 'punch_out']));
+    // Ils restent des outils du sujet « equipe » : un outil n'appartient qu'à un sujet.
+    expect(outilsDuSousAgent('equipe')).toEqual(expect.arrayContaining(['punch_in', 'punch_out']));
+  });
+});

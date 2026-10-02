@@ -180,9 +180,28 @@ La passe lancée à 20 h 25 a été coupée par la panne de la base de productio
 - Par catégorie : clients, équipe, mémoire, transverse 100 % ; devis 95,5 % ; communications 94,7 % ; facturation 93,3 % ; planification 92,9 % ; automatisations 92,3 % ; terrain 91,7 % ; rapports 84,2 % ; aide 75,0 %.
 - Résultats : `evals/lumi/resultats/apres-lot8-eval3-composite/` (passe), `apres-lot11-rejeu/` et `apres-lot12-rejeu/` (rejeux).
 
+## Passe finale — 2026-10-02, 0 h 23 à 0 h 51 UTC, d'un seul tenant
+
+Bureau neuf « [TEST] QA Lumi éval 4 », une demande à la fois, `main` à `19378a5c` : tous les correctifs du soir et les 30 outils de #875. Passe concluante : les 196 tours d'agent ont été servis par Sonnet 5.
+
+| | Passe de 22 h 13 | Passe finale |
+|---|---:|---:|
+| Réussite | 93,7 % | **95,9 %** (212 sur 221) |
+| Réussite quand Sonnet répond | 95,8 % | 95,9 % (196 demandes) |
+| Réponses sans modèle | 90,5 % | 95,0 % |
+| Bon outil appelé | 95,0 % | 96,4 % |
+| Actions sensibles (78 cas) | 96,2 % | 97,4 % |
+| Plusieurs actions dans une phrase (13 cas) | 69,2 % | **92,3 %** |
+| Tours plantés | 4 | **0** |
+| Coût moyen par demande | ≈ 1,2 ¢ | 1,39 ¢ (3,07 $ la passe) |
+
+- Par catégorie : automatisations, communications, équipe, mémoire, planification, terrain, transverse 100 % ; facturation 96,7 % ; clients 95,7 % ; devis 90,9 % ; rapports 89,5 % ; aide 75,0 %.
+- Les 9 échecs : aide-01, aide-07 (réponse sans `search_help`), aide-02, devis-10, devis-08, rapp-03, rapp-15, clients-17, fact-30.
+- Résultats : `evals/lumi/resultats/passe-finale-eval4/`. Relancer : `bash evals/lumi/lancer-passe-un-flux.sh <préfixe> <org> <dossier>`, depuis la racine.
+
 ## Ce qui n'est pas encore mesuré
 
-- Une passe d'un seul tenant après les correctifs du soir (`6a8b2ffa`, `84505af8`, `d41372ab`) et avec les 30 outils de #875 : à jouer un lot à la fois, la base de production ne supportant pas cinq flux.
+- L'effet propre des 30 outils de #875 : la passe finale les mesure avec les correctifs, pas séparément (`LUMI_OUTILS_LOTS=0` les retire).
 - Les tests critiques avec le modèle principal (joués avec le modèle de repli le 2026-10-01).
 
 Mesurés depuis : la robustesse des conversations (37 PASS, 0 FAIL, 3 non couverts) et l'agent de support (93 tests : 85 PASS, 2 FAIL, 6 à relire) — voir `LUMI_READINESS.md`.

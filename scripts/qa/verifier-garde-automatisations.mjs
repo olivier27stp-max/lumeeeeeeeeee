@@ -14,6 +14,10 @@
  * Avant la migration `20261007300000_automation_rules_garde.sql` : les interdites PASSENT (le défaut).
  */
 const prod = process.argv.includes('--prod');
+// --etendue : l'état VISÉ après la fermeture complète (audit des rôles, 2026-10-01) — plus AUCUNE écriture de
+// session sur automation_rules, ni suppression dure d'une adresse d'appel. Rouge tant que le contenu d'une
+// règle s'écrit encore avec la session de l'utilisateur.
+const etendue = process.argv.includes('--etendue');
 // Une base LOCALE (pile jetable des E2E) : GARDE_DB_URL=postgres://…@127.0.0.1:…/postgres. Jamais une base distante.
 const urlLocale = process.env.GARDE_DB_URL ?? '';
 if (urlLocale && !['localhost', '127.0.0.1'].includes(new URL(urlLocale).hostname)) {
@@ -76,10 +80,21 @@ const TENTATIVES = [
   ['renommer une règle fournie', 'accepté', `update automation_rules set name = '[garde] fournie renommée' where id = :fournie`],
   ['créer un brouillon', 'accepté', `insert into automation_rules (org_id, name, trigger_event, conditions, delay_seconds, actions, is_active, is_preset) values (:org, '[garde] brouillon', 'lead.created', '{}', 0, '[]', false, false)`],
 ];
+if (etendue) {
+  // État visé : le contenu d'une règle ne s'écrit plus que par le serveur. Ce qui était « accepté » devient « refusé ».
+  for (const t of TENTATIVES) t[1] = 'refusé';
+  const texto = (corps) => `jsonb_build_array(jsonb_build_object('id', 'e1', 'type', 'action', 'suivant', null, 'action', jsonb_build_object('type', 'send_sms', 'config', jsonb_build_object('body', ${corps}))))`;
+  TENTATIVES.push(
+    ['poser un déclencheur hors catalogue sur SA règle', 'refusé', `update automation_rules set trigger_event = 'declencheur.inexistant' where id = :libre`],
+    ['écrire un texto de 5 000 caractères dans SA règle', 'refusé', `update automation_rules set steps = ${texto("repeat('a', 5000)")} where id = :libre`],
+    ['vider le texto d’une règle PUBLIÉE (elle resterait publiée)', 'refusé', `update automation_rules set steps = ${texto("''")} where id = :publiee`],
+    ['supprimer pour de bon une adresse d’appel (DELETE)', 'refusé', `delete from automation_webhooks where id = :adresse`],
+  );
+}
 
 const blocs = TENTATIVES.map(([nom, , requete], i) => `
   begin
-    ${requete.replace(/:libre/g, 'v_libre').replace(/:fournie/g, 'v_fournie').replace(/:org/g, 'v_org')};
+    ${requete.replace(/:libre/g, 'v_libre').replace(/:fournie/g, 'v_fournie').replace(/:publiee/g, 'v_publiee').replace(/:adresse/g, 'v_adresse').replace(/:org/g, 'v_org')};
     get diagnostics v_n = row_count;
     -- Passée : on l'annule quand même (sous-transaction), et on note qu'elle a passé.
     raise exception 'annuler' using errcode = 'ZZ001';
@@ -99,6 +114,8 @@ const lignes = await sql(`
     v_membre uuid := ${litteral(vise.membre)};
     v_libre uuid;
     v_fournie uuid;
+    v_publiee uuid;
+    v_adresse uuid;
     v_n int;
   begin
     -- Deux règles de test, créées hors session d'utilisateur (comme le fait le serveur de semis).
@@ -106,6 +123,11 @@ const lignes = await sql(`
       values (v_org, '[garde] règle à soi', 'lead.created', '{}', 0, '[]', false, false) returning id into v_libre;
     insert into automation_rules (org_id, name, trigger_event, conditions, delay_seconds, actions, is_active, is_preset, preset_key)
       values (v_org, '[garde] règle fournie', 'lead.created', '{}', 0, '[]', false, true, 'garde_verification_' || substr(v_libre::text, 1, 8)) returning id into v_fournie;
+${etendue ? `
+    -- Mode étendu : une règle PUBLIÉE et une adresse d'appel de test (jamais visibles hors de cette transaction).
+    insert into automation_rules (org_id, name, trigger_event, conditions, delay_seconds, actions, steps, is_active, is_preset)
+      values (v_org, '[garde] règle publiée', 'quote.declined', '{}', 0, '[]', '[]', true, false) returning id into v_publiee;
+    insert into automation_webhooks (org_id, name) values (v_org, '[garde] adresse') returning id into v_adresse;` : ''}
 
     -- La session d'un membre : rôle authenticated + son jeton (la RLS s'applique, comme dans le navigateur).
     perform set_config('request.jwt.claims', json_build_object('sub', v_membre, 'role', 'authenticated')::text, true);
@@ -128,20 +150,22 @@ const lignes = await sql(`
     reset role;
 
     -- Ménage : les deux règles de test disparaissent.
-    delete from automation_rules where id in (v_libre, v_fournie);
+    delete from automation_rules where id in (v_libre, v_fournie, v_publiee);
+    delete from automation_webhooks where id = v_adresse;
   end
   $garde$;
   select rang, nom, issue, detail from _garde_resultats order by rang;`);
 
 let fautes = 0;
-console.log(`${cible} · bureau « ${BUREAU} » · session de ${MEMBRE}\n`);
+console.log(`${cible}${etendue ? ' · mode ÉTENDU (état visé)' : ''} · bureau « ${BUREAU} » · session de ${MEMBRE}\n`);
 for (const l of lignes) {
   const attendu = l.rang === 900 ? 'accepté' : TENTATIVES[l.rang][1];
   const ok = l.issue === attendu;
   if (!ok) fautes += 1;
   console.log(`${ok ? '✓' : '✗'} ${l.nom} — ${l.issue}${ok ? '' : ` (attendu : ${attendu})`}${l.detail && (!ok || l.issue === 'refusé') ? ` · ${String(l.detail).slice(0, 110)}` : ''}`);
 }
-const reste = await sql(`select count(*)::int as n from automation_rules where org_id = ${litteral(vise.org)} and name like '[garde]%'`);
+const reste = await sql(`select (select count(*) from automation_rules where org_id = ${litteral(vise.org)} and name like '[garde]%')::int
+  + (select count(*) from automation_webhooks where org_id = ${litteral(vise.org)} and name like '[garde]%')::int as n`);
 await base?.end();
 console.log(`\nrègles de test restantes : ${reste[0].n}`);
 console.log(`BILAN : ${lignes.length - fautes}/${lignes.length}${fautes ? ' — la garde ne tient pas (ou la migration n’est pas appliquée)' : ''}`);
