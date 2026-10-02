@@ -23,6 +23,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { AUTOMATION_PRESETS, type AutomationPresetDef } from './automationPresets.data';
+import { actionsDepuisEtapes } from './automations-etapes';
 
 type Action = { type: string; config: Record<string, unknown> };
 type Etape = Record<string, unknown>;
@@ -299,11 +300,11 @@ function parcours(
   preset_key: string, name: string, description: string, trigger_event: string,
   steps: Etape[], conditions: Record<string, unknown> = {}, settings: Record<string, unknown> | null = null,
 ): PresetParcours {
-  const premiere = steps.find((e) => e.type === 'action') as { action: Action } | undefined;
   return {
     preset_key, name, description, trigger_event, conditions, delay_seconds: 0,
-    // Reflet de la première action (le moteur suit `steps`).
-    actions: premiere ? [premiere.action] : [],
+    // Reflet du parcours ENTIER (le moteur suit `steps`). Il ne portait que la première action :
+    // tout lecteur de `actions` voyait un message là où le parcours en envoie 8 à 13.
+    actions: actionsDepuisEtapes(steps),
     steps, settings,
   };
 }

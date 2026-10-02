@@ -30,7 +30,7 @@ import { trouverAction, trouverDeclencheur } from '../../src/lib/automationCatal
 import { htmlVersTexte } from '../../src/lib/emailBodyText';
 import { segmentsSms } from '../../src/lib/smsSegments';
 import { localizeAutomationName } from '../../src/lib/automationNames';
-import { problemesPublication } from '../../src/lib/publicationAutomatisation';
+import { actionsDuParcours, problemesPublication } from '../../src/lib/publicationAutomatisation';
 
 /** Ce qu'on lit d'une ligne `automation_rules` — tout est facultatif : chaque appelant sélectionne ce qu'il a. */
 export interface RegleLue {
@@ -124,17 +124,24 @@ export function messagesDeLaRegle(regle: RegleLue): MessageDeRegle[] {
 }
 
 /**
- * `actions` RE-DÉRIVÉ du parcours : les actions des étapes, dans l'ordre.
- * À écrire dans la MÊME mise à jour que `steps`, pour que la colonne d'origine
- * dise la même chose que le parcours (aucun texte que le parcours n'envoie plus).
+ * `actions` RE-DÉRIVÉ du parcours : les actions des étapes, dans l'ordre où le PARCOURS les
+ * rencontre (le fil principal, puis la branche « si non »), 20 au plus — pas dans l'ordre du
+ * tableau. À écrire dans la MÊME mise à jour que `steps`, pour que la colonne d'origine dise la
+ * même chose que le parcours (aucun texte que le parcours n'envoie plus).
+ *
+ * UNE seule règle de reflet pour tout le produit : celle de `actionsDuParcours`, que l'éditeur
+ * écrit à chaque enregistrement. Ce module en avait une seconde, dans l'ordre du tableau : le
+ * PATCH du serveur et l'éditeur écrivaient deux reflets différents dès qu'une étape avait été
+ * insérée au milieu d'un parcours. Seule différence gardée : un parcours SANS action rend une
+ * liste vide (l'appelant décide), là où l'éditeur pose l'action provisoire « À compléter ».
  */
 export function actionsDepuisEtapes(steps: unknown): Array<{ type: string; config: Record<string, unknown> }> {
-  return (Array.isArray(steps) ? steps : [])
-    .filter((e): e is { type: 'action'; action: { type?: unknown; config?: unknown } } => !!e && typeof e === 'object' && (e as { type?: unknown }).type === 'action' && !!(e as { action?: unknown }).action)
-    .map((e) => ({
-      type: String(e.action.type ?? ''),
-      config: e.action.config && typeof e.action.config === 'object' ? { ...(e.action.config as Record<string, unknown>) } : {},
-    }));
+  const etapes = Array.isArray(steps) ? steps : [];
+  const aUneAction = etapes.some((e) => {
+    const x = e as { type?: unknown; action?: { type?: unknown } | null } | null;
+    return x?.type === 'action' && typeof x.action?.type === 'string' && x.action.type !== '';
+  });
+  return aUneAction ? actionsDuParcours(etapes) : [];
 }
 
 /** JSON à clés triées : deux parcours identiques rangés dans un autre ordre de clés sont le MÊME parcours. */

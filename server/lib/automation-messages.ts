@@ -21,6 +21,7 @@
    tenue par tests/automations-finale/t/messages-route.test.ts.
    ═══════════════════════════════════════════════════════════════ */
 
+import { actionsDepuisEtapes } from './automations-etapes';
 import { trouverAction } from '../../src/lib/automationCatalogue';
 
 export type Canal = 'send_sms' | 'send_email';
@@ -38,8 +39,6 @@ export const TEXTO_MAX = plafond('send_sms', 'body', 1600);
 /** Plafonds d'un courriel — champs « Objet » et « Message » de « Envoyer un courriel ». */
 export const OBJET_MAX = plafond('send_email', 'subject', 200);
 export const COURRIEL_MAX = plafond('send_email', 'body', 10000);
-/** Plafond du champ `actions` côté serveur (`corpsAutomatisation`, server/lib/validation.ts). */
-const ACTIONS_REFLET_MAX = 20;
 
 export interface RegleLue {
   actions?: unknown;
@@ -117,11 +116,8 @@ export function etapesDansLOrdre(steps: unknown): Etape[] {
  * enregistrement — les deux écritures doivent donner le même reflet.
  */
 export function refletDuParcours(steps: unknown): Action[] {
-  return etapesDansLOrdre(steps)
-    .flatMap((e) => (e.type === 'action' && typeof e.action?.type === 'string' && e.action.type
-      ? [{ type: e.action.type, config: { ...(e.action.config ?? {}) } }]
-      : []))
-    .slice(0, ACTIONS_REFLET_MAX);
+  // Une seule règle de reflet pour tout le produit (server/lib/automations-etapes.ts).
+  return actionsDepuisEtapes(steps);
 }
 
 const estCanal = (type: unknown): type is Canal => type === 'send_sms' || type === 'send_email';
