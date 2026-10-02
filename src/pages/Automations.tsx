@@ -2421,12 +2421,15 @@ export default function Automations() {
                                   corbeille ne se déclenche plus (le moteur la
                                   filtre) : un interrupteur qui s'allumerait sans
                                   rien changer mentirait. */}
+                              {/* À la corbeille, l'interrupteur est ÉTEINT quoi que dise `is_active` en base :
+                                  « Supprimée » à gauche et un interrupteur vert à droite se contredisaient
+                                  (triage `05-lignes:78`). */}
                               <InterrupteurPublication
-                                actif={rule.is_active}
+                                actif={rule.is_active && !rule.deleted_at}
                                 onBascule={() => handleToggle(rule)}
                                 enCours={fileBascule.enCours(rule.id)}
                                 desactive={!!rule.deleted_at || !peutModifier}
-                                libelle={rule.is_active
+                                libelle={rule.is_active && !rule.deleted_at
                                   ? (fr ? `Repasser ${localizeAutomationName(rule.name, language)} en brouillon` : `Unpublish ${localizeAutomationName(rule.name, language)}`)
                                   : (fr ? `Publier ${localizeAutomationName(rule.name, language)}` : `Publish ${localizeAutomationName(rule.name, language)}`)}
                                 fr={fr}

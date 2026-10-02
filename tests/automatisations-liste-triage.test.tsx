@@ -965,6 +965,29 @@ describe('05-lignes:409 — le panneau « Stats » mène aux Journaux par un lie
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('05-lignes:78 — une automatisation à la corbeille n’affiche jamais un interrupteur allumé', () => {
+  it('supprimée mais restée « active » en base : « Supprimée », interrupteur ÉTEINT et grisé', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Jetée', is_active: true, deleted_at: '2026-09-30T00:00:00Z' })]);
+    await rendre('fr', '/automations?onglet=corbeille');
+    expect(conteneur.querySelector('tbody tr td:nth-child(3)')?.textContent).toBe('Supprimée');
+    const interrupteur = conteneur.querySelector('[role="switch"]') as HTMLButtonElement;
+    expect(interrupteur.getAttribute('aria-checked')).toBe('false');
+    expect(interrupteur.disabled).toBe(true);
+    expect(interrupteur.className).toContain('bg-danger');
+    expect(interrupteur.className).not.toContain('bg-success');
+    expect(interrupteur.getAttribute('aria-label')).toBe('Publier Jetée');
+  });
+
+  it('une automatisation vivante et publiée garde son interrupteur allumé', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Vivante', is_active: true })]);
+    await rendre();
+    const interrupteur = conteneur.querySelector('[role="switch"]') as HTMLButtonElement;
+    expect(interrupteur.getAttribute('aria-checked')).toBe('true');
+    expect(interrupteur.getAttribute('aria-label')).toBe('Repasser Vivante en brouillon');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
