@@ -246,11 +246,13 @@ describe('D — la Vue d’ensemble contre le jeu connu', () => {
     });
   });
 
-  it.each([7, 30])('[D-EL-13] %i jours : « N action(s) ont échoué ces N derniers jours » = les échecs définitifs du jeu', async (jours) => {
+  it.each([7, 30])('[D-EL-13] %i jours : « N actions ont échoué ces N derniers jours » = les échecs définitifs du jeu', async (jours) => {
     await avecCapture(fr, `d-apercu-erreurs-${jours}`, async () => {
       await ouvrirApercu(fr, jours);
+      // La phrase s'accorde depuis le report de l'agent T (05-vue-ensemble:173) : « 1 action a échoué », « N actions ont échoué ».
+      const n = attenduTotal(jeu, jours).echouees;
       await expect.poll(async () => propre(await fr.page.locator('.section-card').last().innerText()))
-        .toContain(`${attenduTotal(jeu, jours).echouees} action(s) ont échoué ces ${jours} derniers jours.`);
+        .toContain(n === 1 ? `1 action a échoué ces ${jours} derniers jours.` : `${n} actions ont échoué ces ${jours} derniers jours.`);
     });
   });
 

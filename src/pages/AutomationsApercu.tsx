@@ -210,8 +210,9 @@ export default function AutomationsApercu() {
             {total && (
               <p className="px-1 text-[12px] text-text-secondary">
                 {fr
-                  ? `${sousTitre} : ${total.reportees} envoi(s) reporté(s), ${total.actions} action(s) interne(s) faite(s) (tâche, étiquette, notification). En ce moment : ${total.en_cours} fiche(s) en cours.`
-                  : `${sousTitre}: ${total.reportees} send(s) postponed, ${total.actions} internal action(s) done (task, tag, notification). Right now: ${total.en_cours} record(s) in progress.`}
+                  // Des nombres accordés, pas de « (s) » (même report : `05-vue-ensemble:173`).
+                  ? `${sousTitre} : ${total.reportees} ${total.reportees > 1 ? 'envois reportés' : 'envoi reporté'}, ${total.actions} ${total.actions > 1 ? 'actions internes faites' : 'action interne faite'} (tâche, étiquette, notification). En ce moment : ${total.en_cours} ${total.en_cours > 1 ? 'fiches' : 'fiche'} en cours.`
+                  : `${sousTitre}: ${total.reportees} ${total.reportees === 1 ? 'send' : 'sends'} postponed, ${total.actions} internal ${total.actions === 1 ? 'action' : 'actions'} done (task, tag, notification). Right now: ${total.en_cours} ${total.en_cours === 1 ? 'record' : 'records'} in progress.`}
               </p>
             )}
 
@@ -225,8 +226,12 @@ export default function AutomationsApercu() {
               </h2>
               {tranches.length === 0 ? (
                 <p className="mt-4 text-[12px] text-text-tertiary">
+                  {/* Une lecture ÉCHOUÉE n'est pas « zéro déclenchement » : ni « 0 » dans la tuile, ni courbe à
+                      plat (triage « modèles », `05-vue-ensemble:209`, report de l'agent T). */}
                   {statsIllisibles
-                    ? (fr ? 'La courbe n’a pas pu être lue.' : 'The chart could not be read.')
+                    ? (fr
+                      ? 'Les déclenchements n’ont pas pu être lus pour le moment. Réessayez dans un instant.'
+                      : 'Triggers could not be read right now. Try again in a moment.')
                     : (fr ? 'Aucune donnée pour l’instant.' : 'No data yet.')}
                 </p>
               ) : (
@@ -351,9 +356,15 @@ export default function AutomationsApercu() {
                 <div className="mt-3 space-y-2">
                   <p className="flex items-center gap-2 text-[13px] text-danger">
                     <AlertTriangle size={15} aria-hidden="true" />
+                    {/* Un singulier juste, et « action » : une tâche qui échoue n'est pas un « envoi »
+                        (triage « modèles », `05-vue-ensemble:173`, report de l'agent T). */}
                     {fr
-                      ? `${total.echouees} action(s) ont échoué ces ${periode} derniers jours.`
-                      : `${total.echouees} action(s) failed in the last ${periode} days.`}
+                      ? (total.echouees === 1
+                        ? `1 action a échoué ces ${periode} derniers jours.`
+                        : `${total.echouees} actions ont échoué ces ${periode} derniers jours.`)
+                      : (total.echouees === 1
+                        ? `1 action failed in the last ${periode} days.`
+                        : `${total.echouees} actions failed in the last ${periode} days.`)}
                   </p>
                   <button
                     type="button"
