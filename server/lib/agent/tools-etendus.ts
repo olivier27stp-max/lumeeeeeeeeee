@@ -264,6 +264,95 @@ function messageHumainErreur(e: any, contexte?: string): string {
 
 /** Deux demandes identiques de la même personne à moins de 10 min = un doublon (double clic, retentative). */
 export const FENETRE_DOUBLON_MS = 10 * 60_000;
+/** Un double clic, ou la retentative immédiate d'un agent : la seule répétition qu'on écarte pour une écriture « courte ». */
+export const FENETRE_DOUBLE_CLIC_MS = 60_000;
+
+/**
+ * CE QUE FAIT UNE ÉCRITURE — et donc quand un succès mémorisé peut être rendu
+ * (« déjà fait ») sans refaire l'action. Mission finale, constat A-03.
+ *
+ * Avant : toute demande identique à moins de 10 minutes recevait le résultat
+ * MÉMORISÉ, sans relire l'état. « Active X » → on la repasse en brouillon à
+ * l'écran → « active X » : Lumi répondait « c'était déjà fait », et X restait en
+ * brouillon. Pareil pour un texte, une langue, un statut, une tâche rouverte :
+ * 194 écritures sur 199 passaient par là.
+ *
+ * Un « déjà fait » n'est honnête que si ce qu'il annonce est ENCORE vrai :
+ *
+ *  · `etat`    — l'écriture POSE un état que l'écran (ou un autre outil) peut
+ *                défaire : activer, texte, langue, statut, assignation… Refaire
+ *                redonne le même état, sans effet de plus (chaque handler a été
+ *                relu : il réécrit la même valeur, ou refuse proprement « déjà… »).
+ *                → jamais de résultat mémorisé : l'écriture est REFAITE, et sa
+ *                réponse dit l'état d'aujourd'hui.
+ *  · `durable` — un fait qui ne se défait pas (un envoi parti, un paiement, une
+ *                suppression définitive, une conversion) : « déjà fait » reste
+ *                vrai, et refaire coûterait un doublon chez le client ou dans
+ *                l'argent. → résultat mémorisé pendant 10 minutes, marqué `rejoue`.
+ *  · `courte`  — une création ou un ajout (tâche, note, visite) : la fiche créée
+ *                a pu être supprimée depuis, et la même demande une minute plus
+ *                tard est une NOUVELLE demande. → on n'écarte que le double clic
+ *                (60 s) ; au-delà, l'action est refaite.
+ *
+ * Un outil qui sait vérifier lui-même (`encoreValable`) garde la fenêtre de
+ * 10 minutes : son résultat n'est rendu que si la vérification passe.
+ *
+ * Tout nouvel outil d'écriture doit être classé (préfixe ou nom) :
+ * `tests/lumi-nature-ecritures.test.ts` échoue sinon. ATTENTION aux préfixes :
+ * un `update_*` ou `set_*` qui ENVOIE quelque chose ou INSÈRE une ligne à chaque
+ * appel n'est pas un `etat` — le nommer ci-dessous.
+ */
+export type NatureEcriture = 'etat' | 'durable' | 'courte';
+
+const NATURE_PAR_NOM: Readonly<Record<string, NatureEcriture>> = {
+  // ── Des états défaisables, sous un préfixe qui ne le dit pas ──
+  setup_taxes: 'etat', save_job_billing_milestones: 'etat',
+  assign_job: 'etat', assign_course: 'etat', reschedule_task: 'etat', schedule_job: 'etat', unschedule_job: 'etat', apply_day_optimization: 'etat',
+  archive_job: 'etat', unarchive_quote: 'etat', restore_archived: 'etat', cancel_quote: 'etat', revert_invoice_to_draft: 'etat',
+  delete_lead: 'etat', delete_client: 'etat', delete_job: 'etat', delete_deal: 'etat', delete_recurring_invoice: 'etat',
+  delete_checklist_template: 'etat', delete_availability: 'etat', delete_automation_rule: 'etat', bulk_update_task_status: 'etat',
+  unmark_payroll_period_paid: 'etat', mark_commission_paid: 'etat', remove_member: 'etat', reset_member_permissions: 'etat', reactivate_member: 'etat',
+  remove_client_tag: 'etat', add_client_tag: 'etat', publish_course: 'etat', remember_this: 'etat', forget_note: 'etat',
+  process_request_submission: 'etat', invite_member: 'etat',
+  punch_in: 'etat', start_break: 'etat', end_break: 'etat', force_punch_out: 'etat',
+  start_field_session: 'etat', pause_field_session: 'etat', resume_field_session: 'etat',
+  toggle_automation_rule: 'etat', rename_automation_rule: 'etat', pause_all_automations: 'etat',
+  // ── Des faits qui ne se défont pas, ou dont un doublon coûte ──
+  mark_invoice_paid: 'durable', mark_conversation_read: 'durable', mark_notifications_read: 'durable', mark_payroll_period_paid: 'durable',
+  approve_timesheet: 'durable', approve_commission: 'durable', void_invoice: 'durable', archive_service: 'durable',
+  remove_card_on_file: 'durable', revoke_invitation: 'durable', deactivate_recurrence_rule: 'durable', bulk_delete_tasks: 'durable',
+  convert_quote_to_job: 'durable', convert_quote_to_invoice: 'durable', convert_lead_to_client: 'durable', convert_lead_to_job: 'durable',
+  merge_clients: 'durable', record_invoice_payment: 'durable', run_recurring_invoice_now: 'durable', log_house_event: 'durable',
+  // Crée un lien de paiement ET peut l'envoyer au client : jamais deux fois.
+  create_payment_request: 'durable',
+  // `update_job_status` et `reschedule_job` vérifient eux-mêmes (`encoreValable`) ; sans cela, on ne refait pas :
+  // « terminée » par un technicien ré-émet « prête à facturer », un déplacement peut viser une autre visite.
+  update_job_status: 'durable', reschedule_job: 'durable',
+  // ── Des ajouts : chaque appel crée une ligne ──
+  set_goal: 'courte', add_note: 'courte', add_visit: 'courte', add_payroll_adjustment: 'courte',
+};
+
+const NATURE_PAR_PREFIXE: ReadonlyArray<[RegExp, NatureEcriture]> = [
+  [/^(update|set)_/, 'etat'],
+  [/^(create|duplicate)_/, 'courte'],
+  [/^(send|resend|charge|refund|delete)_/, 'durable'],
+];
+
+/**
+ * La nature d'une écriture, ou `null` si l'outil n'est pas classé (traité alors
+ * comme `courte` : jamais un succès périmé au-delà d'un double clic).
+ * Trois outils dépendent de leurs arguments : sans l'identifiant de la fiche
+ * visée, ils agissent sur « celle en cours » et refusent proprement s'il n'y en
+ * a pas ; avec l'identifiant, les refaire réécrirait une heure déjà posée.
+ */
+export function natureEcriture(outil: string, args: Record<string, any> = {}): NatureEcriture | null {
+  if (outil === 'punch_out') return args.entry_id ? 'durable' : 'etat';
+  if (outil === 'end_field_session') return args.session_id ? 'durable' : 'etat';
+  // Sans `visit_id`, « annule la visite » vise la PROCHAINE visite : redemandé plus tard, c'est une autre visite.
+  if (outil === 'cancel_visit') return args.visit_id ? 'durable' : 'courte';
+  if (NATURE_PAR_NOM[outil]) return NATURE_PAR_NOM[outil];
+  return NATURE_PAR_PREFIXE.find(([motif]) => motif.test(outil))?.[1] ?? null;
+}
 
 /**
  * `encoreValable` : ce que l'action a créé existe-t-il TOUJOURS ? Pendant la
@@ -327,25 +416,34 @@ export async function executerIdempotent(
       // « fait ». Dire l'état réel plutôt qu'un succès qui pourrait échouer.
       return { error: 'Cette action est déjà en cours d\'exécution (double clic ?). Attends son résultat avant de la redemander.' };
     }
+    // Le succès mémorisé est-il ENCORE vrai ? (voir `NatureEcriture`)
+    let valable = true;
     if (options.encoreValable) {
-      let valable = true;
       try {
         valable = await options.encoreValable(resultat);
       } catch (e: any) {
         console.error(`[agent-tool:${outil}:dedup] validité du résultat mémorisé invérifiable — on ne refait pas`, e?.message || e);
       }
-      if (!valable) {
-        // Ce que l'action avait créé n'existe plus : l'empreinte est périmée.
-        // On libère CETTE ligne-là et on repose la nôtre (la boucle borne les reprises).
-        await admin.from('agent_actions').delete().eq('id', existante.id).eq('created_at', existante.created_at);
-        ({ data: posee, error: insErr } = await poser());
-        continue;
-      }
+    } else {
+      const nature = natureEcriture(outil, args) ?? 'courte';
+      // Un état a pu être défait depuis (à l'écran, par un autre outil) : on le repose.
+      if (nature === 'etat') valable = false;
+      // Une création : passé le double clic, la même demande est une nouvelle demande.
+      else if (nature === 'courte' && age > FENETRE_DOUBLE_CLIC_MS) valable = false;
+    }
+    if (!valable) {
+      // L'empreinte est périmée : on libère CETTE ligne-là et on repose la
+      // nôtre — l'action est refaite (la boucle borne les reprises).
+      await admin.from('agent_actions').delete().eq('id', existante.id).eq('created_at', existante.created_at);
+      ({ data: posee, error: insErr } = await poser());
+      continue;
     }
     return {
       ...resultat,
       deja_fait: true,
-      note: 'Cette action identique vient d\'être exécutée (il y a moins de 10 minutes) — voici son résultat, rien n\'a été refait en double.',
+      // `rejoue` : ce résultat est celui de la PREMIÈRE exécution, rien n'a été relu ni refait.
+      rejoue: true,
+      note: 'Cette action identique vient d\'être exécutée — voici son résultat, rien n\'a été refait en double.',
     };
   }
   if (insErr) return erreurOutil(`${outil}:dedup`, insErr);
@@ -386,7 +484,7 @@ export async function executerIdempotent(
     // jargon SQL) passe par la traduction.
     const dejaHumaine = e instanceof Error && !(e as any)?.code
       && !/constraint|violates|postgres|sql|null value|rls|row-level|permission denied/i.test(String(e.message || ''));
-    return { error: dejaHumaine ? String(e.message).slice(0, 400) : messageHumainErreur(e) };
+    return { error: dejaHumaine ? String(e.message).slice(0, 900) : messageHumainErreur(e) };
   }
 }
 
@@ -1673,6 +1771,16 @@ export const handlerUpdateJobStatus = async (args: Record<string, any>, ctx: Too
     // facture, remerciement) partent par la même route que l'interface.
     const avert = statut === 'completed' ? await signalerEvenement(ctx, '/automations/events/job-completed', { jobId: String(args.job_id) }) : null;
     return { updated: true, job: data, ...(avert ? { warning: avert } : {}) };
+  }, {
+    // « Déjà fait » seulement si la job porte ENCORE ce statut : remise « en cours »
+    // à l'écran puis redemandée « terminée », elle est terminée de nouveau (A-03).
+    // Toujours au même statut : rien n'est refait — terminer deux fois ré-émettrait
+    // « prête à facturer » et ses notifications.
+    encoreValable: async () => {
+      const { data, error } = await ctx.client.from('jobs').select('status').eq('org_id', ctx.orgId).eq('id', String(args.job_id)).maybeSingle();
+      if (error) throw new Error(error.message);
+      return !!data && String((data as { status?: unknown }).status) === String(args.status || '');
+    },
   });
 
 /**
@@ -2960,6 +3068,19 @@ const rescheduleJobTool: AgentTool = {
         overlaps: chevauchements,
         ...(chevauchements > 0 ? { warning: `${chevauchements} visite(s) se chevauchent sur ce créneau — à signaler à l'utilisateur.` } : {}),
       };
+    }, {
+      // « Déjà fait » seulement si une visite de ce job est ENCORE à l'heure demandée :
+      // redéplacée à l'écran puis redemandée, elle est déplacée de nouveau (A-03).
+      // Toujours en place : rien n'est refait (la confirmation ne repart pas au client).
+      encoreValable: async () => {
+        const debut = new Date(String(args.start_at));
+        if (Number.isNaN(debut.getTime())) return true;
+        const { data, error } = await ctx.client
+          .from('schedule_events').select('id, start_at')
+          .eq('org_id', ctx.orgId).eq('job_id', String(args.job_id)).is('deleted_at', null);
+        if (error) throw new Error(error.message);
+        return ((data ?? []) as Array<{ start_at: string }>).some((v) => new Date(v.start_at).getTime() === debut.getTime());
+      },
     }),
 };
 
