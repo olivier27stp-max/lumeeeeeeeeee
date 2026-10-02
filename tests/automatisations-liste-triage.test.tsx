@@ -761,6 +761,26 @@ describe('04-filtres-recherche-tri:113 et :123 — on trouve ce qu’on voit, et
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('05-lignes:119 — un déclencheur hors catalogue n’affiche pas sa clé technique', () => {
+  it('« Déclencheur inconnu · Immédiat », jamais « e2e.declencheur_inconnu »', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Clé brute', trigger_event: 'e2e.declencheur_inconnu' })]);
+    await rendre();
+    expect(texte()).toContain('Déclencheur inconnu · Immédiat');
+    expect(texte()).not.toContain('e2e.declencheur_inconnu');
+  });
+
+  it('en anglais : « Unknown trigger » ; un déclencheur connu garde son libellé', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([
+      regle({ name: 'Raw key', trigger_event: 'e2e.declencheur_inconnu' }), regle({ name: 'Known', trigger_event: 'invoice.paid' }),
+    ]);
+    await rendre('en');
+    expect(texte()).toContain('Unknown trigger · Immediate');
+    expect(texte()).toContain('Invoice paid · Immediate');
+    expect(texte()).not.toContain('e2e.declencheur_inconnu');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 

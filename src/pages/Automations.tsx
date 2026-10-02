@@ -1245,7 +1245,9 @@ export default function Automations() {
    */
   const libelleDeclencheur = (r: AutomationRule): string => {
     const d = trouverDeclencheur(r.trigger_event) ?? TRIGGER_DISPLAY[r.trigger_event];
-    return d ? (fr ? d.fr : d.en) : r.trigger_event;
+    // Hors catalogue ET hors table locale : jamais la clé technique (« e2e.declencheur_inconnu »)
+    // sous le nom d'une ligne (triage `05-lignes:119`).
+    return d ? (fr ? d.fr : d.en) : (fr ? 'Déclencheur inconnu' : 'Unknown trigger');
   };
   /** Le sous-titre d'une ligne : le déclencheur, puis le délai ou le nombre d'étapes. */
   const sousTitre = (r: AutomationRule): string => {
