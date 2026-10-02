@@ -13,6 +13,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { argentFr, argentEn, dateLocale, fuseauDe, type LigneApercu } from './apercu-action';
 import { computePayPeriod, DEFAULT_PAYROLL_SETTINGS, type PayrollSettings } from '../payroll';
 import { trouverModele } from '../automationTemplates';
+import { trouverDeclencheur } from '../../../src/lib/automationCatalogue';
+import { htmlVersTexte } from '../../../src/lib/emailBodyText';
 
 interface Ctx { client: SupabaseClient; orgId: string; userId: string }
 type Args = Record<string, unknown>;
@@ -135,6 +137,60 @@ const texteActuelAutomatisation = (typeForce?: 'send_sms'): Complement => async 
   const objet = txt(cible.config?.subject);
   if (type === 'send_email' && objet && args.subject !== undefined) lignes.push({ libelle: L('Objet actuel', 'Current subject'), valeur: objet });
   lignes.push({ libelle, valeur: txt(cible.config?.body) || '(vide)', ...(txt(cible.config?.body) ? {} : { valeur_en: '(empty)' }) });
+  return lignes;
+};
+
+/**
+ * ACTIVER une automatisation, c'est accepter que des messages partent tout seuls chez des clients.
+ * La carte portait le nom de la règle et « Actif : Oui » : on activait sans relire ce qui allait
+ * partir (constat A-13 de l'audit des automatisations, 2026-10-01). Elle porte maintenant le
+ * déclencheur en clair, chaque message EXACT (parcours `steps` quand il y en a, sinon `actions`)
+ * et à qui il va. Mettre en pause n'ajoute rien : rien ne part.
+ */
+const resumeAvantActivation: Complement = async (args, ctx) => {
+  if (args.is_active !== true || !estUuid(args.rule_id)) return [];
+  const { data: regle } = await ctx.client.from('automation_rules').select('trigger_event, actions, steps').eq('org_id', ctx.orgId).eq('id', args.rule_id).maybeSingle();
+  if (!regle) return [];
+  type Action = { type?: string; config?: { body?: unknown; subject?: unknown } };
+  const etapes = (Array.isArray(regle.steps) ? regle.steps : []) as Array<{ type?: string; action?: Action }>;
+  const actions = etapes.length
+    ? etapes.flatMap((e) => (e?.type === 'action' && e.action ? [e.action] : []))
+    : ((Array.isArray(regle.actions) ? regle.actions : []) as Action[]);
+  const lignes: LigneApercu[] = [];
+  const declencheur = trouverDeclencheur(txt(regle.trigger_event));
+  lignes.push({
+    libelle: L('Se déclenche quand', 'Triggers when'),
+    valeur: declencheur ? `${declencheur.fr} — ${declencheur.aide_fr}` : txt(regle.trigger_event).replace(/[_.]/g, ' '),
+    valeur_en: declencheur ? `${declencheur.en} — ${declencheur.aide_en}` : txt(regle.trigger_event).replace(/[_.]/g, ' '),
+  });
+  let n = 0;
+  for (const a of actions) {
+    const type = txt(a?.type);
+    if (!(type in ENVOIS)) continue;
+    n += 1;
+    const corps = htmlVersTexte(txt(a.config?.body)).trim();
+    const objet = txt(a.config?.subject);
+    const texte = [objet ? `Objet : ${objet}` : '', corps].filter(Boolean).join(' — ');
+    const texteEn = [objet ? `Subject: ${objet}` : '', corps].filter(Boolean).join(' — ');
+    lignes.push({
+      libelle: L(`Message ${n} (${ENVOIS[type][0]})`, `Message ${n} (${ENVOIS[type][1]})`),
+      valeur: texte || 'le texte standard de Lume pour cet envoi',
+      valeur_en: texteEn || 'Lume’s standard wording for this send',
+    });
+  }
+  if (!n) {
+    lignes.push({ libelle: L('Messages au client', 'Messages to the client'), valeur: 'aucun : cette automatisation n’écrit pas au client', valeur_en: 'none: this automation does not write to the client' });
+    return lignes;
+  }
+  lignes.push({
+    libelle: L('Envoyé à', 'Sent to'),
+    valeur: 'chaque client concerné par l’événement, au numéro et au courriel de sa fiche — automatiquement, sans autre confirmation',
+    valeur_en: 'each client the event concerns, at the number and email on their record — automatically, with no further confirmation',
+  });
+  const { data: reglages } = await ctx.client.from('company_settings').select('automations_paused').eq('org_id', ctx.orgId).maybeSingle();
+  if (reglages?.automations_paused === true) {
+    lignes.push({ libelle: L('À savoir', 'Note'), valeur: 'toutes les automatisations de l’entreprise sont arrêtées : rien ne partira tant qu’elles ne sont pas reprises', valeur_en: 'all the company’s automations are stopped: nothing goes out until they are resumed' });
+  }
   return lignes;
 };
 
@@ -278,6 +334,7 @@ const COMPLEMENTS: Record<string, Complement> = {
     return [{ libelle: L('Taux actuel', 'Current rate'), valeur: taux > 0 ? `${argentFr(taux)} de l’heure` : 'aucun taux enregistré', valeur_en: taux > 0 ? `${argentEn(taux)} per hour` : 'no rate on record' }];
   },
 
+  toggle_automation_rule: resumeAvantActivation,
   update_automation_message: texteActuelAutomatisation(),
   update_automation_sms_body: texteActuelAutomatisation('send_sms'),
 
@@ -353,16 +410,69 @@ const COMPLEMENTS: Record<string, Complement> = {
   unmark_payroll_period_paid: periodeDePaie,
 };
 
+/* ── Les automatisations que l'action va déclencher ───────────────────── */
+/**
+ * L'événement d'automatisation que l'outil émet (vérifié dans le code de chaque outil : appels
+ * à /automations/events/… de tools-etendus.ts et tools-terrain.ts), ou null. Terminer un job
+ * peut faire partir une demande d'avis ou une facture ; planifier une visite, une confirmation ;
+ * l'annuler, un avis d'annulation. La carte de l'action ne le disait pas : on confirmait
+ * « terminer un job » sans savoir qu'un texto partait chez le client.
+ */
+export function declencheurDeLOutil(outil: string, args: Args): string | null {
+  switch (outil) {
+    case 'update_job_status': return args.status === 'completed' ? 'job.completed' : null;
+    case 'add_visit':
+    case 'schedule_job': return 'appointment.created';
+    case 'cancel_visit':
+    case 'unschedule_job': return 'appointment.cancelled';
+    default: return null;
+  }
+}
+
+/** Les actions d'automatisation qui écrivent AU CLIENT, et le mot qui les nomme. */
+const ENVOIS: Record<string, [fr: string, en: string]> = {
+  send_sms: ['texto', 'text message'], send_email: ['courriel', 'email'], request_review: ['demande d’avis', 'review request'],
+  envoyer_facture: ['facture', 'invoice'], envoyer_soumission: ['devis', 'quote'],
+};
+
+async function automatisationsDeclenchees(declencheur: string, ctx: Ctx): Promise<LigneApercu[]> {
+  const { data: regles } = await ctx.client.from('automation_rules').select('name, actions, steps')
+    .eq('org_id', ctx.orgId).eq('trigger_event', declencheur).eq('is_active', true).is('deleted_at', null);
+  type Action = { type?: string };
+  const lignes = ((regles ?? []) as Array<{ name: string | null; actions: unknown; steps: unknown }>).map((r) => {
+    const etapes = (Array.isArray(r.steps) ? r.steps : []) as Array<{ type?: string; action?: Action }>;
+    const actions = etapes.length ? etapes.flatMap((e) => (e?.type === 'action' && e.action ? [e.action] : [])) : ((Array.isArray(r.actions) ? r.actions : []) as Action[]);
+    const envois = [...new Set(actions.map((a) => txt(a?.type)).filter((t) => t in ENVOIS))];
+    return { nom: txt(r.name) || 'sans nom', envois };
+  }).filter((r) => r.envois.length);
+  if (!lignes.length) return [];
+  const { data: reglages } = await ctx.client.from('company_settings').select('automations_paused').eq('org_id', ctx.orgId).maybeSingle();
+  const libelle = L('Automatisations déclenchées', 'Automations triggered');
+  const liste = (i: 0 | 1) => lignes.map((r) => `« ${r.nom} » (${r.envois.map((t) => ENVOIS[t][i]).join(', ')}${i === 0 ? ' au client' : ' to the client'})`).join(' ; ');
+  if (reglages?.automations_paused === true) {
+    return [{ libelle, valeur: `aucune pour l’instant : toutes les automatisations sont arrêtées (sinon : ${liste(0)})`, valeur_en: `none for now: all automations are stopped (otherwise: ${liste(1)})` }];
+  }
+  return [{ libelle, valeur: `${liste(0)} — si leurs conditions sont remplies`, valeur_en: `${liste(1)} — if their conditions are met` }];
+}
+
 /** Les outils qui ont un complément — pour les tests de couverture. */
 export const OUTILS_AVEC_COMPLEMENT = Object.keys(COMPLEMENTS);
 
 export async function complementsCarte(outil: string, args: Args, ctx: Ctx): Promise<LigneApercu[]> {
   const complement = COMPLEMENTS[outil];
-  if (!complement) return [];
+  const declencheur = declencheurDeLOutil(outil, args ?? {});
+  if (!complement && !declencheur) return [];
+  const lignes: LigneApercu[] = [];
+  // Chaque partie échoue seule : une lecture ratée n'efface pas l'autre.
   try {
-    return await complement(args ?? {}, ctx, await fuseauDe(ctx));
+    if (complement) lignes.push(...await complement(args ?? {}, ctx, await fuseauDe(ctx)));
   } catch (err) {
     console.error('[lumi/complement-carte]', outil, err instanceof Error ? err.message : err);
-    return [];
   }
+  try {
+    if (declencheur) lignes.push(...await automatisationsDeclenchees(declencheur, ctx));
+  } catch (err) {
+    console.error('[lumi/complement-carte] automatisations', outil, err instanceof Error ? err.message : err);
+  }
+  return lignes;
 }

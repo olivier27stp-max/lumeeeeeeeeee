@@ -117,7 +117,10 @@ describe('automatisations — les outils de Lumi et la langue choisie', () => {
     const b = bloc('create_automation_from_text');
     expect(b).toContain("select('default_language')");
     expect(b).toMatch(/default_language === 'en' \? 'en' : 'fr'/);
-    expect(b).toContain('is_active: false');
+    // La création passe par `ecrireRegle` (une seule porte d'écriture), qui insère toujours en brouillon.
+    expect(b).toMatch(/ecrireRegle\(\{[\s\S]{0,160}ruleId: null/);
+    expect(b).not.toContain('is_active: true');
+    expect(lire('server/lib/automations-ecriture.ts')).toMatch(/\.insert\(\{[\s\S]{0,700}is_active: false/);
   });
 
   it('set_automation_language n’accepte que « fr » ou « en » et écrit la langue de l’entreprise', () => {

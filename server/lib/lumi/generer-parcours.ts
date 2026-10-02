@@ -21,12 +21,18 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { clientAnthropic, isLumiConfigured } from './llm';
-import { reserverBudget, reglerBudget, journaliserUsage, estimationCoutAppel } from './budget';
-import { coutEnCents } from './tarifs';
+import { reserverBudget, reglerBudget, journaliserUsage, estimationCoutAppel, etatCredits, messagePause, messagePausePlateforme } from './budget';
+import { coutEnCents, type UsageTokens } from './tarifs';
 import { logger } from '../logger';
-import { DECLENCHEURS, ACTIONS, trouverAction } from '../../../src/lib/automationCatalogue';
-import { VARIABLES_CONNUES, variablesInconnues, htmlVersTexte } from '../../../src/lib/emailBodyText';
+import { DECLENCHEURS, ACTIONS, trouverAction, trouverDeclencheur } from '../../../src/lib/automationCatalogue';
+import { VARIABLES_CONNUES, variablesInconnues, htmlVersTexte, texteVersHtml } from '../../../src/lib/emailBodyText';
 import { TEXTES_ACTION_PROVISOIRE } from '../../../src/lib/sequenceTypes';
+import { segmentsSms } from '../../../src/lib/smsSegments';
+import { verifierPlafond, ajouterDepense, compterRefus } from './plafond-journalier';
+import { journaliserTrace, ajouterUsage, usageVide, ETAGE, type UsageAgrege } from './traces';
+import { contexteLumi, noterAppelImbrique } from './contexte-appel';
+import { avisSegments, resumeDeLaRegle, type RegleLue } from '../automations-etapes';
+import { sequenceEtapes } from '../validation';
 
 /**
  * Sonnet, pas Haiku (2026-09-30).
@@ -53,7 +59,31 @@ const MODELE = 'claude-sonnet-5';
  * réglée au coût réel. PAS de « JSON compact » : essayé, Sonnet y ajoutait
  * une accolade de trop 2 fois sur 10 (JSON illisible) ; indenté, 0.
  */
-const MAX_TOKENS = 4_000;
+/*
+ * 8 000 (était 4 000, mission finale F-03) : réécrire le parcours de 23 étapes
+ * du pack de base demande environ 4 600 tokens — la réponse était coupée, et
+ * la modification de ces deux automatisations (publiées d'office à la création
+ * de chaque entreprise) échouait à tous les coups, débitée quand même. 30
+ * étapes, le maximum accepté, en demandent environ 6 100. On ne paie que ce qui
+ * est écrit ; une question ou un refus ne réécrit plus rien (`"steps": null`).
+ */
+const MAX_TOKENS = 8_000;
+
+/** Version de CE prompt (celui du clavardage général a la sienne, `version.ts`) : elle voyage dans la trace. */
+export const VERSION_PROMPT_PARCOURS = 'parcours-2026-10-02.2';
+
+/**
+ * Effort de réflexion de l'appel, écrit en toutes lettres (c'est aussi le défaut
+ * de Sonnet 5 quand on ne dit rien). Baisser l'effort était proposé (F-05 : la
+ * même demande coûtait de 1,07 ¢ à 2,79 ¢ et prenait de 8 à 21 s) ; MESURÉ sur
+ * la batterie `npm run qa:construire-lumi` le 2026-10-01, même code, même prompt :
+ *   · effort « high » : 122/123 contrôles, 25,57 ¢ ;
+ *   · effort « low »  : 118/123 contrôles, 21,24 ¢ — une modification « pas
+ *     comprise », un texte non cité, une question non posée.
+ * 17 % d'économie pour quatre fautes de plus : NON RETENU. Le niveau reste
+ * « high ». `LUMI_PARCOURS_EFFORT` sert à remesurer, pas à régler la prod.
+ */
+const EFFORT: 'low' | 'medium' | 'high' = (['low', 'medium', 'high'] as const).find((e) => e === process.env.LUMI_PARCOURS_EFFORT) ?? 'high';
 
 export interface ParcoursPropose {
   /** Le nom suggéré — l'utilisateur peut le changer. */
@@ -62,6 +92,23 @@ export interface ParcoursPropose {
   steps: Array<Record<string, unknown>>;
   /** Ce que Lumi a compris, en une phrase, affiché au-dessus du canevas. */
   resume: string;
+  /**
+   * Le parcours a-t-il changé ? `false` pour une question, un refus ou une
+   * demande incomprise : `steps` est alors le parcours REÇU, rendu tel quel
+   * (le modèle ne l'a pas réécrit).
+   */
+  modifie?: boolean;
+  /** L'utilisateur a demandé de RENOMMER l'automatisation : `nom` est le nouveau nom. Sinon `nom` reste celui d'avant. */
+  renomme?: boolean;
+  /** L'utilisateur demande de publier ou de mettre en pause l'automatisation elle-même — jamais exécuté ici. */
+  intention?: 'activer' | 'desactiver' | null;
+  /**
+   * Les étapes telles qu'elles étaient AVANT cette modification (seulement celles
+   * qui ont changé ou disparu). Gardées avec la conversation : c'est ce qui permet
+   * « annule ça », « remets le texte d'avant » au tour suivant — Lumi répondait
+   * « je n'ai pas l'ancien texte, recolle-le ».
+   */
+  remplacees?: Array<Record<string, unknown>>;
   /**
    * Une DEUXIÈME automatisation, sur un autre déclencheur.
    *
@@ -234,7 +281,11 @@ function ligneMessage(m: MessageDuParcours, fr: boolean): string {
  * message), une étape RETIRÉE est dite, et un texte d'exemple encore présent
  * et destiné au client est signalé — rien de ce qui part ne reste caché.
  */
-export function ceQuiAChange(avant: unknown, apres: unknown, fr: boolean, voulaitModifier = true): string {
+export function ceQuiAChange(
+  avant: unknown, apres: unknown, fr: boolean, voulaitModifier = true,
+  /** Autre chose que les étapes a changé (le déclencheur, le nom) : « je n'ai rien changé » serait faux (A-16). */
+  autreChangement = false,
+): string {
   const a = messagesDuParcours(avant);
   const b = messagesDuParcours(apres);
   const signature = (m: MessageDuParcours) => `${m.type}|${m.objet}|${m.corps}|${m.pour}`;
@@ -272,11 +323,19 @@ export function ceQuiAChange(avant: unknown, apres: unknown, fr: boolean, voulai
       ? `Attention : ${exemples.length > 1 ? 'ces étapes portent' : 'cette étape porte'} encore le texte d’exemple de l’éditeur, qui partirait tel quel au client :\n${exemples.map((m) => ligneMessage(m, fr)).join('\n')}\nDis-moi quoi écrire à la place, ou demande-moi de retirer l’étape.`
       : `Careful: ${exemples.length > 1 ? 'these steps still carry' : 'this step still carries'} the editor’s sample text, which would go to the client as is:\n${exemples.map((m) => ligneMessage(m, fr)).join('\n')}\nTell me what to write instead, or ask me to remove the step.`);
   }
+  // Un texto NOUVEAU ou réécrit qui dépasse un SMS : son coût est dit (A-18).
+  const longs = b.filter((m) => nouveaux.includes(m) && m.type === 'send_sms' && segmentsSms(m.corps).segments > 1);
+  if (longs.length) {
+    // La même phrase que les outils du clavardage (`avisSegments`) : le compte, et pourquoi (un émoji, un accent spécial).
+    blocs.push(longs.map((m) => `${avisSegments(m.corps, fr)} ${fr ? 'Dis « plus court » pour le ramener à un seul.' : 'Say “shorter” to bring it down to one.'}`).join('\n'));
+  }
   if (blocs.length) return `\n\n${blocs.join('\n\n')}`;
   const avaitUnParcours = Array.isArray(avant) && avant.length > 0;
   // Une question ou un refus ne change rien EXPRÈS (`modifie: false`) : la
-  // phrase de Lumi suffit, « je n'ai rien changé » y sonnerait faux.
-  if (voulaitModifier && avaitUnParcours && JSON.stringify(avant) === JSON.stringify(apres)) {
+  // phrase de Lumi suffit, « je n'ai rien changé » y sonnerait faux. Pareil
+  // quand le déclencheur ou le nom a changé : Lumi disait « j'ai changé le
+  // déclencheur… je n'ai rien changé au parcours » dans la même bulle (A-16).
+  if (voulaitModifier && !autreChangement && avaitUnParcours && JSON.stringify(avant) === JSON.stringify(apres)) {
     return fr
       ? '\n\nJe n’ai rien changé au parcours. Dis-moi quel message modifier (le texto ou le courriel) et comment.'
       : '\n\nI did not change anything. Tell me which message to change (the text or the email) and how.';
@@ -319,6 +378,9 @@ FORME DE LA RÉPONSE — un objet JSON, rien autour :
   "trigger_event": "une clé de la liste ci-dessus",
   "resume": "${fr ? 'une phrase, au tutoiement, qui dit CE QUE TU AS FAIT à cette demande' : 'one sentence IN ENGLISH saying WHAT YOU DID for this request'}",
   "modifie": true,
+  "renomme": false,
+  "intention": null,
+  "explication": false,
   "steps": [
     { "id": "e1", "type": "action", "action": { "type": "send_sms", "config": { "body": "..." } }, "suivant": "e2" },
     { "id": "e2", "type": "attendre", "delai_secondes": 259200, "suivant": "e3" },
@@ -380,12 +442,29 @@ RÈGLES ABSOLUES :
   · "montant" (en DOLLARS, montant du devis ou de la facture) avec "gt",
     "gte", "lt" ou "lte" : « une facture de plus de 5 000 $ » →
     { "montant": { "gt": 5000 } } ;
-  · "tag" avec "eq", pour les déclencheurs d'étiquette (client.tagged,
-    client.untagged) : « quand j'ajoute l'étiquette VIP » →
-    { "tag": { "eq": "VIP" } }.
+  · "client_a_etiquette" ou "client_sans_etiquette", avec le NOM de
+    l'étiquette en valeur directe — pour N'IMPORTE QUEL déclencheur, jugé sur
+    les étiquettes réelles du client : « seulement les clients qui ont
+    l'étiquette VIP » → { "client_a_etiquette": "VIP" } ; « sauf ceux marqués
+    Ne pas relancer » → { "client_sans_etiquette": "Ne pas relancer" } ;
+  · "tag" avec "eq" : seulement pour dire QUELLE étiquette déclenche, avec
+    les déclencheurs d'étiquette (client.tagged, client.untagged) : « quand
+    j'ajoute l'étiquette VIP » → { "tag": { "eq": "VIP" } }.
   Un filtre demandé (montant, étiquette) va dans un "si" placé AVANT les
   actions, "alors" vers la suite, "sinon": null. Ne l'oublie jamais : sans
   lui, l'automatisation partirait pour TOUTES les factures ou étiquettes.
+- Le TYPE de client (« commercial », « résidentiel », « mes gros clients »,
+  « les entreprises ») n'est pas une donnée de Lume : AUCUN filtre n'existe
+  dessus. N'invente pas de condition et ne change rien : "steps": null,
+  "modifie": false, et dans "resume" UNE seule question — « Je ne peux pas
+  encore cibler par type de client. As-tu une étiquette « Commercial » sur
+  ces clients ? Si oui, je filtre dessus. » Si l'utilisateur répond oui (ou
+  nomme l'étiquette), pose alors le filtre "client_a_etiquette".
+- Une action qui n'est PAS dans la liste (appel téléphonique automatique,
+  message vocal, WhatsApp, Messenger, lettre…) n'existe pas dans Lume :
+  "steps": null, "modifie": false, et dis dans "resume" que ce n'est pas
+  possible, avec l'action la plus proche qui existe (un texto, un courriel,
+  une tâche d'appel pour toi). Ne la remplace jamais d'office par autre chose.
 - N'invente AUCUN champ. Pas de destinataire : le message part toujours au
   client concerné.
 - REFUSE, et explique pourquoi dans "resume" avec "steps": [] : une menace,
@@ -396,6 +475,13 @@ RÈGLES ABSOLUES :
   d'un client ailleurs que dans ses messages. Propose une version correcte
   quand il y en a une (« un rappel poli à 7 jours »).
 - Les messages partent aux CLIENTS de l'entreprise : ${fr ? 'français québécois, VOUVOIEMENT, ton poli et chaleureux, court et direct, ouverture « Bonjour [client_first_name], », aucun émoji — le même registre que les messages préréglés de Lumi. Tutoiement, émojis ou ton familier seulement si l\'utilisateur le demande' : 'plain, polite English, short and direct, opening "Hi [client_first_name],", no emoji unless the user asks for a casual tone'}.
+- Ce registre est un DÉFAUT, pas un interdit : quand l'utilisateur demande un
+  émoji, un ton drôle, familier ou le tutoiement, fais-le dans le message —
+  ce n'est jamais un refus.
+- « Annule ça », « remets comme avant », « remets le texte d'avant », "undo
+  that" : remets les étapes d'AVANT ta dernière modification, mot pour mot
+  (elles te sont données plus bas quand il y en a). Si rien n'avait changé,
+  dis simplement que le texte est toujours celui d'avant.
 - Variables entre crochets : UNIQUEMENT celles-ci — ${VARIABLES_CONNUES.map((v) => `[${v}]`).join(', ')}.
   Aucune autre n'existe : une variable inventée part VIDE au client. Le lien
   de paiement d'une facture est [invoice_link], celui d'une soumission
@@ -405,6 +491,22 @@ RÈGLES ABSOLUES :
   pas : garde son déclencheur, son nom et toutes ses étapes, et ne change
   QUE ce qui est demandé. « Change le délai à 7 jours » ne touche que le
   délai ; « le deuxième c'est 2 jours » ne touche que la deuxième attente.
+- LE NOM ne change JAMAIS de lui-même : "nom" reprend le nom ACTUEL mot pour
+  mot, "renomme": false — même s'il te semble maladroit ou ne décrit plus le
+  parcours. Seule une demande explicite (« renomme-la en X », « appelle-la
+  X », "rename it to X") le change : "nom": "X", "renomme": true, et rien
+  d'autre ne bouge.
+- Le corps d'un courriel s'écrit en TEXTE simple, un paragraphe par ligne,
+  sans balise : le serveur le met en forme.
+- PUBLIER ou METTRE EN PAUSE l'automatisation elle-même (« active-la »,
+  « publie-la », « mets-la en marche », "turn it on", « mets-la en pause »,
+  « désactive-la ») : tu ne le fais pas toi-même et tu ne dis pas que c'est
+  fait. "steps": null, "modifie": false, "intention": "activer" (ou
+  "desactiver"), et "resume" : une phrase courte, sans rien affirmer — le
+  serveur écrit le récapitulatif exact et s'en occupe. Un « oui », « ok »,
+  « vas-y », "yes, go ahead" qui répond à une demande de confirmation
+  d'activation : "intention": "activer" aussi. Partout ailleurs,
+  "intention": null.
 - "resume" répond à la DERNIÈRE demande : ce que tu viens de changer (« J'ai
   raccourci le texto et le courriel, avec le lien du devis. »), jamais une
   redescription du parcours. Ne recopie pas le texte des messages : il est
@@ -425,14 +527,24 @@ RÈGLES ABSOLUES :
 - "modifie" : false quand tu n'as RIEN changé au parcours (question,
   refus, demande incomprise), true sinon.
 - Une QUESTION sur le parcours (« explique-moi ce que ça fait », « ça part
-  quand ? ») : renvoie le parcours ACTUEL inchangé, "modifie": false, et
-  réponds dans "resume" en deux ou trois phrases simples.
-- Un REFUS sur un parcours qui existe : renvoie le parcours ACTUEL inchangé,
-  "modifie": false, et explique le refus dans "resume".
+  quand ? », « c'est quoi le déclencheur ? ») : "steps": null, "modifie":
+  false — ne réécris PAS le parcours, le serveur le garde tel quel — et
+  réponds dans "resume" en deux ou trois phrases simples, dans l'ordre des
+  étapes, avec les délais (« 3 jours ») et les mots de l'écran : le
+  déclencheur se dit par sa description (« quand une facture est en
+  retard »), jamais par sa clé (invoice.overdue). Ne décris que ce qui est
+  dans le parcours : une attente simple n'est pas une condition.
+- On te demande CE QUE FAIT l'automatisation (« explique-moi ce qu'elle
+  fait », « qu'est-ce que ça fait ? », "explain what it does") : en plus,
+  "explication": true, et "resume" tient en UNE phrase simple. Le serveur
+  écrit dessous le détail exact — le déclencheur sous son nom d'écran, chaque
+  étape, chaque message mot pour mot : ne le recopie pas, ne le paraphrase pas.
+- Un REFUS sur un parcours qui existe : "steps": null, "modifie": false, et
+  explique le refus dans "resume".
 - [quote_valid_until] est VIDE quand la soumission n'a pas de date limite
   (« valide jusqu'au . ») : ne l'utilise que si l'utilisateur parle
   d'échéance.
-- Si tu ne comprends pas la demande, renvoie le parcours ACTUEL inchangé et
+- Si tu ne comprends pas la demande : "steps": null, "modifie": false, et
   dis-le dans "resume". Ne reste jamais silencieux : l'utilisateur croirait
   que sa correction a été prise en compte.
 - Si la demande est VAGUE (« relance mes clients », sans dire quoi ni quand),
@@ -484,6 +596,73 @@ export interface ResultatGeneration {
   sansLumi?: boolean;
 }
 
+const AVEC_BALISE = /<[a-z][^>]*>/i;
+
+/** Le parcours à l'écran (ou en base), tel que la génération le reçoit. */
+export interface ParcoursActuel {
+  /** Le nom de l'automatisation : il ne change que si l'utilisateur le demande (A-04). */
+  nom?: string | null;
+  trigger_event?: string;
+  steps?: unknown[];
+  /** Les étapes d'avant la DERNIÈRE modification de Lumi (voir `ParcoursPropose.remplacees`) : pour « annule ça ». */
+  avant?: unknown[] | null;
+}
+
+/** Les étapes d'un parcours avec leurs courriels dépliés en texte (ce que le modèle lit). */
+function etapesEnTexte(steps: unknown[]): unknown[] {
+  return steps.map((e) => {
+    const etape = e as { type?: unknown; action?: { type?: unknown; config?: Record<string, unknown> } };
+    const corps = etape?.action?.config?.body;
+    if (etape?.type === 'action' && etape.action?.type === 'send_email' && typeof corps === 'string' && AVEC_BALISE.test(corps)) {
+      return { ...etape, action: { ...etape.action, config: { ...etape.action.config, body: htmlVersTexte(corps) } } };
+    }
+    return e;
+  });
+}
+
+/**
+ * Le parcours actuel sous sa forme COMPACTE, pour le modèle (F-03).
+ *
+ * Avant : `JSON.stringify(parcours).slice(0, 6_000)`. Les deux gros parcours du
+ * pack de base (17 et 23 étapes, 8 278 et 8 741 caractères) partaient COUPÉS
+ * au milieu d'une étape : le modèle rendait un parcours bancal, refusé, débité.
+ * Maintenant le parcours part ENTIER — jamais tronqué —, en JSON sans
+ * indentation, et les corps de courriel y sont dépliés en texte : l'enveloppe
+ * HTML (`<div style="font-family:…">`) n'apprend rien au modèle et pèse le
+ * tiers du parcours. Au retour, un courriel dont le texte n'a pas bougé
+ * reprend son HTML d'origine (`remettreCourriels`).
+ */
+export function parcoursPourLeModele(p: ParcoursActuel): string {
+  const steps = etapesEnTexte(Array.isArray(p.steps) ? p.steps : []);
+  return JSON.stringify({ ...(p.nom ? { nom: p.nom } : {}), trigger_event: p.trigger_event, steps });
+}
+
+/**
+ * Les courriels du parcours rendu, au format ENREGISTRÉ (le HTML de l'éditeur).
+ *
+ *  · texte inchangé → le HTML d'origine, à l'octet près : une demande qui ne
+ *    touche pas ce courriel ne le réécrit pas ;
+ *  · texte nouveau → `texteVersHtml`, la conversion de l'éditeur de courriel
+ *    (première ligne en titre, un paragraphe par ligne). Sans elle, un courriel
+ *    écrit par Lumi partait en un seul bloc, sans paragraphes (A-21).
+ */
+export function remettreCourriels(steps: Array<Record<string, unknown>>, originaux: unknown[] | undefined): Array<Record<string, unknown>> {
+  const plat = (t: string) => t.replace(/\s+/g, ' ').trim();
+  const dOrigine = (Array.isArray(originaux) ? originaux : [])
+    .map((e) => e as { id?: unknown; action?: { type?: unknown; config?: { body?: unknown } } })
+    .filter((e) => e?.action?.type === 'send_email' && typeof e.action.config?.body === 'string')
+    .map((e) => ({ id: String(e.id ?? ''), html: String(e.action!.config!.body), texte: plat(htmlVersTexte(String(e.action!.config!.body))) }));
+  return steps.map((e) => {
+    const action = e.action as { type?: unknown; config?: Record<string, unknown> } | undefined;
+    if (e.type !== 'action' || action?.type !== 'send_email' || typeof action.config?.body !== 'string') return e;
+    const rendu = action.config.body;
+    if (AVEC_BALISE.test(rendu)) return e;
+    const texte = plat(rendu);
+    const meme = dOrigine.find((o) => o.id === String(e.id ?? '') && o.texte === texte) ?? dOrigine.find((o) => o.texte === texte);
+    return { ...e, action: { ...action, config: { ...action.config, body: meme ? meme.html : texteVersHtml(rendu) } } };
+  });
+}
+
 /**
  * Les messages envoyés au modèle : l'historique, le parcours courant,
  * puis la demande.
@@ -495,7 +674,7 @@ export interface ResultatGeneration {
 export function construireMessages(
   demande: string,
   echanges?: Array<{ role: 'user' | 'assistant'; content: string }>,
-  parcoursActuel?: { trigger_event?: string; steps?: unknown[] } | null,
+  parcoursActuel?: ParcoursActuel | null,
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
@@ -519,14 +698,20 @@ export function construireMessages(
     const consigneExemples = exemples.length
       ? `
 
-ÉTAPE${exemples.length > 1 ? 'S' : ''} NON RÉDIGÉE${exemples.length > 1 ? 'S' : ''} : ${exemples.join(', ')}. Son texte est l'EXEMPLE que l'éditeur pose quand on ajoute une étape ; l'utilisateur ne l'a pas écrit et ne veut pas l'envoyer. Ne garde JAMAIS une telle étape telle quelle : si la demande porte sur ce message, RÉÉCRIS-le selon la demande ; sinon RETIRE l'étape et dis-le dans "resume". Un texte d'exemple ne doit jamais partir à un client.`
+ÉTAPE${exemples.length > 1 ? 'S' : ''} NON RÉDIGÉE${exemples.length > 1 ? 'S' : ''} : ${exemples.join(', ')}. Son texte est l'EXEMPLE que l'éditeur pose quand on ajoute une étape ; l'utilisateur ne l'a pas écrit et ne veut pas l'envoyer. Ne garde JAMAIS une telle étape telle quelle : si la demande porte sur ce message, ou si elle dit « le message » sans préciser alors que c'est le seul, RÉÉCRIS-le selon la demande ; sinon RETIRE l'étape et dis-le dans "resume". Un texte d'exemple ne doit jamais partir à un client.`
       : '';
+    if (Array.isArray(parcoursActuel.avant) && parcoursActuel.avant.length > 0) {
+      messages.push({
+        role: 'user',
+        content: `AVANT ta dernière modification, ces étapes étaient ainsi (à remettre telles quelles si on te demande d'annuler ou de remettre comme avant) :
+${JSON.stringify(etapesEnTexte(parcoursActuel.avant))}`,
+      });
+    }
     messages.push({
       role: 'user',
+      // Rien entre l'annonce et le JSON, et le JSON ENTIER : jamais de coupe (F-03).
       content: `Voici le parcours ACTUEL, à modifier (ne le reconstruis pas de zéro) :
-${
-        JSON.stringify(parcoursActuel).slice(0, 6_000)
-      }${consigneExemples}`,
+${parcoursPourLeModele(parcoursActuel)}${consigneExemples}`,
     });
   }
 
@@ -613,7 +798,8 @@ async function genererParcoursUneFois(params: {
    */
   echanges?: Array<{ role: 'user' | 'assistant'; content: string }>;
   /**
-   * Le parcours actuellement à l'écran.
+   * Le parcours actuellement à l'écran (ou en base, pour un outil de Lumi),
+   * avec le NOM de l'automatisation.
    *
    * C'est ce qu'il faut MODIFIER. Sans lui, une correction du genre
    * « Non, le deuxième c'est 2 jours, pas 5 » n'avait rien à quoi se
@@ -621,16 +807,95 @@ async function genererParcoursUneFois(params: {
    * (P1-7). Le silence est le pire comportement — l'utilisateur croit
    * que c'est corrigé.
    */
-  parcoursActuel?: { trigger_event?: string; steps?: unknown[] } | null;
+  parcoursActuel?: ParcoursActuel | null;
+  /**
+   * La conversation du clavardage d'où part la génération (outils de Lumi).
+   * Absente : celle du tour en cours, s'il y en a un (`contexte-appel.ts`).
+   * Sans elle, la dépense était journalisée hors conversation : invisible de
+   * la trace du tour et du plafond par conversation (F-02).
+   */
+  conversationId?: string | null;
+  /** Pour la trace : le panneau de l'éditeur, ou un outil du clavardage. */
+  canal?: 'panneau' | 'clavardage';
+  /** Pour la trace : l'automatisation ouverte ou modifiée. */
+  ruleId?: string | null;
 }): Promise<ResultatGeneration> {
   const { admin, orgId, userId, demande, langue, echanges, parcoursActuel } = params;
   const fr = langue === 'fr';
+  const debut = Date.now();
+  const appelLumi = contexteLumi();
+  const conversationId = params.conversationId ?? appelLumi?.conversationId ?? null;
+  const canal = params.canal ?? (appelLumi ? 'clavardage' : 'panneau');
+  const etapesEnvoyees = Array.isArray(parcoursActuel?.steps) ? parcoursActuel.steps.length : 0;
 
   if (!isLumiConfigured()) {
     return { parcours: null, erreur: fr ? 'Lumi n’est pas configuré.' : 'Lumi is not configured.' };
   }
 
+  /*
+   * LA TRACE (F-01). Ce chemin n'écrivait que `ai_usage` : ni la durée, ni le
+   * résultat, ni un échec n'étaient mesurables — deux refus 422 de la passe de
+   * mesure n'ont laissé qu'une ligne dans les journaux du serveur. Une ligne
+   * par génération, comme un tour du clavardage : ce qui a été demandé
+   * (normalisé, sans coordonnées), ce que ça a coûté, combien de temps, et
+   * pourquoi ça n'a pas abouti.
+   */
+  let usage: UsageAgrege = usageVide();
+  let coutGeneration = 0;
+  let modeleRepondu: string | null = null;
+  let stopReason: string | null = null;
+  let secondEssai = false;
+  const tracer = (resultat: 'ok' | 'refus' | 'erreur', motif: string | null, etapesRendues = 0): void => {
+    void journaliserTrace(admin, {
+      orgId, userId, conversationId, canal: 'lumi', origine: canal === 'panneau' ? 'texte' : 'carte',
+      enonce: demande, etage: ETAGE.agent, action: 'construire-parcours',
+      params: {
+        canal, ...(params.ruleId ? { rule_id: params.ruleId } : {}),
+        etapes_envoyees: etapesEnvoyees, etapes_rendues: etapesRendues,
+        ...(motif ? { motif: motif.slice(0, 200) } : {}),
+        ...(stopReason ? { stop_reason: stopReason } : {}),
+        ...(secondEssai ? { second_essai: true } : {}),
+      },
+      outils: [], resultat, model: modeleRepondu, promptVersion: VERSION_PROMPT_PARCOURS,
+      usage, costCents: coutGeneration, dureeMs: Date.now() - debut,
+    });
+  };
+
+  /*
+   * LE PLAFOND JOURNALIER de la plateforme (F-06) : ce chemin n'entrait dans
+   * aucun cran d'arrêt en dollars par jour — une boucle sur le panneau n'était
+   * arrêtée que par le budget mensuel de CE client. Même compteur que le
+   * clavardage (`lumi`) : c'est le même produit, la même clé.
+   */
+  const plafond = verifierPlafond('lumi');
+  if (!plafond.autorise) {
+    compterRefus('lumi');
+    logger.error('[lumi/parcours] génération refusée par le plafond journalier de la plateforme', { org_id: orgId, depense_cents: plafond.depense_cents, plafond_cents: plafond.plafond_cents });
+    tracer('refus', 'plafond_plateforme');
+    return { parcours: null, erreur: messagePausePlateforme(langue) };
+  }
+
   const systeme = consignes(fr);
+  const aLaMain = fr
+    ? 'Le parcours peut toujours être construit à la main avec le « + ».'
+    : 'You can still build the path by hand with “+”.';
+
+  /*
+   * Les crédits, lus à la MÊME source que l'écran (F-08, F-10) : l'éditeur
+   * disait « le budget du mois est atteint », sans date, là où le reste de
+   * Lumi dit « tes crédits sont épuisés jusqu'au … ». Et un bureau à zéro
+   * crédit ne génère plus, même si la réservation en base, seule garde avant,
+   * disait encore oui. Illisible (panne, tests) : la réservation tranche.
+   */
+  let renouvellement: string | null = null;
+  try {
+    const credits = await etatCredits(admin, orgId);
+    renouvellement = credits.renouvellement_le || null;
+    if (credits.inclus && credits.palier === 'epuise') {
+      tracer('refus', 'credits_epuises');
+      return { parcours: null, erreur: `${messagePause(langue, renouvellement ?? new Date())} ${aLaMain}` };
+    }
+  } catch { /* la réservation ci-dessous reste la garde */ }
 
   /*
    * FACTURÉ au budget Lumi de l'entreprise (décision du 2026-09-28) :
@@ -653,6 +918,7 @@ async function genererParcoursUneFois(params: {
   });
 
   if (reservation.statut === 'plan_sans_lumi') {
+    tracer('refus', 'plan_sans_lumi');
     return {
       parcours: null,
       sansLumi: true,
@@ -661,15 +927,17 @@ async function genererParcoursUneFois(params: {
         : 'Building with Lumi is included in the Autopilot plan. You can build this path by hand with “+”.',
     };
   }
-  // AVANT le cas « sans id » : un budget atteint rend `reservation_id: null`,
-  // et le test suivant l'annonçait « budget illisible, réessaie » — la branche
-  // « budget du mois atteint » ne s'exécutait jamais (audit V2, L-1).
+  // AVANT le cas « sans id » : un plafond atteint rend `reservation_id: null`,
+  // et le test suivant l'annonçait « illisible, réessaie » — la bonne branche
+  // ne s'exécutait jamais (audit V2, L-1).
   if (reservation.statut === 'capped') {
+    tracer('refus', 'credits_epuises');
     return {
       parcours: null,
-      erreur: fr
-        ? 'Le budget Lumi du mois est atteint. Le parcours peut être construit à la main avec le « + ».'
-        : 'This month’s Lumi budget is used up. You can still build the path by hand with “+”.',
+      // Les mêmes mots que le clavardage ; la date seulement quand on la CONNAÎT.
+      erreur: renouvellement
+        ? `${messagePause(langue, renouvellement)} ${aLaMain}`
+        : `${fr ? 'Tes crédits Lumi sont épuisés.' : 'Your Lumi credits are used up.'} ${aLaMain}`,
     };
   }
   /*
@@ -679,31 +947,40 @@ async function genererParcoursUneFois(params: {
    * Autopilot et le plafond du mois à chaque panne.
    */
   if (reservation.statut === 'indisponible' || !reservation.id) {
+    tracer('erreur', 'reservation_indisponible');
     return {
       parcours: null,
       erreur: fr
-        ? 'Lumi est momentanément indisponible (budget illisible). Réessaie dans un instant, ou construis le parcours à la main avec le « + ».'
-        : 'Lumi is temporarily unavailable (budget unreadable). Try again shortly, or build the path by hand with “+”.',
+        ? 'Lumi est momentanément indisponible. Réessaie dans un instant, ou construis le parcours à la main avec le « + ».'
+        : 'Lumi is temporarily unavailable. Try again shortly, or build the path by hand with “+”.',
     };
   }
   try {
-    /** Un appel au modèle, journalisé (compté au budget du client). */
+    /** Un appel au modèle, journalisé (compté au budget du client, au plafond du jour et à la trace). */
     const appeler = async (msgs: typeof messages) => {
       const rep = await clientAnthropic().messages.create({
         model: MODELE,
         max_tokens: MAX_TOKENS,
         system: [{ type: 'text', text: systeme, cache_control: { type: 'ephemeral' } }],
         messages: msgs,
+        // Réflexion adaptative, effort borné : voir EFFORT (F-05).
+        thinking: { type: 'adaptive' },
+        output_config: { effort: EFFORT },
       });
-      const u = rep.usage;
+      const u = (rep.usage ?? { input_tokens: 0, output_tokens: 0 }) as UsageTokens;
       // `coutEnCents` prend l'usage BRUT de l'API : il sait lire un id daté et
       // distinguer les écritures de cache 5 min / 1 h.
       const modeleRendu = rep.model ?? MODELE;
-      const cout = coutEnCents(modeleRendu, u ?? { input_tokens: 0, output_tokens: 0 });
+      const cout = coutEnCents(modeleRendu, u);
+      modeleRepondu = modeleRendu;
+      stopReason = rep.stop_reason ?? null;
+      usage = ajouterUsage(usage, u);
+      ajouterDepense('lumi', cout);
+      noterAppelImbrique(modeleRendu, u, cout);
       await journaliserUsage(admin, {
         orgId,
         userId,
-        conversationId: null,
+        conversationId,
         model: modeleRendu,
         input_tokens: u?.input_tokens ?? 0,
         output_tokens: u?.output_tokens ?? 0,
@@ -720,7 +997,7 @@ async function genererParcoursUneFois(params: {
     const lisible = (t: string) => { try { extraireJson(t); return true; } catch { return false; } };
 
     let essai = await appeler(messages);
-    let coutGeneration = essai.cout;
+    coutGeneration = essai.cout;
     /*
      * UN deuxième essai quand la réponse, complète, n'est pas un JSON
      * lisible. Mesuré le 2026-09-30 sur la batterie `qa:construire-lumi` :
@@ -730,11 +1007,57 @@ async function genererParcoursUneFois(params: {
      */
     if (essai.rep.stop_reason !== 'max_tokens' && !lisible(essai.texte)) {
       logger.warn('[lumi/parcours] réponse illisible — second essai', { org_id: orgId });
+      secondEssai = true;
       const relance = essai.texte.trim()
         ? [...messages, { role: 'assistant' as const, content: essai.texte.slice(0, 8_000) }, { role: 'user' as const, content: 'Ta réponse n’est pas un objet JSON valide. Renvoie UNIQUEMENT l’objet JSON demandé, complet, rien autour.' }]
         : messages;
       essai = await appeler(relance);
       coutGeneration += essai.cout;
+    }
+    /*
+     * UN deuxième essai aussi quand le parcours rendu ne passerait pas la
+     * validation du moteur (un renvoi vers une étape absente, un champ
+     * obligatoire vide) : le motif exact est rendu au modèle, qui corrige.
+     * Avant, la route répondait « Lumi a proposé un parcours que le moteur ne
+     * saurait pas exécuter. Reformule » — pour une demande claire, débitée.
+     */
+    if (!secondEssai && essai.rep.stop_reason !== 'max_tokens' && lisible(essai.texte)) {
+      const propose = extraireJson(essai.texte) as Partial<ParcoursPropose> | null;
+      const etapes = Array.isArray(propose?.steps) && propose.steps.length ? normaliserEtapes(propose.steps) : null;
+      const verdict = etapes ? sequenceEtapes.safeParse(etapes) : null;
+      /*
+       * Les LONGUEURS, comptées par le code : un modèle ne sait pas compter les
+       * caractères. « Plus court » rendait parfois un texto plus long, et la
+       * règle des 160 caractères n'était qu'une consigne (mesuré le 2026-10-02 :
+       * 183 caractères pour « plus court » sur un texte de 160).
+       */
+      const smsAvant = new Map(messagesDuParcours(parcoursActuel?.steps).filter((m) => m.type === 'send_sms').map((m) => [m.id, m.corps]));
+      const veutPlusCourt = /plus courts?|trop long|raccourci|shorter|too long|shorten/i.test(demande);
+      const longueurs = etapes
+        ? messagesDuParcours(etapes).filter((m) => m.type === 'send_sms').flatMap((m) => {
+          const avant = smsAvant.get(m.id);
+          // Seulement un texto que le modèle a RÉÉCRIT : « raccourcis le courriel, le texto est correct »
+          // ne doit pas faire raccourcir le texto (recul mesuré par qa:construire-lumi, cas « seulement-courriel »).
+          if (avant !== undefined && m.corps === avant) return [];
+          if (veutPlusCourt && avant !== undefined && m.corps.length >= avant.length) return [`le texto ${m.id} fait ${m.corps.length} caractères alors que l'actuel en fait ${avant.length} : il doit être nettement PLUS COURT`];
+          if (m.corps.length > 160 && (avant === undefined || avant.length <= 160)) return [`le texto ${m.id} fait ${m.corps.length} caractères : 160 au plus`];
+          return [];
+        })
+        : [];
+      if ((verdict && !verdict.success) || longueurs.length) {
+        const motifs = [
+          ...(verdict && !verdict.success ? verdict.error.issues.slice(0, 4).map((i) => `${i.path.join('.')} : ${i.message}`) : []),
+          ...longueurs,
+        ].join(' ; ');
+        logger.warn('[lumi/parcours] parcours à corriger — second essai', { org_id: orgId, motifs });
+        secondEssai = true;
+        essai = await appeler([
+          ...messages,
+          { role: 'assistant' as const, content: essai.texte.slice(0, 24_000) },
+          { role: 'user' as const, content: `Ce parcours est à corriger avant d’être proposé : ${motifs}. Corrige ces points, ne change rien d’autre, et renvoie UNIQUEMENT l’objet JSON complet.` },
+        ]);
+        coutGeneration += essai.cout;
+      }
     }
     await reglerBudget(admin, reservation.id, coutGeneration);
 
@@ -746,6 +1069,7 @@ async function genererParcoursUneFois(params: {
     // ce défaut est resté invisible (mesuré le 2026-09-30).
     if (reponse.stop_reason === 'max_tokens') {
       logger.error('[lumi/parcours] réponse coupée au plafond de sortie', { org_id: orgId, max_tokens: MAX_TOKENS });
+      tracer('erreur', 'reponse_coupee');
       return {
         parcours: null,
         coutCents: coutGeneration,
@@ -767,13 +1091,16 @@ async function genererParcoursUneFois(params: {
      * « JSON » une fois sur deux — du jargon pour un plombier. On dit ce
      * qui manque, avec des mots fixes.
      */
-    let brut: Partial<ParcoursPropose>;
+    type Brut = Partial<ParcoursPropose> & { modifie?: unknown; renomme?: unknown; intention?: unknown; explication?: unknown };
+    let brut: Brut;
     try {
-      brut = extraireJson(texte) as Partial<ParcoursPropose>;
+      brut = extraireJson(texte) as Brut;
     } catch {
       const rienAModifier = !parcoursActuel?.steps?.length;
+      tracer('erreur', 'reponse_illisible');
       return {
         parcours: null,
+        coutCents: coutGeneration,
         erreur: rienAModifier
           ? (fr
             ? 'Il n’y a pas encore de parcours à modifier. Décris ce que l’automatisation doit faire (ex. : « relance la soumission après 3 jours par texto »), ou ajoute une étape avec le « + ».'
@@ -784,6 +1111,16 @@ async function genererParcoursUneFois(params: {
       };
     }
 
+    const etapesActuelles = Array.isArray(parcoursActuel?.steps) ? parcoursActuel.steps : [];
+    const aUnParcoursActuel = etapesActuelles.length > 0;
+    const nomActuel = typeof parcoursActuel?.nom === 'string' ? parcoursActuel.nom.trim() : '';
+    const nomPropose = String(brut?.nom ?? '').trim().slice(0, 120);
+    // Le nom ne change QUE sur demande (A-04) : Lumi rebaptisait « Mauvais payeurs —
+    // Longueuil (Will) » en « Relance facture en retard » après « mets le texto plus court ».
+    const renomme = aUnParcoursActuel && !!nomActuel && brut?.renomme === true && !!nomPropose && nomPropose !== nomActuel;
+    const nomRendu = aUnParcoursActuel && nomActuel && !renomme ? nomActuel : (nomPropose || (fr ? 'Nouvelle automatisation' : 'New automation'));
+    const intention = brut?.intention === 'activer' || brut?.intention === 'desactiver' ? brut.intention : null;
+
     /*
      * Filet : en MODIFIANT un parcours, le modèle omet parfois le
      * déclencheur, qu'il considère inchangé. On reprend celui du parcours
@@ -793,28 +1130,73 @@ async function genererParcoursUneFois(params: {
       brut.trigger_event = parcoursActuel.trigger_event;
     }
 
+    const explication = typeof brut?.resume === 'string' ? brut.resume.trim() : '';
+    const sansEtapes = !Array.isArray(brut?.steps) || brut.steps.length === 0;
+
+    /*
+     * RIEN À RÉÉCRIRE (F-07, A-16) : une question, un refus, une demande
+     * incomprise, « active-la ». Le modèle rend `"steps": null` et le parcours
+     * reçu repart TEL QUEL — il le réécrivait en entier pour deux phrases
+     * (trois tours sur six d'une conversation, 1,92 ¢ sur 3,56). Jamais un
+     * parcours vide en retour : le canevas ne se vide pas sur une question.
+     */
+    if (sansEtapes && aUnParcoursActuel && (explication.length > 0 || intention || renomme)) {
+      const declencheur = String(parcoursActuel?.trigger_event ?? brut.trigger_event ?? '');
+      tracer('ok', renomme ? 'renomme' : intention ? `intention_${intention}` : 'sans_modification', etapesActuelles.length);
+      /*
+       * « Explique-moi ce qu'elle fait » : la phrase du modèle, PUIS le détail écrit par
+       * le code — le déclencheur sous son nom d'écran, chaque étape dans l'ordre, chaque
+       * message mot pour mot. Laissé au modèle, le détail était paraphrasé (« passes its
+       * due date » pour « Invoice overdue », un texto résumé au lieu d'être cité : C03 T5).
+       */
+      let reponse = explication.slice(0, 700);
+      if (brut?.explication === true && !intention && !renomme) {
+        const detail = resumeDeLaRegle({
+          id: '', name: nomRendu, trigger_event: declencheur, conditions: null, steps: etapesActuelles, actions: [],
+          delay_seconds: 0, settings: null, is_active: false, is_preset: false, deleted_at: null,
+        } as RegleLue, langue, { maxMessage: 600 });
+        reponse = [explication.slice(0, 300), `${fr ? 'Déclencheur' : 'Trigger'} : ${detail.declencheur}`, ...detail.etapes].filter(Boolean).join('\n');
+      }
+      return {
+        parcours: {
+          nom: nomRendu,
+          trigger_event: declencheur,
+          resume: reponse,
+          steps: etapesActuelles as Array<Record<string, unknown>>,
+          autre: null,
+          modifie: renomme,
+          renomme,
+          intention,
+        },
+        coutCents: coutGeneration,
+      };
+    }
+
     /*
      * Lumi a REFUSÉ (demande impossible ou dangereuse) : son explication est
      * dans « resume ». On la montre — « Reformule en une phrase » laissait
      * croire que c'était faisable (audit V2, L-5 : 5 refus sur 30, tous
      * justes, tous rendus illisibles).
      */
-    const explication = typeof brut?.resume === 'string' ? brut.resume.trim() : '';
-    if ((!Array.isArray(brut?.steps) || brut.steps.length === 0) && explication.length >= 15) {
+    if (sansEtapes && explication.length >= 15) {
+      tracer('refus', 'refus_du_modele');
       return { parcours: null, erreur: explication.slice(0, 400), coutCents: coutGeneration };
     }
 
-    if (!brut?.trigger_event || !Array.isArray(brut.steps) || brut.steps.length === 0) {
+    if (!brut?.trigger_event || sansEtapes) {
+      tracer('erreur', 'parcours_vide');
       return {
         parcours: null,
+        coutCents: coutGeneration,
         erreur: fr
           ? 'Lumi n’a pas réussi à construire ce parcours. Reformule en une phrase, ou construis-le avec le « + ».'
           : 'Lumi could not build that path. Rephrase it in one sentence, or build it with “+”.',
       };
     }
 
-    brut.steps = normaliserEtapes(brut.steps);
-    if (brut.autre && Array.isArray(brut.autre.steps)) brut.autre.steps = normaliserEtapes(brut.autre.steps);
+    // Les courriels reprennent le format enregistré (HTML de l'éditeur) : voir `remettreCourriels`.
+    brut.steps = remettreCourriels(normaliserEtapes(brut.steps as unknown[]), [...etapesActuelles, ...(Array.isArray(parcoursActuel?.avant) ? parcoursActuel.avant : [])]);
+    if (brut.autre && Array.isArray(brut.autre.steps)) brut.autre.steps = remettreCourriels(normaliserEtapes(brut.autre.steps), undefined);
 
     /*
      * Variable INVENTÉE (`[payment_link]`) : elle partirait vide au client
@@ -823,12 +1205,28 @@ async function genererParcoursUneFois(params: {
      */
     const inventees = variablesInconnues(textesDesMessages(brut.steps).join('\n'));
     if (inventees.length) {
+      tracer('refus', `variables_inconnues:${inventees.join(',')}`);
       return {
         parcours: null,
         coutCents: coutGeneration,
         erreur: fr
           ? `Lumi a utilisé ${inventees.map((v) => `[${v}]`).join(', ')}, qui n’existe pas : le client recevrait un trou. Redemande en précisant (le lien de paiement d’une facture est [invoice_link]).`
           : `Lumi used ${inventees.map((v) => `[${v}]`).join(', ')}, which does not exist: the client would get a blank. Ask again (an invoice payment link is [invoice_link]).`,
+      };
+    }
+
+    // Ce que le moteur refuserait, même après le second essai : dit ici, et TRACÉ.
+    const verdictFinal = sequenceEtapes.safeParse(brut.steps);
+    if (!verdictFinal.success) {
+      const motifs = verdictFinal.error.issues.slice(0, 3).map((i) => i.message).join(' ; ');
+      logger.error('[lumi/parcours] proposition invalide', { org_id: orgId, motifs });
+      tracer('refus', `parcours_invalide:${motifs}`);
+      return {
+        parcours: null,
+        coutCents: coutGeneration,
+        erreur: fr
+          ? 'Lumi a proposé un parcours que le moteur ne saurait pas exécuter. Reformule, ou construis-le avec le « + ».'
+          : 'Lumi proposed a path the engine could not run. Rephrase, or build it with “+”.',
       };
     }
 
@@ -856,16 +1254,49 @@ async function genererParcoursUneFois(params: {
       }
       : null;
 
+    /*
+     * CE QUI A CHANGÉ, constaté par le serveur — pas déclaré par le modèle.
+     * Le déclencheur et le nom comptent : « j'ai changé le déclencheur… je
+     * n'ai rien changé au parcours » ne se lit plus dans la même bulle (A-16).
+     */
+    const declencheurChange = aUnParcoursActuel && !!parcoursActuel?.trigger_event && String(brut.trigger_event) !== parcoursActuel.trigger_event;
+    const etapesChangees = JSON.stringify(etapesActuelles) !== JSON.stringify(brut.steps);
+    const modifie = !aUnParcoursActuel || etapesChangees || declencheurChange || renomme;
+    const declencheurDit = declencheurChange
+      ? (() => {
+        const d = trouverDeclencheur(String(brut.trigger_event));
+        return d ? (fr ? `\n\nNouveau déclencheur : « ${d.fr} ».` : `\n\nNew trigger: “${d.en}”.`) : '';
+      })()
+      : '';
+
+    // Les étapes d'AVANT qui ont changé ou disparu : gardées pour « annule ça ».
+    const nouvelles = new Map((brut.steps as Array<Record<string, unknown>>).map((e) => [String(e.id), JSON.stringify(e)]));
+    const remplacees = (etapesActuelles as Array<Record<string, unknown>>).filter((e) => nouvelles.get(String(e.id)) !== JSON.stringify(e)).slice(0, 12);
+    /*
+     * Lumi ANNONCE un changement que la comparaison ne retrouve pas (« j'ai
+     * remis le texte d'avant » alors que rien n'a bougé) : sa phrase est
+     * écartée, seule la constatation du serveur reste. Jamais « c'est fait »
+     * sans que ce soit fait.
+     */
+    const annonceSansEffet = aUnParcoursActuel && !modifie && brut.modifie !== false;
+    const constat = ceQuiAChange(parcoursActuel?.steps, brut.steps, fr, brut.modifie !== false, declencheurChange || renomme);
+
+    tracer('ok', annonceSansEffet ? 'annonce_sans_effet' : null, (brut.steps as unknown[]).length);
     return {
       parcours: {
-        nom: String(brut.nom ?? (fr ? 'Nouvelle automatisation' : 'New automation')).slice(0, 120),
+        nom: nomRendu,
         trigger_event: String(brut.trigger_event),
-        // La phrase de Lumi, PUIS le nouveau texte (après la coupe à 300 :
-        // c'est la partie que l'utilisateur doit voir en entier).
-        resume: String(brut.resume ?? '').slice(0, 300)
-          + ceQuiAChange(parcoursActuel?.steps, brut.steps, fr, (brut as { modifie?: unknown }).modifie !== false),
+        // La phrase de Lumi, PUIS le nouveau texte (après la coupe : c'est la
+        // partie que l'utilisateur doit voir en entier).
+        resume: annonceSansEffet && constat.trim() ? constat.trim() : String(brut.resume ?? '').slice(0, 400)
+          + declencheurDit
+          + constat,
+        ...(modifie && aUnParcoursActuel && remplacees.length ? { remplacees } : {}),
         steps: brut.steps as Array<Record<string, unknown>>,
         autre,
+        modifie,
+        renomme,
+        intention,
       },
       coutCents: coutGeneration,
     };
@@ -875,6 +1306,7 @@ async function genererParcoursUneFois(params: {
     // Appel raté : on libère la réservation (rien n'a été consommé, ou on
     // ne le sait pas — mieux vaut ne pas facturer).
     await reglerBudget(admin, reservation.id, 0).catch(() => {});
+    tracer('erreur', message);
     return {
       parcours: null,
       erreur: fr

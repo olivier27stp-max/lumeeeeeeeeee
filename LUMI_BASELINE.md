@@ -161,8 +161,47 @@ Conséquence pratique : **une passe propre par bureau de test et par jour**. Tro
 - Le correcteur donne le score par moteur et refuse de conclure si un autre modèle que prévu a répondu.
 - Entre les deux passes, 9 attentes ont été corrigées (le tri les détaille : `evals/lumi/resultats/baseline-A/TRIAGE.md`, branche `mission/lumi-evals`) : toujours pour juger le fond de la réponse plutôt que l'appel d'un outil, jamais pour faire passer un cas.
 
+## Troisième passe — 22 h 13 UTC, reprise après la panne
+
+La passe lancée à 20 h 25 a été coupée par la panne de la base de production (20 h 36 → 21 h 41). 145 demandes étaient jouées ; les 80 autres (et les 4 plantées) ont été rejouées de 22 h 01 à 22 h 13, une seule à la fois. Bureau « [TEST] QA Lumi éval 3 », jeu d'outils d'avant #875.
+
+| | Passe de 18 h 42 | Passe de 22 h 13 |
+|---|---:|---:|
+| Réussite | 90,5 % | **93,7 %** (207 sur 221) |
+| Réussite quand Sonnet répond | 92,5 % | **95,8 %** (191 demandes) |
+| Réponses sans modèle | 90,0 % | 90,5 % |
+| Bon outil appelé | 94,1 % | 95,0 % |
+| Actions sensibles (78 cas) | 92,3 % | 96,2 % |
+| Injection, extraction, hors-sujet | 100 % | 100 % |
+| Plusieurs actions dans une phrase (13 cas) | 69,2 % | 69,2 % |
+| Tours plantés | 4 | 4 |
+
+- Les 4 tours plantés des deux passes ont la même cause, qui n'était pas la surcharge du modèle d'abord supposée : le modèle demande un outil de Lume et une recherche d'outil dans la même réponse, et la recherche restée en suspens fait refuser l'appel suivant (`6a8b2ffa`). Rejoués en prod après ce correctif et celui du plafond à cache froid (`84505af8`) : aucun plantage, 3 réussites sur 4.
+- Par catégorie : clients, équipe, mémoire, transverse 100 % ; devis 95,5 % ; communications 94,7 % ; facturation 93,3 % ; planification 92,9 % ; automatisations 92,3 % ; terrain 91,7 % ; rapports 84,2 % ; aide 75,0 %.
+- Résultats : `evals/lumi/resultats/apres-lot8-eval3-composite/` (passe), `apres-lot11-rejeu/` et `apres-lot12-rejeu/` (rejeux).
+
+## Passe finale — 2026-10-02, 0 h 23 à 0 h 51 UTC, d'un seul tenant
+
+Bureau neuf « [TEST] QA Lumi éval 4 », une demande à la fois, `main` à `19378a5c` : tous les correctifs du soir et les 30 outils de #875. Passe concluante : les 196 tours d'agent ont été servis par Sonnet 5.
+
+| | Passe de 22 h 13 | Passe finale |
+|---|---:|---:|
+| Réussite | 93,7 % | **95,9 %** (212 sur 221) |
+| Réussite quand Sonnet répond | 95,8 % | 95,9 % (196 demandes) |
+| Réponses sans modèle | 90,5 % | 95,0 % |
+| Bon outil appelé | 95,0 % | 96,4 % |
+| Actions sensibles (78 cas) | 96,2 % | 97,4 % |
+| Plusieurs actions dans une phrase (13 cas) | 69,2 % | **92,3 %** |
+| Tours plantés | 4 | **0** |
+| Coût moyen par demande | ≈ 1,2 ¢ | 1,39 ¢ (3,07 $ la passe) |
+
+- Par catégorie : automatisations, communications, équipe, mémoire, planification, terrain, transverse 100 % ; facturation 96,7 % ; clients 95,7 % ; devis 90,9 % ; rapports 89,5 % ; aide 75,0 %.
+- Les 9 échecs : aide-01, aide-07 (réponse sans `search_help`), aide-02, devis-10, devis-08, rapp-03, rapp-15, clients-17, fact-30.
+- Résultats : `evals/lumi/resultats/passe-finale-eval4/`. Relancer : `bash evals/lumi/lancer-passe-un-flux.sh <préfixe> <org> <dossier>`, depuis la racine.
+
 ## Ce qui n'est pas encore mesuré
 
-- La passe après le lot 6 et les cartes (#874), puis après les nouveaux outils de la session voisine.
-- La robustesse des conversations (phase 4) : batterie écrite (40 tests), à jouer.
-- L'agent de support en production : batterie en cours d'écriture.
+- L'effet propre des 30 outils de #875 : la passe finale les mesure avec les correctifs, pas séparément (`LUMI_OUTILS_LOTS=0` les retire).
+- Les tests critiques avec le modèle principal (joués avec le modèle de repli le 2026-10-01).
+
+Mesurés depuis : la robustesse des conversations (37 PASS, 0 FAIL, 3 non couverts) et l'agent de support (93 tests : 85 PASS, 2 FAIL, 6 à relire) — voir `LUMI_READINESS.md`.

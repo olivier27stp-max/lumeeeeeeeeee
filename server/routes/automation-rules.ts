@@ -33,6 +33,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { genererParcours } from '../lib/lumi/generer-parcours';
 import { lireDejaPubliees, noteDejaPubliees, typesDAction } from '../lib/lumi/deja-publiees';
+import { demandeTropCourte, ouvrirPanneau, reponseSansChangement, journaliserProposition } from '../lib/lumi/panneau-automatisation';
+import { refletDesActions } from '../lib/automations-etapes';
 import { sequenceEtapes } from '../lib/validation';
 import {
   validate, automationRuleCreateSchema, automationRuleUpdateSchema,
@@ -47,13 +49,14 @@ import { logger } from '../lib/logger';
 import { messageCorbeille, STATUT_CORBEILLE } from '../lib/automations-corbeille';
 import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, declencheurOffertA, refusDeclencheurNonOffert, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
-import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee, activerApresEcritureUtilisateur } from '../lib/automations-publication';
+import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee, activerApresEcritureUtilisateur, champSurveilleDeLaRegle } from '../lib/automations-publication';
 import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
 import { problemeJoursAvant } from '../lib/rappels-dates';
 import {
   DECLENCHEURS,
   ACTIONS,
   trouverDeclencheur,
+  fautesDuDeclencheur,
   conditionsApresChangement,
   declencheurOffert,
   estPrereglageRetire,
@@ -89,6 +92,15 @@ export function verifierCoherence(corps: {
   if (trigger_event === 'date.reached' && conditions) {
     const probleme = problemeJoursAvant(conditions.jours_avant, fr);
     if (probleme) return probleme;
+  }
+
+  // Les réglages du déclencheur qu'on s'apprête à ÉCRIRE : un nombre hors
+  // bornes (« 0 mois », « -5 $ »), « 2,5 mois », un minimum plus grand que le
+  // maximum s'enregistraient tels quels — la règle ne partait jamais, sans un
+  // mot. Même règle que le panneau, qui refuse avant d'envoyer (catalogue).
+  if (trigger_event && conditions) {
+    const faute = fautesDuDeclencheur(trigger_event, conditions)[0];
+    if (faute) return fr ? faute.fr : faute.en;
   }
 
   // Un délai négatif = « X avant la date de référence ». Le moteur ne sait le
@@ -237,7 +249,11 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
   }
 
   const fr = langueDe(req) === 'fr';
-  const probleme = verifierCoherence(req.body, fr);
+  // Dans un PARCOURS, `actions` n'est que le reflet des étapes, réparties dans le
+  // temps : deux étapes identiques y sont légitimes. Le refus des doublons ne
+  // vaut que pour une règle simple, où tout part ensemble.
+  const aDesEtapes = Array.isArray(req.body.steps) && req.body.steps.length > 0;
+  const probleme = verifierCoherence(aDesEtapes ? { ...req.body, actions: undefined } : req.body, fr);
   if (probleme) return res.status(400).json({ error: probleme });
   // Un déclencheur en rodage, pas offert à cette entreprise : la règle ne partirait jamais.
   if (!(await declencheurOffertA(auth.client, auth.orgId, req.body.trigger_event))) {
@@ -246,7 +262,9 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
 
   // Naître publiée = publier : mêmes vérifications que la route de publication (M8).
   if (req.body.is_active === true) {
-    const problemes = problemesBloquants(req.body, fr);
+    // L'entité que fixe le champ surveillé (« Date atteinte » sur un champ du pipeline…).
+    const surveille = await champSurveilleDeLaRegle(auth.client, auth.orgId, req.body);
+    const problemes = problemesBloquants({ ...req.body, ...surveille }, fr);
     if (problemes.length) return res.status(422).json({ error: messageRefus(problemes, fr), code: 'publication_refusee', problemes });
   }
 
@@ -368,7 +386,8 @@ router.post('/automations/rules/generer', async (req, res) => {
   };
 
   const demande = String((req.body as { demande?: unknown })?.demande ?? '').trim();
-  if (demande.length < 10) {
+  // Dix caractères pour une PREMIÈRE demande ; en conversation, « oui » ou « active-la » sont des réponses (A-12).
+  if (demandeTropCourte(demande, (req.body as { echanges?: unknown })?.echanges)) {
     return res.status(400).json({ error: 'Décris ton automatisation en une phrase.' });
   }
   const langue = (req.body as { langue?: string })?.langue === 'en' ? 'en' : 'fr';
@@ -396,6 +415,8 @@ router.post('/automations/rules/generer', async (req, res) => {
         .map((e) => ({ role: e.role as 'user' | 'assistant', content: String(e.content) }))
     : undefined;
 
+  // L'automatisation ouverte telle qu'ENREGISTRÉE (son nom, le fil gardé avec elle) — lib/lumi/panneau-automatisation.ts.
+  const panneau = await ouvrirPanneau(auth.client, auth.orgId, ruleIdEnvoye);
   const resultat = await genererParcours({
     admin: getServiceClient(),
     orgId: auth.orgId,
@@ -403,13 +424,22 @@ router.post('/automations/rules/generer', async (req, res) => {
     demande,
     langue,
     echanges,
-    parcoursActuel: corps?.parcours_actuel ?? null,
+    parcoursActuel: corps?.parcours_actuel ? { ...corps.parcours_actuel, nom: panneau.nom, avant: panneau.etapesDAvant } : null,
+    canal: 'panneau',
+    ruleId: panneau.id,
   });
 
   if (!resultat.parcours) {
     // `sans_lumi` : l'écran propose Autopilot au lieu d'afficher une erreur.
     return refuser({ error: resultat.erreur ?? 'Lumi n’a rien pu construire.', sans_lumi: resultat.sansLumi === true });
   }
+
+  // Rien n'a changé (question, refus, « active-la ») : le parcours à l'écran repart tel quel — lib/lumi/panneau-automatisation.ts.
+  const sansChangement = await reponseSansChangement({
+    panneau, parcours: resultat.parcours, parcoursALEcran: corps?.parcours_actuel, demande, langue,
+    client: auth.client, admin: getServiceClient(), orgId: auth.orgId, userId: auth.user.id,
+  });
+  if (sansChangement) return res.json(sansChangement);
 
   // Le garde-fou : ce que Lumi propose doit passer la validation humaine.
   const verdict = sequenceEtapes.safeParse(resultat.parcours.steps);
@@ -501,6 +531,7 @@ router.post('/automations/rules/generer', async (req, res) => {
   const ruleId = typeof (req.body as { rule_id?: unknown })?.rule_id === 'string'
     ? String((req.body as { rule_id: string }).rule_id)
     : null;
+  let versionApresConversation: string | null = null;
   if (ruleId && /^[0-9a-f-]{36}$/i.test(ruleId)) {
     const { data: actuelle, error: lectureErr } = await auth.client
       .from('automation_rules')
@@ -521,29 +552,58 @@ router.post('/automations/rules/generer', async (req, res) => {
             (resultat.parcours.resume || (langue === 'fr' ? 'Parcours construit.' : 'Path built.'))
             + (autre ? (langue === 'fr' ? ` — Et une 2e automatisation, « ${autre.nom} » : ${autre.resume}` : ` — And a second automation, “${autre.nom}”: ${autre.resume}`) : '')
           ).slice(0, 2000),
+          // Ce que Lumi vient de remplacer (étapes d'avant) : c'est ce qui rend « annule ça » possible au tour suivant.
+          ...(resultat.parcours.remplacees?.length ? { avant: resultat.parcours.remplacees } : {}),
         },
       ].slice(-40);
-      const { error: ecritureErr } = await auth.client
+      const { data: gardee, error: ecritureErr } = await auth.client
         .from('automation_rules')
         .update({ lumi_conversation: conversation })
         .eq('id', ruleId)
-        .eq('org_id', auth.orgId);
+        .eq('org_id', auth.orgId)
+        .select('updated_at')
+        .maybeSingle();
       if (ecritureErr) {
         logger.error('[lumi/parcours] conversation non gardée', { rule_id: ruleId, message: ecritureErr.message });
       }
+      versionApresConversation = gardee?.updated_at ? String(gardee.updated_at) : null;
     }
   }
+
+  // Le journal d'actions de Lumi (A-17) : ce qu'il propose dans l'éditeur n'apparaissait nulle part.
+  journaliserProposition(getServiceClient(), { orgId: auth.orgId, userId: auth.user.id, panneau, parcours: resultat.parcours });
 
   return res.json({
     nom: resultat.parcours.nom,
     trigger_event: resultat.parcours.trigger_event,
     resume: resultat.parcours.resume,
     steps: verdict.data,
+    // Ce que le SERVEUR a constaté (avant / après) : l'éditeur n'enregistre que si quelque chose a changé.
+    modifie: resultat.parcours.modifie !== false,
+    renomme: resultat.parcours.renomme === true,
     autre,
+    // Garder la conversation a touché la règle : l'éditeur, qui envoie la
+    // version qu'il a lue (garde A-09), doit connaître celle-ci.
+    ...(versionApresConversation ? { updated_at: versionApresConversation } : {}),
   });
 });
 
 // ── Modifier ────────────────────────────────────────────────
+
+/**
+ * Le refus d'une écriture PÉRIMÉE (garde de version, constat A-09) : la règle
+ * a changé depuis que l'appelant l'a lue. `code` permet à l'éditeur de le
+ * distinguer du 409 de la corbeille ; `updated_at` est la version en base.
+ */
+function refusModifieeAilleurs(fr: boolean, versionEnBase: string) {
+  return {
+    error: fr
+      ? 'Cette automatisation a été modifiée ailleurs (par Lumi ou dans un autre onglet).'
+      : 'This automation was changed elsewhere (by Lumi or in another tab).',
+    code: 'modifiee_ailleurs',
+    updated_at: versionEnBase,
+  };
+}
 
 router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), async (req, res) => {
   const auth = await requireAuthedClient(req, res);
@@ -554,7 +614,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
 
   const { data: existante, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('id, is_preset, is_active, trigger_event, delay_seconds, modele_id, conditions, steps, actions, deleted_at')
+    .select('id, is_preset, is_active, trigger_event, delay_seconds, modele_id, conditions, steps, actions, deleted_at, updated_at')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .is('purged_at', null)
@@ -586,7 +646,26 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     return res.status(STATUT_CORBEILLE).json({ error: messageCorbeille(langueDe(req) === 'fr') });
   }
 
+  /*
+   * GARDE DE VERSION (constat A-09). L'éditeur envoie son parcours EN ENTIER :
+   * resté ouvert pendant que Lumi (clavardage général) ou un autre onglet
+   * modifiait la même automatisation, il réécrivait sa version périmée
+   * par-dessus, sans un mot — le texte de Lumi disparaissait.
+   *
+   * `version_lue` = le `updated_at` que l'appelant a lu. Si la règle a changé
+   * depuis : 409, RIEN n'est écrit, et l'éditeur propose de recharger. Un
+   * appelant qui n'envoie pas la garde (outils de Lumi, scripts) garde le
+   * comportement d'avant.
+   */
+  const versionLue = typeof req.body.version_lue === 'string' ? req.body.version_lue : null;
+  const versionEnBase = String(existante.updated_at ?? '');
+  if (versionLue && versionLue !== versionEnBase) {
+    return res.status(409).json(refusModifieeAilleurs(langueDe(req) === 'fr', versionEnBase));
+  }
+
   const patch = { ...req.body };
+  delete patch.version_lue;
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'Rien à modifier.' });
   const contenuModifie = CHAMPS_CONTENU.some((k) => k in patch);
   // Modifier une copie liée la détache de son modèle : sinon la prochaine
   // modification du modèle écraserait ce qu'on vient d'écrire ici.
@@ -615,10 +694,32 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   }
 
   const fr = langueDe(req) === 'fr';
+  /** Les étapes telles qu'elles SERONT après cette modification. */
+  const etapesApres: unknown[] = Array.isArray('steps' in patch ? patch.steps : existante.steps)
+    ? (('steps' in patch ? patch.steps : existante.steps) as unknown[]) : [];
+  /*
+   * UNE AUTOMATISATION PUBLIÉE NE SE VIDE PAS (triage éditeur, 05b:303).
+   * Retirer toutes les étapes d'un parcours publié le faisait retomber au
+   * « format d'origine » : le moteur relisait `actions` — l'ancien message,
+   * resté là depuis la conversion — et continuait de l'envoyer, alors que
+   * l'écran venait de le « supprimer ». On refuse, sauf si la même
+   * modification la repasse en brouillon.
+   */
+  const avaitDesEtapes = Array.isArray(existante.steps) && existante.steps.length > 0;
+  if (existante.is_active && patch.is_active !== false && avaitDesEtapes && etapesApres.length === 0) {
+    return res.status(422).json({
+      error: fr
+        ? 'Cette automatisation est publiée : on ne peut pas lui retirer toutes ses étapes. Gardez-en au moins une, ou repassez-la en brouillon d’abord.'
+        : 'This automation is published: you cannot remove all of its steps. Keep at least one, or switch it back to draft first.',
+      code: 'publiee_cassee',
+    });
+  }
   const probleme = verifierCoherence({
     trigger_event: patch.trigger_event ?? existante.trigger_event,
     delay_seconds: patch.delay_seconds ?? existante.delay_seconds,
-    actions: patch.actions,
+    // Reflet d'un PARCOURS (étapes réparties dans le temps) : deux étapes
+    // identiques y sont légitimes — le refus des doublons vaut pour une règle simple.
+    actions: etapesApres.length > 0 ? undefined : patch.actions,
     // Seulement si ce PATCH écrit les conditions : une règle déjà hors bornes
     // reste renommable, déplaçable, dépubliable.
     conditions: patch.conditions,
@@ -635,7 +736,8 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   // publication (M8), sur la règle telle qu'elle SERA après modification.
   if (patch.is_active === true) {
     // (Une règle à la corbeille a déjà été refusée plus haut — J-065.)
-    const problemes = problemesBloquants({ ...existante, ...patch }, fr);
+    const apres = { ...existante, ...patch };
+    const problemes = problemesBloquants({ ...apres, ...(await champSurveilleDeLaRegle(auth.client, auth.orgId, apres)) }, fr);
     if (problemes.length) return res.status(422).json({ error: messageRefus(problemes, fr), code: 'publication_refusee', problemes });
   }
 
@@ -651,8 +753,10 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
    */
   const parcoursModifie = (['trigger_event', 'steps', 'actions', 'conditions'] as const).some((k) => k in patch);
   if (existante.is_active && patch.is_active === undefined && parcoursModifie) {
-    const avant = new Set(problemesBloquants(existante, fr));
-    const nouveaux = problemesBloquants({ ...existante, ...patch }, fr).filter((p) => !avant.has(p));
+    // Chaque état est jugé avec SON entité : changer le champ surveillé change la fiche qui arrive.
+    const apres = { ...existante, ...patch };
+    const avant = new Set(problemesBloquants({ ...existante, ...(await champSurveilleDeLaRegle(auth.client, auth.orgId, existante)) }, fr));
+    const nouveaux = problemesBloquants({ ...apres, ...(await champSurveilleDeLaRegle(auth.client, auth.orgId, apres)) }, fr).filter((p) => !avant.has(p));
     if (nouveaux.length) {
       return res.status(422).json({ error: messagePublieeCassee(nouveaux, fr), code: 'publiee_cassee', problemes: nouveaux });
     }
@@ -669,16 +773,19 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   // Déjà publiée : rien à écrire non plus — l'utilisateur n'envoie JAMAIS `is_active: true`.
   if (patch.is_active === true) delete patch.is_active;
 
-  const { data, error } = await auth.client
+  let ecriture = auth.client
     .from('automation_rules')
-    .update({ ...patch, updated_at: new Date().toISOString() })
+    // `actions` REDIT le parcours quand il change (A-02) — lib/automations-etapes.ts.
+    .update({ ...patch, ...refletDesActions(patch, existante.steps), updated_at: new Date().toISOString() })
     .eq('id', req.params.id)
-    .eq('org_id', auth.orgId)
-    .select(COLONNES)
-    .single();
+    .eq('org_id', auth.orgId);
+  // Avec la garde, l'écriture elle-même ne passe que sur la version lue :
+  // une modification arrivée entre la lecture ci-dessus et ici n'est pas écrasée.
+  if (versionLue) ecriture = ecriture.eq('updated_at', versionEnBase);
+  const { data, error } = await ecriture.select(COLONNES).single();
 
   if (!error && aPublier) {
-    const { error: ePub } = await activerApresEcritureUtilisateur(auth.orgId, req.params.id);
+    const { error: ePub, updated_at: versionPubliee } = await activerApresEcritureUtilisateur(auth.orgId, req.params.id);
     if (ePub) {
       logger.error('[automation-rules] publication par modification échouée', { rule_id: req.params.id, message: ePub.message });
       return res.status(500).json({
@@ -688,6 +795,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
       });
     }
     (data as unknown as { is_active: boolean }).is_active = true;
+    if (versionPubliee) (data as unknown as { updated_at: string }).updated_at = versionPubliee;
   }
 
   if (error) {
@@ -700,7 +808,18 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
      * une panne : répondre 500 faisait réessayer sans fin un enregistrement
      * qui ne pouvait jamais réussir (audit du 2026-10-01).
      */
-    if (error.code === 'PGRST116') return res.status(404).json({ error: 'Automatisation introuvable.' });
+    if (error.code === 'PGRST116') {
+      // Sous garde de version : la règle existe-t-elle encore, changée entre-temps ?
+      if (versionLue) {
+        const { data: encore } = await auth.client
+          .from('automation_rules').select('updated_at')
+          .eq('id', req.params.id).eq('org_id', auth.orgId).is('purged_at', null).maybeSingle();
+        if (encore && String(encore.updated_at ?? '') !== versionEnBase) {
+          return res.status(409).json(refusModifieeAilleurs(langueDe(req) === 'fr', String(encore.updated_at ?? '')));
+        }
+      }
+      return res.status(404).json({ error: 'Automatisation introuvable.' });
+    }
     logger.error('[automation-rules] modification échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de modifier l\'automatisation.' });
   }

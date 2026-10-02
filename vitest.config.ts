@@ -21,7 +21,15 @@ export default defineConfig({
     // Pour les lancer : npm run test:quarantaine
     // tests/automations-suite/ : lancés par `npm run test:automations`
     // (vitest.automations.config.ts) — l'intégration exige staging.
-    exclude: ['node_modules', 'dist', 'tests/courses/run-*.mjs', 'tests/quarantaine/**', 'tests/automations-suite/**'],
+    // tests/automations-finale/{a,b,d,e,f}/ : preuves de la mission « correction
+    // finale » qui exigent une base (pile locale) et parfois le vrai modèle —
+    // chacune a son vitest.config.ts et se lance par `npm run test:automations:all`.
+    // Les dossiers u/ et t/ (tests de composant, sans base) restent dans cette suite.
+    exclude: [
+      'node_modules', 'dist', 'tests/courses/run-*.mjs', 'tests/quarantaine/**', 'tests/automations-suite/**',
+      'tests/automations-finale/a/**', 'tests/automations-finale/b/**', 'tests/automations-finale/d/**',
+      'tests/automations-finale/e/**', 'tests/automations-finale/f/**',
+    ],
     testTimeout: 10000,
     coverage: {
       provider: 'v8',

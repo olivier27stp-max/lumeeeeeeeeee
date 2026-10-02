@@ -21,12 +21,14 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { bloquantsPublication, type RegleAPublier } from '../../src/lib/publicationAutomatisation';
+import { champQuiFixeLEntite, entiteDuChamp } from '../../src/lib/automationCatalogue';
 import { logger } from './logger';
 import { MESSAGES_EN } from './automations-langue';
 import { getServiceClient } from './supabase';
 
 export type ResultatPublication =
-  | { ok: true; id: string; is_active: boolean; name: string }
+  /** `updated_at` : la version de la règle APRÈS ce changement (garde de version de l'éditeur, A-09). */
+  | { ok: true; id: string; is_active: boolean; name: string; updated_at?: string }
   | { ok: false; id: string; statut: 403 | 404 | 422 | 500; erreur: string; problemes?: string[] };
 
 /** Le message affiché quand la publication est refusée — il NOMME les problèmes. */
@@ -44,6 +46,60 @@ export function messagePublieeCassee(problemes: string[], fr = true): string {
 /** Les problèmes bloquants d'une règle, en texte (vide = publiable). */
 export function problemesBloquants(regle: RegleAPublier, fr = true): string[] {
   return bloquantsPublication({ ...regle, fr }).map((p) => p.message);
+}
+
+/**
+ * L'ENTITÉ QUE LES RÉGLAGES DE LA RÈGLE FIXENT (triage actions, lignes 5 et 7).
+ *
+ * « Date atteinte » sur un champ date du PIPELINE fait arriver une
+ * opportunité ; « Champ personnalisé modifié » fait arriver la fiche du champ
+ * surveillé. Le serveur jugeait sur le seul déclencheur : il refusait de
+ * publier « Assigner l'opportunité » que l'éditeur venait d'offrir, et
+ * publiait sans broncher « Envoyer la facture » sur un champ du client.
+ *
+ * La règle partagée (`champQuiFixeLEntite`) dit où lire le champ ; on y lit
+ * son objet avec le client de l'UTILISATEUR (la RLS borne au bureau). Champ
+ * non choisi, introuvable ou lecture en échec : `null` — on juge alors sur le
+ * déclencheur seul, comme avant.
+ */
+export async function entiteDeLaRegle(
+  client: SupabaseClient,
+  orgId: string,
+  regle: { trigger_event?: string | null; conditions?: Record<string, unknown> | null },
+): Promise<string | null> {
+  return (await champSurveilleDeLaRegle(client, orgId, regle)).entite;
+}
+
+/**
+ * LE CHAMP QUE LA RÈGLE SURVEILLE, vu de la base : l'entité qu'il fixe, et
+ * s'il EXISTE ENCORE (triage déclencheurs, 06-publication-declencheur:109).
+ *
+ * « Date atteinte » sur un champ date supprimé se publiait : la règle
+ * s'affichait active et le balayage l'ignorait chaque nuit (« champ date
+ * introuvable — règle ignorée », un journal que personne ne lit). `absent`
+ * vaut vrai quand la règle nomme un champ que ce bureau n'a pas, ou qu'il a
+ * archivé. Une lecture en échec ne prouve rien : `absent` reste faux.
+ *
+ * Le résultat s'étale tel quel dans la règle à juger :
+ * `problemesBloquants({ ...regle, ...(await champSurveilleDeLaRegle(…)) })`.
+ */
+export async function champSurveilleDeLaRegle(
+  client: SupabaseClient,
+  orgId: string,
+  regle: { trigger_event?: string | null; conditions?: Record<string, unknown> | null },
+): Promise<{ entite: string | null; champSurveilleAbsent: boolean }> {
+  const idChamp = champQuiFixeLEntite(regle.trigger_event, regle.conditions);
+  if (!idChamp) return { entite: null, champSurveilleAbsent: false };
+  // Un identifiant qui n'en est pas un ne peut désigner aucun champ.
+  if (!/^[0-9a-f-]{36}$/i.test(idChamp)) return { entite: null, champSurveilleAbsent: true };
+  const { data, error } = await client.from('custom_fields').select('object_type, archived_at').eq('id', idChamp).eq('org_id', orgId).maybeSingle();
+  if (error) {
+    logger.error('[publication] objet du champ surveillé illisible', { field_id: idChamp, message: error.message });
+    return { entite: null, champSurveilleAbsent: false };
+  }
+  const champ = data as { object_type?: string | null; archived_at?: string | null } | null;
+  if (!champ || champ.archived_at) return { entite: null, champSurveilleAbsent: true };
+  return { entite: entiteDuChamp(champ.object_type), champSurveilleAbsent: false };
 }
 
 /**
@@ -66,14 +122,18 @@ export function definirClientDeServicePourTests(client: SupabaseClient | null): 
  * par les contrôles de publication : la copie vers d'autres bureaux reprend
  * l'état de l'original, sans le rejuger.
  */
-export async function activerApresEcritureUtilisateur(orgId: string, id: string): Promise<{ error: { message: string; code?: string } | null }> {
-  const { error } = await ecrireParService()
+export async function activerApresEcritureUtilisateur(orgId: string, id: string): Promise<{ error: { message: string; code?: string } | null; updated_at?: string }> {
+  const { data, error } = await ecrireParService()
     .from('automation_rules')
     .update({ is_active: true, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('org_id', orgId)
-    .is('deleted_at', null);
-  return { error };
+    .is('deleted_at', null)
+    .select('updated_at');
+  // La version APRÈS activation : la réponse de la route doit porter celle-ci
+  // (garde de version de l'éditeur, A-09), pas celle de l'écriture d'avant.
+  const version = ((data ?? []) as Array<{ updated_at?: string | null }>)[0]?.updated_at;
+  return { error, ...(version ? { updated_at: String(version) } : {}) };
 }
 
 export async function changerPublication(
@@ -108,7 +168,8 @@ export async function changerPublication(
         erreur: t('Cette automatisation est à la corbeille : restaurez-la avant de la publier.'),
       };
     }
-    const problemes = problemesBloquants(regle as RegleAPublier, fr);
+    const surveille = await champSurveilleDeLaRegle(client, orgId, regle as RegleAPublier);
+    const problemes = problemesBloquants({ ...(regle as RegleAPublier), ...surveille }, fr);
     if (problemes.length > 0) {
       return { ok: false, id, statut: 422, erreur: messageRefus(problemes, fr), problemes };
     }
@@ -148,7 +209,7 @@ export async function changerPublication(
         .eq('id', id)
         .eq('org_id', orgId)
         .is('deleted_at', null)
-        .select('id, name, is_active');
+        .select('id, name, is_active, updated_at');
     })()
     // `.select()` : une ligne filtrée par la RLS ne doit pas passer pour un succès.
     : await client
@@ -156,7 +217,7 @@ export async function changerPublication(
       .update({ is_active: false, updated_at: horodatage })
       .eq('id', id)
       .eq('org_id', orgId)
-      .select('id, name, is_active');
+      .select('id, name, is_active, updated_at');
   const { data, error } = ecriture;
 
   if (error) {
@@ -166,14 +227,14 @@ export async function changerPublication(
     logger.error('[publication] écriture échouée', { rule_id: id, message: error.message, code: error.code });
     return { ok: false, id, statut: 500, erreur: t('Impossible de changer le statut de l’automatisation.') };
   }
-  const ligne = (data ?? [])[0] as { id: string; name: string; is_active: boolean } | undefined;
+  const ligne = (data ?? [])[0] as { id: string; name: string; is_active: boolean; updated_at?: string | null } | undefined;
   if (!ligne) {
     return { ok: false, id, statut: 403, erreur: t('Votre rôle ne permet pas de publier une automatisation.') };
   }
   if (ligne.is_active !== actif) {
     return { ok: false, id, statut: 500, erreur: t('La modification n’a pas été appliquée — réessayez.') };
   }
-  return { ok: true, id: ligne.id, is_active: ligne.is_active, name: ligne.name };
+  return { ok: true, id: ligne.id, is_active: ligne.is_active, name: ligne.name, ...(ligne.updated_at ? { updated_at: String(ligne.updated_at) } : {}) };
 }
 
 /**

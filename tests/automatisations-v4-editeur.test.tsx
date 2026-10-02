@@ -315,6 +315,10 @@ describe('A-05 — « Ajouter » (haut à droite) ajoute à la FIN du parcours',
     cliquer(boutonExact('Ajouter'));
     cliquer(bouton('Créer une tâche'));
     await attendre();
+    // Une étape choisie dans le tiroir n'entre dans le parcours qu'une fois
+    // enregistrée dans son panneau (triage actions, ligne 1).
+    cliquer(boutonExact('Enregistrer'));
+    await attendre();
     // Le départ enregistre ce qui attend (A-04) : on lit ce qui part au serveur.
     cliquer(container.querySelector('[data-testid="retour-navigateur"]'));
     await attendre();

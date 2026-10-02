@@ -19,7 +19,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { X, Zap } from 'lucide-react';
 import type { DeclencheurCatalogue } from '../../lib/automationCatalogue';
-import { champVisible, CASE_SORTIE } from '../../lib/automationCatalogue';
+import { champVisible, CASE_SORTIE, fautesDuDeclencheur } from '../../lib/automationCatalogue';
 import { useModuleAccess } from '../../hooks/useModuleAccess';
 import { apercuClientsInactifs } from '../../lib/reservationApi';
 import ChampActionUI from './ChampAction';
@@ -160,7 +160,26 @@ export default function PanneauDeclencheur({
     (c) => c.obligatoire && champVisible(c, brouillon) && !String(brouillon[c.cle] ?? '').trim(),
   );
 
+  /*
+   * Ce que le serveur refuserait — ou, pire, enregistrerait tel quel pour une
+   * automatisation qui ne partirait jamais : un nombre hors bornes, « 2,5
+   * mois », un minimum plus grand que le maximum. Refusé ICI, avec la borne
+   * dite, avant tout envoi (triage déclencheurs, 03:316 et 03:581). La règle
+   * est celle du serveur (`fautesDuDeclencheur`, catalogue partagé).
+   *
+   * Comme pour un champ obligatoire resté vide, le bouton RESTE cliquable :
+   * le refus est écrit dans le panneau dès la saisie, et un clic y ramène
+   * (un bouton grisé sans raison visible ne dit pas quoi corriger).
+   */
+  const fautes = fautesDuDeclencheur(declencheur.cle, brouillon).map((f) => (fr ? f.fr : f.en));
+  const refRefus = useRef<HTMLDivElement>(null);
+
   const enregistrer = () => {
+    if (fautes.length > 0) {
+      refRefus.current?.scrollIntoView?.({ block: 'nearest' });
+      refRefus.current?.focus();
+      return;
+    }
     /*
      * On repart des conditions EXISTANTES : une règle peut porter des
      * conditions qui ne viennent pas de ce panneau (filtres d'un « si »,
@@ -368,6 +387,18 @@ export default function PanneauDeclencheur({
           </div>
         )}
 
+        {fautes.length > 0 && (
+          <div
+            ref={refRefus}
+            role="alert"
+            tabIndex={-1}
+            className="rounded-lg border border-danger/40 bg-danger-light px-3 py-2 text-[12px] text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+          >
+            <p className="font-medium">{fr ? 'À corriger avant d’enregistrer :' : 'To fix before saving:'}</p>
+            {fautes.map((f) => <p key={f}>{f}</p>)}
+          </div>
+        )}
+
         {manquants.length > 0 && (
           <p className="rounded-lg border border-warning/40 bg-warning-light px-3 py-2 text-[12px] text-warning">
             {fr
@@ -385,7 +416,7 @@ export default function PanneauDeclencheur({
         >
           {fr ? 'Annuler' : 'Cancel'}
         </button>
-        <button type="button" onClick={enregistrer} className="glass-button-primary text-[13px]">
+        <button type="button" onClick={enregistrer} title={fautes[0]} className="glass-button-primary text-[13px]">
           {fr ? 'Enregistrer' : 'Save'}
         </button>
       </div>

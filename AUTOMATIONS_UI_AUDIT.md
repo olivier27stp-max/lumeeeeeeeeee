@@ -1,36 +1,51 @@
 # Audit utilisateur de la page Automatisations — rapport
 
-*Mission du 2026-10-01. État au 2026-10-01, 20 h 15 UTC. Carte des éléments : `AUTOMATIONS_UI_MAP.md` (377 éléments).*
+*Mission du 2026-10-01. État au 2026-10-02, 01 h 30 UTC. Carte des éléments : `AUTOMATIONS_UI_MAP.md` (377 éléments).*
 
 ## 1. Verdict pour le launch du 26 octobre
 
-**Pas encore prêt à déclarer « chaque bouton fonctionne » — mais tous les défauts bloquants trouvés sont corrigés et en production.**
+**Pas prêt à déclarer « chaque bouton fonctionne » : la passe complète a enfin tourné, et elle a fait sortir environ 220 défauts que la tournée à la main n'avait pas vus. Ils sont décrits un par un et en cours de correction ; rien de ce qui est en production aujourd'hui n'est cassé par les lots de cet audit.**
 
 Ce qui est acquis :
 
-- 68 constats consignés par la tournée « chaque bouton » ; 61 corrigés et déployés, 2 corrigés en partie, 5 laissés ouverts (3 demandent une migration, 2 sont des décisions de produit — voir § 6).
+- Les 68 constats de la tournée « chaque bouton » : 64 corrigés et déployés (roles-05, roles-07 et l'onglet « Modèles » se sont ajoutés avec #889), 3 corrigés en partie (roles-06, roles-13, roles-14), 1 ouvert (liste-12) — § 6.
 - Les 2 bloquants (contournement des gardes de l'API par une barre finale ou une majuscule ; réglages d'un ancien déclencheur qui restaient et empêchaient la règle de partir) sont corrigés, en prod, vérifiés sur le vrai site.
-- Chaque lot a été vérifié **sur lumecrm.net**, dans un bureau de test en bac à sable, avant et après son déploiement.
+- **Passe du vrai site : 68 vérifications sur 68** le 1er octobre de 23 h 21 à 23 h 31 UTC (onze scripts l'un après l'autre sur lumecrm.net, bureau de test en bac à sable), publication à l'écran comprise, avec la garde en base en place.
+- **La passe automatique complète a tourné** : 1 054 tests de bout en bout sur une base locale jetable (ni staging ni prod), puis chaque dossier trié et relancé. Résultat au § 2.
 
 Ce qui manque pour dire « prêt » :
 
-1. **La passe automatique complète n'a pas tourné.** 1 054 tests de bout en bout sont écrits (un par élément de la carte et par parcours) ; moins de 150 ont été exécutés. Ils visaient staging, qui est tombé sous leur charge le 1er octobre ; la consigne est depuis « tests en prod, jamais en staging ». Le banc est réparé mais reste à brancher sur le bureau de test de la prod et à relancer. Tant que ce n'est pas fait, la couverture annoncée ci-dessous est une couverture *écrite*, pas *prouvée*.
-2. **Trois constats majeurs demandent une décision** (garde en base contre les écritures directes, § 6).
-3. **Phase 5 (Lumi et les automatisations)** : « Construire avec Lumi » est couvert (batterie 122/123, deux défauts vécus en prod corrigés) ; les 25 demandes à Lumi *dans le clavardage de l'app* n'ont pas été rejouées par cette mission — la mission « Lumi fiable » (autre session) évalue les outils de Lumi en prod en ce moment.
+1. **environ 220 défauts du produit sont ouverts** (236 tests rouges, chacun sur l'attente qui décrit son défaut), dont une vingtaine de majeurs (§ 6). Les plus graves : une automatisation ouverte sur réseau lent qui reçoit le nom et le parcours d'une autre ; deux onglets qui s'écrasent ; une action ajoutée à une automatisation PUBLIÉE qui part en ligne avec son texte d'exemple sans avoir été enregistrée ; le texte anglais d'un message qui reste en base, invisible, après une correction ; « 3 jours » qui devient « 5 minutes » en retapant le nombre ; le nom d'un vrai client (« Coquin lavage ») écrit en dur comme exemple dans l'aperçu des courriels de tous les bureaux. La session « correction finale » les corrige (branches `mission/auto-finale-*`) ; chaque correctif fera passer au vert le test qui le décrit.
+2. **Le contenu d'une automatisation s'écrit encore avec la session de l'utilisateur.** La garde en base ferme la publication et les règles fournies (§ 5), pas le contenu : un membre qui a le droit de modifier les automatisations peut encore, par un appel direct à la base, poser un déclencheur inconnu ou vider le texto d'une règle publiée. Fermeture décidée (une seule porte d'écriture côté serveur, puis retrait des droits d'écriture à la session) ; preuve prête : `scripts/qa/verifier-garde-automatisations.mjs --etendue` (10/20 aujourd'hui).
+3. **La matrice des appareils n'a pas été rejouée par la passe complète** : seul le projet « bureau » (Chromium 1440) a tourné. iPad paysage et portrait sont couverts par la passe du vrai site (29 vérifications) ; Firefox, Safari de bureau et le téléphone ne le sont que par la tournée à la main.
+4. **Phase 5 (Lumi et les automatisations)** : « Construire avec Lumi » est couvert (batterie 122/123, deux défauts vécus en prod corrigés) ; les demandes à Lumi *dans le clavardage de l'app* relèvent de la mission « Lumi fiable » (autre session : 95,9 % sur sa passe finale).
 
 ## 2. Couverture
 
-| | Éléments de la carte | Tests écrits | Tests exécutés dans un vrai navigateur |
-|---|---|---|---|
-| Liste | 103 | 201 | 24 |
-| Bibliothèque de modèles, messages | 80 | 221 | 31 |
-| Éditeur | 96 | 183 | 38 |
-| Déclencheurs | 81 | 123 | 6 |
-| Actions | 115 | 177 | 31 |
-| Rôles et API directe | 118 (105 couverts) | 139 | 14 |
-| **Total** | **377 éléments distincts** | **1 054** | **144** |
+**La passe complète** (`e2e/automations/`, 62 fichiers, un vrai navigateur sur l'app locale, base locale jetable) :
 
-À côté de cette passe, vérifications manuelles pilotées par script **sur le vrai site** (bureau « Grok Audit (TEST) », envois en bac à sable) :
+| | Éléments de la carte | Tests | Passent | Rouges = défaut du produit | Rouges sans conclusion |
+|---|---|---|---|---|---|
+| Liste | 103 | 205 | 156 | 49 | 0 |
+| Bibliothèque de modèles, messages | 80 | 222 | 173 | 49 | 0 |
+| Éditeur | 96 | 184 | 135 | 49 | 0 |
+| Déclencheurs | 81 | 123 | 95 | 28 | 0 |
+| Actions | 115 | 177 | 143 | 34 | 0 |
+| Rôles, API et base directes | 118 | 141 | 114 | 27 | 0 |
+| Banc (sessions, bac à sable, moteur) | — | 6 | 6 | 0 | 0 |
+| **Total** | **377 éléments distincts** | **1 058** | **822** | **236** | **0** |
+
+Comment lire ce tableau :
+
+- Première passe, d'un seul trait (1 h 30, deux navigateurs en parallèle) : 565 réussis, 489 échoués. Ce chiffre brut ne dit rien : 139 échecs venaient d'une préparation manquante (le dossier « rôles » veut ses propres bureaux de test), et environ 130 de specs écrites avant les lots 1 à 5 (un libellé changé exprès, un champ devenu une liste, une sous-navigation devenue des liens).
+- Chaque dossier a donc été **trié échec par échec** (défaut du produit / spec périmée / environnement / test fragile), les specs périmées réparées *sans affaiblir ce qu'elles prouvent*, puis le dossier **relancé en entier**. Les nombres du tableau sont ceux de ces relances. Deux échecs de la relance « modèles » et un de la relance « rôles » venaient du poste (tampons réseau épuisés, verrou de session) : rejoués seuls, ils passent, et sont comptés verts. La relance « déclencheurs » date d'avant un test remis en « défaut » : son 95 / 28 est déduit de 96 / 27.
+- Un test rouge porte la marque `@defaut` : il affirme le comportement **attendu** et reste rouge tant que le défaut existe. Interdit de l'affaiblir. 81 tests marqués ainsi ce matin sont passés au vert depuis (les lots 1 à 5 ont corrigé leur défaut) : leur marque est retirée.
+- Les fiches de tri, un défaut par ligne (écran, geste, ce qu'on voit, ce qu'on devrait voir, spec et ligne) : `e2e/automations/_tri/` — c'est la liste de travail de la session qui corrige.
+- Limites : un seul projet (« bureau », Chromium 1440 × 900) ; la pile locale n'a ni stockage de fichiers, ni clé d'IA (les réponses de Lumi y sont simulées), ni fournisseur d'envoi (tout part dans le bac à sable) ; une seule relance complète par dossier, donc la stabilité d'une passe à l'autre n'est pas mesurée.
+
+Pour la relancer : `bash scripts/qa/automations-e2e/pile.sh` (une fois : monte la base locale), puis `npm run test:automations:e2e:local`.
+
+À côté de cette passe, vérifications pilotées par script **sur le vrai site** (bureau « Grok Audit (TEST) », envois en bac à sable) :
 
 | Script | Ce qu'il vérifie | Avant déploiement | Après |
 |---|---|---|---|
@@ -42,8 +57,9 @@ Ce qui manque pour dire « prêt » :
 | `50-comportements-navigateur` | éditeur : rechargement, retour arrière et avancer, lien direct vers une règle inexistante (« introuvable ») ou à la corbeille, modification hors ligne (l’écran dit « Modifié », rien n’est écrit, puis ça s’enregistre au retour du réseau), règle supprimée dans un autre onglet (« n’existe plus ») | — | 6/6 |
 | `60-anglais` | interface en anglais : liste, vue d’ensemble, réglages globaux, éditeur — aucun texte d’interface resté en français | — | 4/4 |
 | `70-journaux-causes` | onglet Journaux : deux causes écrites en anglais par le moteur sont lues en français | 0/1 | 1/1 |
+| `80-publication` | liste : publier puis repasser en brouillon avec l’interrupteur, la base relue à chaque fois, rechargement compris — avant et après la migration de garde | 3/3 | 3/3 |
 
-Ces scripts sont maintenant dans le dépôt (`scripts/qa/automations-prod/`) et se lancent d’une commande : **`npm run test:automations:e2e`** — 65 vérifications, toutes réussies le 2026-10-01 (dernière : 20 h 12 UTC), sortie en JSON et en markdown. C’est une passe **après déploiement** : elle juge ce qui est en ligne. Ce qui bloque un merge avant déploiement reste la CI.
+Ces scripts sont dans le dépôt (`scripts/qa/automations-prod/`) et se lancent d’une commande : **`npm run test:automations:e2e`** — 68 vérifications, toutes réussies à la dernière passe (2026-10-01, 23 h 21 → 23 h 31 UTC), sortie en JSON et en markdown. C’est une passe **après déploiement** : elle juge ce qui est en ligne. Depuis la panne du 1er octobre (§ 4) elle tourne un script à la fois, lit `/api/health` avant chacun, garde une session par rôle et s’arrête d’elle-même au premier 429 ou dès que la base dépasse 1 500 ms.
 
 Tests unitaires et de composant ajoutés par les correctifs : environ 330, tous dans la suite de la CI (qui bloque le merge).
 
@@ -56,14 +72,20 @@ Tests unitaires et de composant ajoutés par les correctifs : environ 330, tous 
 | iPad portrait 768 (WebKit) | idem, plus l'avatar « Mon profil » qui dépasse de l'écran sur toutes les pages ; corrigé par #876 |
 | Téléphone 375 | la section n'est pas offerte : porte mobile « Le bureau sur l'ordi. Le terrain dans l'app. » — voulu |
 | Firefox, Safari de bureau | conformes ; Firefox remonte à chaque page l'exception du verrou de session de supabase-js, sans effet visible (P-001) |
-| Rôles | propriétaire et admin : complet ; technicien et vendeur : refusés sur les 32 routes de l’API par appel direct (403, vérifié sur le vrai site), y compris avec une adresse détournée ; **membre « lecture + modification » : voir § 6** |
+| Rôles | propriétaire et admin : complet ; technicien et vendeur : refusés sur les 32 routes de l’API par appel direct (403, vérifié sur le vrai site), y compris avec une adresse détournée ; membre « lecture + modification » : la base lui refuse désormais de publier, de se déclarer « fournie » et de supprimer (garde du § 5) ; le contenu d’une règle reste inscriptible en direct (§ 1, point 2) |
 | Anglais | les quatre écrans vérifiés sur le vrai site sans un texte d’interface en français ; libellés alignés (« Build with Lumi »), textes anglais ajoutés aux 54 notifications / tâches des modèles ; reste le titre « Workflows list » à côté d’un menu « Workflows » (P-002) |
 
 ## 4. Envois : rien n'est parti
 
 Tout a été fait dans des bureaux de test inscrits au bac à sable (`orgs_envois_simules`) : bureaux « [TEST] QA Automatisations » sur staging au début, « Grok Audit (TEST) » en prod ensuite. Canari 6/6 au départ. Aucun envoi réel constaté. « M'envoyer un essai » n'a jamais été cliqué par les scripts.
 
-Incident à signaler : le 1er octobre, six agents en parallèle sur staging ont saturé sa base (503) ; elle a été redémarrée, sans effet sur la prod. Depuis : une seule passe à la fois, et plus aucune sur staging.
+Incidents à signaler, tous du 1er octobre :
+
+- **Staging, le matin** : six agents en parallèle ont saturé sa base (503) ; elle a été redémarrée, sans effet sur la prod.
+- **Prod, 20 h 36 → 21 h 41 UTC : base injoignable pendant une heure.** Trois sessions testaient la prod en même temps ; de mon côté, une passe complète du vrai site (dix scripts d’affilée, une vingtaine d’ouvertures de session, trois 429) puis un script de 17 chargements de page tournaient dans le quart d’heure précédent. La cause exacte n’est pas établie ; le projet Supabase a été redémarré avec ton accord par une autre session. Depuis : contre la prod, un seul flux à la fois, santé lue avant et pendant, arrêt au-dessus de 1 500 ms — c’est écrit dans le lanceur.
+- **Staging, 22 h 07 → 22 h 20 UTC** : injoignable sous les jobs « Automatisations » de plusieurs PR poussées ensemble (#886 les a retirés des PR).
+
+Conséquence : la passe complète ne vise plus ni staging ni la prod. Elle tourne sur une base **locale** jetable (schéma de la prod rejoué, deux tables de référence, aucune donnée de client), et le banc refuse toute autre adresse. Mes 16 bureaux de test de staging sont retirés (désactivés, rien d’effacé).
 
 ## 5. Ce qui a été livré
 
@@ -76,17 +98,53 @@ Incident à signaler : le 1er octobre, six agents en parallèle sur staging ont 
 | #870 (lot 2) | 45 constats : liste, éditeur, bibliothèque de modèles, routes, refus lisibles, anglais | oui, 19:01 UTC |
 | #876 (lot 3) | tablette : liste, barre du haut, cibles tactiles | oui, 19:21 UTC |
 | #881 (lot 4) | aucune cause d’échec en anglais brut dans la liste ni dans l’onglet Journaux (14 messages du moteur + 10 causes relevées dans les journaux de prod) | oui, 20:08 UTC |
+| #889 (lot 5) | onglet « Modèles » → « Prêtes à publier » ; confirmation « Publier avec le texte d’exemple ? » quand une étape n’a pas été rédigée ; « publiée » ne s’écrit plus que par le serveur | oui, 22:34 UTC |
+| migration `20261007300000` | garde en base sur `automation_rules` : une session d’utilisateur ne peut plus publier, insérer une règle publiée ou « fournie », changer le bureau ou le statut « fournie », changer le déclencheur ou mettre à la corbeille une règle fournie, purger hors corbeille, ni supprimer pour de bon. 16 écritures jouées avec le rôle d’une session : 7/16 avant, 16/16 après — pile locale, staging, prod | staging 22:35, prod 22:36 UTC |
 
 Fonctions de base ajoutées (elles manquaient) : menu des étapes pour « Déplacer l'opportunité », recherche dans la palette de variables, Ctrl+Z / Ctrl+Y, Échap sur les menus et le tiroir, écran « à la corbeille » avec « Restaurer », écran « n'existe plus », « Réessayer » quand l'état de la pause est illisible, sous-navigation en liens.
 
-## 6. Ouvert — à décider
+## 6. Ouvert
 
-1. **Écritures directes qui contournent le serveur (roles-05, 06, 07 — majeurs).** Un membre à qui on a donné le droit « modifier les automatisations » peut, en appelant la base directement (pas par l'écran), publier une règle incomplète, se déclarer « automatisation fournie », changer un déclencheur pour une valeur inconnue, ou supprimer une règle pour de bon. Ça reste dans SON bureau et demande ce droit, mais les gardes du serveur ne s'appliquent pas. Correctif proposé : droits par colonne en base (`REVOKE UPDATE` puis `GRANT UPDATE` sur les seules colonnes de contenu), retrait du `DELETE`, un déclencheur de table qui protège les règles fournies, et cinq écritures du serveur à faire passer par le rôle de service après le contrôle de droit. C'est une migration : staging puis prod, une seule main sur le schéma. **Non fait sans ton accord.**
-2. **Le mot « Modèles »** désigne deux choses : l'onglet de la liste (automatisations fournies pas encore publiées) et la « Bibliothèque de modèles » (copies en brouillon). Proposition : renommer l'onglet « Prêtes à publier ».
-3. **« Anniversaire client »** part 12 mois après la création de la fiche, pas à l'anniversaire du client (liste-12) : le sous-titre le dit, le nom non.
-4. **Confirmation à la publication quand une étape porte encore le texte d'exemple** de l'éditeur (P-008) : proposée, non bâtie.
-5. **Table des gardes de l'API** : elle ne reconnaît comme paramètre qu'un uuid, un nombre ou un segment de plus de 10 caractères ; un identifiant court passe hors table. Sans conséquence aujourd'hui (les routes concernées ont leur propre contrôle), à durcir.
-6. **Texte anglais « New lead… »** des notifications déjà semées dans les bureaux existants : corrigé pour les nouveaux bureaux, les anciens demandent une migration de données.
+**A. Les défauts sortis de la passe complète** — environ 220 défauts pour 236 tests rouges (une même racine est parfois vue par deux chemins). Le détail est dans `e2e/automations/_tri/` (un fichier par dossier). Les majeurs :
+
+| Où | Ce qui se passe | Preuve |
+|---|---|---|
+| Éditeur | « Ouvrir » une 2e automatisation sur réseau lent écrit le nom et le parcours de la 1re dans la 2e (S-01) | `editeur/` |
+| Éditeur | Deux onglets sur la même règle : le second écrase le premier, sans avertir (S-13) | `editeur/` |
+| Éditeur | Après un 429, aucun nouvel essai : l’écran reste sur « Enregistrement… », la modification n’atteint jamais la base | `editeur/12-enregistrement` |
+| Éditeur | Parcours converti du format d’origine : supprimer la dernière étape la fait revenir ; une règle publiée peut être vidée | `editeur/05b` |
+| Éditeur | Lumi remplace un parcours PUBLIÉ sans poser de question (S-03) | `editeur/07` |
+| Éditeur | « Arrêter ici » au milieu fait disparaître la suite ; une condition supprimée laisse sa branche orpheline (S-12) | `editeur/` |
+| Éditeur | La pause globale est invisible dans l’éditeur (S-32) ; « Précédent » avec une étape incomplète perd le travail | `editeur/` |
+| Actions | Automatisation PUBLIÉE : une action choisie dans le tiroir part en ligne 3 s plus tard avec son texte d’exemple, sans avoir été enregistrée | `actions/06-publication` |
+| Actions, messages | Corriger un texto laisse l’ancien texte anglais en base, invisible ; c’est lui qui part aux clients d’un bureau en anglais | `actions/08`, `modeles/` |
+| Actions | Un courriel fourni, à la conversion, s’ouvre en HTML brut | `actions/08` |
+| Actions, déclencheurs | « Attendre » : effacer « 3 » et taper « 5 » transforme 3 jours en 5 minutes | `actions/05`, `declencheurs/05` |
+| Actions | Une saisie que le serveur refuse (nombre hors bornes, adresse en http://) est acceptée par le panneau ; l’enregistrement échoue ensuite en boucle et bloque tout le parcours | `actions/03` |
+| Actions, déclencheurs | « Date atteinte » sur un champ du pipeline : le tiroir offre des actions d’opportunité que la publication refuse ; « Appel reçu de l’extérieur » : six actions impossibles ne sont ni grisées ni refusées | `actions/01`, `declencheurs/06` |
+| Déclencheurs | Filtre : taper « 12.5 » enregistre 125 ; minimum 5 000 $ et maximum 100 $ acceptés | `declencheurs/04`, `/03` |
+| Déclencheurs | Étape « Si… » : les conditions « est l’un de » sont invisibles puis effacées à l’enregistrement suivant ; une ligne mal écrite est jetée sans un mot | `declencheurs/05` |
+| Déclencheurs | « Date atteinte » sur un champ supprimé : la publication est proposée | `declencheurs/06` |
+| Messages | Modifier le premier de deux textos (ou courriels) d’une automatisation recopie son texte dans le second | `modeles/` |
+| Messages | L’aperçu réel d’un courriel affiche « Coquin lavage » pour [company_name] dans tous les bureaux (exemple écrit en dur) — déjà corrigé sur la branche de correction | `modeles/04` |
+| Modèles | « Relance de devis — 1, 2, 5, 10 et 30 jours » s’ouvre sur 180 cartes pour 23 étapes (chaque « Si » redessine toute la suite) | `modeles/02` |
+| Liste | « Client inactif » publié EN LOT sans confirmation, alors que l’interrupteur de la même ligne annonce le nombre de clients visés et demande confirmation | `liste/07-lot` |
+| Liste | Corriger un texto d’une automatisation à l’ancien format qui en a deux réécrit aussi l’autre | `liste/05-lignes` |
+| Liste | Rôle « voir sans modifier » : le menu et la Vue d’ensemble mènent à « Accès restreint » | `liste/12-permissions` |
+| Liste | Onglet « À vérifier » : au-delà de 200 échecs récents une automatisation en échec en sort ; si la lecture des échecs tombe, l’écran dit « Aucune erreur — tout roule » | `liste/10-volume`, `/03` |
+| Liste | Menu « ⋮ » d’une ligne : depuis qu’il est rendu hors du tableau (#859, mon correctif), la touche Tab ne l’atteint plus après son bouton | `liste/11-clavier` |
+| Rôles | Écritures directes en base encore possibles : déclencheur hors catalogue, texto de 5 000 caractères, texto vidé d’une règle publiée, suppression dure d’une adresse d’appel, brouillon créé sans le forfait ; un technicien sans droit sur les clients modifie leurs étiquettes | `roles/40`, `/50`, `/55`, `/20` |
+
+**B. Décisions et restes de la tournée**
+
+1. **« Anniversaire client »** part 12 mois après la création de la fiche, pas à l'anniversaire du client (liste-12) : le sous-titre le dit, le nom non. Décision de produit.
+2. **Texte anglais « New lead… »** des notifications déjà semées dans les bureaux existants (roles-13) : corrigé pour les nouveaux bureaux ; les anciens demandent une migration de données sur de vrais bureaux — ton accord d'abord.
+3. **Tout rôle peut annoncer « visite déplacée »** (roles-14) : sans effet si la visite n'a pas bougé, mais la route n'exige aucun droit.
+4. **Table des gardes de l'API** : elle ne reconnaît comme paramètre qu'un uuid, un nombre ou un segment de plus de 10 caractères ; un identifiant court passe hors table. Sans conséquence aujourd'hui (les routes concernées ont leur propre contrôle) ; la durcir touche toute l'API, pas seulement les automatisations — non fait à trois semaines du launch sans une passe de toutes les routes.
+5. **Verrou de session** (P-001) : supabase-js lève « Lock broken by another request with the 'steal' option » — vu à chaque page sur Firefox, deux fois sur une dizaine de passes sur Chromium (Vue d'ensemble), une fois avec un blocage de 60 s sur « Chargement de l'espace… ». Cause non établie.
+6. **Titre anglais « Workflows list »** à côté d'un menu « Automations » (P-002) : cosmétique.
+7. **Base de référence du dépôt en retard** : `supabase/baseline/` date du 26 septembre (77 migrations de retard, une colonne de `plans` manquante). La pile locale rejoue les migrations par-dessus ; à régénérer après la dernière migration de la série en cours.
+8. **`check:db-coherence` annonce 4 écarts sans rapport avec cet audit** : `commissions_totaux_periode()`, `quickbooks_claim_jobs()`, `quickbooks_enqueue()`, `quickbooks_enqueue_history()` appelées par le code et non exécutables par une session.
 
 ## 6 bis. Ce que disent les journaux de tes vrais bureaux (lecture seule, 2026-10-01)
 
@@ -98,12 +156,14 @@ Fonctions de base ajoutées (elles manquaient) : menu des étapes pour « Dépla
 
 ## 7. Non testé
 
-- La passe automatique complète (voir § 1).
-- Les parcours qui demandent deux bureaux réels en prod (« Copier vers d'autres bureaux ») : un seul bureau de test en prod.
-- « M'envoyer un essai » (enverrait un vrai courriel, même à soi).
-- L'envoi réel de textos : Twilio n'est pas configuré en prod (« Twilio not configured » au diagnostic) ; les étapes texto sont sautées et l'écran le dit.
-- Volume (D-17) : pas d'essai de charge, le disque C: du poste est plein à 99 %.
-- Lumi dans le clavardage de l'app (phase 5), hors « Construire avec Lumi ».
+- La matrice de la passe complète hors « bureau » : iPad, téléphone, Firefox, Safari (projets prêts dans `e2e/automations/playwright.config.ts`, jamais lancés en entier).
+- Les parcours qui demandent deux bureaux réels en prod (« Copier vers d'autres bureaux ») : couverts en local, pas sur le vrai site (un seul bureau de test en prod).
+- « M'envoyer un essai » sur le vrai site (enverrait un vrai courriel, même à soi) ; en local il part dans un serveur de courriel piège.
+- L'envoi réel de textos : Twilio n'est pas configuré en prod ; les étapes texto sont sautées et l'écran le dit.
+- Les vraies réponses de Lumi dans l'éditeur pendant la passe complète (simulées, faute de clé d'IA en local).
+- Téléverser une image dans un courriel (pas de stockage de fichiers en local).
+- Volume (D-17) : pas d'essai de charge.
+- Le job de CI « Automatisations » (intégration sur staging) n'a validé aucun des lots de cet audit : annulé à chaque merge rapproché, puis retiré des PR.
 
 ## 8. Tableau des constats
 

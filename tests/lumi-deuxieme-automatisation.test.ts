@@ -53,7 +53,10 @@ describe('la route et le moteur', () => {
   it('la route refuse une étape qui vise une automatisation inexistante', () => {
     const route = lire('server/routes/automation-rules.ts');
     expect(route).toMatch(/refAutomatisationInventee\(auth\.client, auth\.orgId, verdict\.data\)/);
-    expect(route).toMatch(/autre,\n\s*\}\);/);
+    // La 2e automatisation est RENDUE à l'éditeur, dans la réponse de la route de
+    // génération (d'autres champs la suivent depuis la garde de version A-09).
+    const reponse = route.slice(route.lastIndexOf('return res.json({', route.indexOf('\n    autre,\n')));
+    expect(reponse).toMatch(/^return res\.json\(\{[\s\S]*?\n    autre,\n[\s\S]*?\n  \}\);/);
   });
 
   it('le moteur honore « une fois par client tous les N jours »', () => {

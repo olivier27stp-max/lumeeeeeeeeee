@@ -50,7 +50,8 @@ router.post('/automations/rules/:id/publication', validate(publicationSchema), a
       ...(r.problemes ? { code: 'publication_refusee', problemes: r.problemes } : {}),
     });
   }
-  return res.json({ id: r.id, is_active: r.is_active });
+  // `updated_at` : l'éditeur ouvert garde ainsi la version à jour de la règle (garde A-09).
+  return res.json({ id: r.id, is_active: r.is_active, ...(r.updated_at ? { updated_at: r.updated_at } : {}) });
 });
 
 export default router;

@@ -845,3 +845,46 @@ describe('recherche d’outil en suspens à côté d’un outil de Lume : retir�
     expect(forme(assainirPourApi(enPause))).toBe('user[texte] assistant[server_tool_use]');
   });
 });
+
+// ── Démarrage à froid : il ne retire plus ses outils à Lumi ──────────────
+// Rejeu en prod du 2026-10-01, juste après un déploiement : « assigne la job de Marie
+// Roy à l'équipe Pression » → deux lectures, puis « confirme-moi au prochain message »
+// au lieu d'une carte. Le premier appel avait ÉCRIT le cache du sujet (13 000 à
+// 21 000 tokens, 4 à 6 ¢) : compté en entier contre le plafond du tour (6 ¢) depuis
+// que le cache est en 5 minutes, il retirait les outils dès la deuxième étape.
+describe('plafond de coût du tour : le démarrage à froid ne compte pas', () => {
+  // 30 000 tokens écrits en cache 5 min = 7,5 ¢ (2 $ le million × 1,25) : à lui seul au-dessus du plafond de 6 ¢.
+  const froid = { input_tokens: 200, output_tokens: 40, cache_read_input_tokens: 0, cache_creation_input_tokens: 30_000, cache_creation: { ephemeral_5m_input_tokens: 30_000, ephemeral_1h_input_tokens: 0 } };
+  const chaud = { input_tokens: 200, output_tokens: 40, cache_read_input_tokens: 20_000, cache_creation_input_tokens: 300, cache_creation: { ephemeral_5m_input_tokens: 300, ephemeral_1h_input_tokens: 0 } };
+
+  it('premier appel à cache froid, puis une lecture : la deuxième étape garde ses outils et propose l’action', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'l1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage: froid });
+    reponses.push({ content: [{ type: 'tool_use', id: 'w1', name: 'create_job', input: { title: 'Lavage' } }], stop_reason: 'tool_use', usage: chaud });
+    const r = await tourLumi(baseTour([], []));
+    expect(instantanes[1].tool_choice).toBeUndefined();
+    expect(JSON.stringify(instantanes[1].messages)).not.toContain('tu ne peux plus appeler d’outil');
+    expect(r.proposition).toMatchObject({ tool: 'create_job' });
+    // Le coût réel, lui, est compté en entier : seul le plafond du tour l'écarte.
+    expect(r.cost_cents).toBeGreaterThan(7);
+  });
+
+  it('une écriture de cache aux étapes SUIVANTES compte toujours : une boucle qui grossit est arrêtée', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'l1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage: chaud });
+    reponses.push({ content: [{ type: 'tool_use', id: 'l2', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage: froid });
+    reponses.push({ content: [{ type: 'text', text: 'Voilà ce que j’ai.' }], stop_reason: 'end_turn', usage: chaud });
+    await tourLumi(baseTour([], []));
+    expect(instantanes[1].tool_choice).toBeUndefined();
+    expect(instantanes[2].tool_choice).toEqual({ type: 'none' });
+  });
+
+  it('un premier appel cher en ENTRÉE (pas en écriture de cache) atteint toujours le plafond', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    const cher = { input_tokens: 30_000, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+    reponses.push({ content: [{ type: 'tool_use', id: 'l1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage: cher });
+    reponses.push({ content: [{ type: 'text', text: 'Voilà.' }], stop_reason: 'end_turn', usage: chaud });
+    await tourLumi(baseTour([], []));
+    expect(instantanes[1].tool_choice).toEqual({ type: 'none' });
+  });
+});

@@ -30,6 +30,10 @@ export interface RegleAPublier {
   conditions?: Record<string, unknown> | null;
   is_preset?: boolean | null;
   fr?: boolean;
+  /** L'entité que les réglages de la règle fixent — voir `champQuiFixeLEntite` (catalogue). */
+  entite?: string | null;
+  /** Le champ que la règle surveille n'existe plus (supprimé, archivé) — voir `problemesAvantPublication`. */
+  champSurveilleAbsent?: boolean;
 }
 
 /** L'action « À compléter » posée à la création : ce n'est pas un vrai envoi. */
@@ -37,6 +41,58 @@ function estProvisoire(actions: unknown[]): boolean {
   if (actions.length !== 1) return false;
   const a = actions[0] as { type?: string; config?: { body?: unknown } } | null;
   return a?.type === 'send_sms' && TEXTES_ACTION_PROVISOIRE.includes(String(a.config?.body ?? ''));
+}
+
+/** Plafond du champ `actions` côté serveur (`corpsAutomatisation`, server/lib/validation.ts). */
+const ACTIONS_REFLET_MAX = 20;
+
+/**
+ * `actions`, REFLET du parcours (triage éditeur, 05b-canevas-outils-origine:303 ;
+ * constat A-02).
+ *
+ * Une règle porte deux copies de ses messages : `steps` (le parcours, que le
+ * moteur exécute dès qu'il y en a) et `actions` (le format d'origine). L'éditeur
+ * n'écrivait que `steps` : « Convertir » laissait dans `actions` l'ancien
+ * message, et dès que le parcours redevenait vide, l'éditeur ET le moteur
+ * relisaient la règle comme « au format d'origine » — l'étape supprimée
+ * revenait, en lecture seule, et continuait de partir.
+ *
+ * `actions` se DÉRIVE donc du parcours, à chaque enregistrement : ses actions,
+ * dans l'ordre où le parcours les rencontre (le fil principal, puis la branche
+ * « si non »), sans attente ni condition. Un parcours VIDE donne l'action
+ * provisoire « À compléter » — celle d'une automatisation neuve, que l'éditeur
+ * et la publication lisent comme « aucune étape » (le serveur exige une action).
+ */
+export function actionsDuParcours(steps: unknown, fr = true): Array<{ type: string; config: Record<string, unknown> }> {
+  const etapes = (Array.isArray(steps) ? steps : []) as Array<Record<string, unknown> | null | undefined>;
+  const parId = new Map<string, Record<string, unknown>>();
+  for (const e of etapes) if (e && typeof e.id === 'string') parId.set(e.id, e);
+  const ordre: Array<Record<string, unknown>> = [];
+  const vues = new Set<string>();
+  // Parcours en profondeur, sans récursion : la suite d'abord, les embranchements ensuite.
+  const pile: string[] = typeof etapes[0]?.id === 'string' ? [etapes[0].id as string] : [];
+  while (pile.length) {
+    const id = pile.pop() as string;
+    const etape = parId.get(id);
+    if (!etape || vues.has(id)) continue;
+    vues.add(id);
+    ordre.push(etape);
+    const suites = etape.type === 'si'
+      ? [etape.alors, etape.sinon]
+      : etape.type === 'arreter' ? [] : [etape.suivant, etape.si_reponse, etape.si_depasse];
+    for (const s of [...suites].reverse()) if (typeof s === 'string' && !vues.has(s)) pile.push(s);
+  }
+  // Une étape que rien n'atteint (brouillon en cours de câblage) : gardée, à la fin.
+  for (const e of etapes) if (e && typeof e.id === 'string' && !vues.has(e.id)) ordre.push(e);
+
+  const actions = ordre.flatMap((e) => {
+    const a = e.type === 'action' ? (e.action as { type?: unknown; config?: unknown } | null | undefined) : null;
+    return a && typeof a.type === 'string' && a.type
+      ? [{ type: a.type, config: { ...((a.config ?? {}) as Record<string, unknown>) } }]
+      : [];
+  });
+  if (actions.length === 0) return [{ type: 'send_sms', config: { body: TEXTES_ACTION_PROVISOIRE[fr ? 0 : 1] } }];
+  return actions.slice(0, ACTIONS_REFLET_MAX);
 }
 
 /** Tous les problèmes (bloquants et avertissements) avant publication. */
@@ -55,6 +111,8 @@ export function problemesPublication(regle: RegleAPublier): ProblemePublication[
       actions: actions.filter((a) => trouverAction(String((a as { type?: unknown })?.type ?? ''))),
       conditions: regle.conditions ?? null,
       fr: regle.fr,
+      entite: regle.entite,
+      champSurveilleAbsent: regle.champSurveilleAbsent,
     });
   }
 
@@ -67,6 +125,8 @@ export function problemesPublication(regle: RegleAPublier): ProblemePublication[
     actions: estProvisoire(actions) ? [] : actions,
     conditions: regle.conditions ?? null,
     fr: regle.fr,
+    entite: regle.entite,
+    champSurveilleAbsent: regle.champSurveilleAbsent,
   });
 }
 

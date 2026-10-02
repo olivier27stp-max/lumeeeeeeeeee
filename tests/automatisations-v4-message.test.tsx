@@ -4,9 +4,13 @@
 //
 // L'audit (s10 S1) a vidé le texto d'une règle PUBLIÉE : « Enregistrer »
 // restait actif, la base a reçu `body = ""`, toast « Message enregistré ».
-// L'écriture passe par PostgREST (le PATCH serveur refuserait les actions
-// internes des modèles, `log_activity`) : la garde vit donc dans l'écran ET
-// dans `updateRuleMessage`, que partagent la liste et les Réglages.
+// L'écriture passait par PostgREST : la garde vit donc dans l'écran ET dans
+// `updateRuleMessage`, que partagent la liste et les Réglages.
+//
+// 2026-10-01 : l'écriture passe désormais par le serveur
+// (`PATCH /api/automations/rules/:id/messages`), qui refuse lui aussi un
+// message vide (tests/automations-finale/t/messages-route.test.ts). Les deux
+// gardes d'ici restent : rien ne part, ni vers la table, ni vers la route.
 
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -14,6 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+/** Tout ce qui est écrit : directement dans la table (plus jamais), ou envoyé à la route. */
 const ecritures: unknown[] = [];
 vi.mock('../src/lib/supabase', () => {
   const chaine: Record<string, unknown> = {};
@@ -24,7 +29,12 @@ vi.mock('../src/lib/supabase', () => {
     update: (p: unknown) => { ecritures.push(p); return chaine; },
     then: (ok: (r: unknown) => unknown) => Promise.resolve({ data: [{ id: 'r1' }], error: null }).then(ok),
   });
-  return { supabase: { from: () => chaine } };
+  return { supabase: { from: () => chaine, auth: { getSession: async () => ({ data: { session: { access_token: 'jeton' } } }) } } };
+});
+vi.mock('../src/lib/orgApi', () => ({ getCurrentOrgId: async () => 'org-1' }));
+vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+  if (init?.method === 'PATCH' && /\/api\/automations\/rules\/[^/]+\/messages$/.test(url)) ecritures.push(JSON.parse(String(init.body)));
+  return new Response(JSON.stringify({ regle: {}, variables_inconnues: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 });
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), info: vi.fn() }) }));
 

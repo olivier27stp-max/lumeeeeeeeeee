@@ -19,6 +19,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { trouverAction, trouverDeclencheur } from '../../../src/lib/automationCatalogue';
 import { localizeAutomationName } from '../../../src/lib/automationNames';
+import { typesDActionDeLaRegle } from '../automations-etapes';
 
 export interface DejaPubliee {
   nom: string;
@@ -28,11 +29,8 @@ export interface DejaPubliee {
 
 /** Les types d'action d'une règle, format d'origine (`actions`) ou parcours (`steps`). */
 export function typesDAction(regle: { steps?: unknown; actions?: unknown }): string[] {
-  const steps = Array.isArray(regle.steps) ? regle.steps : [];
-  const source = steps.length > 0
-    ? steps.map((e) => (e as { action?: { type?: unknown } })?.action?.type)
-    : (Array.isArray(regle.actions) ? regle.actions : []).map((a) => (a as { type?: unknown })?.type);
-  return [...new Set(source.filter((t): t is string => typeof t === 'string' && t !== 'log_activity'))];
+  // Un seul accès aux étapes d'une règle (automations-etapes.ts) : le parcours s'il existe, sinon le format d'origine.
+  return typesDActionDeLaRegle(regle);
 }
 
 /**

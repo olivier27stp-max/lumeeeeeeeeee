@@ -85,6 +85,7 @@ La garde quotidienne de dépense IA (15 % du plafond mensuel en un jour) fait pa
 |---|---|---|---|
 | « [TEST] QA Lumi éval 2 — ne pas utiliser » | `5930d318-b207-40f3-9e14-f8898a02e240` | `eval2` | `eval2.proprio1…4@lume-qa.test`, `eval2.tech@lume-qa.test` |
 | « [TEST] QA Lumi éval 3 — ne pas utiliser » | `7f859087-0f5e-4604-8a20-315be43be4c3` | `eval3` | `eval3.proprio1…4@lume-qa.test`, `eval3.tech@lume-qa.test` |
+| « [TEST] QA Lumi éval 4 — ne pas utiliser » | `da121990-9319-47d7-9788-54f2fec23471` | `eval4` | `eval4.proprio1…4@lume-qa.test`, `eval4.tech@lume-qa.test` |
 
 ```bash
 # Créer ou retrouver les bureaux (simulation sans --appliquer ; bac à sable inscrit AVANT toute autre écriture)

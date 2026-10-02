@@ -51,6 +51,7 @@ import communicationsRouter from './routes/communications';
 import automationTestRouter from './routes/automation-test';
 import automationEventsRouter from './routes/automation-events';
 import automationRulesRouter from './routes/automation-rules';
+import automationMessagesRouter from './routes/automation-messages';
 import automationPublicationRouter from './routes/automation-publication';
 import automationStatsRouter from './routes/automation-stats';
 import portalRouter from './routes/portal';
@@ -862,6 +863,8 @@ app.use('/api', communicationsRouter);
 app.use('/api', automationTestRouter);
 app.use('/api', automationEventsRouter);
 app.use('/api', automationRulesRouter);
+// Le texte d'un message d'automatisation : PATCH /api/automations/rules/:id/messages.
+app.use('/api', automationMessagesRouter);
 app.use('/api', automationPublicationRouter);
 app.use('/api', automationStatsRouter);
 app.use('/api', portalRouter);
@@ -1559,6 +1562,10 @@ app.listen(port, '0.0.0.0', () => {
     Promise.all([import('./lib/courriels/sante'), import('./lib/supabase')]).then(([{ demarrerSanteCourriels }, { getServiceClient: serviceClient }]) => {
       demarrerSanteCourriels(serviceClient);
     }).catch((e: any) => captureCronFailure('courriels-sante-startup', e));
+    // Veille de la base : trois minutes sans réponse → un message Slack à l'équipe, un autre au retour (pannes du 2026-09-28 et du 2026-10-01, sans alerte).
+    Promise.all([import('./lib/veille-base'), import('./lib/supabase')]).then(([{ demarrerVeilleBase }, { getServiceClient: serviceClient }]) => {
+      demarrerVeilleBase(serviceClient);
+    }).catch((e: any) => captureCronFailure('veille-base-startup', e));
     import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
       demarrerAlertingSecurite();
     }).catch((e: any) => captureCronFailure('security-alerting-startup', e));

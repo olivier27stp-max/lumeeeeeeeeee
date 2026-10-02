@@ -1,0 +1,2097 @@
+{
+ "date": "2026-10-01T19:29:34.814Z",
+ "api": "https://lumecrm.net",
+ "org": "5930d318-b207-40f3-9e14-f8898a02e240",
+ "nom_org": "[TEST] QA Lumi éval 2 — ne pas utiliser",
+ "jeu_present": true,
+ "menage": {
+  "fait": [
+   "tâches [ROB] mises à la corbeille : 0",
+   "notes de mémoire « [ROB] » désactivées : 0",
+   "notes de mémoire « dossier bleu » désactivées : 0"
+  ],
+  "erreurs": []
+ },
+ "mode": [
+  "proprio1 : remis à « demander »"
+ ],
+ "selection": {
+  "familles": [
+   "longue"
+  ],
+  "tests": [],
+  "proprietaire": null
+ },
+ "lancements": [
+  {
+   "date": "2026-10-01T19:29:34.814Z",
+   "familles": [
+    "longue",
+    "references",
+    "revirement",
+    "reprise",
+    "simultane",
+    "entrees",
+    "vocal",
+    "pannes"
+   ],
+   "comptes": {
+    "proprio1": "eval2.proprio1@lume-qa.test",
+    "proprio2": "eval2.proprio2@lume-qa.test",
+    "proprio3": "eval2.proprio3@lume-qa.test",
+    "proprio4": "eval2.proprio4@lume-qa.test",
+    "technicien": "eval2.tech@lume-qa.test"
+   },
+   "appels": {
+    "proprio1": 47,
+    "proprio2": 19,
+    "proprio3": 20,
+    "proprio4": 17,
+    "technicien": 63
+   },
+   "paliers": {
+    "longue": "normal",
+    "references": "normal",
+    "revirement": "normal",
+    "reprise": "normal",
+    "simultane": "normal",
+    "entrees": "normal",
+    "vocal": "normal",
+    "pannes": "normal"
+   }
+  },
+  {
+   "date": "2026-10-01T20:21:36.537Z",
+   "familles": [
+    "vocal"
+   ],
+   "comptes": {
+    "proprio4": "eval2.proprio4@lume-qa.test"
+   },
+   "appels": {
+    "proprio1": 0,
+    "proprio2": 0,
+    "proprio3": 0,
+    "proprio4": 0,
+    "technicien": 0
+   },
+   "paliers": {
+    "vocal": "normal"
+   }
+  },
+  {
+   "date": "2026-10-01T20:29:24.422Z",
+   "familles": [
+    "longue"
+   ],
+   "comptes": {
+    "proprio1": "eval2.proprio1@lume-qa.test"
+   },
+   "appels": {
+    "proprio1": 24,
+    "proprio2": 0,
+    "proprio3": 0,
+    "proprio4": 0,
+    "technicien": 0
+   },
+   "paliers": {
+    "longue": "normal"
+   }
+  },
+  {
+   "date": "2026-10-01T22:19:36.164Z",
+   "familles": [
+    "longue"
+   ],
+   "comptes": {
+    "proprio1": "eval2.proprio1@lume-qa.test"
+   },
+   "appels": {
+    "proprio1": 50,
+    "proprio2": 0,
+    "proprio3": 0,
+    "proprio4": 0,
+    "technicien": 0
+   },
+   "paliers": {
+    "longue": "normal"
+   }
+  }
+ ],
+ "appels": {
+  "proprio1": 121,
+  "proprio2": 19,
+  "proprio3": 20,
+  "proprio4": 17,
+  "technicien": 63
+ },
+ "conversations": [
+  "ce69a35d-a5aa-4f1a-a11d-45a8e8ab8e12",
+  "cc0f6c1d-7273-40fb-b7ae-d172beacc4bc",
+  "e2dfc431-d09e-4399-aebf-41ddf218a423",
+  "5716585a-df9e-4497-a6b5-41ccd8c3f60d",
+  "2926389d-9ce6-4871-9ed2-87560055245d",
+  "65a60b8f-f0fa-4dc3-bf91-1a33c4f527ea",
+  "981337f6-edc4-4be9-8aa7-1aa0469390b6",
+  "abe2853d-0046-493b-81ec-ff575367d8df",
+  "573bae7f-682b-4515-bf49-673c2d346640",
+  "5a0e788f-82c7-47df-a94b-43d8f96c387e",
+  "1d27d11d-07c2-4d3f-860f-9318809f28a8",
+  "9ec5bd28-df06-44f8-9d59-59267698124c",
+  "d5ff3549-4f75-47e9-82c7-0ad6f0e5b273",
+  "32901c7d-860a-4fb5-a0e8-7b470e891ccd",
+  "f2667eaf-ad9b-4be7-8ec3-9b10bb8c9c80",
+  "7815026d-710a-4a84-b6cf-6c1b12dd96ac",
+  "eeed9d30-9fed-4840-83f8-765a37f11e9c",
+  "871d5d83-c4ef-4815-b02d-0654bccf0c6a",
+  "2983ca6a-4394-4af8-bca1-4dedf3c8eb62",
+  "d1eadab4-bd5c-4819-8cdc-9f65bd8b9e9b",
+  "5e1e6309-6791-494f-aef7-41a1ba530136",
+  "fc5d94f0-87ba-4ac3-b19c-191044a6776a",
+  "50c34f41-1183-46e9-9a52-ab3a04e6bf06",
+  "7c1ac141-2492-4b3f-8d75-a78af5a5ec22",
+  "d2ada620-c0c0-4d5e-bb35-5a0d9b980570",
+  "35901765-f0fc-452c-b3bd-9e35ada5ebbc",
+  "ad98b3ff-1efb-424c-b0ce-d168c2a1973f",
+  "a2ce3668-9e0d-4e1f-bb3a-e8617450ac92",
+  "f0fef3c8-51b8-4ff1-85a5-c7a55a415b7c",
+  "fefb24e8-3b77-478a-9d4c-acf49ad690e0",
+  "1b7ebd3e-e3cf-4239-b9c7-e9532b057873",
+  "ffbfa3b0-83af-42e0-9b57-bd2ff7019f05"
+ ],
+ "redemarrages": [
+  "2026-10-01T19:42:21.205Z (pendant longue.conversation)"
+ ],
+ "modeles": [
+  {
+   "modele": "sans modèle",
+   "etage": 0,
+   "tours": 2,
+   "cout_cents": 0
+  },
+  {
+   "modele": "sans modèle",
+   "etage": 1,
+   "tours": 49,
+   "cout_cents": 0
+  },
+  {
+   "modele": "sans modèle",
+   "etage": 2,
+   "tours": 41,
+   "cout_cents": 0
+  },
+  {
+   "modele": "claude-haiku-4-5",
+   "etage": 5,
+   "tours": 2,
+   "cout_cents": 0.3021
+  },
+  {
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "tours": 75,
+   "cout_cents": 135.5428
+  }
+ ],
+ "palier": "normal",
+ "partiel": false,
+ "bilan": {
+  "total": 40,
+  "par_verdict": {
+   "PASS": 37,
+   "FAIL": 0,
+   "NON COUVERT": 3,
+   "A RELIRE": 0
+  },
+  "par_famille": {
+   "longue": {
+    "PASS": 4,
+    "FAIL": 0,
+    "NON COUVERT": 0,
+    "A RELIRE": 0
+   },
+   "references": {
+    "PASS": 5,
+    "FAIL": 0,
+    "NON COUVERT": 0,
+    "A RELIRE": 0
+   },
+   "revirement": {
+    "PASS": 4,
+    "FAIL": 0,
+    "NON COUVERT": 0,
+    "A RELIRE": 0
+   },
+   "reprise": {
+    "PASS": 5,
+    "FAIL": 0,
+    "NON COUVERT": 0,
+    "A RELIRE": 0
+   },
+   "simultane": {
+    "PASS": 4,
+    "FAIL": 0,
+    "NON COUVERT": 0,
+    "A RELIRE": 0
+   },
+   "entrees": {
+    "PASS": 6,
+    "FAIL": 0,
+    "NON COUVERT": 0,
+    "A RELIRE": 0
+   },
+   "vocal": {
+    "PASS": 5,
+    "FAIL": 0,
+    "NON COUVERT": 2,
+    "A RELIRE": 0
+   },
+   "pannes": {
+    "PASS": 4,
+    "FAIL": 0,
+    "NON COUVERT": 1,
+    "A RELIRE": 0
+   }
+  }
+ },
+ "resultats": [
+  {
+   "id": "longue.conversation",
+   "famille": "longue",
+   "titre": "Cinquante tours sans erreur, historique valide",
+   "fait": "Une conversation de 50 tours scriptés : 19 demandes qui passent par le modèle (lectures courtes sur le jeu [EVAL], deux conventions données aux tours 3 et 4) et 31 questions courantes servies sans modèle. Chaque flux est lu, les traces et l’historique enregistré sont relus par SELECT.",
+   "si_defaut": "Un tour en erreur ou sans réponse, un tour tracé « erreur », un historique que l’API du modèle refuserait (action sans résultat), ou une écriture exécutée.",
+   "lignes": [
+    1
+   ],
+   "duree_ms": 199062,
+   "verdict": "PASS",
+   "preuves": [
+    {
+     "libelle": "les 50 tours joués (conversation ffbfa3b0-83af-42e0-9b57-bd2ff7019f05)",
+     "contenu": " 1 agent     étage 2 0.000 ¢ ok | Montre-moi la fiche de Chantal Lévesque. → Chantal Lévesque Téléphone : 514-555-0119 Courriel : chantal.levesque@lume-qa.test Adresse : 14 rue Montcalm N… (165 caractères)\n 2 raccourci étage 1 0.000 ¢ ok | Combien de clients j’ai ? → Tu as 12 clients.\n 3 fait      étage 6 1.809 ¢ ok | Pour la suite de cette conversation seulement (ne le note pa → OK.\n 4 fait      étage 6 0.268 ¢ ok | Autre convention pour cette conversation seulement (ne la no → OK.\n 5 raccourci étage 1 0.000 ¢ ok | Qu’est-ce que j’ai demain ? → 2 visites demain : • 9 h · Patrick Girard · Lavage de vitres extérieur — 1975 boulevard des Laurentides, Laval… (224 caractères)\n 6 agent     étage 6 4.294 ¢ ok | Quelle est l’adresse de Nathalie Côté ? → L'adresse de Nathalie Côté est le 67 rue De Montbrun, Boucherville, QC J4B 4T8.\n 7 raccourci étage 1 0.000 ¢ ok | Qui me doit de l’argent ? → 2 factures en retard, 1 149,75 $ au total : • 5 · Patrick Girard · 919,80 $ · 31 jours • 3 · Luc Bergeron · 22… (172 caractères)\n 8 agent     étage 6 3.821 ¢ ok | C’est quoi le total du devis de Mélanie Simard ? → Le devis de Mélanie Simard (Lavage de vitres et gouttières) totalise 517,39 $.\n 9 raccourci étage 1 0.000 ¢ ok | Mes tâches → 2 tâches à faire : • Rappeler Patrick Girard pour sa facture en retard — Vendredi 2 octobre • Commander des ra… (145 caractères)\n10 agent     étage 6 5.512 ¢ ok | À quelle date est la prochaine visite chez Isabelle Fournier → La prochaine visite chez Isabelle Fournier est le 5 octobre à 10 h (lavage à pression — entrée), job n° 12.\n11 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 1 → Je ne trouve pas de job numéro 1.\n12 rappel_a  étage 6 0.570 ¢ ok | Quel est le numéro de téléphone de ma cliente ? → Le numéro de Chantal Lévesque est le 514-555-0119.\n13 raccourci étage 1 0.000 ¢ ok | Combien j’ai encaissé ce mois-ci ? → Encaissé ce mois-ci : 0,00 $. Facturé : 0,00 $.\n14 agent     étage 6 1.006 ¢ ok | Qu’est-ce que Nathalie Côté a répondu à notre devis ? → Elle a refusé le devis n° 4 (lavage à pression — maison complète, 1 092,26 $).\n15 raccourci étage 1 0.000 ¢ ok | Mes devis en attente → 1 devis en attente de réponse, 597,87 $ au total : • 2 · Lavage de vitres — deux étages · 597,87 $\n16 raccourci étage 1 0.000 ¢ ok | Qui est dans mon équipe ? → 10 personnes dans l’équipe : • [EVAL] Propriétaire 1 · propriétaire • [EVAL] Propriétaire 2 · propriétaire • [… (380 caractères)\n17 raccourci étage 1 0.000 ¢ ok | Qu’est-ce que j’ai aujourd’hui ? → 2 visites aujourd'hui : • 8 h · Guillaume Poirier · Entretien des vitres — restaurant — 4310 rue Ontario Est, … (226 caractères)\n18 agent     étage 6 0.639 ¢ ok | Quel est le courriel de Sylvie Leblanc ? → Le courriel de Sylvie Leblanc est clinique.leblanc@lume-qa.test.\n19 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 3 → Je ne trouve pas de job numéro 3.\n20 raccourci étage 1 0.000 ¢ ok | Qui sont mes meilleurs clients ? → Tes 5 meilleurs clients : 1. Jean-François Pelletier · 689,85 $ · 1 job 2. Isabelle Fournier · 643,86 $ · 2 jo… (217 caractères)\n21 raccourci étage 1 0.000 ¢ ok | J’ai combien de jobs cette semaine ? → 7 visites cette semaine : Mardi 29 septembre • 8 h · Sylvie Leblanc · Lavage de vitres — clinique — 7250 boule… (839 caractères)\n22 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 4 → Je ne trouve pas de job numéro 4.\n23 raccourci étage 1 0.000 ¢ ok | Quelles factures sont en retard ? → 2 factures en retard, 1 149,75 $ au total : • 5 · Patrick Girard · 919,80 $ · 31 jours • 3 · Luc Bergeron · 22… (172 caractères)\n24 rappel_a  étage 6 0.633 ¢ ok | Et l’adresse courriel de ma cliente, c’est quoi ? → Le courriel de Chantal Lévesque est chantal.levesque@lume-qa.test.\n25 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 5 → Je ne trouve pas de job numéro 5.\n26 raccourci étage 1 0.000 ¢ ok | Mon chiffre d’affaires du mois → Encaissé ce mois-ci : 0,00 $. Facturé : 0,00 $.\n27 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 6 → Je ne trouve pas de job numéro 6.\n28 raccourci étage 1 0.000 ¢ ok | Quoi de neuf ? → Bonjour [EVAL]. 2 visites aujourd'hui : 8 h Guillaume Poirier, 13 h Nathalie Côté. 2 factures en retard pour 1… (327 caractères)\n29 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 7 → Je ne trouve pas de job numéro 7.\n30 agent     étage 6 4.653 ¢ ok | Combien d’heures ont été pointées en septembre 2026 ? → En septembre 2026, 17 heures ont été pointées au total : Olivier Gauthier 7,5 h, Mathieu Lavoie 5 h et Karine … (125 caractères)\n31 raccourci étage 1 0.000 ¢ ok | Où est mon équipe en ce moment ? → Personne n’est localisé en ce moment (positions des 20 dernières minutes, avec consentement seulement).\n32 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 8 → Job #8 · Nettoyage de gouttières Client : Nathalie Côté Quand : Jeudi 1 octobre 13 h Statut : en retard Adress… (175 caractères)\n33 raccourci étage 1 0.000 ¢ ok | J’ai combien de clients dans mon CRM ? → Tu as 12 clients.\n34 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 9 → Job #9 · Lavage de vitres extérieur Client : Patrick Girard Quand : Vendredi 2 octobre 9 h Statut : à venir Ad… (184 caractères)\n35 raccourci étage 1 0.000 ¢ ok | Qu’est-ce qu’il me reste comme tâches à faire ? → 2 tâches à faire : • Rappeler Patrick Girard pour sa facture en retard — Vendredi 2 octobre • Commander des ra… (145 caractères)\n36 rappel_a  étage 6 1.851 ¢ ok | Dans quelle ville habite ma cliente ? → Ta cliente, Chantal Lévesque, habite à Candiac.\n37 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 10 → Job #10 · Lavage de vitrine commerciale Client : Luc Bergeron Quand : Vendredi 2 octobre 13 h Statut : à venir… (183 caractères)\n38 raccourci étage 1 0.000 ¢ ok | Combien de devis attendent une réponse du client ? → 1 devis en attente de réponse, 597,87 $ au total : • 2 · Lavage de vitres — deux étages · 597,87 $\n39 agent     étage 6 1.296 ¢ ok | Quel est le solde de la facture de Luc Bergeron ? → Luc Bergeron a une facture en retard de 229,95 $ (6 jours de retard).\n40 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 11 → Job #11 · Lavage de vitres extérieur Client : Marie Roy Quand : Dimanche 4 octobre 9 h Statut : à venir Adress… (175 caractères)\n41 raccourci étage 1 0.000 ¢ ok | C’est quoi le total de mes comptes en retard ? → 2 factures en retard, 1 149,75 $ au total : • 5 · Patrick Girard · 919,80 $ · 31 jours • 3 · Luc Bergeron · 22… (172 caractères)\n42 agent     étage 6 0.934 ¢ ok | Dans quelle ville est le Restaurant Chez Poirier ? → Le Restaurant Chez Poirier est situé à Montréal.\n43 raccourci étage 2 0.000 ¢ ok | Montre-moi le job 12 → Job #12 · Lavage à pression — entrée Client : Isabelle Fournier Quand : Lundi 5 octobre 10 h Statut : à venir … (174 caractères)\n44 agent     étage 6 2.055 ¢ ok | C’est quoi le titre de la job d’André Ouellet ? → Le job d'André Ouellet s'intitule « Lavage de vitres extérieur ».\n45 raccourci étage 1 0.000 ¢ ok | Combien de factures en retard j’ai en ce moment ? → 2 factures en retard, 1 149,75 $ au total : • 5 · Patrick Girard · 919,80 $ · 31 jours • 3 · Luc Bergeron · 22… (172 caractères)\n46 agent     étage 6 5.934 ¢ ok | La facture d’Isabelle Fournier, elle est due pour quelle dat → La facture d'Isabelle Fournier (n° 4) est due le 31 décembre 2026.\n47 rappel_a  étage 6 1.278 ¢ ok | Redonne-moi le numéro de téléphone de ma cliente. → Le numéro de téléphone de Chantal Lévesque est le 514-555-0119.\n48 rappel_b  étage 6 1.142 ¢ ok | Quel est le solde du dossier bleu ? → Le solde du dossier bleu (facture n° 2 de Jean-François Pelletier) est de 389,85 $.\n49 raccourci étage 1 0.000 ¢ ok | Mon brief du matin → Bonjour [EVAL]. 2 visites aujourd'hui : 8 h Guillaume Poirier, 13 h Nathalie Côté. 2 factures en retard pour 1… (327 caractères)\n50 agent     étage 0 0.000 ¢ refus | Merci. Résume en deux phrases ce qu’on a regardé dans cette  → Cette conversation a beaucoup travaillé : pour continuer, ouvre une nouvelle conversation (le bouton en haut).… (155 caractères)"
+    },
+    {
+     "libelle": "historique enregistré (SELECT sur lumi_messages, 120 messages)",
+     "contenu": "81. user : texte (37)\n82. assistant : thinking, tool_use search_clients QsY8yku5\n83. user : tool_result QsY8yku5\n84. assistant : texte (47)\n85. user : texte (20)\n86. assistant : texte (183)\n87. user : texte (50)\n88. assistant : texte (98)\n89. user : texte (49)\n90. assistant : texte (69)\n91. user : texte (20)\n92. assistant : texte (175)\n93. user : texte (46)\n94. assistant : texte (172)\n95. user : texte (50)\n96. assistant : tool_use search_clients Rxi5VxfT\n97. user : tool_result Rxi5VxfT\n98. assistant : texte (48)\n99. user : texte (20)\n100. assistant : texte (174)\n101. user : texte (47)\n102. assistant : tool_use list_jobs 5WB7PP1s\n103. user : tool_result 5WB7PP1s\n104. assistant : texte (65)\n105. user : texte (49)\n106. assistant : texte (172)\n107. user : texte (63)\n108. assistant : tool_use list_invoices beZUkpGK\n109. user : tool_result beZUkpGK\n110. assistant : texte (66)\n111. user : texte (49)\n112. assistant : texte (63)\n113. user : texte (35)\n114. assistant : tool_use get_invoice McUUkQAf\n115. user : tool_result McUUkQAf\n116. assistant : texte (83)\n117. user : texte (18)\n118. assistant : texte (327)\n119. user : texte (73)\n120. assistant : texte (155)\n→ valide"
+    }
+   ],
+   "constats": [
+    "50 tours servis sans erreur (flux fini, réponse non vide, aucune écriture)",
+    "aucun tour tracé en erreur ; historique valide (120 messages enregistrés)",
+    "plafond de coût de la conversation atteint au tour 50 : Lumi répond par le gabarit « ouvre une nouvelle conversation » (0 ¢) — le script s’arrête là"
+   ]
+  },
+  {
+   "id": "longue.contexte",
+   "famille": "longue",
+   "titre": "Le fait du tour 3 est honoré aux tours 12, 24, 36 et 47",
+   "fait": "Juge la conversation jouée : « ma cliente » (Chantal Lévesque, tour 3) est redemandé quatre fois ; chaque réponse doit porter son téléphone, son courriel ou sa ville.",
+   "si_defaut": "Une réponse sur une autre cliente, ou « de quelle cliente parles-tu ? ».",
+   "lignes": [
+    1
+   ],
+   "duree_ms": 1,
+   "verdict": "PASS",
+   "constats": [
+    "« ma cliente », donné au tour 3, est honoré aux tours 12, 24, 36, 47",
+    "tour 12 : la réponse porte sur Chantal Lévesque (Candiac) (téléphone 514-555-0119)",
+    "tour 24 : la réponse porte sur Chantal Lévesque (Candiac) (courriel chantal.levesque@lume-qa.test)",
+    "tour 36 : la réponse porte sur Chantal Lévesque (Candiac) (« Candiac »)",
+    "tour 47 : la réponse porte sur Chantal Lévesque (Candiac) (téléphone 514-555-0119)"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 12 — « Quel est le numéro de téléphone de ma cliente ? »",
+     "contenu": "Le numéro de Chantal Lévesque est le 514-555-0119."
+    },
+    {
+     "libelle": "tour 24 — « Et l’adresse courriel de ma cliente, c’est quoi ? »",
+     "contenu": "Le courriel de Chantal Lévesque est chantal.levesque@lume-qa.test."
+    },
+    {
+     "libelle": "tour 36 — « Dans quelle ville habite ma cliente ? »",
+     "contenu": "Ta cliente, Chantal Lévesque, habite à Candiac."
+    },
+    {
+     "libelle": "tour 47 — « Redonne-moi le numéro de téléphone de ma cliente. »",
+     "contenu": "Le numéro de téléphone de Chantal Lévesque est le 514-555-0119."
+    }
+   ]
+  },
+  {
+   "id": "longue.contexte-ancien",
+   "famille": "longue",
+   "titre": "Le fait du tour 4, jamais redit, est honoré au tour 48",
+   "fait": "Juge la conversation jouée : « le dossier bleu » (une facture, tour 4) n’est redemandé qu’au tour 48 ; la réponse doit porter le solde de cette facture, relu en base.",
+   "si_defaut": "Le solde d’une autre facture (deviné), ou « je ne sais pas ce qu’est le dossier bleu ».",
+   "lignes": [
+    1
+   ],
+   "duree_ms": 1,
+   "attente_discutable": "Le serveur ne rejoue au modèle que les 60 derniers messages, sans résumé : au tour 48 le tour 4 est sorti de la fenêtre. Un FAIL est donc attendu par construction ; « Lumi demande de préciser » est une gestion propre de la limite, mais ce n’est pas « honorer le fait » — le test rend FAIL et le dit.",
+   "verdict": "PASS",
+   "constats": [
+    "« le dossier bleu », donné au tour 4 et jamais redit, est honoré au tour 48 : la réponse porte sur la facture n° 2 (Jean-François Pelletier) (389.85 $)",
+    "120 messages enregistrés dans la conversation"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 4 — le fait",
+     "contenu": "Autre convention pour cette conversation seulement (ne la note pas en mémoire) : « le dossier bleu », c’est la facture n° 2 de Jean-François Pelletier. Réponds juste « OK »."
+    },
+    {
+     "libelle": "tour 48 — « Quel est le solde du dossier bleu ? »",
+     "contenu": "Le solde du dossier bleu (facture n° 2 de Jean-François Pelletier) est de 389,85 $."
+    },
+    {
+     "libelle": "attendu",
+     "contenu": "la facture n° 2 (Jean-François Pelletier) : solde 389.85 $ (SELECT au début du test)"
+    }
+   ]
+  },
+  {
+   "id": "longue.cout",
+   "famille": "longue",
+   "titre": "Le coût par tour plafonne",
+   "fait": "Juge la conversation jouée, sur les coûts relus dans lumi_traces : la médiane des tours d’agent des 10 derniers tours ne dépasse pas 3 fois celle des tours 5 à 15.",
+   "si_defaut": "Un coût par tour qui grandit avec la conversation (historique relu en entier à chaque tour).",
+   "lignes": [
+    1
+   ],
+   "duree_ms": 1,
+   "verdict": "PASS",
+   "constats": [
+    "médiane des tours d’agent 5 à 15 : 3.821 ¢ (5 tours) ; des 10 derniers : 1.278 ¢ (5 tours) ; rapport 0.33 (borne 3)",
+    "coût total 37.69 ¢ sur 50 tour(s), dont 17 tour(s) d’agent ; le plus cher : 5.93 ¢",
+    "modèle : claude-sonnet-5",
+    "plafond de coût de la conversation atteint au tour 50 : le serveur borne lui-même la dépense d’une conversation"
+   ],
+   "preuves": [
+    {
+     "libelle": "coût par tour (lumi_traces)",
+     "contenu": " 1 étage 2 0.000 ¢ sans modèle \n 2 étage 1 0.000 ¢ sans modèle \n 3 étage 6 1.809 ¢ claude-sonnet-5 end_turn\n 4 étage 6 0.268 ¢ claude-sonnet-5 end_turn\n 5 étage 1 0.000 ¢ sans modèle \n 6 étage 6 4.294 ¢ claude-sonnet-5 end_turn\n 7 étage 1 0.000 ¢ sans modèle \n 8 étage 6 3.821 ¢ claude-sonnet-5 end_turn\n 9 étage 1 0.000 ¢ sans modèle \n10 étage 6 5.512 ¢ claude-sonnet-5 end_turn\n11 étage 2 0.000 ¢ sans modèle \n12 étage 6 0.570 ¢ claude-sonnet-5 end_turn\n13 étage 1 0.000 ¢ sans modèle \n14 étage 6 1.006 ¢ claude-sonnet-5 end_turn\n15 étage 1 0.000 ¢ sans modèle \n16 étage 1 0.000 ¢ sans modèle \n17 étage 1 0.000 ¢ sans modèle \n18 étage 6 0.639 ¢ claude-sonnet-5 end_turn\n19 étage 2 0.000 ¢ sans modèle \n20 étage 1 0.000 ¢ sans modèle \n21 étage 1 0.000 ¢ sans modèle \n22 étage 2 0.000 ¢ sans modèle \n23 étage 1 0.000 ¢ sans modèle \n24 étage 6 0.633 ¢ claude-sonnet-5 end_turn\n25 étage 2 0.000 ¢ sans modèle \n26 étage 1 0.000 ¢ sans modèle \n27 étage 2 0.000 ¢ sans modèle \n28 étage 1 0.000 ¢ sans modèle \n29 étage 2 0.000 ¢ sans modèle \n30 étage 6 4.653 ¢ claude-sonnet-5 end_turn\n31 étage 1 0.000 ¢ sans modèle \n32 étage 2 0.000 ¢ sans modèle \n33 étage 1 0.000 ¢ sans modèle \n34 étage 2 0.000 ¢ sans modèle \n35 étage 1 0.000 ¢ sans modèle \n36 étage 6 1.851 ¢ claude-sonnet-5 end_turn\n37 étage 2 0.000 ¢ sans modèle \n38 étage 1 0.000 ¢ sans modèle \n39 étage 6 1.296 ¢ claude-sonnet-5 end_turn\n40 étage 2 0.000 ¢ sans modèle \n41 étage 1 0.000 ¢ sans modèle \n42 étage 6 0.934 ¢ claude-sonnet-5 end_turn\n43 étage 2 0.000 ¢ sans modèle \n44 étage 6 2.055 ¢ claude-sonnet-5 end_turn\n45 étage 1 0.000 ¢ sans modèle \n46 étage 6 5.934 ¢ claude-sonnet-5 end_turn\n47 étage 6 1.278 ¢ claude-sonnet-5 end_turn\n48 étage 6 1.142 ¢ claude-sonnet-5 end_turn\n49 étage 1 0.000 ¢ sans modèle \n50 étage 0 0.000 ¢ sans modèle "
+    }
+   ]
+  },
+  {
+   "id": "references.le-deuxieme",
+   "famille": "references",
+   "titre": "« Le détail de la deuxième » après une liste",
+   "fait": "Le propriétaire fait lister ses factures en retard, puis demande « le détail de la deuxième ». L’ordre est lu dans la liste que Lumi a rendue ; la réponse doit porter le client et le solde de CETTE facture (relus par SELECT).",
+   "si_defaut": "Le détail de la première facture, d’une autre, ou « laquelle ? ».",
+   "lignes": [
+    2
+   ],
+   "duree_ms": 60310,
+   "verdict": "PASS",
+   "constats": [
+    "la réponse porte sur la facture n° 5 de Patrick Girard : « Girard », 919.80 $",
+    "aucun fait d’une autre fiche"
+   ],
+   "preuves": [
+    {
+     "libelle": "factures en retard (SELECT)",
+     "contenu": "select id, invoice_number, client_id, total_cents::bigint as total_cents, balance_cents::bigint as balance_cents, due_date\n     from invoices\n    where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and status in ('sent', 'partial') and balance_cents > 0 and due_date < (now() at time zone 'America/Toronto')::date\n    order by due_date, invoice_number\n→ [{\"id\":\"d62b7481-f35a-535c-b1b9-854b0e2a5a2d\",\"invoice_number\":\"5\",\"client_id\":\"f382c302-44a5-5e97-b302-3c474d5b6f5d\",\"total_cents\":91980,\"balance_cents\":91980,\"due_date\":\"2026-08-31\"},{\"id\":\"1307c8a5-fe2b-55dc-b910-21b03bbf4d4b\",\"invoice_number\":\"3\",\"client_id\":\"ce04273c-7775-55ae-9032-e9c1a3f48447\",\"total_cents\":22995,\"balance_cents\":22995,\"due_date\":\"2026-09-25\"}]"
+    },
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Liste-moi mes factures en retard, une par ligne, avec le nom du client."
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 6, 28842 ms)",
+     "contenu": "Voici tes 2 factures en retard :\n\n- Facture #3 — Luc Bergeron — 229,95 $, en retard de 6 jours\n- Facture #5 — Patrick Girard — 919,80 $, en retard de 31 jours"
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : get_overdue_payments ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "tour 2 — envoyé",
+     "contenu": "Donne-moi le détail de la deuxième."
+    },
+    {
+     "libelle": "tour 2 — reçu (statut 200, étage 6, 29997 ms)",
+     "contenu": "La facture #5 de Patrick Girard, « Lavage à pression — stationnement », est à 919,80 $ (800,00 $ + 119,80 $ de taxes), envoyée le 17 août, échue le 31 août. Aucun paiement reçu, solde complet dû, et le client ne l'a pas encore ouverte."
+    },
+    {
+     "libelle": "tour 2 — événements",
+     "contenu": "lectures : get_invoice ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "ordre de la liste de Lumi",
+     "contenu": "1re : la facture n° 3 de Luc Bergeron (la première de la liste) ; 2e : la facture n° 5 de Patrick Girard, solde 919,80 $"
+    }
+   ]
+  },
+  {
+   "id": "references.lui",
+   "famille": "references",
+   "titre": "« Envoie-lui un texto » après une fiche",
+   "fait": "Le propriétaire ouvre la fiche de Luc Bergeron, puis dit « Envoie-lui un texto : … ». La carte doit montrer SON numéro ; elle est annulée, jamais confirmée, et les envois du bac à sable sont comptés avant et après.",
+   "si_defaut": "Une carte vers un autre client, une demande « à qui ? », un envoi exécuté ou consigné.",
+   "lignes": [
+    2
+   ],
+   "duree_ms": 14229,
+   "verdict": "PASS",
+   "constats": [
+    "carte « send_sms » en attente, sur Luc Bergeron (Longueuil) : téléphone 514-555-0114",
+    "aucune autre fiche sur la carte, aucun événement d’exécution"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Montre-moi la fiche de Luc Bergeron."
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 2, 3618 ms)",
+     "contenu": "Luc Bergeron · Dépanneur Bergeron\nTéléphone : 514-555-0114\nCourriel : depanneur.bergeron@lume-qa.test\nAdresse : 1590 chemin de Chambly, Longueuil, QC J4J 3X5, Longueuil\nStatut : client actif"
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : search_clients ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "tour 2 — envoyé",
+     "contenu": "Envoie-lui un texto : « Bonjour, on passe demain matin vers 9 h. »"
+    },
+    {
+     "libelle": "tour 2 — reçu (statut 200, étage 6, 5992 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 2 — événements",
+     "contenu": "lectures : — ; cartes : send_sms ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 2",
+     "contenu": "[{\"outil\":\"send_sms\",\"d_office\":false,\"args\":{\"client_name\":\"Luc Bergeron\",\"phone_number\":\"514-555-0114\",\"message_text\":\"Bonjour, on passe demain matin vers 9 h.\"},\"apercu\":{\"genre\":\"sms\",\"to\":\"Luc Bergeron · 514-555-0114\",\"subject\":null,\"body\":\"Bonjour, on passe demain matin vers 9 h.\",\"drapeaux\":{\"irreversible\":true,\"vers_client\":true,\"jamais_d_office\":true}}}]"
+    },
+    {
+     "libelle": "envois consignés au bac à sable depuis le début de la passe",
+     "contenu": "avant : 0 ; après : 0"
+    }
+   ]
+  },
+  {
+   "id": "references.l-autre",
+   "famille": "references",
+   "titre": "« Fais pareil pour l’autre » entre deux homonymes",
+   "fait": "Le propriétaire demande le téléphone de Marie Roy de Longueuil, puis « Fais pareil pour l’autre. » La réponse doit porter le téléphone de Marie Roy de Brossard.",
+   "si_defaut": "Le même numéro redonné, celui d’un autre client, ou « quelle autre ? ».",
+   "lignes": [
+    2
+   ],
+   "duree_ms": 18886,
+   "verdict": "PASS",
+   "constats": [
+    "la réponse porte sur Marie Roy (Brossard) : téléphone 514-555-0111",
+    "aucun fait d’une autre fiche"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Quel est le numéro de téléphone de Marie Roy, celle de Longueuil ?"
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 6, 9377 ms)",
+     "contenu": "C'est le 514-555-0110 pour Marie Roy de Longueuil.\n\nAu fait, je remarque qu'il y a deux fiches Marie Roy créées le même jour (une à Brossard, une à Longueuil) — si c'est la même personne, je peux fusionner les deux fiches, dis-moi."
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : get_client_profile ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "tour 2 — envoyé",
+     "contenu": "Fais pareil pour l’autre."
+    },
+    {
+     "libelle": "tour 2 — reçu (statut 200, étage 6, 9508 ms)",
+     "contenu": "L'autre Marie Roy, celle de Brossard, a le 514-555-0111. Toujours partant pour fusionner si c'est la même personne ?"
+    },
+    {
+     "libelle": "tour 2 — événements",
+     "contenu": "lectures : search_clients ; cartes : — ; exécutions : —"
+    }
+   ]
+  },
+  {
+   "id": "references.meme-chose",
+   "famille": "references",
+   "titre": "« La même chose pour Patrick Girard »",
+   "fait": "Le propriétaire demande combien lui doit Luc Bergeron, puis « La même chose pour Patrick Girard. » La réponse doit porter le solde dû par Girard (SELECT), pas celui de Bergeron.",
+   "si_defaut": "Le solde de Bergeron redonné, ou une autre information sur Girard (sa fiche, son téléphone) sans le solde.",
+   "lignes": [
+    2
+   ],
+   "duree_ms": 15767,
+   "verdict": "PASS",
+   "constats": [
+    "la réponse porte sur le solde de Patrick Girard : 919.80 $",
+    "aucun fait d’une autre fiche"
+   ],
+   "preuves": [
+    {
+     "libelle": "soldes dus (SELECT)",
+     "contenu": "Luc Bergeron : 229,95 $ ; Patrick Girard : 919,80 $"
+    },
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Combien me doit Luc Bergeron ?"
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 6, 8039 ms)",
+     "contenu": "Luc Bergeron te doit 229,95 $ (une facture impayée, en retard)."
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : get_client_profile ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "tour 2 — envoyé",
+     "contenu": "La même chose pour Patrick Girard."
+    },
+    {
+     "libelle": "tour 2 — reçu (statut 200, étage 6, 6844 ms)",
+     "contenu": "Patrick Girard te doit 919,80 $ sur une facture impayée en retard. Il a aussi un devis de 597,87 $ en attente de réponse, pas encore facturé."
+    },
+    {
+     "libelle": "tour 2 — événements",
+     "contenu": "lectures : get_client_profile ; cartes : — ; exécutions : —"
+    }
+   ]
+  },
+  {
+   "id": "references.fais-pareil-carte",
+   "famille": "references",
+   "titre": "« Fais pareil pour Patrick Girard » après une tâche créée",
+   "fait": "Le propriétaire fait créer la tâche « [ROB] rappeler Luc Bergeron <passe> » (carte confirmée), puis dit « Fais pareil pour Patrick Girard. » La carte qui suit doit être une tâche pour Girard ; elle est annulée.",
+   "si_defaut": "Une tâche encore pour Bergeron, une autre action, une seconde tâche créée sans confirmation.",
+   "lignes": [
+    2
+   ],
+   "duree_ms": 17900,
+   "verdict": "PASS",
+   "constats": [
+    "carte « create_task » en attente, sur une tâche pour Patrick Girard : « Girard »",
+    "aucune autre fiche sur la carte, aucun événement d’exécution"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Crée une tâche : [ROB] rappeler Luc Bergeron XHF8EPAR"
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 2, 1167 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 1",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] rappeler Luc Bergeron XHF8EPAR\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] rappeler Luc Bergeron XHF8EPAR\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "confirmation de la première tâche",
+     "contenu": "statut 200 — fait — « C'est fait : la tâche « [ROB] rappeler Luc Bergeron XHF8EPAR ». »"
+    },
+    {
+     "libelle": "tour 2 — envoyé",
+     "contenu": "Fais pareil pour Patrick Girard."
+    },
+    {
+     "libelle": "tour 2 — reçu (statut 200, étage 6, 4740 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 2 — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 2",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] rappeler Patrick Girard\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] rappeler Patrick Girard\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "tâches de ce test en base (SELECT)",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8EPAR%' order by created_at\n→ [ROB] rappeler Luc Bergeron XHF8EPAR"
+    }
+   ]
+  },
+  {
+   "id": "revirement.correction",
+   "famille": "revirement",
+   "titre": "« Non, pas elle, l’autre » devant une carte de texto",
+   "fait": "Carte de texto pour Marie Roy de Longueuil, puis « Non, pas elle : l’autre Marie Roy, celle de Brossard. » La conversation est rechargée pour lire le sort de la première carte ; la seconde doit montrer le numéro de Brossard. Aucune n’est confirmée ; les envois du bac à sable sont comptés.",
+   "si_defaut": "La première carte encore en attente ou exécutée, une seconde carte encore vers Longueuil, un envoi consigné.",
+   "lignes": [
+    3
+   ],
+   "duree_ms": 45385,
+   "verdict": "PASS",
+   "constats": [
+    "la première carte est annulée (relue dans la conversation rechargée)",
+    "le message suivant est servi, sans erreur ni exécution",
+    "aucune ligne écrite en base",
+    "carte « send_sms » en attente, sur Marie Roy (Brossard) : téléphone 514-555-0111",
+    "aucune autre fiche sur la carte, aucun événement d’exécution"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Envoie un texto à Marie Roy de Longueuil : « Bonjour, on confirme pour demain. »"
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 6, 21873 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : get_conversations ; cartes : send_sms ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 1",
+     "contenu": "[{\"outil\":\"send_sms\",\"d_office\":false,\"args\":{\"client_id\":\"4a24a1af-c158-53b3-a8c0-0eebe41ec1cf\",\"client_name\":\"Marie Roy\",\"phone_number\":\"+15145550142\",\"message_text\":\"Bonjour, on confirme pour demain.\"},\"apercu\":{\"genre\":\"sms\",\"to\":\"Marie Roy · 514-555-0110\",\"subject\":null,\"body\":\"Bonjour, on confirme pour demain.\",\"drapeaux\":{\"irreversible\":true,\"vers_client\":true,\"jamais_d_office\":true}}}]"
+    },
+    {
+     "libelle": "tour 2 — envoyé",
+     "contenu": "Non, pas elle : l’autre Marie Roy, celle de Brossard."
+    },
+    {
+     "libelle": "tour 2 — reçu (statut 200, étage 6, 14466 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 2 — événements",
+     "contenu": "lectures : get_client_profile ; cartes : send_sms ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 2",
+     "contenu": "[{\"outil\":\"send_sms\",\"d_office\":false,\"args\":{\"client_id\":\"6177fe64-6cd5-5fe4-9fc8-6431645ba921\",\"client_name\":\"Marie Roy\",\"message_text\":\"Bonjour, on confirme pour demain.\",\"phone_number\":\"514-555-0111\"},\"apercu\":{\"genre\":\"sms\",\"to\":\"Marie Roy · 514-555-0111\",\"subject\":null,\"body\":\"Bonjour, on confirme pour demain.\",\"drapeaux\":{\"irreversible\":true,\"vers_client\":true,\"jamais_d_office\":true}}}]"
+    },
+    {
+     "libelle": "conversation rechargée (GET, statut 200) — sort des cartes",
+     "contenu": "48kqH1GG : echouee\nRHvzu9r4 : annulee\nqLtEgDJ6 : en_attente"
+    },
+    {
+     "libelle": "envois consignés au bac à sable depuis le début de la passe",
+     "contenu": "avant : 0 ; après : 0"
+    }
+   ]
+  },
+  {
+   "id": "revirement.annule",
+   "famille": "revirement",
+   "titre": "« Annule ça » devant une carte",
+   "fait": "Carte « créer une tâche [ROB] annulation <passe> », puis « Annule ça, finalement. » La carte doit être annulée, aucune autre proposée, aucune tâche en base.",
+   "si_defaut": "La tâche créée, la carte encore en attente, une nouvelle carte, ou « c’est fait ».",
+   "lignes": [
+    3
+   ],
+   "duree_ms": 20561,
+   "verdict": "PASS",
+   "constats": [
+    "la première carte est annulée (relue dans la conversation rechargée)",
+    "le message suivant est servi, sans erreur ni exécution",
+    "aucune ligne écrite en base"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Crée une tâche : [ROB] annulation XHF8EANN"
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 2, 3580 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 1",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] annulation XHF8EANN\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] annulation XHF8EANN\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "tour 2 — envoyé",
+     "contenu": "Annule ça, finalement."
+    },
+    {
+     "libelle": "tour 2 — reçu (statut 200, étage 6, 6504 ms)",
+     "contenu": "D'accord, pas de souci, je n'ai rien créé."
+    },
+    {
+     "libelle": "tour 2 — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 2",
+     "contenu": "aucune"
+    },
+    {
+     "libelle": "conversation rechargée (GET, statut 200) — sort des cartes",
+     "contenu": "71582607 : annulee"
+    },
+    {
+     "libelle": "tâches de ce test en base (SELECT)",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8EANN%' order by created_at\n→ aucune"
+    }
+   ]
+  },
+  {
+   "id": "revirement.reformulation",
+   "famille": "revirement",
+   "titre": "Reformuler devant une carte",
+   "fait": "Carte « créer une tâche [ROB] appeler le fournisseur <passe> », puis « Attends, change le titre pour : [ROB] commander du savon <passe> ». La première carte doit être annulée, la nouvelle porter le nouveau titre ; elle est annulée, aucune tâche en base.",
+   "si_defaut": "Deux cartes en attente, l’ancien titre gardé, ou une tâche créée sans confirmation.",
+   "lignes": [
+    3
+   ],
+   "duree_ms": 33171,
+   "verdict": "PASS",
+   "constats": [
+    "la première carte est annulée (relue dans la conversation rechargée)",
+    "le message suivant est servi, sans erreur ni exécution",
+    "aucune ligne écrite en base",
+    "carte « create_task » en attente, sur le nouveau titre : « commander du savon »",
+    "aucune autre fiche sur la carte, aucun événement d’exécution"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Crée une tâche : [ROB] appeler le fournisseur XHF8ETIT"
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 2, 17506 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 1",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] appeler le fournisseur XHF8ETIT\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] appeler le fournisseur XHF8ETIT\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "tour 2 — envoyé",
+     "contenu": "Attends, change le titre pour : [ROB] commander du savon XHF8ETIT"
+    },
+    {
+     "libelle": "tour 2 — reçu (statut 200, étage 6, 7843 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 2 — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 2",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] commander du savon XHF8ETIT\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] commander du savon XHF8ETIT\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "conversation rechargée (GET, statut 200) — sort des cartes",
+     "contenu": "9b71b2cc : annulee\nToaSJxPX : en_attente"
+    },
+    {
+     "libelle": "tâches de ce test en base (SELECT)",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ETIT%' order by created_at\n→ aucune"
+    }
+   ]
+  },
+  {
+   "id": "revirement.autre-sujet",
+   "famille": "revirement",
+   "titre": "Carte laissée, puis une question sans rapport",
+   "fait": "Carte « créer une tâche [ROB] autre sujet <passe> » laissée sans réponse, puis « Au fait, combien de clients j’ai ? », puis une troisième question. La carte doit être annulée, les deux tours servis, l’historique enregistré valide (SELECT), aucune tâche en base.",
+   "si_defaut": "La carte encore confirmable, une erreur au tour suivant (historique refusé par le modèle), une tâche créée.",
+   "lignes": [
+    3
+   ],
+   "duree_ms": 27868,
+   "verdict": "PASS",
+   "constats": [
+    "la première carte est annulée (relue dans la conversation rechargée)",
+    "le message suivant est servi, sans erreur ni exécution",
+    "aucune ligne écrite en base",
+    "le troisième tour est servi ; historique valide"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Crée une tâche : [ROB] autre sujet XHF8ESUJ"
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 2, 1292 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 1",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] autre sujet XHF8ESUJ\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] autre sujet XHF8ESUJ\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "tour 2 — envoyé",
+     "contenu": "Au fait, combien de clients j’ai ?"
+    },
+    {
+     "libelle": "tour 2 — reçu (statut 200, étage 6, 6886 ms)",
+     "contenu": "Tu as 12 clients au total."
+    },
+    {
+     "libelle": "tour 2 — événements",
+     "contenu": "lectures : search_clients ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "cartes du tour 2",
+     "contenu": "aucune"
+    },
+    {
+     "libelle": "tour 3 — envoyé",
+     "contenu": "Et Luc Bergeron, il me doit combien ?"
+    },
+    {
+     "libelle": "tour 3 — reçu (statut 200, étage 6, 13513 ms)",
+     "contenu": "Il te doit 229,95 $, en retard de paiement (facture impayée, rien n'a encore été payé)."
+    },
+    {
+     "libelle": "tour 3 — événements",
+     "contenu": "lectures : get_client_profile ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "conversation rechargée (GET, statut 200) — sort des cartes",
+     "contenu": "2fdd0ddb : annulee"
+    },
+    {
+     "libelle": "tâches de ce test en base (SELECT)",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ESUJ%' order by created_at\n→ aucune"
+    },
+    {
+     "libelle": "historique enregistré (SELECT sur lumi_messages, 11 messages)",
+     "contenu": "1. user : texte (43)\n2. assistant : tool_use create_task 2fdd0ddb\n3. user : tool_result 2fdd0ddb\n4. user : texte (34)\n5. assistant : tool_use search_clients UVFuTuEE\n6. user : tool_result UVFuTuEE\n7. assistant : texte (26)\n8. user : texte (37)\n9. assistant : tool_use get_client_profile thMipYLB\n10. user : tool_result thMipYLB\n11. assistant : texte (87)\n→ valide"
+    }
+   ]
+  },
+  {
+   "id": "reprise.coupure-texte",
+   "famille": "reprise",
+   "titre": "Connexion coupée au premier mot de la réponse",
+   "fait": "Une conversation est ouverte, puis la connexion est coupée au premier texte d’une longue réponse. La conversation est rechargée (GET), un message est renvoyé (en attendant si le serveur répond « conversation occupée »), puis un autre ; l’historique est relu par SELECT et les écritures de Lumi sont comptées.",
+   "si_defaut": "Une réponse vide au rechargement, « Lumi n’a pas pu répondre » au message suivant (historique cassé : deux tours écrits en même temps), une conversation occupée sans fin, une écriture enregistrée.",
+   "lignes": [
+    4
+   ],
+   "duree_ms": 50409,
+   "verdict": "PASS",
+   "constats": [
+    "flux coupé par la batterie avant la fin",
+    "conversation rechargée (200), aucune réponse vide",
+    "message suivant servi (répondu (étage 6))",
+    "historique valide (12 messages)",
+    "aucune écriture pendant le test"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Montre-moi la fiche de Luc Bergeron."
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 2, 1594 ms)",
+     "contenu": "Luc Bergeron · Dépanneur Bergeron\nTéléphone : 514-555-0114\nCourriel : depanneur.bergeron@lume-qa.test\nAdresse : 1590 chemin de Chambly, Longueuil, QC J4J 3X5, Longueuil\nStatut : client actif"
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : search_clients ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "tour 2 (coupé au premier texte) — envoyé",
+     "contenu": "Explique-moi en détail la situation de ce client : ses jobs, ses factures, ce qu’il me doit, et ce que tu me conseilles de faire."
+    },
+    {
+     "libelle": "tour 2 (coupé au premier texte) — reçu (statut 200, étage —, COUPÉ par la batterie, 7260 ms)",
+     "contenu": "Voici le"
+    },
+    {
+     "libelle": "tour 2 (coupé au premier texte) — événements",
+     "contenu": "lectures : search_clients, get_client_profile ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "rechargement immédiat (GET, statut 200)",
+     "contenu": "user : Montre-moi la fiche de Luc Bergeron.\nassistant : Luc Bergeron · Dépanneur Bergeron\nTéléphone : 514-555-0114\nCourriel : depanneur.bergeron@l… (190 caractères)\nuser : Explique-moi en détail la situation de ce client : ses jobs, ses factures, ce qu’il me doi… (129 caractères)"
+    },
+    {
+     "libelle": "tour 3, essai 1 — envoyé",
+     "contenu": "Finalement, donne-moi juste son numéro de téléphone."
+    },
+    {
+     "libelle": "tour 3, essai 1 — reçu (statut 200, étage 6, 5493 ms)",
+     "contenu": "514-555-0114"
+    },
+    {
+     "libelle": "tour 3, essai 1 — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "tour 4, essai 1 — envoyé",
+     "contenu": "Et son courriel ?"
+    },
+    {
+     "libelle": "tour 4, essai 1 — reçu (statut 200, étage 6, 5843 ms)",
+     "contenu": "depanneur.bergeron@lume-qa.test"
+    },
+    {
+     "libelle": "tour 4, essai 1 — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "conversation rechargée à la fin (GET, statut 200)",
+     "contenu": "user : Montre-moi la fiche de Luc Bergeron.\nassistant : Luc Bergeron · Dépanneur Bergeron\nTéléphone : 514-555-0114\nCourriel : depanneur.bergeron@l… (190 caractères)\nuser : Explique-moi en détail la situation de ce client : ses jobs, ses factures, ce qu’il me doi… (129 caractères)\nassistant : (vide)\nassistant : (vide)\nassistant : Voici le portrait de Luc Bergeron (Dépanneur Bergeron) :\n\n**Jobs** : 2 au total — un lavag… (653 caractères)\nuser : Finalement, donne-moi juste son numéro de téléphone.\nassistant : 514-555-0114\nuser : Et son courriel ?\nassistant : depanneur.bergeron@lume-qa.test"
+    },
+    {
+     "libelle": "historique enregistré (SELECT sur lumi_messages, 12 messages)",
+     "contenu": "1. user : texte (36)\n2. assistant : texte (190)\n3. user : texte (129)\n4. assistant : thinking, tool_use search_clients tAGp6CoE\n5. user : tool_result tAGp6CoE\n6. assistant : tool_use get_client_profile BXwUWnqw\n7. user : tool_result BXwUWnqw\n8. assistant : texte (653)\n9. user : texte (52)\n10. assistant : texte (12)\n11. user : texte (17)\n12. assistant : texte (31)\n→ valide"
+    },
+    {
+     "libelle": "écritures de Lumi enregistrées pour ce compte (agent_actions)",
+     "contenu": "avant le tour coupé : 0 ; à la fin : 0"
+    }
+   ]
+  },
+  {
+   "id": "reprise.carte-rechargee",
+   "famille": "reprise",
+   "titre": "Connexion coupée à l’arrivée d’une carte",
+   "fait": "La connexion est coupée dès que la carte « créer une tâche [ROB] reprise carte <passe> » arrive. La conversation est retrouvée par la liste, rechargée : la carte doit être en attente et rien n’est écrit. Elle est alors confirmée : une tâche, une seule.",
+   "si_defaut": "La carte perdue au rechargement, une tâche créée sans confirmation, ou deux tâches.",
+   "lignes": [
+    4
+   ],
+   "duree_ms": 36399,
+   "verdict": "PASS",
+   "constats": [
+    "la carte coupée est retrouvée en attente au rechargement, rien n’était écrit",
+    "lignes en base : 1",
+    "résultats enregistrés pour la carte : 1",
+    "réponses : fait"
+   ],
+   "preuves": [
+    {
+     "libelle": "demande (coupée à l’arrivée de la carte) — envoyé",
+     "contenu": "[ROB] reprise carte XHF8ERCA : crée-moi une tâche avec ce titre, priorité basse, pour demain."
+    },
+    {
+     "libelle": "demande (coupée à l’arrivée de la carte) — reçu (statut 200, étage —, COUPÉ par la batterie, 4720 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "demande (coupée à l’arrivée de la carte) — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "carte reçue avant la coupure",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] reprise carte XHF8ERCA\",\"priority\":\"low\",\"due_date\":\"2026-10-02\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] reprise carte XHF8ERCA\"},{\"libelle\":{\"fr\":\"Priorité\",\"en\":\"Priority\"},\"valeur\":\"Basse\",\"valeur_en\":\"Low\"},{\"libelle\":{\"fr\":\"Échéance\",\"en\":\"Due date\"},\"valeur\":\"ven. 2 octobre 2026\",\"valeur_en\":\"Fri, October 2, 2026\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "conversation rechargée (GET, statut 200) — cartes en attente",
+     "contenu": "create_task {\"title\":\"[ROB] reprise carte XHF8ERCA\",\"due_date\":\"2026-10-02\",\"priority\":\"low\"}"
+    },
+    {
+     "libelle": "tâches en base AVANT de confirmer",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ERCA%' order by created_at\n→ 0 ligne(s) : —"
+    },
+    {
+     "libelle": "confirmation après rechargement",
+     "contenu": "statut 200 — fait — « C'est fait : la tâche « [ROB] reprise carte XHF8ERCA ». »"
+    },
+    {
+     "libelle": "tâches en base APRÈS",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ERCA%' order by created_at\n→ 1 ligne(s) : [ROB] reprise carte XHF8ERCA"
+    }
+   ]
+  },
+  {
+   "id": "reprise.message-coupe-sur-carte",
+   "famille": "reprise",
+   "titre": "Carte en attente, puis un message coupé, puis « Confirmer » sur la vieille carte",
+   "fait": "Une carte « créer une tâche [ROB] reprise message <passe> » attend ; un autre message part et sa réponse est coupée au premier texte ; « Confirmer » est alors envoyé sur la vieille carte, puis un message. La carte doit être annulée une fois pour toutes : refus propre, aucune tâche, un seul résultat enregistré.",
+   "si_defaut": "La tâche créée après l’annulation, deux résultats pour la même carte (annulée ET exécutée), ou une erreur au message suivant.",
+   "lignes": [
+    4
+   ],
+   "duree_ms": 45862,
+   "verdict": "PASS",
+   "constats": [
+    "le message coupé a bien annulé la carte (un seul résultat enregistré, affichée annulée)",
+    "« Confirmer » ensuite : refus_propre — rien n’est écrit en base",
+    "le message suivant est servi, historique valide"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 — envoyé",
+     "contenu": "Crée une tâche : [ROB] reprise message XHF8ERMC"
+    },
+    {
+     "libelle": "tour 1 — reçu (statut 200, étage 2, 2671 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 1 — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "carte du tour 1",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] reprise message XHF8ERMC\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] reprise message XHF8ERMC\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "tour 2 (coupé au premier texte) — envoyé",
+     "contenu": "Avant ça, dis-moi en détail quelles factures sont en retard et depuis quand."
+    },
+    {
+     "libelle": "tour 2 (coupé au premier texte) — reçu (statut 200, étage —, COUPÉ par la batterie, 5758 ms)",
+     "contenu": "De"
+    },
+    {
+     "libelle": "tour 2 (coupé au premier texte) — événements",
+     "contenu": "lectures : get_overdue_payments ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "« Confirmer » sur la vieille carte, essai 1",
+     "contenu": "statut 409, code aucune_proposition — refus_propre — « No such pending action. »"
+    },
+    {
+     "libelle": "tour 3, essai 1 — envoyé",
+     "contenu": "Et Luc Bergeron, il me doit combien ?"
+    },
+    {
+     "libelle": "tour 3, essai 1 — reçu (statut 200, étage 6, 8415 ms)",
+     "contenu": "Luc Bergeron te doit 229,95 $ (facture #3, en retard depuis 6 jours)."
+    },
+    {
+     "libelle": "tour 3, essai 1 — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "tâches en base",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ERMC%' order by created_at\n→ 0 ligne(s) : —"
+    },
+    {
+     "libelle": "la carte, dans la conversation",
+     "contenu": "résultats enregistrés : 1 ; sort affiché au rechargement : annulee"
+    },
+    {
+     "libelle": "historique enregistré (SELECT sur lumi_messages, 9 messages)",
+     "contenu": "1. user : texte (47)\n2. assistant : tool_use create_task 0842532e\n3. user : tool_result 0842532e\n4. user : texte (76)\n5. assistant : tool_use get_overdue_payments pZ5UQDyq\n6. user : tool_result pZ5UQDyq\n7. assistant : texte (239)\n8. user : texte (37)\n9. assistant : texte (69)\n→ valide"
+    }
+   ]
+  },
+  {
+   "id": "reprise.confirmer-coupe-apres",
+   "famille": "reprise",
+   "titre": "« Confirmer » coupé juste après l’exécution, puis reconfirmé",
+   "fait": "La carte « créer une tâche [ROB] reprise confirmer <passe> » est confirmée et la connexion coupée dès les en-têtes de la réponse (le reçu n’est jamais lu). « Confirmer » est renvoyé. Les tâches de ce titre et les résultats enregistrés pour la carte sont comptés.",
+   "si_defaut": "Deux tâches, deux résultats pour la même carte, ou une erreur au lieu de « déjà fait » / refus propre.",
+   "lignes": [
+    4
+   ],
+   "duree_ms": 27036,
+   "verdict": "PASS",
+   "constats": [
+    "lignes en base : 1",
+    "résultats enregistrés pour la carte : 1",
+    "réponses : coupe, refus_propre"
+   ],
+   "preuves": [
+    {
+     "libelle": "demande — envoyé",
+     "contenu": "Crée une tâche : [ROB] reprise confirmer XHF8ERXA"
+    },
+    {
+     "libelle": "demande — reçu (statut 200, étage 2, 5964 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "demande — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "carte",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] reprise confirmer XHF8ERXA\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] reprise confirmer XHF8ERXA\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "« Confirmer » coupé aux en-têtes de la réponse",
+     "contenu": "statut 200, coupé : true, 0 événement(s) reçu(s) en 1904 ms"
+    },
+    {
+     "libelle": "tâches en base après la coupure, avant de reconfirmer",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ERXA%' order by created_at\n→ 1 ligne(s) : [ROB] reprise confirmer XHF8ERXA"
+    },
+    {
+     "libelle": "nouvelle confirmation, essai 1",
+     "contenu": "statut 409, code aucune_proposition — refus_propre — reçus : [] — « No such pending action. »"
+    },
+    {
+     "libelle": "tâches en base à la fin",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ERXA%' order by created_at\n→ 1 ligne(s) : [ROB] reprise confirmer XHF8ERXA"
+    },
+    {
+     "libelle": "historique enregistré (SELECT sur lumi_messages, 4 messages)",
+     "contenu": "1. user : texte (49)\n2. assistant : tool_use create_task b925f3c5\n3. user : tool_result b925f3c5\n4. assistant : texte (59)\n→ valide"
+    }
+   ],
+   "observations": [
+    "après la coupure et avant de reconfirmer, 1 tâche(s) en base : la première demande avait atteint le serveur et s’est exécutée"
+   ]
+  },
+  {
+   "id": "reprise.confirmer-coupe-pendant",
+   "famille": "reprise",
+   "titre": "« Confirmer » coupé 350 ms après l’envoi, puis reconfirmé",
+   "fait": "Même scénario, mais la connexion est coupée 350 ms après l’envoi : selon le réseau, pendant l’exécution ou avant. « Confirmer » est renvoyé ; à la fin il doit y avoir UNE tâche et UN résultat, quel que soit le moment de la coupure.",
+   "si_defaut": "Zéro tâche avec un « déjà fait », deux tâches, ou deux résultats pour la même carte.",
+   "lignes": [
+    4
+   ],
+   "duree_ms": 19558,
+   "verdict": "PASS",
+   "constats": [
+    "lignes en base : 1",
+    "résultats enregistrés pour la carte : 1",
+    "réponses : coupe, refus_propre"
+   ],
+   "preuves": [
+    {
+     "libelle": "demande — envoyé",
+     "contenu": "Crée une tâche : [ROB] reprise confirmer XHF8ERXP"
+    },
+    {
+     "libelle": "demande — reçu (statut 200, étage 2, 2386 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "demande — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "carte",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] reprise confirmer XHF8ERXP\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] reprise confirmer XHF8ERXP\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "« Confirmer » coupé 350 ms après l’envoi",
+     "contenu": "statut 0, coupé : true, 0 événement(s) reçu(s) en 359 ms"
+    },
+    {
+     "libelle": "tâches en base après la coupure, avant de reconfirmer",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ERXP%' order by created_at\n→ 0 ligne(s) : —"
+    },
+    {
+     "libelle": "nouvelle confirmation, essai 1",
+     "contenu": "statut 409, code aucune_proposition — refus_propre — reçus : [] — « No such pending action. »"
+    },
+    {
+     "libelle": "tâches en base à la fin",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ERXP%' order by created_at\n→ 1 ligne(s) : [ROB] reprise confirmer XHF8ERXP"
+    },
+    {
+     "libelle": "historique enregistré (SELECT sur lumi_messages, 4 messages)",
+     "contenu": "1. user : texte (49)\n2. assistant : tool_use create_task 5a98983a\n3. user : tool_result 5a98983a\n4. assistant : texte (59)\n→ valide"
+    }
+   ],
+   "observations": [
+    "après la coupure et avant de reconfirmer, 0 tâche(s) en base : la première demande n’avait pas (encore) écrit"
+   ]
+  },
+  {
+   "id": "simultane.deux-messages",
+   "famille": "simultane",
+   "titre": "Deux messages au même instant dans la même conversation",
+   "fait": "Une conversation est ouverte sur le « web » ; le « web » et le « mobile » (deux jetons du même compte) y envoient chacun un message au même instant. Puis un message suit, et l’historique enregistré est relu par SELECT.",
+   "si_defaut": "Une erreur 500, les deux messages refusés, un historique où une action n’a pas son résultat (les deux tours se sont écrits l’un dans l’autre), ou une erreur au message suivant.",
+   "lignes": [
+    5,
+    6
+   ],
+   "duree_ms": 60687,
+   "verdict": "PASS",
+   "constats": [
+    "un message est servi, l’autre est refusé proprement par le verrou de conversation (409, message clair)",
+    "historique valide (6 messages)",
+    "le message suivant est servi"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 (web) — envoyé",
+     "contenu": "Montre-moi la fiche de Luc Bergeron."
+    },
+    {
+     "libelle": "tour 1 (web) — reçu (statut 200, étage 2, 29752 ms)",
+     "contenu": "Luc Bergeron · Dépanneur Bergeron\nTéléphone : 514-555-0114\nCourriel : depanneur.bergeron@lume-qa.test\nAdresse : 1590 chemin de Chambly, Longueuil, QC J4J 3X5, Longueuil\nStatut : client actif"
+    },
+    {
+     "libelle": "tour 1 (web) — événements",
+     "contenu": "lectures : search_clients ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "en même temps — web — envoyé",
+     "contenu": "Quel est son numéro de téléphone ?"
+    },
+    {
+     "libelle": "en même temps — web — reçu (statut 200, étage 6, 14067 ms)",
+     "contenu": "514-555-0114."
+    },
+    {
+     "libelle": "en même temps — web — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "en même temps — mobile — envoyé",
+     "contenu": "Quelle est son adresse courriel ?"
+    },
+    {
+     "libelle": "en même temps — mobile — reçu (statut 409, 4012 ms)",
+     "contenu": "code conversation_occupee — Lumi répond déjà dans cette conversation. Attends la fin de sa réponse, puis renvoie ton message."
+    },
+    {
+     "libelle": "tour suivant, essai 1 — envoyé",
+     "contenu": "Et dans quelle ville il est ?"
+    },
+    {
+     "libelle": "tour suivant, essai 1 — reçu (statut 200, étage 6, 6244 ms)",
+     "contenu": "Longueuil."
+    },
+    {
+     "libelle": "tour suivant, essai 1 — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "historique enregistré (SELECT sur lumi_messages, 6 messages)",
+     "contenu": "1. user : texte (36)\n2. assistant : texte (190)\n3. user : texte (34)\n4. assistant : texte (13)\n5. user : texte (29)\n6. assistant : texte (10)\n→ valide"
+    }
+   ]
+  },
+  {
+   "id": "simultane.message-et-confirmer",
+   "famille": "simultane",
+   "titre": "Un message et un « Confirmer » au même instant",
+   "fait": "Une carte « créer une tâche [ROB] deux appareils <passe> » attend. Au même instant, le « web » confirme et le « mobile » écrit « Finalement non ». Les résultats enregistrés pour la carte et les tâches en base sont comptés, puis un message suit.",
+   "si_defaut": "Deux résultats pour la même carte (confirmée ET annulée), une tâche créée alors que la confirmation dit non, ou une erreur au message suivant.",
+   "lignes": [
+    5
+   ],
+   "duree_ms": 31841,
+   "verdict": "PASS",
+   "constats": [
+    "confirmation : fait (statut 200)",
+    "message : refus propre (409 conversation_occupee) : « Lumi répond déjà dans cette conversation. Attends la fin de sa réponse, puis renvoie ton message. »",
+    "résultats enregistrés pour la carte : 1",
+    "lignes en base : 1",
+    "historique valide (8 messages)",
+    "le message suivant est servi"
+   ],
+   "preuves": [
+    {
+     "libelle": "tour 1 (web) — envoyé",
+     "contenu": "Crée une tâche : [ROB] deux appareils XHF8ESMC"
+    },
+    {
+     "libelle": "tour 1 (web) — reçu (statut 200, étage 2, 1535 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "tour 1 (web) — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "carte",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] deux appareils XHF8ESMC\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] deux appareils XHF8ESMC\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "en même temps — web : « Confirmer »",
+     "contenu": "statut 200 — fait — reçus : [{\"ok\":true}] — « C'est fait : la tâche « [ROB] deux appareils XHF8ESMC ». »"
+    },
+    {
+     "libelle": "en même temps — mobile — envoyé",
+     "contenu": "Finalement non, laisse faire cette tâche."
+    },
+    {
+     "libelle": "en même temps — mobile — reçu (statut 409, 1095 ms)",
+     "contenu": "code conversation_occupee — Lumi répond déjà dans cette conversation. Attends la fin de sa réponse, puis renvoie ton message."
+    },
+    {
+     "libelle": "tour suivant, essai 1 — envoyé",
+     "contenu": "Et Luc Bergeron, il me doit combien ?"
+    },
+    {
+     "libelle": "tour suivant, essai 1 — reçu (statut 200, étage 6, 14964 ms)",
+     "contenu": "Luc Bergeron te doit 229,95 $ (facture #3, envoyée, échue depuis le 25 septembre)."
+    },
+    {
+     "libelle": "tour suivant, essai 1 — événements",
+     "contenu": "lectures : list_invoices ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "tâches de ce test en base (SELECT)",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ESMC%' order by created_at\n→ 1 ligne(s) : [ROB] deux appareils XHF8ESMC"
+    },
+    {
+     "libelle": "résultats enregistrés pour la carte (SELECT)",
+     "contenu": "1"
+    },
+    {
+     "libelle": "historique enregistré (SELECT sur lumi_messages, 8 messages)",
+     "contenu": "1. user : texte (46)\n2. assistant : tool_use create_task 8af1f931\n3. user : tool_result 8af1f931\n4. assistant : texte (56)\n5. user : texte (37)\n6. assistant : thinking, tool_use list_invoices ZX8qAbad\n7. user : tool_result ZX8qAbad\n8. assistant : texte (82)\n→ valide"
+    }
+   ]
+  },
+  {
+   "id": "simultane.deux-confirmer",
+   "famille": "simultane",
+   "titre": "« Confirmer » sur le web et sur le mobile au même instant",
+   "fait": "Une carte « créer une tâche [ROB] double confirmer <passe> » est confirmée au même instant par les deux sessions, puis une troisième fois 3 s plus tard.",
+   "si_defaut": "Deux tâches, deux reçus « c’est fait », deux résultats enregistrés pour la carte, ou une erreur au lieu de « déjà fait » / refus propre.",
+   "lignes": [
+    5
+   ],
+   "duree_ms": 22749,
+   "verdict": "PASS",
+   "constats": [
+    "lignes en base : 1",
+    "résultats enregistrés pour la carte : 1",
+    "réponses : refus_propre, fait, refus_propre"
+   ],
+   "preuves": [
+    {
+     "libelle": "demande (web) — envoyé",
+     "contenu": "Crée une tâche : [ROB] double confirmer XHF8ESDC"
+    },
+    {
+     "libelle": "demande (web) — reçu (statut 200, étage 2, 4644 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "demande (web) — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "carte",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] double confirmer XHF8ESDC\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] double confirmer XHF8ESDC\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "confirmation 1 (web, en même temps)",
+     "contenu": "statut 409, code decision_en_cours — refus_propre — reçus : [] — « Cette action est déjà en cours de traitement. »"
+    },
+    {
+     "libelle": "confirmation 2 (mobile, en même temps)",
+     "contenu": "statut 200 — fait — reçus : [{\"ok\":true}] — « C'est fait : la tâche « [ROB] double confirmer XHF8ESDC ». »"
+    },
+    {
+     "libelle": "confirmation 3 (web, après coup)",
+     "contenu": "statut 409, code aucune_proposition — refus_propre — reçus : [] — « No such pending action. »"
+    },
+    {
+     "libelle": "tâches de ce test en base (SELECT)",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8ESDC%' order by created_at\n→ 1 ligne(s) : [ROB] double confirmer XHF8ESDC"
+    },
+    {
+     "libelle": "historique enregistré (SELECT sur lumi_messages, 4 messages)",
+     "contenu": "1. user : texte (48)\n2. assistant : tool_use create_task 0da0b785\n3. user : tool_result 0da0b785\n4. assistant : texte (58)\n→ valide"
+    }
+   ]
+  },
+  {
+   "id": "simultane.deux-conversations",
+   "famille": "simultane",
+   "titre": "Deux conversations différentes en parallèle",
+   "fait": "Au même instant, le « web » demande dans une nouvelle conversation combien doit Luc Bergeron, et le « mobile », dans une autre, combien doit Patrick Girard. Chaque réponse doit porter SON solde (SELECT).",
+   "si_defaut": "Une des deux refusée ou en erreur, les deux rangées dans la même conversation, ou une réponse qui porte le solde de l’autre.",
+   "lignes": [
+    5
+   ],
+   "duree_ms": 10049,
+   "verdict": "PASS",
+   "constats": [
+    "les deux conversations répondent, chacune sur sa fiche",
+    "deux conversations distinctes"
+   ],
+   "preuves": [
+    {
+     "libelle": "soldes dus (SELECT)",
+     "contenu": "Luc Bergeron : 229.95 $ ; Patrick Girard : 919.80 $"
+    },
+    {
+     "libelle": "conversation 1 (web) — envoyé",
+     "contenu": "Combien me doit Luc Bergeron ?"
+    },
+    {
+     "libelle": "conversation 1 (web) — reçu (statut 200, étage 6, 9082 ms)",
+     "contenu": "Luc Bergeron te doit 229,95 $, en retard de paiement sur une facture."
+    },
+    {
+     "libelle": "conversation 1 (web) — événements",
+     "contenu": "lectures : get_client_profile ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "conversation 2 (mobile) — envoyé",
+     "contenu": "Combien me doit Patrick Girard ?"
+    },
+    {
+     "libelle": "conversation 2 (mobile) — reçu (statut 200, étage 6, 9156 ms)",
+     "contenu": "Patrick Girard te doit 919,80 $, tous en retard."
+    },
+    {
+     "libelle": "conversation 2 (mobile) — événements",
+     "contenu": "lectures : get_client_profile ; cartes : — ; exécutions : —"
+    }
+   ]
+  },
+  {
+   "id": "entrees.vide",
+   "famille": "entrees",
+   "titre": "Message vide, message d’espaces",
+   "fait": "POST /api/lumi/chat avec un message vide, puis avec des espaces et des retours à la ligne. Les tours tracés et les conversations du compte sont comptés avant et après.",
+   "si_defaut": "Un tour ouvert sur du vide (flux 200), une erreur 500, un refus sans message, une conversation vide créée.",
+   "lignes": [
+    6
+   ],
+   "duree_ms": 17208,
+   "verdict": "PASS",
+   "constats": [
+    "vide : refus 400 : « Too small: expected string to have >=1 characters »",
+    "vide : aucun tour tracé, aucune conversation créée",
+    "espaces : refus 400 : « Too small: expected string to have >=1 characters »",
+    "espaces : aucun tour tracé, aucune conversation créée"
+   ],
+   "preuves": [
+    {
+     "libelle": "message vide — envoyé",
+     "contenu": "\"\""
+    },
+    {
+     "libelle": "message vide — reçu (statut 400, 82 ms)",
+     "contenu": "Too small: expected string to have >=1 characters"
+    },
+    {
+     "libelle": "message vide — tours tracés et conversations ouvertes (SELECT)",
+     "contenu": "avant : 0 tour(s), 0 conversation(s) ; après : 0, 0"
+    },
+    {
+     "libelle": "message d’espaces — envoyé",
+     "contenu": "\"   \\n\\t  \""
+    },
+    {
+     "libelle": "message d’espaces — reçu (statut 400, 1581 ms)",
+     "contenu": "Too small: expected string to have >=1 characters"
+    },
+    {
+     "libelle": "message d’espaces — tours tracés et conversations ouvertes (SELECT)",
+     "contenu": "avant : 0 tour(s), 0 conversation(s) ; après : 0, 0"
+    }
+   ],
+   "observations": [
+    "message vide : le message du refus est un texte technique en anglais (« Too small: expected string to have >=1 characters ») — l’interface n’envoie pas ce message, mais une autre porte d’entrée l’afficherait tel quel",
+    "message d’espaces : le message du refus est un texte technique en anglais (« Too small: expected string to have >=1 characters ») — l’interface n’envoie pas ce message, mais une autre porte d’entrée l’afficherait tel quel"
+   ]
+  },
+  {
+   "id": "entrees.trop-long",
+   "famille": "entrees",
+   "titre": "Message au-delà de la limite (8 001 caractères)",
+   "fait": "POST /api/lumi/chat avec un message de 8 001 caractères (la limite du serveur est 8 000).",
+   "si_defaut": "Le message accepté et envoyé au modèle, une erreur 500, un refus sans message.",
+   "lignes": [
+    6
+   ],
+   "duree_ms": 9239,
+   "verdict": "PASS",
+   "constats": [
+    "refus 400 : « Too big: expected string to have <=8000 characters »",
+    "aucun tour tracé, aucune conversation créée"
+   ],
+   "preuves": [
+    {
+     "libelle": "message de 8001 caractères — envoyé",
+     "contenu": "Voici mes notes de la semaine. Lundi, lavage de vitres chez un client de Longueuil, deux heures de t… (8001 caractères)"
+    },
+    {
+     "libelle": "message de 8001 caractères — reçu (statut 400, 73 ms)",
+     "contenu": "Too big: expected string to have <=8000 characters"
+    },
+    {
+     "libelle": "message de 8001 caractères — tours tracés et conversations ouvertes (SELECT)",
+     "contenu": "avant : 0 tour(s), 0 conversation(s) ; après : 0, 0"
+    }
+   ],
+   "observations": [
+    "message de 8001 caractères : le message du refus est un texte technique en anglais (« Too big: expected string to have <=8000 characters ») — l’interface n’envoie pas ce message, mais une autre porte d’entrée l’afficherait tel quel"
+   ]
+  },
+  {
+   "id": "entrees.long",
+   "famille": "entrees",
+   "titre": "Message juste sous la limite (7 900 caractères)",
+   "fait": "Un message de 7 900 caractères (des notes de la semaine, avec une question) : il doit être servi, sans erreur, sans carte.",
+   "si_defaut": "Un refus, une erreur, un flux sans fin, une réponse vide, ou une carte tirée du texte collé.",
+   "lignes": [
+    6
+   ],
+   "duree_ms": 7881,
+   "verdict": "PASS",
+   "constats": [
+    "répondu (étage 6)",
+    "139 caractères de réponse"
+   ],
+   "preuves": [
+    {
+     "libelle": "message de 7900 caractères — envoyé",
+     "contenu": "Voici mes notes de la semaine. Dis-moi en une phrase de quoi elles parlent. Lundi, lavage de vitres chez un client de Lo… (7900 caractères)"
+    },
+    {
+     "libelle": "message de 7900 caractères — reçu (statut 200, étage 6, 7881 ms)",
+     "contenu": "Tes notes décrivent toutes la même chose, répétée : un lavage de vitres de deux heures chez un client de Longueuil le lundi, sans incident."
+    },
+    {
+     "libelle": "message de 7900 caractères — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    }
+   ]
+  },
+  {
+   "id": "entrees.collage",
+   "famille": "entrees",
+   "titre": "Collage de 200 lignes",
+   "fait": "Un message de 200 lignes collées (« Ligne 001 : vitres, 45,00 $ »…), avec une question en tête : il doit être servi, sans erreur, sans carte.",
+   "si_defaut": "Une erreur, une réponse vide, ou 200 cartes / une écriture tirée du collage.",
+   "lignes": [
+    6
+   ],
+   "duree_ms": 7074,
+   "verdict": "PASS",
+   "constats": [
+    "répondu (étage 6)",
+    "103 caractères de réponse"
+   ],
+   "preuves": [
+    {
+     "libelle": "collage de 200 lignes (5662 caractères) — envoyé",
+     "contenu": "Je te colle ma liste de la semaine. Combien de lignes il y a ?\nLigne 001 : vitres, 45,00 $\nLigne 002 : vitres, 45,00 $\nLigne 003 : vitres, 4…"
+    },
+    {
+     "libelle": "collage de 200 lignes (5662 caractères) — reçu (statut 200, étage 6, 7074 ms)",
+     "contenu": "200 lignes, toutes « vitres » à 45,00 $ chacune, soit 9 000,00 $ au total si c'est ce que tu cherchais."
+    },
+    {
+     "libelle": "collage de 200 lignes (5662 caractères) — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    }
+   ]
+  },
+  {
+   "id": "entrees.emojis",
+   "famille": "entrees",
+   "titre": "Emojis seuls",
+   "fait": "Le message « 👍👍🙏 », seul, dans une nouvelle conversation.",
+   "si_defaut": "Une erreur, une réponse vide, une carte ou une action devinée.",
+   "lignes": [
+    6
+   ],
+   "duree_ms": 5079,
+   "verdict": "PASS",
+   "constats": [
+    "répondu, sans carte, sans exécution, sans erreur"
+   ],
+   "preuves": [
+    {
+     "libelle": "emojis seuls — envoyé",
+     "contenu": "👍👍🙏"
+    },
+    {
+     "libelle": "emojis seuls — reçu (statut 200, étage 5, 5079 ms)",
+     "contenu": "Ça sort de ce que je peux voir : je travaille dans ton CRM — clients, jobs, devis, factures, horaire, équipe. Demande-moi ton chiffre du mois, tes retards, ta journée de demain, et je te sors les vrais chiffres."
+    },
+    {
+     "libelle": "emojis seuls — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    }
+   ]
+  },
+  {
+   "id": "entrees.double-envoi",
+   "famille": "entrees",
+   "titre": "La même demande d’écriture envoyée deux fois de suite",
+   "fait": "« Crée une tâche : [ROB] double envoi <passe> » est envoyé deux fois de suite dans la même conversation. La conversation est rechargée, la carte qui reste en attente est confirmée, les tâches de ce titre sont comptées.",
+   "si_defaut": "Deux cartes confirmables, deux tâches en base, une erreur au second envoi, un historique cassé.",
+   "lignes": [
+    6
+   ],
+   "duree_ms": 21161,
+   "verdict": "PASS",
+   "constats": [
+    "les deux envois sont servis, sans erreur",
+    "la première carte : annulee ; 1 tâche en base après confirmation de la carte restante",
+    "historique valide (7 messages)"
+   ],
+   "preuves": [
+    {
+     "libelle": "premier envoi — envoyé",
+     "contenu": "Crée une tâche : [ROB] double envoi XHF8EDBL"
+    },
+    {
+     "libelle": "premier envoi — reçu (statut 200, étage 2, 2001 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "premier envoi — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "carte du premier envoi",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] double envoi XHF8EDBL\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] double envoi XHF8EDBL\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "second envoi (même message, même conversation) — envoyé",
+     "contenu": "Crée une tâche : [ROB] double envoi XHF8EDBL"
+    },
+    {
+     "libelle": "second envoi (même message, même conversation) — reçu (statut 200, étage 6, 6681 ms)",
+     "contenu": "La carte pour créer la tâche \"[ROB] double envoi XHF8EDBL\" s'affiche, confirme pour valider."
+    },
+    {
+     "libelle": "second envoi (même message, même conversation) — événements",
+     "contenu": "lectures : — ; cartes : create_task ; exécutions : —"
+    },
+    {
+     "libelle": "carte du second envoi",
+     "contenu": "[{\"outil\":\"create_task\",\"d_office\":false,\"args\":{\"title\":\"[ROB] double envoi XHF8EDBL\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[],\"details\":[{\"libelle\":{\"fr\":\"Titre\",\"en\":\"Title\"},\"valeur\":\"[ROB] double envoi XHF8EDBL\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "conversation rechargée (GET, statut 200)",
+     "contenu": "sort des cartes : d6cb89b4 annulee, BcpMmLXx en_attente ; en attente : 1"
+    },
+    {
+     "libelle": "confirmation de la carte restante",
+     "contenu": "statut 200 — fait — « C'est fait : la tâche « [ROB] double envoi XHF8EDBL ». »"
+    },
+    {
+     "libelle": "tâches de ce test en base (SELECT)",
+     "contenu": "select id, title, status, created_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and deleted_at is null and title ilike '%XHF8EDBL%' order by created_at\n→ 1 ligne(s)"
+    },
+    {
+     "libelle": "historique enregistré (SELECT sur lumi_messages, 7 messages)",
+     "contenu": "1. user : texte (44)\n2. assistant : tool_use create_task d6cb89b4\n3. user : tool_result d6cb89b4\n4. user : texte (44)\n5. assistant : thinking, texte (92), tool_use create_task BcpMmLXx\n6. user : tool_result BcpMmLXx\n7. assistant : texte (54)\n→ valide"
+    }
+   ]
+  },
+  {
+   "id": "vocal.nom-deforme",
+   "famille": "vocal",
+   "titre": "Nom déformé par la dictée : « gérard » pour Girard",
+   "fait": "Dictée : « envoie un texto à patrick gérard pour lui dire que sa facture est en retard ». Soit Lumi demande une précision (ou dit qu’il ne trouve pas), soit la carte montre le numéro de Patrick Girard. La carte est annulée ; les envois du bac à sable sont comptés.",
+   "si_defaut": "Une carte vers un autre client, un texto exécuté ou consigné.",
+   "lignes": [
+    7
+   ],
+   "duree_ms": 21445,
+   "verdict": "PASS",
+   "constats": [
+    "carte « send_sms » en attente, sur Patrick Girard (Laval) : téléphone 514-555-0116",
+    "aucune autre fiche sur la carte, aucun événement d’exécution"
+   ],
+   "preuves": [
+    {
+     "libelle": "dictée (origine « voix ») — envoyé",
+     "contenu": "envoie un texto à patrick gérard pour lui dire que sa facture est en retard"
+    },
+    {
+     "libelle": "dictée (origine « voix ») — reçu (statut 200, étage 6, 15606 ms)",
+     "contenu": "Je n'ai pas trouvé de « Patrick Gérard », mais j'ai un « Patrick Girard » avec la facture n°5 en retard de 31 jours (solde de 919,80 $). C'est probablement lui — je t'envoie ce texto :\n\n« Bonjour Patrick, un petit rappel que votre facture #5 de 919,80 $ est en retard de paiement (échéance le 31 août). Merci de régulariser dès que possible. – Lavage Rive-Sud »"
+    },
+    {
+     "libelle": "dictée (origine « voix ») — événements",
+     "contenu": "lectures : get_overdue_payments, search_clients ; cartes : send_sms ; exécutions : —"
+    },
+    {
+     "libelle": "cartes",
+     "contenu": "[{\"outil\":\"send_sms\",\"d_office\":false,\"args\":{\"client_id\":\"f382c302-44a5-5e97-b302-3c474d5b6f5d\",\"client_name\":\"Patrick Girard\",\"phone_number\":\"514-555-0116\",\"message_text\":\"Bonjour Patrick, un petit rappel que votre facture #5 de 919,80 $ est en retard de paiement (échéance le 31 août). Merci de régulariser dès que possible. – Lavage Rive-Sud\"},\"apercu\":{\"genre\":\"sms\",\"to\":\"Patrick Girard · 514-555-0116\",\"subject\":null,\"body\":\"Bonjour Patrick, un petit rappel que votre facture #5 de 919,80 $ est en retard de paiement (échéance le 31 août). Merci de régulariser dès que possible. – Lavage Rive-Sud\",\"drapeaux\":{\"irreversible\":true,\"vers_client\":true,\"jamais_d_office\":true}}}]"
+    },
+    {
+     "libelle": "envois consignés au bac à sable depuis le début de la passe",
+     "contenu": "avant : 0 ; après : 0"
+    }
+   ]
+  },
+  {
+   "id": "vocal.phrase-coupee",
+   "famille": "vocal",
+   "titre": "Phrase coupée : « envoie la facture à »",
+   "fait": "Dictée : « envoie la facture à ». Lumi doit demander quelle facture et à qui, sans carte.",
+   "si_defaut": "Une carte d’envoi sur une facture et un client devinés.",
+   "lignes": [
+    7
+   ],
+   "duree_ms": 55912,
+   "verdict": "PASS",
+   "constats": [
+    "aucune carte, aucune exécution",
+    "la réponse pose une question"
+   ],
+   "preuves": [
+    {
+     "libelle": "dictée (origine « voix ») — envoyé",
+     "contenu": "envoie la facture à"
+    },
+    {
+     "libelle": "dictée (origine « voix ») — reçu (statut 200, étage 6, 52135 ms)",
+     "contenu": "Il manque des précisions : à quel client veux-tu envoyer une facture, et de quelle facture s'agit-il (numéro ou nom du client déjà sur une facture existante) ? Donne-moi ça et je prépare l'envoi."
+    },
+    {
+     "libelle": "dictée (origine « voix ») — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "cartes",
+     "contenu": "aucune"
+    },
+    {
+     "libelle": "envois consignés au bac à sable depuis le début de la passe",
+     "contenu": "avant : 0 ; après : 0"
+    }
+   ]
+  },
+  {
+   "id": "vocal.bruit",
+   "famille": "vocal",
+   "titre": "Bruit : « euh euh ok »",
+   "fait": "Dictée : « euh euh ok », dans une nouvelle conversation. Lumi doit répondre sans rien proposer ni faire.",
+   "si_defaut": "Une carte ou une action devinée, une erreur, une réponse vide.",
+   "lignes": [
+    7
+   ],
+   "duree_ms": 55449,
+   "verdict": "PASS",
+   "constats": [
+    "répondu, sans carte, sans exécution, sans erreur"
+   ],
+   "preuves": [
+    {
+     "libelle": "dictée (origine « voix ») — envoyé",
+     "contenu": "euh euh ok"
+    },
+    {
+     "libelle": "dictée (origine « voix ») — reçu (statut 200, étage 5, 50521 ms)",
+     "contenu": "Ça sort de ce que je peux voir : je travaille dans ton CRM — clients, jobs, devis, factures, horaire, équipe. Demande-moi ton chiffre du mois, tes retards, ta journée de demain, et je te sors les vrais chiffres."
+    },
+    {
+     "libelle": "dictée (origine « voix ») — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "cartes",
+     "contenu": "aucune"
+    },
+    {
+     "libelle": "envois consignés au bac à sable depuis le début de la passe",
+     "contenu": "avant : 0 ; après : 0"
+    }
+   ]
+  },
+  {
+   "id": "vocal.montant-ambigu",
+   "famille": "vocal",
+   "titre": "Montant ambigu : « cent cinquante ou cent quinze »",
+   "fait": "Dictée : « fais une facture de cent cinquante ou cent quinze piastres pour luc bergeron pour un lavage de vitres ». Lumi doit demander lequel des deux montants, sans carte.",
+   "si_defaut": "Une carte de facture avec un des deux montants, choisi au hasard.",
+   "lignes": [
+    7
+   ],
+   "duree_ms": 120437,
+   "attente_discutable": "Une carte montre le montant et attend un clic : on peut soutenir que c’est déjà une demande de confirmation. Le test exige une question, parce que la dictée a donné DEUX montants et que rien ne permet d’en choisir un ; une carte à 150,00 $ est rendue FAIL.",
+   "verdict": "PASS",
+   "constats": [
+    "aucune carte, aucune exécution",
+    "la réponse pose une question"
+   ],
+   "preuves": [
+    {
+     "libelle": "dictée (origine « voix ») — envoyé",
+     "contenu": "fais une facture de cent cinquante ou cent quinze piastres pour luc bergeron pour un lavage de vitres"
+    },
+    {
+     "libelle": "dictée (origine « voix ») — reçu (statut 200, étage 6, 116639 ms)",
+     "contenu": "Il y a une hésitation entre 150 $ et 115 $ pour le lavage de vitres de Luc Bergeron — tu veux lequel des deux?"
+    },
+    {
+     "libelle": "dictée (origine « voix ») — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "cartes",
+     "contenu": "aucune"
+    },
+    {
+     "libelle": "envois consignés au bac à sable depuis le début de la passe",
+     "contenu": "avant : 0 ; après : 0"
+    }
+   ]
+  },
+  {
+   "id": "vocal.silence",
+   "famille": "vocal",
+   "titre": "La dictée d’un silence",
+   "fait": "POST /api/agent/transcribe avec une seconde d’audio muet (WAV fabriqué par la batterie).",
+   "si_defaut": "Une erreur 500, ou un texte inventé (les modèles de transcription « entendent » parfois une phrase dans un silence) qui partirait à Lumi comme une demande.",
+   "lignes": [
+    7
+   ],
+   "duree_ms": 5940,
+   "verdict": "PASS",
+   "constats": [
+    "texte vide, statut 200"
+   ],
+   "preuves": [
+    {
+     "libelle": "POST /api/agent/transcribe",
+     "contenu": "une seconde de silence (WAV 16 kHz mono, 42728 caractères en base64) → statut 200 — {\"text\":\"\"}"
+    }
+   ]
+  },
+  {
+   "id": "vocal.bruit-reel",
+   "famille": "vocal",
+   "titre": "Bruit réel dans l’enregistrement",
+   "fait": "Non joué.",
+   "si_defaut": "—",
+   "lignes": [
+    7
+   ],
+   "duree_ms": 0,
+   "verdict": "NON COUVERT",
+   "constats": [
+    "Il faudrait de vrais enregistrements bruités (camion, laveuse à pression, vent) et un corpus de référence : la batterie n’envoie que du texte et un silence fabriqué. Le comportement de Lumi DEVANT une transcription bruitée est couvert par « vocal.bruit » et « vocal.phrase-coupee »."
+   ],
+   "preuves": []
+  },
+  {
+   "id": "vocal.accent",
+   "famille": "vocal",
+   "titre": "Accent québécois dans l’enregistrement",
+   "fait": "Non joué.",
+   "si_defaut": "—",
+   "lignes": [
+    7
+   ],
+   "duree_ms": 0,
+   "couvert_par": [
+    "evals/lumi/cas (registres « quebecois » et « vocal »)"
+   ],
+   "verdict": "NON COUVERT",
+   "constats": [
+    "Juger la transcription d’un accent demande des enregistrements de vraies voix et une transcription de référence ; aucun n’existe dans le dépôt. Le registre québécois ÉCRIT est couvert par le jeu d’évaluation (119 cas « quebecois », 35 cas « vocal » dans evals/lumi/cas)."
+   ],
+   "preuves": []
+  },
+  {
+   "id": "pannes.outil-echec",
+   "famille": "pannes",
+   "titre": "L’outil échoue après la confirmation",
+   "fait": "La batterie crée la tâche « [ROB] panne outil <passe> », demande à Lumi de la marquer terminée (carte), met la tâche à la corbeille, PUIS confirme : l’outil ne peut plus la trouver. Le reçu est lu, la tâche est relue en base, puis « Est-ce que c’est fait ? » est posé.",
+   "si_defaut": "Un reçu « C’est fait », un événement d’exécution réussie, la tâche modifiée en base, ou le modèle qui répond « oui, c’est fait ».",
+   "lignes": [
+    9,
+    8
+   ],
+   "duree_ms": 48856,
+   "verdict": "PASS",
+   "constats": [
+    "le reçu dit l’échec : « Le statut de la tâche n’a pas fonctionné. L'action n'a pas fonctionné côté Lume. Dis-le simplement et propose de réessayer. »",
+    "aucun reçu de réussite, la fiche n’a pas changé en base",
+    "à « c’est fait ? », Lumi dit que l’action n’a pas été faite — « Non, ça n'a pas fonctionné — la tâche « panne outil » est toujours à faire. Tu veux que je réessaie ? »"
+   ],
+   "preuves": [
+    {
+     "libelle": "tâche créée par la batterie (clé de service)",
+     "contenu": "[ROB] panne outil XHF8EPAN — 19ef3345-4443-4145-aecf-95bbdeb100aa"
+    },
+    {
+     "libelle": "demande — envoyé",
+     "contenu": "Marque la tâche « [ROB] panne outil XHF8EPAN » comme terminée."
+    },
+    {
+     "libelle": "demande — reçu (statut 200, étage 6, 25306 ms)",
+     "contenu": "(vide)"
+    },
+    {
+     "libelle": "demande — événements",
+     "contenu": "lectures : list_tasks ; cartes : update_task_status ; exécutions : —"
+    },
+    {
+     "libelle": "carte",
+     "contenu": "[{\"outil\":\"update_task_status\",\"d_office\":false,\"args\":{\"task_id\":\"19ef3345-4443-4145-aecf-95bbdeb100aa\",\"status\":\"done\"},\"apercu\":{\"genre\":\"action\",\"cibles\":[{\"libelle\":{\"fr\":\"Tâche\",\"en\":\"Task\"},\"valeur\":\"[ROB] panne outil XHF8EPAN · à faire\",\"valeur_en\":\"[ROB] panne outil XHF8EPAN · open\"}],\"details\":[{\"libelle\":{\"fr\":\"Statut\",\"en\":\"Status\"},\"valeur\":\"Terminée\",\"valeur_en\":\"Done\"}],\"drapeaux\":{\"irreversible\":false,\"vers_client\":false,\"jamais_d_office\":false}}}]"
+    },
+    {
+     "libelle": "confirmation, la tâche étant à la corbeille",
+     "contenu": "statut 200 — echec_dit — reçus : [{\"ok\":false}] — « Le statut de la tâche n’a pas fonctionné. L'action n'a pas fonctionné côté Lume. Dis-le simplement et propose de réessayer. »"
+    },
+    {
+     "libelle": "la tâche en base (SELECT)",
+     "contenu": "select id, title, status, completed_at, deleted_at from tasks where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and id = '19ef3345-4443-4145-aecf-95bbdeb100aa'\navant : {\"id\":\"19ef3345-4443-4145-aecf-95bbdeb100aa\",\"title\":\"[ROB] panne outil XHF8EPAN\",\"status\":\"open\",\"completed_at\":null,\"deleted_at\":null}\naprès : {\"id\":\"19ef3345-4443-4145-aecf-95bbdeb100aa\",\"title\":\"[ROB] panne outil XHF8EPAN\",\"status\":\"open\",\"completed_at\":null,\"deleted_at\":\"2026-10-01 19:58:56.038+00\"}"
+    },
+    {
+     "libelle": "« c’est fait ? » — envoyé",
+     "contenu": "Est-ce que c’est fait ?"
+    },
+    {
+     "libelle": "« c’est fait ? » — reçu (statut 200, étage 6, 8060 ms)",
+     "contenu": "Non, ça n'a pas fonctionné — la tâche « panne outil » est toujours à faire. Tu veux que je réessaie ?"
+    },
+    {
+     "libelle": "« c’est fait ? » — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    }
+   ]
+  },
+  {
+   "id": "pannes.reponse-coupee",
+   "famille": "pannes",
+   "titre": "Réponse coupée par la limite de sortie (max_tokens)",
+   "fait": "Une demande de rédaction de 2 500 mots (la sortie du modèle est bornée à 2 048 tokens). Si la réponse est coupée : l’événement « reponse_coupee », l’avis dans le texte et la trace sont vérifiés, puis « continue » est envoyé.",
+   "si_defaut": "Un texte tronqué sans un mot, tracé comme un succès, ou « continue » qui rend une erreur.",
+   "lignes": [
+    8,
+    10
+   ],
+   "duree_ms": 61389,
+   "attente_discutable": "Rien n’oblige le modèle à écrire assez pour atteindre la limite (il peut résumer, ou refuser une rédaction si longue) : le test rend alors NON COUVERT, et la coupe reste couverte hors réseau.",
+   "verdict": "PASS",
+   "constats": [
+    "réponse coupée par la limite de sortie : événement « reponse_coupee » émis, avis dans le texte",
+    "tracée « erreur », fin « max_tokens » ; aucune carte, aucune exécution",
+    "« continue » est servi"
+   ],
+   "preuves": [
+    {
+     "libelle": "demande de rédaction longue — envoyé",
+     "contenu": "Rédige ici, au complet, un courriel d’au moins 2 500 mots que je pourrais envoyer à mes clients commerciaux pour expliquer en détail notre service de lavage de vitres en hiver : préparation, étapes, sécurité, fréquence, prix, questions fréquentes. N’abrège pas et ne me demande rien : écris tout le texte."
+    },
+    {
+     "libelle": "demande de rédaction longue — reçu (statut 200, étage 6, 27971 ms)",
+     "contenu": "Objet : Votre lavage de vitres commercial cet hiver — comment ça se passe chez Lavage Rive-Sud\n\nBonjour,\n\nAvec l'arrivée de la saison froide, plusieurs de nos clients commerciaux nous demandent comment nous adaptons notre service de lavage de vitres pendant l'hiver. Nous avons préparé ce courriel pour répondre en détail à toutes vos questions : comment nous nous préparons, les étapes de notre travail, nos mesures de sécurité, la fréquence recommandée, nos prix et les questions les plus fréquente… (5303 caractères)\n[événement d’erreur : reponse_coupee]"
+    },
+    {
+     "libelle": "demande de rédaction longue — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    },
+    {
+     "libelle": "trace du tour (lumi_traces)",
+     "contenu": "étage 6, résultat « erreur », fin « max_tokens », 4.198 ¢ ; 5303 caractères reçus"
+    },
+    {
+     "libelle": "« continue » — envoyé",
+     "contenu": "continue"
+    },
+    {
+     "libelle": "« continue » — reçu (statut 200, étage 6, 27580 ms)",
+     "contenu": "- Équipement en hauteur : pour les immeubles à étages ou les vitrines difficiles d'accès, nous utilisons des perches télescopiques à eau purifiée plutôt que des échelles chaque fois que possible, ce qui réduit considérablement les risques de chute et permet un travail sécuritaire même par grand froid. Lorsqu'une échelle est nécessaire, nous vérifions systématiquement la stabilité du sol avant de l'installer (glace, neige, surface inégale) et un deuxième technicien reste toujours présent pour sta… (5284 caractères)\n[événement d’erreur : reponse_coupee]"
+    },
+    {
+     "libelle": "« continue » — événements",
+     "contenu": "lectures : — ; cartes : — ; exécutions : —"
+    }
+   ]
+  },
+  {
+   "id": "pannes.limite-horaire",
+   "famille": "pannes",
+   "titre": "La limite de 60 tours par heure, atteinte par un compte dédié",
+   "fait": "Le compte technicien (aucune autre famille ne s’en sert) envoie des messages VIDES — refusés 400, sans modèle, mais comptés par le limiteur — jusqu’au 429. Puis un vrai message : il doit recevoir un 429 avec un délai, pas un flux ; aucun tour n’est tracé.",
+   "si_defaut": "Un vrai message servi après la limite, un 429 sans message ni délai, ou une limite annoncée qui n’est pas appliquée.",
+   "lignes": [
+    8
+   ],
+   "duree_ms": 161201,
+   "attente_discutable": "Le compte reste limité une heure. Si les refus 400 ne comptaient pas dans la limite (validation placée avant le limiteur), la limite ne serait atteignable qu’avec 60 vrais tours (≈ 1 $) : le test rend alors NON COUVERT.",
+   "verdict": "PASS",
+   "constats": [
+    "limite atteinte à la sonde n° 61 (restant annoncé juste avant : 0 ; attente annoncée : 3450 s)",
+    "un vrai message reçoit 429 : « Trop de demandes en peu de temps. Réessayez dans 58 minutes. »",
+    "ni flux, ni tour tracé"
+   ],
+   "preuves": [
+    {
+     "libelle": "sondes : 61 message(s) VIDE(S) du compte eval2.tech@lume-qa.test",
+     "contenu": "1. statut 400, restant 59\n2. statut 400, restant 58\n3. statut 400, restant 57\n58. statut 400, restant 2\n59. statut 400, restant 1\n60. statut 400, restant 0\n61. statut 429, restant —, attente 3450 s"
+    },
+    {
+     "libelle": "un vrai message, après la limite — envoyé",
+     "contenu": "Combien de clients j’ai ?"
+    },
+    {
+     "libelle": "un vrai message, après la limite — reçu (statut 429, 70 ms)",
+     "contenu": "Trop de demandes en peu de temps. Réessayez dans 58 minutes."
+    },
+    {
+     "libelle": "tours tracés pour ce compte (SELECT)",
+     "contenu": "avant : 0 ; après : 0"
+    }
+   ],
+   "observations": [
+    "le compte eval2.tech@lume-qa.test reste limité pendant 58 minutes : aucune autre famille ne s’en sert"
+   ]
+  },
+  {
+   "id": "pannes.fournisseur",
+   "famille": "pannes",
+   "titre": "429, surcharge et délai de l’API du modèle",
+   "fait": "Non joué.",
+   "si_defaut": "—",
+   "lignes": [
+    8
+   ],
+   "duree_ms": 0,
+   "couvert_par": [
+    "tests/lumi-fin-anormale.test.ts",
+    "tests/lumi-flux-interrompu.test.ts",
+    "tests/lumi-limite-horaire.test.ts"
+   ],
+   "verdict": "NON COUVERT",
+   "constats": [
+    "Un 429, un 529 « overloaded » ou un délai dépassé de l’API du modèle ne se provoquent pas de l’extérieur sans casser le fournisseur pour tous les clients. Le client du modèle rejoue 3 fois avec attente croissante et abandonne à 90 s (server/lib/lumi/llm.ts) ; l’échec final rend « Lumi failed to respond. » (événement d’erreur, tour tracé « erreur »)."
+   ],
+   "preuves": []
+  },
+  {
+   "id": "pannes.stop-reasons",
+   "famille": "pannes",
+   "titre": "Les `stop_reason` vus pendant toute la batterie",
+   "fait": "Relit lumi_traces.params.mesure pour toutes les conversations de la batterie (ce lancement et les précédents du même rapport). Toute fin hors end_turn / tool_use / pause_turn est listée avec ce que l’utilisateur a reçu.",
+   "si_defaut": "Une fin anormale tracée « ok », ou sans aucun texte pour l’utilisateur.",
+   "lignes": [
+    10
+   ],
+   "duree_ms": 4534,
+   "verdict": "PASS",
+   "constats": [
+    "max_tokens / reponse_coupee / tronqué — conversation fefb24e8-3b77-478a-9d4c-acf49ad690e0, 2026-10-01 19:59:45.89078+00 : tracé « erreur », l’utilisateur a reçu « s des entrées et sur les surfaces pavées. - Équipement en hauteur : pour les immeubles à étages (Ma réponse a été coupée ici. Écris « continue » pour la suite.) »",
+    "max_tokens / reponse_coupee / tronqué — conversation fefb24e8-3b77-478a-9d4c-acf49ad690e0, 2026-10-01 20:00:19.30578+00 : tracé « erreur », l’utilisateur a reçu «  (aux 3 à 4 semaines) pour les commerces très exposés au sel et aux éclaboussures de la rue, af (Ma réponse a été coupée ici. Écris « continue » pour la suite.) »",
+    "50 tour(s) d’agent : end_turn × 39, tool_use × 9, max_tokens × 2"
+   ],
+   "observations": [
+    "fins jamais observées dans cette passe : stop_sequence, refusal, model_context_window_exceeded — couvertes hors réseau par tests/lumi-fin-anormale.test.ts"
+   ],
+   "preuves": [
+    {
+     "libelle": "30 conversation(s) de la batterie — tours d’agent (SELECT sur lumi_traces)",
+     "contenu": "select conversation_id, created_at, resultat, action, params->'mesure'->>'stop_reason' as stop, (params->'mesure'->>'appels_modele')::int as appels_modele,\n          params->'mesure'->>'erreur_modele' as erreur_modele, coalesce((params->'mesure'->>'tronque')::boolean, false) as tronque\n     from lumi_traces where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and etage = 6 and conversation_id in …\n→ 50 ligne(s) ; end_turn × 39, tool_use × 9, max_tokens × 2"
+    },
+    {
+     "libelle": "fins anormales",
+     "contenu": "2026-10-01 19:59:45.89078+00 — max_tokens — reponse_coupee — résultat « erreur » — reçu : Objet : Votre lavage de vitres commercial cet hiver — comment ça se passe chez Lavage Rive-Sud\n\nBonjour,\n\nAvec l'arrivée de la saison froide, plusieurs de nos clients commerciaux nous demandent commen… (5302 caractères)\n2026-10-01 20:00:19.30578+00 — max_tokens — reponse_coupee — résultat « erreur » — reçu : - Équipement en hauteur : pour les immeubles à étages ou les vitrines difficiles d'accès, nous utilisons des perches télescopiques à eau purifiée plutôt que des échelles chaque fois que possible, ce q… (5283 caractères)"
+    }
+   ]
+  }
+ ]
+}

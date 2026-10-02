@@ -48,9 +48,14 @@ export function estSousAgent(topic: string | null | undefined): topic is IdTopic
  * d'heures pointées sur la job 21 » sont classés « job », mais le chiffre vient de la rentabilité.
  * Sans l'outil, Lumi répondait avec get_job — « aucune dépense » (il y en avait 77,00 $), « 2 h »
  * (la durée de la visite, 4 h pointées). Passe de référence en prod, 2026-10-01.
+ *
+ * planification + punch_in / punch_out : « punch-moi in sur la job du restaurant Chez Poirier » est
+ * classé « job » ; sans l'outil de pointage dans ce jeu, Lumi répondait « pas d'outil punch_in dans
+ * Lume » — faux, et un nom d'outil dans la réponse (passe du 2026-10-01, terrain-05). Le technicien
+ * pointe SUR un job : les deux vont ensemble.
  */
 export const OUTILS_VOISINS: Partial<Record<IdTopic, readonly string[]>> = {
-  planification: ['analyze_profitability'],
+  planification: ['analyze_profitability', 'punch_in', 'punch_out'],
 };
 
 export function outilsDuSousAgent(topic: IdTopic): string[] {

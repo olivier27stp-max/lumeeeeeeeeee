@@ -352,13 +352,13 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
     champs: [
       {
         cle: 'mois', fr: 'Aucun job terminé depuis (mois)', en: 'No completed job for (months)',
-        obligatoire: true, type: 'nombre', min_valeur: 1, max_valeur: 60, defaut_fr: '6', defaut_en: '6',
+        obligatoire: true, type: 'nombre', min_valeur: 1, max_valeur: 60, entier: true, defaut_fr: '6', defaut_en: '6',
         aide_fr: '3, 6 ou 12 mois — ou toute autre valeur.',
         aide_en: '3, 6 or 12 months — or any other value.',
       },
       {
         cle: 'max_par_heure', fr: 'Au plus, par heure', en: 'At most, per hour',
-        obligatoire: false, type: 'nombre', min_valeur: 1, max_valeur: 1000,
+        obligatoire: false, type: 'nombre', min_valeur: 1, max_valeur: 1000, entier: true,
         aide_fr: 'Évite d’envoyer des centaines de messages d’un coup à l’activation. Le reste part aux heures suivantes (entre 9 h et 19 h).',
         aide_en: 'Avoids sending hundreds of messages at once when activated. The rest go out in the following hours (9 a.m. – 7 p.m.).',
       },
@@ -416,7 +416,7 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
       },
       {
         cle: 'jours_avant', fr: 'Combien de jours avant', en: 'How many days before',
-        obligatoire: false, type: 'nombre', min_valeur: -365, max_valeur: 365,
+        obligatoire: false, type: 'nombre', min_valeur: -365, max_valeur: 365, entier: true,
         aide_fr: '7 = une semaine avant la date. 0 = le jour même. -7 = une semaine après.',
         aide_en: '7 = one week before the date. 0 = on the day. -7 = one week after.',
       },
@@ -577,6 +577,56 @@ export function trouverDeclencheur(cle: string): DeclencheurCatalogue | undefine
   return DECLENCHEURS.find((d) => d.cle === cle);
 }
 
+/**
+ * CE QUI CLOCHE DANS LES RÉGLAGES D'UN DÉCLENCHEUR — une seule règle pour le
+ * panneau du déclencheur et pour le serveur (triage « déclencheurs »,
+ * 03-panneau-declencheur:316 et :581).
+ *
+ * « Montant minimum 5 000 $, maximum 100 $ », « -5 $ », « 0 mois », « 61
+ * mois », « 2,5 mois » s'enregistraient tels quels : l'automatisation
+ * s'affichait comme réglée et ne partait jamais (ou partait sur une autre
+ * valeur que celle à l'écran), sans un mot. Sont jugés ici :
+ *   · chaque champ `nombre` visible : un nombre, dans ses bornes, entier s'il
+ *     compte des mois ou des jours (`fauteDeValeur`) ;
+ *   · chaque plage `x__gte` / `x__lte` : le minimum ne dépasse pas le maximum.
+ *
+ * `valeurs` : le brouillon du panneau (du texte) ou les `conditions` qu'on
+ * s'apprête à écrire (des nombres) — les deux formes sont lues.
+ */
+export function fautesDuDeclencheur(cle: string, valeurs: Record<string, unknown> | null | undefined): FauteValeur[] {
+  const champs = trouverDeclencheur(cle)?.champs ?? [];
+  const lues = valeurs ?? {};
+  const fautes: FauteValeur[] = [];
+  const fautifs = new Set<string>();
+  for (const champ of champs) {
+    if (champ.type !== 'nombre' || !champVisible(champ, lues)) continue;
+    const faute = fauteDeValeur(champ, lues[champ.cle]);
+    if (!faute) continue;
+    fautifs.add(champ.cle);
+    fautes.push({ fr: `« ${champ.fr} » ${faute.fr}.`, en: `“${champ.en}” ${faute.en}.` });
+  }
+  const nombre = (champ: ChampAction): number | null => {
+    const brut = lues[champ.cle];
+    if (fautifs.has(champ.cle) || brut === undefined || brut === null || String(brut).trim() === '') return null;
+    const n = Number(String(brut).trim());
+    return Number.isFinite(n) ? n : null;
+  };
+  for (const min of champs) {
+    if (min.type !== 'nombre' || !min.cle.endsWith('__gte')) continue;
+    const max = champs.find((c) => c.type === 'nombre' && c.cle === `${min.cle.slice(0, -'__gte'.length)}__lte`);
+    if (!max || !champVisible(min, lues) || !champVisible(max, lues)) continue;
+    const a = nombre(min);
+    const b = nombre(max);
+    if (a !== null && b !== null && a > b) {
+      fautes.push({
+        fr: `« ${min.fr} » est plus grand que « ${max.fr} » : rien ne peut remplir les deux, l’automatisation ne partirait jamais.`,
+        en: `“${min.en}” is greater than “${max.en}”: nothing can meet both, the automation would never run.`,
+      });
+    }
+  }
+  return fautes;
+}
+
 // ── Actions ─────────────────────────────────────────────────
 
 /**
@@ -649,6 +699,8 @@ export interface ChampAction {
   /** Bornes pour `nombre`. */
   min_valeur?: number;
   max_valeur?: number;
+  /** `nombre` : seulement un nombre ENTIER (des mois, des jours) — « 2,5 » est refusé. */
+  entier?: boolean;
   /** Options d'un `choix`. La valeur stockée est `cle`. */
   options?: Array<{ cle: string; fr: string; en: string }>;
   /** Aide sous le champ — la phrase qui évite une question au support. */
@@ -1245,9 +1297,60 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   // pipeline (`server/lib/rappels-dates.ts`). L'éditeur, qui connaît le
   // champ choisi, le précise via `actionCompatible(…, entiteConnue)`.
   'date.reached': 'client',
+  /*
+   * Un appel venu de l'EXTÉRIEUR n'apporte aucune fiche du CRM : le serveur
+   * émet l'entité `automation_webhook_receipt` (server/routes/
+   * webhooks-entrants.ts). Sans cette ligne, le déclencheur passait pour
+   * « inconnu » et tout était offert : « Envoyer la facture », « Envoyer le
+   * devis », « Changer le statut du rendez-vous » et les trois actions sur
+   * l'opportunité se laissaient ajouter ET publier, pour échouer à chaque
+   * passage (triage actions, ligne 6).
+   */
+  'webhook.received': 'automation_webhook_receipt',
   'deal.stage_entered': 'deal',
   'deal.stage_idle': 'deal',
 };
+
+/**
+ * LE CHAMP PERSONNALISÉ DONT L'OBJET FIXE L'ENTITÉ DE LA RÈGLE — la règle
+ * partagée du triage actions, lignes 5 et 7.
+ *
+ * Deux déclencheurs font arriver une entité qui dépend d'un champ choisi dans
+ * leurs réglages : « Date atteinte » (le champ date surveillé : un champ du
+ * pipeline émet une OPPORTUNITÉ, pas un client) et « Champ personnalisé
+ * modifié » (le champ surveillé). L'éditeur le savait pour son tiroir ; le
+ * canevas et le serveur l'ignoraient, et les trois se contredisaient.
+ *
+ * UNE fonction dit où lire ce champ dans `conditions` ; l'éditeur (qui a la
+ * liste des champs) et le serveur (qui les lit en base) y cherchent l'objet
+ * du champ, et passent l'entité à `actionCompatible` et à
+ * `problemesAvantPublication`. Rend `''` quand aucun champ n'est choisi.
+ */
+export function champQuiFixeLEntite(
+  cleDeclencheur: string | null | undefined,
+  conditions: Record<string, unknown> | null | undefined,
+): string {
+  if (cleDeclencheur === 'date.reached') {
+    const v = conditions?.champ_id;
+    return typeof v === 'string' ? v : '';
+  }
+  if (cleDeclencheur === 'custom_field.changed') {
+    // L'éditeur écrit `{ field_id: { eq: id } }` ; une règle plus ancienne peut le porter à plat.
+    const v = conditions?.field_id;
+    if (v && typeof v === 'object' && !Array.isArray(v)) return String((v as { eq?: unknown }).eq ?? '');
+    return typeof v === 'string' ? v : '';
+  }
+  return '';
+}
+
+/**
+ * L'entité que fixe l'objet de ce champ (`custom_fields.object_type` : client,
+ * deal, job, quote, invoice). Une « propriété » n'en fixe aucune : aucun
+ * déclencheur ne fait arriver une propriété.
+ */
+export function entiteDuChamp(objetDuChamp: string | null | undefined): string | null {
+  return objetDuChamp && objetDuChamp !== 'property' ? objetDuChamp : null;
+}
 
 /**
  * Cette action peut-elle suivre ce déclencheur ?
@@ -1300,6 +1403,99 @@ export function trouverAction(cle: string): ActionCatalogue | undefined {
 export const CLES_CHAMPS_ACTION = Array.from(
   new Set(ACTIONS.flatMap((a) => a.champs.map((c) => c.cle))),
 ).sort();
+
+/** Ce qu'une valeur a de fautif, à lire après le nom du champ : « doit être au plus 365 ». */
+export interface FauteValeur { fr: string; en: string }
+
+/**
+ * CE QU'UNE VALEUR DE CHAMP A DE FAUTIF — une seule règle pour le panneau, la
+ * publication et le serveur (triage actions, lignes 8 et 9).
+ *
+ * Le serveur refusait déjà une valeur hors bornes ou une adresse en http://,
+ * mais lui seul : le panneau laissait « Enregistrer » actif, sans un mot, et
+ * le refus arrivait trois secondes plus tard, par l'enregistrement
+ * automatique, sans désigner l'étape. La même fonction juge maintenant la
+ * saisie DANS le panneau (avec la borne), sur le canevas avant de publier, et
+ * à l'enregistrement (`server/lib/validation.ts`).
+ *
+ * Toutes les valeurs sont du TEXTE (`config` est du jsonb rempli depuis des
+ * champs de formulaire) : « 250 », « true ». Vide = absent, donc jamais
+ * fautif ici — le caractère obligatoire se juge ailleurs. `null` = valide.
+ */
+export function fauteDeValeur(champ: ChampAction, brut: unknown): FauteValeur | null {
+  // Une règle semée d'avant la validation peut porter un vrai nombre ou un
+  // vrai booléen : jugé sur sa forme écrite, pas refusé pour son type.
+  const texte = typeof brut === 'number' || typeof brut === 'boolean' ? String(brut) : brut;
+  if (texte === undefined || texte === null) return null;
+  if (typeof texte !== 'string') return { fr: 'doit être du texte', en: 'must be text' };
+  const v = texte.trim();
+  if (v === '') return null;
+
+  switch (champ.type) {
+    case 'bascule':
+      return v === 'true' || v === 'false' ? null : { fr: 'doit valoir true ou false', en: 'must be true or false' };
+
+    case 'nombre': {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return { fr: 'doit être un nombre', en: 'must be a number' };
+      if (champ.entier) {
+        // Des mois, des jours : le moteur ne sait viser qu'un nombre entier.
+        // La faute dit les DEUX exigences d'un coup (entier, et dans les bornes).
+        const { min_valeur: min, max_valeur: max } = champ;
+        const dedans = (min === undefined || n >= min) && (max === undefined || n <= max);
+        if (Number.isInteger(n) && dedans) return null;
+        const [bornesFr, bornesEn] = min !== undefined && max !== undefined
+          ? [`, entre ${min} et ${max}`, ` between ${min} and ${max}`]
+          : min !== undefined ? [`, d’au moins ${min}`, ` of at least ${min}`]
+            : max !== undefined ? [`, d’au plus ${max}`, ` of at most ${max}`] : ['', ''];
+        return { fr: `doit être un nombre entier${bornesFr}`, en: `must be a whole number${bornesEn}` };
+      }
+      if (champ.min_valeur !== undefined && n < champ.min_valeur) {
+        return { fr: `doit être au moins ${champ.min_valeur}`, en: `must be at least ${champ.min_valeur}` };
+      }
+      if (champ.max_valeur !== undefined && n > champ.max_valeur) {
+        return { fr: `doit être au plus ${champ.max_valeur}`, en: `must be at most ${champ.max_valeur}` };
+      }
+      return null;
+    }
+
+    case 'choix': {
+      const permis = (champ.options ?? []).map((o) => o.cle);
+      return permis.includes(v) ? null : { fr: `doit être l’un de : ${permis.join(', ')}`, en: `must be one of: ${permis.join(', ')}` };
+    }
+
+    case 'membre':
+      // Un identifiant de membre, pas un nom : la route vérifie ensuite qu'il
+      // appartient bien à l'organisation.
+      return /^[0-9a-fA-F-]{36}$/.test(v) ? null : { fr: 'doit être un membre valide', en: 'must be a valid member' };
+
+    case 'url': {
+      // https UNIQUEMENT. Un webhook en http laisse passer les données du
+      // client en clair, et `file://` ou `http://169.254.169.254` visent des
+      // ressources internes au serveur (SSRF).
+      if (!/^https:\/\//i.test(v)) return { fr: 'doit commencer par https://', en: 'must start with https://' };
+      let hote: string;
+      try {
+        hote = new URL(v).hostname.toLowerCase();
+      } catch {
+        return { fr: 'n’est pas une adresse valide', en: 'is not a valid address' };
+      }
+      const interne =
+        hote === 'localhost' ||
+        hote === '169.254.169.254' ||
+        /^127\./.test(hote) ||
+        /^10\./.test(hote) ||
+        /^192\.168\./.test(hote) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(hote) ||
+        hote.endsWith('.local') ||
+        hote.endsWith('.internal');
+      return interne ? { fr: 'ne peut pas viser une adresse interne', en: 'cannot target an internal address' } : null;
+    }
+
+    default:
+      return null; // texte, zone, étiquette : seule la longueur compte
+  }
+}
 
 /**
  * Un champ est-il visible, compte tenu de ce qui est déjà rempli ?
@@ -1425,6 +1621,22 @@ export function problemesAvantPublication(regle: {
   /** Les réglages du déclencheur — voir `DeclencheurCatalogue.champs`. */
   conditions?: Record<string, unknown> | null;
   fr?: boolean;
+  /**
+   * L'entité que les réglages de la règle FIXENT (l'objet du champ surveillé —
+   * voir `champQuiFixeLEntite`), quand l'appelant la connaît. Sans elle, « Date
+   * atteinte » sur un champ du pipeline passait pour un déclencheur de client :
+   * le canevas et le serveur refusaient « Assigner l'opportunité », que le
+   * tiroir venait d'offrir.
+   */
+  entite?: string | null;
+  /**
+   * Le champ que la règle surveille (« Date atteinte », « Champ personnalisé
+   * modifié » sur un champ précis) N'EXISTE PLUS — supprimé ou archivé. À
+   * l'appelant de le savoir : l'éditeur par la liste des champs du bureau, le
+   * serveur par la base. Le balayage et le moteur ne trouveraient jamais ce
+   * champ : l'automatisation ne partirait jamais.
+   */
+  champSurveilleAbsent?: boolean;
 }): ProblemePublication[] {
   const fr = regle.fr !== false;
   const out: ProblemePublication[] = [];
@@ -1470,6 +1682,19 @@ export function problemesAvantPublication(regle: {
       }
     }
   }
+  /*
+   * Le champ surveillé a été SUPPRIMÉ (triage déclencheurs,
+   * 06-publication-declencheur:109). La carte du déclencheur disait « champ
+   * supprimé », et l'interrupteur proposait quand même « Publier cette
+   * automatisation ? » : publiée, elle ne serait jamais partie, sans un mot.
+   */
+  if (decl && !decl.bientot && regle.champSurveilleAbsent && champQuiFixeLEntite(regle.trigger_event, regle.conditions)) {
+    dire(
+      `« ${decl.fr} » : le champ surveillé a été supprimé. Choisissez-en un autre, sinon l’automatisation ne partirait jamais.`,
+      `“${decl.en}”: the watched field was deleted. Pick another one, otherwise the automation would never run.`,
+      'bloquant',
+    );
+  }
 
   const steps = Array.isArray(regle.steps) ? (regle.steps as Array<Record<string, any>>) : null;
   const actions = Array.isArray(regle.actions) ? (regle.actions as Array<Record<string, any>>) : [];
@@ -1510,7 +1735,7 @@ export function problemesAvantPublication(regle: {
     }
 
     // L'action peut-elle seulement partir sur ce déclencheur ?
-    if (regle.trigger_event && !actionCompatible(modele, regle.trigger_event)) {
+    if (regle.trigger_event && !actionCompatible(modele, regle.trigger_event, regle.entite)) {
       dire(
         `« ${modele.fr} » ne peut pas suivre ce déclencheur${ou}.`,
         `“${modele.en}” cannot follow this trigger${ou}.`,
@@ -1526,6 +1751,20 @@ export function problemesAvantPublication(regle: {
         dire(
           `« ${modele.fr} » : « ${champ.fr} » est vide${ou}.`,
           `“${modele.en}”: “${champ.en}” is empty${ou}.`,
+          'bloquant', etapeId,
+        );
+      }
+    }
+
+    // Une valeur que le serveur refuserait (hors bornes, adresse en http://) :
+    // dite ici, sur l'étape, par la même règle que le panneau et l'enregistrement.
+    for (const champ of modele.champs) {
+      if (!champVisible(champ, config)) continue;
+      const faute = fauteDeValeur(champ, config[champ.cle]);
+      if (faute) {
+        dire(
+          `« ${modele.fr} » : « ${champ.fr} » ${faute.fr}${ou}.`,
+          `“${modele.en}”: “${champ.en}” ${faute.en}${ou}.`,
           'bloquant', etapeId,
         );
       }

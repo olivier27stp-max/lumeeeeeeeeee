@@ -31,6 +31,8 @@ interface Probleme {
   values?: unknown[];
   note?: string;
   errors?: Probleme[][];
+  /** Posé par les raffinements du schéma : la version anglaise du message. */
+  params?: { en?: unknown };
 }
 
 export interface MessageClair { fr: string; en: string; path: PropertyKey[] }
@@ -112,6 +114,24 @@ function lieuAction(action: unknown, rang: [string, string], reste: Chemin): [st
     }
   }
   return [fr, en];
+}
+
+/**
+ * « Étape 2 (« Créer une tâche ») » — l'étape (ou l'action d'une règle simple)
+ * qui porte le champ fautif, sans le champ : le message le nomme déjà.
+ * `null` quand le problème ne vise pas la configuration d'une action.
+ */
+function lieuDeLEtape(chemin: Chemin, brut: unknown): [string, string] | null {
+  const [tete, rang, ...suite] = chemin;
+  if (typeof rang !== 'number') return null;
+  const n = rang + 1;
+  if (tete === 'steps' && suite[0] === 'action' && suite[1] === 'config') {
+    return lieuAction(lire(brut, ['steps', rang, 'action']), [`Étape ${n}`, `Step ${n}`], []);
+  }
+  if (tete === 'actions' && suite[0] === 'config') {
+    return lieuAction(lire(brut, ['actions', rang]), [`Action ${n}`, `Action ${n}`], []);
+  }
+  return null;
 }
 
 /** Où se trouve le problème, en mots : [français, anglais]. */
@@ -265,9 +285,19 @@ function traduire(p: Probleme, brut: unknown, out: MessageClair[]): void {
     }
     if (!MESSAGE_ZOD.test(p.message)) {
       // Message déjà écrit pour un humain (raffinements du schéma, graphe du
-      // parcours) : gardé tel quel. Bilingue « fr / en » → séparé.
-      const [fr, en] = p.message.includes(' / ') ? p.message.split(' / ') : [p.message, p.message];
-      out.push({ fr, en, path: chemin });
+      // parcours) : gardé tel quel. Sa version anglaise vient de `params.en`
+      // quand le schéma la donne ; sinon bilingue « fr / en » → séparé.
+      const enDonne = typeof p.params?.en === 'string' ? p.params.en : null;
+      const [fr, en] = enDonne !== null
+        ? [p.message, enDonne]
+        : p.message.includes(' / ') ? p.message.split(' / ') : [p.message, p.message];
+      /*
+       * … et il DÉSIGNE L'ÉTAPE (triage actions, ligne 8). « « À faire dans
+       * (jours) » doit être au plus 365. » ne disait pas laquelle des quinze
+       * étapes du parcours était fautive.
+       */
+      const etape = lieuDeLEtape(chemin, brut);
+      out.push(etape ? { fr: `${etape[0]} : ${fr}`, en: `${etape[1]}: ${en}`, path: chemin } : { fr, en, path: chemin });
       return;
     }
   }
@@ -285,7 +315,17 @@ function traduire(p: Probleme, brut: unknown, out: MessageClair[]): void {
 /** Les problèmes d'un corps d'automatisation, en phrases claires (doublons retirés). */
 export function messagesClairs(issues: ReadonlyArray<z.core.$ZodIssue>, brut: unknown): MessageClair[] {
   const out: MessageClair[] = [];
-  for (const i of issues) traduire(i as unknown as Probleme, brut, out);
+  /*
+   * Dans un PARCOURS, `actions` n'est que le reflet des étapes (l'éditeur
+   * l'envoie avec elles) : une valeur fautive y est donc refusée DEUX fois.
+   * On ne garde que le refus de l'étape — c'est elle que l'écran montre.
+   */
+  const etapes = (brut as { steps?: unknown } | null)?.steps;
+  const refusDesEtapes = Array.isArray(etapes) && etapes.length > 0 && issues.some((i) => i.path[0] === 'steps');
+  for (const i of issues) {
+    if (refusDesEtapes && i.path[0] === 'actions') continue;
+    traduire(i as unknown as Probleme, brut, out);
+  }
   const vus = new Set<string>();
   return out.filter((m) => (vus.has(m.fr) ? false : (vus.add(m.fr), true)));
 }

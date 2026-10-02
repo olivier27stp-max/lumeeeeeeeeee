@@ -15,7 +15,8 @@
  *   · un échec ramène l'écran au dernier état CONFIRMÉ par le serveur.
  */
 export interface OptionsFileBascule {
-  envoyer: (id: string, actif: boolean) => Promise<void>;
+  /** Ce que l'envoi rend n'est pas lu ici (`changerPublication` rend la version de la règle). */
+  envoyer: (id: string, actif: boolean) => Promise<unknown>;
   /** La base a l'état voulu ; plus rien en vol pour cet id. */
   surFin?: (id: string, actif: boolean) => void;
   /** Échec : `retour` est le dernier état confirmé, à réafficher. */

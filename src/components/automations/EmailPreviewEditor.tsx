@@ -10,18 +10,22 @@
    Aucune balise n'est jamais visible.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { X, Loader2, Check, Plus, Trash2, Type, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
 import { cn } from '../../lib/utils';
-import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRulesApi';
 import {
-  htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES, VARIABLES_CONNUES, VARIABLES_POINTEES_CONNUES,
+  ecrireMessageDeRegle, lireMessageDeRegle, getAutomationLanguage, getCompanyBranding, type EcritureMessage,
+} from '../../lib/automationRulesApi';
+import {
+  htmlVersTexte, texteVersHtml, remplacerVariables, variablesInconnues, VARIABLES_PROPOSEES, VARIABLES_CONNUES, VARIABLES_POINTEES_CONNUES,
 } from '../../lib/emailBodyText';
 import { variablesPour, VARIABLES_PAR_TYPE } from '../../lib/variablesCourriel';
+import { trouverAction } from '../../lib/automationCatalogue';
 import { apercuCourriel, envoyerEssaiCourriel } from '../../lib/emailTemplatesApi';
 import { useChampsTous, variablesChampsPourCourriel } from '../champs/automatisations';
+import AutreVersionMessage, { nomAutreVersion, phraseLangueDesMessages, type ChoixAutreVersion } from './AutreVersionMessage';
 
 interface Props {
   /** Règle d'automatisation visée. Absent quand `enregistrerTexte` est fourni. */
@@ -60,11 +64,26 @@ interface Props {
   revenirAuDefaut?: () => Promise<void> | void;
 }
 
+/** Les deux versions qu'un courriel d'automatisation peut porter. */
+type Langue = 'fr' | 'en';
+
+/** Une version du courriel, telle qu'on la modifie. */
+interface Version {
+  blocs: Bloc[];
+  objet: string;
+}
+
 /** Un bloc du courriel : titre, paragraphe ou puce. */
 interface Bloc {
   id: number;
   type: 'titre' | 'paragraphe' | 'puce';
   texte: string;
+  /**
+   * Le HTML d'où vient ce bloc, et le texte qu'il donnait à l'ouverture. Tant
+   * que le texte n'a pas changé, c'est CE HTML qui est enregistré : son gras,
+   * son lien, son style. Absent pour un bloc ajouté dans l'éditeur.
+   */
+  origine?: { html: string; texte: string };
 }
 
 /**
@@ -99,27 +118,34 @@ let compteurId = 0;
  * champ et lui fait perdre le focus au milieu d'une phrase.
  */
 function ChampBloc({
-  bloc, fr, onChange, onFocus,
+  bloc, fr, onChange, onFocus, prendLeFocus, suffixeNom,
 }: {
   bloc: Bloc;
   fr: boolean;
+  /** Ajouté au nom du champ (« Paragraphe — Version anglaise ») : les lignes de l'autre langue ne portent pas le nom de celles du courriel. */
+  suffixeNom?: string;
+  /** La ligne vient d'être ajoutée : elle reçoit le curseur, on peut taper tout de suite (04-courriel:443). */
+  prendLeFocus?: boolean;
   onChange: (texte: string) => void;
-  onFocus: () => void;
+  /** Le champ qui reçoit le curseur : « Insérer » écrira là où il est. */
+  onFocus: (champ: HTMLTextAreaElement) => void;
 }) {
+  const champ = useRef<HTMLTextAreaElement | null>(null);
   const ajuster = (el: HTMLTextAreaElement | null) => {
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
   };
+  useEffect(() => { if (prendLeFocus) champ.current?.focus(); }, [prendLeFocus]);
 
   return (
     <textarea
       value={bloc.texte}
       onChange={(e) => { onChange(e.target.value); ajuster(e.currentTarget); }}
-      onFocus={onFocus}
+      onFocus={(e) => onFocus(e.currentTarget)}
       rows={1}
       placeholder={fr ? 'Écrivez ici…' : 'Type here…'}
-      aria-label={bloc.type === 'titre' ? (fr ? 'Titre' : 'Title') : bloc.type === 'puce' ? (fr ? 'Puce' : 'Bullet') : (fr ? 'Paragraphe' : 'Paragraph')}
+      aria-label={`${bloc.type === 'titre' ? (fr ? 'Titre' : 'Title') : bloc.type === 'puce' ? (fr ? 'Puce' : 'Bullet') : (fr ? 'Paragraphe' : 'Paragraph')}${suffixeNom ? ` — ${suffixeNom}` : ''}`}
       className={cn(
         'w-full bg-transparent border border-transparent rounded px-2 py-1 resize-none overflow-hidden',
         'hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none transition-colors',
@@ -128,13 +154,21 @@ function ChampBloc({
           : 'text-[13px] text-text-secondary leading-relaxed',
       )}
       style={{ minHeight: bloc.type === 'titre' ? 30 : 26 }}
-      ref={ajuster}
+      ref={(el) => { champ.current = el; ajuster(el); }}
     />
   );
 }
 
+/** Au-delà, une boîte de réception coupe l'objet : l'essentiel doit tenir avant. */
+const OBJET_REPERE = 70;
+/** Plafond de l'objet d'un courriel d'AUTOMATISATION — celui du catalogue (champ « Objet » de « Envoyer un courriel »), que le serveur applique aussi. */
+const OBJET_MAX_AUTOMATISATION = trouverAction('send_email')?.champs.find((c) => c.cle === 'subject')?.max ?? 200;
+
 /** Au-delà de ce nombre de variables, la palette offre une recherche. */
 const SEUIL_RECHERCHE_VARIABLES = 12;
+
+/** Les lignes de l'autre langue ne deviennent pas la cible de « Insérer » : il vise le courriel affiché. */
+const pasDeCible = (): void => {};
 
 /** Découpe le texte converti en blocs manipulables. */
 function texteEnBlocs(texte: string): Bloc[] {
@@ -152,12 +186,176 @@ function blocsEnTexte(blocs: Bloc[]): string {
     .join('\n');
 }
 
+/**
+ * Ce que disent des blocs, sans les lignes vides ni les espaces de bord : deux
+ * courriels qui donnent le même HTML se comparent égaux (une ligne ajoutée et
+ * laissée vide n'est pas « une modification »).
+ */
+function texteCompare(blocs: Bloc[]): string {
+  return blocsEnTexte(blocs).split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
+}
+
+/*
+ * CE QU'ON N'A PAS TOUCHÉ GARDE SA MISE EN FORME (triage « modèles »,
+ * 04-courriel:394 et :410).
+ *
+ * L'éditeur montre du TEXTE, et reconstruisait tout le courriel à partir de ce
+ * texte : corriger un mot d'un paragraphe effaçait le gras d'un autre, changeait
+ * le lien « Voir votre soumission » en simple « [quote_link] », et faisait un
+ * TITRE de la première ligne quelle qu'elle soit.
+ *
+ * Chaque bloc garde donc le HTML d'où il vient (`origine`). À l'enregistrement,
+ * un bloc dont le texte n'a pas changé rend CE HTML, tel quel ; seul un bloc
+ * réécrit (ou ajouté) est reconstruit — par le même générateur qu'avant
+ * (`texteVersHtml`), dans son type : un paragraphe reste un paragraphe.
+ */
+
+/** Le courriel (HTML) découpé en blocs : un par titre, paragraphe ou puce. */
+function htmlEnBlocs(body: string): Bloc[] {
+  if (!body.trim()) return [];
+  // Sans DOM (hors navigateur) : l'ancienne découpe, par lignes de texte.
+  if (typeof DOMParser === 'undefined') return texteEnBlocs(htmlVersTexte(body));
+
+  let conteneur: Element = new DOMParser().parseFromString(body, 'text/html').body;
+  // L'enveloppe — un <div> qui contient tout le courriel — n'est pas un bloc.
+  for (;;) {
+    const enfants = Array.from(conteneur.childNodes).filter((n) => n.nodeType === 1 || (n.textContent ?? '').trim());
+    const seul = enfants.length === 1 && enfants[0].nodeType === 1 ? (enfants[0] as Element) : null;
+    if (!seul || seul.tagName !== 'DIV') break;
+    conteneur = seul;
+  }
+
+  const blocs: Bloc[] = [];
+  const bloc = (type: Bloc['type'], html: string, interieur: string) => {
+    const texte = htmlVersTexte(interieur);
+    if (texte.trim()) blocs.push({ id: compteurId++, type, texte, origine: { html, texte } });
+  };
+  /* Du texte posé à même le courriel, hors de tout paragraphe (un courriel
+     écrit en texte brut) : une ligne = un paragraphe. S'il porte du gras ou un
+     lien, la suite reste UN bloc, pour garder cette mise en forme. */
+  let suite: Node[] = [];
+  const viderSuite = () => {
+    if (!suite.length) return;
+    const html = suite.map((n) => (n.nodeType === 1 ? (n as Element).outerHTML : echapperTexte(n.textContent ?? ''))).join('');
+    if (suite.some((n) => n.nodeType === 1 && (n as Element).tagName !== 'BR')) {
+      bloc('paragraphe', `<p style="${STYLE_PARAGRAPHE}">${html.trim()}</p>`, html);
+    } else {
+      for (const ligne of htmlVersTexte(html).split('\n')) {
+        if (ligne.trim()) blocs.push({ id: compteurId++, type: 'paragraphe', texte: ligne.trim() });
+      }
+    }
+    suite = [];
+  };
+  for (const noeud of Array.from(conteneur.childNodes)) {
+    const el = noeud.nodeType === 1 ? (noeud as Element) : null;
+    if (!el || BALISES_EN_LIGNE.has(el.tagName)) {
+      if (el || noeud.nodeType === 3) suite.push(noeud);
+      continue;
+    }
+    viderSuite();
+    if (/^H[1-6]$/.test(el.tagName)) bloc('titre', el.outerHTML, el.innerHTML);
+    else if (el.tagName === 'UL' || el.tagName === 'OL') {
+      for (const li of Array.from(el.children)) bloc('puce', li.tagName === 'LI' ? li.outerHTML : `<li>${li.outerHTML}</li>`, li.innerHTML);
+    } else bloc('paragraphe', el.outerHTML, el.tagName === 'P' ? el.innerHTML : el.outerHTML);
+  }
+  viderSuite();
+  return blocs;
+}
+
+const BALISES_EN_LIGNE = new Set(['A', 'B', 'STRONG', 'I', 'EM', 'U', 'SPAN', 'BR', 'SMALL', 'FONT']);
+const echapperTexte = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/* Les morceaux du générateur (`texteVersHtml`), pris sur ce qu'il produit plutôt
+   que recopiés : l'enveloppe, le style d'un paragraphe, l'ouverture d'une liste.
+   S'il change, l'éditeur suit. */
+const FIN_ENVELOPPE = '</div>';
+const ENVELOPPE_OUVERTE = texteVersHtml('').slice(0, -FIN_ENVELOPPE.length);
+/** Tout ce que le générateur écrit avant le contenu qui suit une première ligne « x » (l'enveloppe et son titre). */
+const AVANT_LA_SUITE = texteVersHtml('x').slice(0, -FIN_ENVELOPPE.length);
+const suiteDe = (texte: string) => texteVersHtml(`x\n${texte}`).slice(AVANT_LA_SUITE.length, -FIN_ENVELOPPE.length);
+const STYLE_PARAGRAPHE = suiteDe('x').match(/^<p style="([^"]*)"/)?.[1] ?? '';
+const LISTE_OUVERTE = suiteDe('- x').match(/^<ul[^>]*>/)?.[0] ?? '<ul>';
+
+/** Le HTML d'un bloc réécrit ou ajouté, dans SON type. */
+function htmlDuBlocReecrit(type: Bloc['type'], texte: string): string {
+  // Pour le générateur, la première ligne d'un texte est un titre.
+  if (type === 'titre') return texteVersHtml(texte).slice(ENVELOPPE_OUVERTE.length, -FIN_ENVELOPPE.length);
+  if (type === 'puce') {
+    const liste = suiteDe(`- ${texte.replace(/\s*\n\s*/g, ' ')}`);
+    return liste.slice(LISTE_OUVERTE.length, liste.lastIndexOf('</ul>'));
+  }
+  return suiteDe(texte);
+}
+
+/**
+ * Blocs → HTML du courriel. Un bloc intact rend son HTML d'origine ; les puces
+ * qui se suivent partagent une liste.
+ */
+function blocsVersHtml(blocs: Bloc[]): string {
+  const morceaux: string[] = [];
+  let puces: string[] = [];
+  const viderPuces = () => {
+    if (puces.length) morceaux.push(`${LISTE_OUVERTE}${puces.join('')}</ul>`);
+    puces = [];
+  };
+  for (const b of blocs) {
+    if (!b.texte.trim()) continue;
+    const html = b.origine && b.origine.texte === b.texte ? b.origine.html : htmlDuBlocReecrit(b.type, b.texte);
+    if (b.type === 'puce') { puces.push(html); continue; }
+    viderPuces();
+    morceaux.push(html);
+  }
+  viderPuces();
+  return `${ENVELOPPE_OUVERTE}${morceaux.join('')}${FIN_ENVELOPPE}`;
+}
+
 export default function EmailPreviewEditor({
   ruleId, ruleName, body, subject, fr, onClose, onSaved, enregistrerTexte, typeCourriel, declencheur,
   revenirAuDefaut,
 }: Props) {
-  const [blocs, setBlocs] = useState<Bloc[]>(() => texteEnBlocs(htmlVersTexte(body)));
-  const [objet, setObjet] = useState(subject);
+  /*
+   * LES DEUX VERSIONS (triage « modèles », 04-courriel:834).
+   *
+   * Un courriel d'automatisation peut porter une version anglaise (`body_en`,
+   * `subject_en`) : le moteur l'envoie À LA PLACE du français quand la langue
+   * du bureau est l'anglais. L'éditeur ne montrait que le français : un bureau
+   * anglophone corrigeait un texte que ses clients ne recevaient pas, pendant
+   * que l'anglais, invisible, continuait de partir.
+   *
+   * LA RÈGLE (fixée le 2026-10-01 ; elle remplace celle du commit 6e7bc921,
+   * qui montrait deux onglets et bloquait « Enregistrer ») :
+   *   · le courriel affiché — objet et lignes — est celui de la langue dans
+   *     laquelle le bureau ENVOIE ses messages (`principale`), et l'écran le dit ;
+   *   · l'AUTRE langue, quand le courriel en porte une, est dans un bloc replié
+   *     au-dessus du pied (`AutreVersionMessage`), dépliable et modifiable ;
+   *   · corriger le courriel affiché sans l'autre langue ne bloque rien : le
+   *     bloc se déplie, dit « Cette version n'est plus à jour. » et offre de la
+   *     retirer (coché d'office) ou de la garder telle quelle.
+   * `blocs` et `objet` sont ceux de la langue principale.
+   */
+  const modeRegle = !!ruleId && !enregistrerTexte;
+  const [versions, setVersions] = useState<Record<Langue, Version>>(() => ({
+    fr: { blocs: htmlEnBlocs(body), objet: subject },
+    en: { blocs: [], objet: '' },
+  }));
+  /** La langue du courriel affiché : celle qui part. Fixée à l'ouverture, une fois la règle relue. */
+  const [principale, setPrincipale] = useState<Langue>('fr');
+  const autre: Langue = principale === 'fr' ? 'en' : 'fr';
+  const { blocs, objet } = versions[principale];
+  const setBlocs = useCallback((maj: (b: Bloc[]) => Bloc[]) => {
+    setVersions((v) => ({ ...v, [principale]: { ...v[principale], blocs: maj(v[principale].blocs) } }));
+  }, [principale]);
+  const setObjet = useCallback((maj: string | ((o: string) => string)) => {
+    setVersions((v) => ({ ...v, [principale]: { ...v[principale], objet: typeof maj === 'function' ? maj(v[principale].objet) : maj } }));
+  }, [principale]);
+  /** Ce qu'on sait de la règle une fois relue. `pret` = on peut montrer le texte ; `aAutre` = le courriel porte l'autre langue. */
+  const [lecture, setLecture] = useState<{ pret: boolean; aAutre: boolean; langueBureau: Langue | null }>(
+    { pret: !modeRegle, aAutre: false, langueBureau: null },
+  );
+  /** L'autre langue, périmée : « La retirer » (d'office) ou « La garder telle quelle ». */
+  const [choixAutre, setChoixAutre] = useState<ChoixAutreVersion>('retirer');
+  /** Le bloc de l'autre langue, déplié par l'utilisateur (périmée, elle l'est toujours). */
+  const [autreDeplie, setAutreDeplie] = useState(false);
   const [actif, setActif] = useState<number | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
   const [enregistre, setEnregistre] = useState(false);
@@ -188,9 +386,12 @@ export default function EmailPreviewEditor({
   const envoyerEssai = async () => {
     setEssaiEnCours(true);
     try {
-      const adresse = await envoyerEssaiCourriel(texteVersHtml(blocsEnTexte(blocs)), objet, typeCourriel, declencheur);
+      const adresse = await envoyerEssaiCourriel(blocsVersHtml(blocs), objet, typeCourriel, declencheur);
       if (adresse) toast.success(fr ? `Essai envoyé à ${adresse}` : `Test sent to ${adresse}`);
       else toast.error(fr ? 'Envoi impossible' : 'Could not send');
+    } catch (e: unknown) {
+      // Le serveur a dit POURQUOI l'essai n'est pas parti : on le dit (04-courriel:793).
+      toast.error(e instanceof Error && e.message ? e.message : (fr ? 'Envoi impossible' : 'Could not send'));
     } finally {
       setEssaiEnCours(false);
     }
@@ -200,7 +401,7 @@ export default function EmailPreviewEditor({
     if (!ongletApercu) return;
     let vivant = true;
     setChargementApercu(true);
-    void apercuCourriel(texteVersHtml(blocsEnTexte(blocs)), typeCourriel, declencheur)
+    void apercuCourriel(blocsVersHtml(blocs), typeCourriel, declencheur)
       .then((h) => { if (vivant) setHtmlReel(h); })
       .finally(() => { if (vivant) setChargementApercu(false); });
     return () => { vivant = false; };
@@ -262,7 +463,10 @@ export default function EmailPreviewEditor({
        traite avant les crochets : `{{client.x}}` passerait sinon pour la clé
        bancale `{client.x`. Champ connu → rien à dire ; inconnu → signalé tel
        qu'écrit, pour que l'auteur voie exactement ce qu'il a tapé. */
-    const texte = `${objet} ${blocsEnTexte(blocs)}`.replace(
+    // Les deux langues peuvent partir aux clients : mêmes variables, même contrôle.
+    const ecrit = [versions[principale], ...(lecture.aAutre ? [versions[autre]] : [])]
+      .map((v) => `${v.objet} ${blocsEnTexte(v.blocs)}`).join(' ');
+    const texte = ecrit.replace(
       /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g,
       (entier, obj: string, cle: string) => {
         // {{soumission.total}}, {{facture.lien}}… : remplies par le moteur
@@ -309,8 +513,15 @@ export default function EmailPreviewEditor({
       if (!ressemble) continue;
       if (!connues.has(cle)) vues.add(cle);
     }
+    /* UNE AUTOMATISATION : le moteur remplace par du VIDE toute variable d'un
+       seul mot qu'il ne connaît pas — « Bonjour [prenom], » part en
+       « Bonjour , » — qu'elle ressemble ou non à une variable connue. C'est
+       le contrôle de l'éditeur de texto (`variablesInconnues`) ; l'éditeur de
+       courriel ne signalait que les clés PROCHES d'une vraie, et laissait
+       passer « [prenom] » (triage « modèles », 04-courriel:620). */
+    if (!typeCourriel) for (const cle of variablesInconnues(texte)) if (!connues.has(cle)) vues.add(cle);
     return [...vues];
-  }, [objet, blocs, variables]);
+  }, [versions, principale, autre, lecture.aAutre, variables]);
 
   // L'en-tête et le pied de page sont ajoutés par le SERVEUR à l'envoi
   // (`buildEmailLayout`), comme pour une facture ou un devis. Les afficher ici
@@ -322,8 +533,82 @@ export default function EmailPreviewEditor({
       .catch(() => { /* aperçu sans logo : pas bloquant */ });
   }, []);
 
-  const initial = useMemo(() => ({ blocs: blocsEnTexte(texteEnBlocs(htmlVersTexte(body))), objet: subject }), [body, subject]);
-  const modifie = blocsEnTexte(blocs) !== initial.blocs || objet !== initial.objet;
+  /*
+   * Le texte EN BASE sur lequel on travaille : celui de l'ouverture, puis celui
+   * du dernier enregistrement. Il désigne le courriel à modifier quand la règle
+   * en envoie plusieurs (`CibleMessage`), et il dit s'il reste quelque chose à
+   * enregistrer — sans attendre que la liste, derrière, se soit rechargée.
+   */
+  const [enBase, setEnBase] = useState<{ body: string; subject: string; body_en: string; subject_en: string }>(
+    { body, subject, body_en: '', subject_en: '' },
+  );
+  useEffect(() => { setEnBase((b) => ({ ...b, body, subject })); }, [body, subject]);
+
+  /* À l'ouverture : la version anglaise du courriel, s'il en a une, et la
+     langue dans laquelle le bureau écrit à ses clients. Le texte n'est montré
+     qu'ensuite — sinon on commencerait à corriger la version qui ne part pas. */
+  useEffect(() => {
+    if (!modeRegle || !ruleId) return;
+    let vivant = true;
+    void (async () => {
+      let anglais: { body: string; subject: string } | null = null;
+      let langueBureau: Langue | null = null;
+      try {
+        const message = await lireMessageDeRegle(ruleId, 'send_email', { corpsLu: body, objetLu: subject });
+        const corps = typeof message.config.body_en === 'string' ? message.config.body_en : '';
+        const sujet = typeof message.config.subject_en === 'string' ? message.config.subject_en : '';
+        if (corps.trim() || sujet.trim()) anglais = { body: corps, subject: sujet };
+      } catch (e: unknown) {
+        console.error('[automations/courriel] version anglaise illisible', e);
+      }
+      try {
+        langueBureau = await getAutomationLanguage();
+      } catch (e: unknown) {
+        console.error('[automations/courriel] langue des messages illisible', e);
+      }
+      if (!vivant) return;
+      /* La langue du courriel affiché : celle qui PART — l'anglais quand le
+         bureau envoie en anglais et que le courriel en a une version, sinon le
+         texte de base (c'est lui que le moteur envoie faute d'anglais). */
+      const quiPart: Langue = langueBureau === 'en' && !!anglais && anglais.body.trim() !== '' ? 'en' : 'fr';
+      if (anglais) {
+        const lu = anglais;
+        // Sans objet anglais, c'est l'objet de base qui part avec le corps anglais : on montre celui-là.
+        const objetAnglais = lu.subject.trim() || quiPart !== 'en' ? lu.subject : subject;
+        setVersions((v) => ({ ...v, en: { blocs: htmlEnBlocs(lu.body), objet: objetAnglais } }));
+        setEnBase((b) => ({ ...b, body_en: lu.body, subject_en: lu.subject }));
+      }
+      setPrincipale(quiPart);
+      // Le texte de base existe toujours : affiché en anglais, le courriel porte forcément l'autre langue.
+      setLecture({ pret: true, aAutre: quiPart === 'en' || !!anglais, langueBureau });
+    })();
+    return () => { vivant = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- à l'ouverture seulement : relire à chaque frappe remplacerait la saisie.
+  }, []);
+
+  const initial = useMemo(() => ({
+    fr: { blocs: texteCompare(htmlEnBlocs(enBase.body)), objet: enBase.subject },
+    en: {
+      blocs: texteCompare(htmlEnBlocs(enBase.body_en)),
+      // Affiché en anglais sans objet anglais : l'objet de base est celui qu'on a montré.
+      objet: enBase.subject_en.trim() || principale !== 'en' ? enBase.subject_en : enBase.subject,
+    },
+  }), [enBase, principale]);
+  const changee = (l: Langue) => texteCompare(versions[l].blocs) !== initial[l].blocs || versions[l].objet !== initial[l].objet;
+  const modifiePrincipale = changee(principale);
+  const modifieAutre = lecture.aAutre && changee(autre);
+  const modifie = modifiePrincipale || modifieAutre;
+  /**
+   * Le courriel affiché a changé, pas son autre langue : elle n'est plus à
+   * jour. On ne bloque RIEN — le bloc de l'autre langue se déplie, le dit, et
+   * offre de la retirer (d'office) ou de la garder telle quelle.
+   */
+  const autrePerimee = lecture.aAutre && modifiePrincipale && !modifieAutre;
+  /** L'autre langue s'en va : on l'a vidée, ou elle est périmée et « La retirer » est resté coché. */
+  const retirerAutre = (modifieAutre && !blocsEnTexte(versions[autre].blocs).trim()) || (autrePerimee && choixAutre === 'retirer');
+  /** Un objet qu'on vient d'écrire et que le serveur refusera : dit ici, bouton grisé. */
+  const objetTropLong = modeRegle && ([principale, ...(lecture.aAutre && !retirerAutre ? [autre] : [])] as Langue[])
+    .some((l) => versions[l].objet.length > OBJET_MAX_AUTOMATISATION && versions[l].objet !== initial[l].objet);
 
   /**
    * Ferme la fenêtre, en demandant confirmation si du travail serait perdu.
@@ -337,10 +622,42 @@ export default function EmailPreviewEditor({
       const question = fr
         ? 'Vos modifications ne sont pas enregistrées. Fermer quand même ?'
         : 'Your changes are not saved. Close anyway?';
-      if (!(await confirmer({ message: question, danger: true }))) return;
+      // Des boutons qui disent ce qu'ils font : « Confirmer » ne disait pas QUOI (04-courriel:201).
+      const fermerSansEnregistrer = fr ? 'Fermer sans enregistrer' : 'Close without saving';
+      if (!(await confirmer({ message: question, danger: true, confirmLabel: fermerSansEnregistrer }))) return;
     }
     onClose();
   }, [modifie, fr, onClose]);
+
+  /*
+   * LA FENÊTRE AU CLAVIER (triage « modèles », 04-courriel:212).
+   *
+   * Ouverte par Entrée sur « Modifier », elle laissait le focus sur la page
+   * derrière : Tab et Maj+Tab s'y promenaient, et un lecteur d'écran ne savait
+   * pas qu'une fenêtre venait de s'ouvrir. Elle est maintenant un dialogue
+   * (`role="dialog"`, `aria-modal`) qui prend le focus à l'ouverture, le garde
+   * (Tab boucle dedans), et le rend à ce qui l'a ouverte quand elle se ferme.
+   */
+  const fenetre = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const ouvreur = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    fenetre.current?.focus();
+    return () => { if (ouvreur && document.contains(ouvreur)) ouvreur.focus(); };
+  }, []);
+  const garderLeFocus = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab') return;
+    const cadre = fenetre.current;
+    if (!cadre) return;
+    const atteignables = Array.from(cadre.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], iframe',
+    ));
+    if (atteignables.length === 0) { e.preventDefault(); return; }
+    const premier = atteignables[0];
+    const dernier = atteignables[atteignables.length - 1];
+    const ici = document.activeElement;
+    if (e.shiftKey && (ici === premier || ici === cadre)) { e.preventDefault(); dernier.focus(); }
+    else if (!e.shiftKey && ici === dernier) { e.preventDefault(); premier.focus(); }
+  };
 
   // Échap ferme la fenêtre — réflexe attendu d'une fenêtre superposée.
   useEffect(() => {
@@ -379,45 +696,126 @@ export default function EmailPreviewEditor({
     });
   };
 
-  const ajouterBloc = (type: Bloc['type']) =>
-    setBlocs((bs) => [...bs, { id: compteurId++, type, texte: '' }]);
+  /** La ligne qu'on vient d'ajouter : elle reçoit le curseur. */
+  const [ligneNeuve, setLigneNeuve] = useState<number | null>(null);
+  const ajouterBloc = (type: Bloc['type']) => {
+    const id = compteurId++;
+    setBlocs((bs) => [...bs, { id, type, texte: '' }]);
+    setLigneNeuve(id);
+  };
+
+  /*
+   * « INSÉRER » ÉCRIT LÀ OÙ EST LE CURSEUR (triage « modèles », 04-courriel:538
+   * et :547). La variable partait toujours en FIN de ligne — « Bonjour , à
+   * demain.[client_first_name] » — et, sur un courriel vidé de ses lignes, le
+   * clic ne faisait rien, sans rien dire.
+   *
+   * Le champ qui a eu le curseur en dernier (l'objet ou une ligne) le garde en
+   * mémoire même quand le clic sur le bouton lui prend le focus ; sans champ
+   * cliqué, la variable va à la fin de la dernière ligne, comme avant.
+   */
+  const champActif = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  /** Où remettre le curseur une fois la variable posée : juste après elle. */
+  const curseurVoulu = useRef<{ champ: HTMLTextAreaElement | HTMLInputElement; position: number } | null>(null);
+  useEffect(() => {
+    const voulu = curseurVoulu.current;
+    if (!voulu) return;
+    curseurVoulu.current = null;
+    voulu.champ.focus();
+    voulu.champ.setSelectionRange(voulu.position, voulu.position);
+  });
 
   const insererVariable = (cle: string, jeton?: string) => {
     // Un champ personnalisé apporte son écriture complète ({{client.cle}}) ;
     // les variables classiques prennent les crochets historiques.
     const ecriture = jeton ?? `[${cle}]`;
+    const champ = champActif.current;
+    const auCurseur = (texte: string): string => {
+      // Le champ mémorisé n'est pas (ou plus) celui de ce texte : à la fin.
+      if (!champ || champ.value !== texte) return `${texte}${ecriture}`;
+      const debut = champ.selectionStart ?? texte.length;
+      const fin = champ.selectionEnd ?? debut;
+      curseurVoulu.current = { champ, position: debut + ecriture.length };
+      return `${texte.slice(0, debut)}${ecriture}${texte.slice(fin)}`;
+    };
     // L'objet décide de l'ouverture : il doit pouvoir porter le montant ou le
     // numéro, pas seulement le corps.
     if (cibleObjet) {
-      setObjet((o) => `${o}${ecriture}`);
+      setObjet(auCurseur(objet));
       return;
     }
-    const cible = actif ?? blocs[blocs.length - 1]?.id;
-    if (cible === undefined) return;
-    setBlocs((bs) => bs.map((b) => (b.id === cible ? { ...b, texte: `${b.texte}${ecriture}` } : b)));
+    // Aucune ligne : la variable en ouvre une.
+    if (blocs.length === 0) {
+      setBlocs(() => [{ id: compteurId++, type: 'paragraphe', texte: ecriture }]);
+      return;
+    }
+    const ligne = blocs.find((b) => b.id === actif) ?? blocs[blocs.length - 1];
+    const texte = ligne.id === actif ? auCurseur(ligne.texte) : `${ligne.texte}${ecriture}`;
+    setBlocs((bs) => bs.map((b) => (b.id === ligne.id ? { ...b, texte } : b)));
   };
 
   const enregistrer = async () => {
-    if (!modifie || enregistrement) return;
+    if (!modifie || enregistrement || objetTropLong) return;
     setEnregistrement(true);
     try {
       // Le HTML n'est reconstruit qu'ici : l'utilisateur ne l'a jamais vu.
-      const corpsHtml = texteVersHtml(blocsEnTexte(blocs));
+      const corpsHtml = blocsVersHtml(blocs);
       if (enregistrerTexte) {
         await enregistrerTexte(corpsHtml, objet);
       } else if (ruleId) {
-        await updateRuleMessage(ruleId, 'send_email', corpsHtml, objet);
+        // Une règle peut envoyer DEUX courriels : on écrit dans celui qu'on a
+        // ouvert (désigné par le texte lu), jamais dans « tous les courriels ».
+        // Et seulement la ou les langues modifiées. L'autre langue, périmée ou
+        // vidée, n'est retirée que sur l'ordre que l'écran a montré.
+        const champs = (l: Langue): EcritureMessage => (l === 'fr'
+          ? { body: blocsVersHtml(versions.fr.blocs), subject: versions.fr.objet }
+          : {
+            body_en: blocsVersHtml(versions.en.blocs),
+            // Un objet anglais n'est créé que si on l'a écrit : sinon l'objet de base continue de partir.
+            ...(versions.en.objet !== initial.en.objet || enBase.subject_en.trim() ? { subject_en: versions.en.objet } : {}),
+          });
+        const ecriture: EcritureMessage = {
+          ...(modifiePrincipale ? champs(principale) : {}),
+          ...(modifieAutre && !retirerAutre ? champs(autre) : {}),
+          ...(retirerAutre ? { retirer: autre } : {}),
+        };
+        await ecrireMessageDeRegle(ruleId, 'send_email', ecriture, { corpsLu: enBase.body, objetLu: enBase.subject });
+        if (retirerAutre && autre === 'fr') {
+          // Le français retiré : le texte anglais devient LE texte du courriel (c'est ce que le serveur a écrit).
+          const seul = versions.en;
+          setEnBase((b) => ({
+            body: ecriture.body_en ?? b.body_en,
+            subject: seul.objet.trim() ? seul.objet : b.subject,
+            body_en: '',
+            subject_en: '',
+          }));
+          setVersions({ fr: seul, en: { blocs: [], objet: '' } });
+          setPrincipale('fr');
+        } else {
+          setEnBase((b) => ({
+            body: ecriture.body ?? b.body,
+            subject: ecriture.subject ?? b.subject,
+            body_en: retirerAutre ? '' : ecriture.body_en ?? b.body_en,
+            subject_en: retirerAutre ? '' : ecriture.subject_en ?? b.subject_en,
+          }));
+          if (retirerAutre) setVersions((v) => ({ ...v, en: { blocs: [], objet: '' } }));
+        }
+        // Il ne reste qu'un texte : plus de bloc « autre langue ».
+        if (retirerAutre) setLecture((l) => ({ ...l, aAutre: false }));
+        setChoixAutre('retirer');
+        setAutreDeplie(false);
       } else {
         // Ni destination injectée, ni règle : rien n'aurait été écrit, et
         // l'utilisateur aurait vu « enregistré » pour du travail perdu.
         throw new Error(fr ? 'Aucune destination d’enregistrement' : 'No save destination');
       }
+      if (enregistrerTexte) setEnBase((b) => ({ ...b, body: corpsHtml, subject: objet }));
       setEnregistre(true);
       setTimeout(() => setEnregistre(false), 1800);
       onSaved();
       toast.success(fr ? 'Courriel enregistré' : 'Email saved');
     } catch (e: any) {
-      // `updateRuleMessage` lève quand la RLS filtre la ligne — sans quoi
+      // `ecrireMessageDeRegle` lève quand la RLS filtre la ligne — sans quoi
       // l'utilisateur croirait avoir enregistré.
       toast.error(e?.message || (fr ? 'Enregistrement impossible' : 'Could not save'));
     } finally {
@@ -433,10 +831,14 @@ export default function EmailPreviewEditor({
       onClick={fermer}
     >
       <div
-        className="w-full sm:max-w-3xl h-[95vh] sm:h-auto sm:max-h-[90vh] flex flex-col rounded-t-xl sm:rounded-xl bg-surface-secondary shadow-2xl overflow-hidden"
-        role="presentation"
+        ref={fenetre}
+        className="w-full sm:max-w-3xl h-[95vh] sm:h-auto sm:max-h-[90vh] flex flex-col rounded-t-xl sm:rounded-xl bg-surface-secondary shadow-2xl overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+        role="dialog"
+        aria-modal="true"
+        aria-label={ruleName}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={garderLeFocus}
       >
         {/* En-tête */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-outline/50 shrink-0">
@@ -466,8 +868,11 @@ export default function EmailPreviewEditor({
         {/* Deux onglets. « Modifier » garde l'édition sur place ; « Aperçu
             réel » montre ce que le serveur enverrait, sans rien redessiner. */}
         <div className="flex items-center gap-1 px-3 sm:px-5 pt-3 border-b border-outline/40">
+          {/* `aria-pressed` : un lecteur d'écran sait lequel des deux est
+              affiché (04-courriel:683). */}
           <button
             type="button"
+            aria-pressed={!ongletApercu}
             onClick={() => setOngletApercu(false)}
             className={cn(
               'px-3 py-2 text-[12px] font-semibold border-b-2 -mb-px transition-colors',
@@ -478,6 +883,7 @@ export default function EmailPreviewEditor({
           </button>
           <button
             type="button"
+            aria-pressed={ongletApercu}
             onClick={() => setOngletApercu(true)}
             className={cn(
               'px-3 py-2 text-[12px] font-semibold border-b-2 -mb-px transition-colors',
@@ -488,7 +894,21 @@ export default function EmailPreviewEditor({
           </button>
         </div>
 
-        {ongletApercu ? (
+        {/* Dans quelle langue les messages partent — donc quel courriel on a sous les yeux. */}
+        {modeRegle && lecture.pret && (
+          <p data-testid="langue-des-messages" className="shrink-0 border-b border-outline/40 px-3 py-2 text-[11px] leading-relaxed text-text-tertiary sm:px-5">
+            {phraseLangueDesMessages(fr, lecture.langueBureau, principale, 'courriel')}
+          </p>
+        )}
+
+        {!lecture.pret ? (
+          <div className="flex-1 overflow-y-auto p-3 sm:p-5">
+            <p role="status" className="flex items-center justify-center gap-2 py-10 text-[12px] text-text-tertiary">
+              <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+              {fr ? 'Chargement du courriel…' : 'Loading the email…'}
+            </p>
+          </div>
+        ) : ongletApercu ? (
           <div className="flex-1 overflow-y-auto bg-surface-secondary p-3 sm:p-5">
             {chargementApercu ? (
               <p className="flex items-center justify-center gap-2 py-10 text-[12px] text-text-tertiary">
@@ -510,18 +930,8 @@ export default function EmailPreviewEditor({
                   : 'Preview unavailable right now. Your text is safe — go back to “Edit”.'}
               </p>
             )}
-            <div className="mx-auto mt-3 flex max-w-[600px] justify-center">
-              <button
-                type="button"
-                onClick={() => void envoyerEssai()}
-                disabled={essaiEnCours}
-                className="rounded-lg border border-outline/60 bg-surface px-4 py-2 text-[12.5px] font-semibold text-text-secondary hover:bg-surface-secondary disabled:opacity-60"
-              >
-                {essaiEnCours
-                  ? (fr ? 'Envoi…' : 'Sending…')
-                  : (fr ? 'M’envoyer un essai' : 'Send me a test')}
-              </button>
-            </div>
+            {/* « M'envoyer un essai » vit dans le pied de la fenêtre : sous un
+                cadre de 620 px, il fallait défiler pour le trouver. */}
             <p className="mx-auto mt-2 max-w-[600px] text-center text-[10px] leading-relaxed text-text-tertiary">
               {fr
                 ? 'Rendu par le serveur, avec le même gabarit qu’à l’envoi. Le montant et le bouton sont des exemples ; les valeurs entre crochets seront remplacées par les vraies données du client.'
@@ -539,11 +949,28 @@ export default function EmailPreviewEditor({
               <input
                 value={objet}
                 onChange={(e) => setObjet(e.target.value)}
-                onFocus={() => { setActif(null); setCibleObjet(true); }}
+                onFocus={(e) => { setActif(null); setCibleObjet(true); champActif.current = e.currentTarget; }}
                 placeholder={fr ? 'Objet du courriel' : 'Email subject'}
                 aria-label={fr ? 'Objet du courriel' : 'Email subject'}
                 className="w-full bg-transparent border border-transparent rounded px-2 py-1 text-[13px] font-semibold text-text-primary hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none transition-colors"
               />
+              {/* Un objet de 300 caractères s'écrivait sans que rien ne dise
+                  qu'une boîte de réception en coupe l'essentiel (04-courriel:366). */}
+              {objet.length > OBJET_REPERE && (
+                <p
+                  role="status"
+                  className={cn('mt-1 px-2 text-[10px] leading-relaxed',
+                    modeRegle && objet.length > OBJET_MAX_AUTOMATISATION ? 'text-danger' : 'text-amber-700 dark:text-amber-400')}
+                >
+                  {modeRegle && objet.length > OBJET_MAX_AUTOMATISATION
+                    ? (fr
+                      ? `${objet.length} caractères : un objet en fait ${OBJET_MAX_AUTOMATISATION} au plus. Raccourcissez-le pour enregistrer.`
+                      : `${objet.length} characters: a subject is ${OBJET_MAX_AUTOMATISATION} at most. Shorten it to save.`)
+                    : (fr
+                      ? `${objet.length} caractères : une boîte de réception n’en montre qu’environ ${OBJET_REPERE}. Mettez l’essentiel au début.`
+                      : `${objet.length} characters: an inbox shows only about ${OBJET_REPERE}. Put what matters first.`)}
+                </p>
+              )}
             </div>
 
             {/* En-tête ajouté par le serveur — non modifiable ici, il vient
@@ -575,15 +1002,22 @@ export default function EmailPreviewEditor({
                       bloc={bloc}
                       fr={fr}
                       onChange={(t) => majBloc(bloc.id, t)}
-                      onFocus={() => { setActif(bloc.id); setCibleObjet(false); }}
+                      onFocus={(champ) => { setActif(bloc.id); setCibleObjet(false); champActif.current = champ; setLigneNeuve(null); }}
+                      prendLeFocus={bloc.id === ligneNeuve}
                     />
                   </div>
+                  {/* Visible au survol — mais aussi quand la ligne ou le bouton a
+                      le focus (clavier) et au doigt (pas de survol) : un bouton
+                      qu'on atteint par Tab sans le voir ne sert à personne
+                      (04-courriel:478). */}
                   <button
+                    type="button"
                     onClick={() => supprimerBloc(bloc.id)}
                     title={fr ? 'Supprimer cette ligne' : 'Remove this line'}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-text-tertiary hover:text-red-500 shrink-0 mt-1"
+                    aria-label={fr ? 'Supprimer cette ligne' : 'Remove this line'}
+                    className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 transition-opacity p-1 rounded text-text-tertiary hover:text-red-500 shrink-0 mt-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                   >
-                    <Trash2 size={12} />
+                    <Trash2 size={12} aria-hidden="true" />
                   </button>
                 </div>
               ))}
@@ -672,6 +1106,55 @@ export default function EmailPreviewEditor({
           </div>
         )}
 
+        {/* L'AUTRE LANGUE du courriel : repliée, dépliable et modifiable. Périmée
+            (le courriel affiché a changé, pas elle), elle se déplie d'elle-même
+            et offre le choix — « Enregistrer » n'attend rien. */}
+        {modeRegle && lecture.pret && lecture.aAutre && (
+          <div className="shrink-0 border-t border-outline/40 px-3 py-2 sm:px-5">
+            <AutreVersionMessage
+              fr={fr}
+              langue={autre}
+              perimee={autrePerimee}
+              choix={choixAutre}
+              onChoix={setChoixAutre}
+              deplie={autreDeplie}
+              onDeplie={setAutreDeplie}
+            >
+              <div className="max-h-[28vh] space-y-1 overflow-y-auto rounded-md border border-outline/40 bg-white p-2">
+                <input
+                  value={versions[autre].objet}
+                  onChange={(e) => {
+                    const valeur = e.target.value;
+                    setVersions((v) => ({ ...v, [autre]: { ...v[autre], objet: valeur } }));
+                  }}
+                  placeholder={fr ? 'Objet du courriel' : 'Email subject'}
+                  aria-label={`${fr ? 'Objet du courriel' : 'Email subject'} — ${nomAutreVersion(fr, autre)}`}
+                  className="w-full rounded border border-transparent bg-transparent px-2 py-1 text-[13px] font-semibold text-text-primary hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                />
+                {versions[autre].blocs.map((bloc) => (
+                  <div key={bloc.id} className="flex items-start gap-1">
+                    {bloc.type === 'puce' && (
+                      <span className="select-none pt-1.5 text-[13px] text-text-tertiary">•</span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <ChampBloc
+                        bloc={bloc}
+                        fr={fr}
+                        suffixeNom={nomAutreVersion(fr, autre)}
+                        onChange={(texte) => setVersions((v) => ({
+                          ...v,
+                          [autre]: { ...v[autre], blocs: v[autre].blocs.map((b) => (b.id === bloc.id ? { ...b, texte } : b)) },
+                        }))}
+                        onFocus={pasDeCible}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </AutreVersionMessage>
+          </div>
+        )}
+
         {/* Pied : variables + enregistrement */}
         <div className="border-t border-outline/50 px-5 py-3 shrink-0 bg-surface-secondary">
           {/* La palette a une hauteur BORNÉE. Pour une automatisation, elle
@@ -679,7 +1162,10 @@ export default function EmailPreviewEditor({
               et occupait à elle seule plus de la moitié de l'écran : le
               courriel qu'on écrit ne tenait plus que sur quelques lignes
               (audit du 2026-10-01). Elle défile, et se filtre en tapant. */}
-          {variables.length > SEUIL_RECHERCHE_VARIABLES && (
+          {/* Sur « Aperçu réel », pas de palette : « Insérer » y modifiait un
+              texte qu'on ne voit pas — le pied passait à « Modifications non
+              enregistrées » sans qu'on ait rien tapé (04-courriel:560). */}
+          {!ongletApercu && variables.length > SEUIL_RECHERCHE_VARIABLES && (
             <input
               type="search"
               value={filtreVariable}
@@ -689,6 +1175,7 @@ export default function EmailPreviewEditor({
               className="mb-1.5 w-full max-w-[260px] rounded border border-outline/50 bg-surface px-2 py-1 text-[11px] text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             />
           )}
+          {!ongletApercu && (
           <div
             data-testid="palette-variables"
             className="flex flex-wrap items-center gap-1 mb-2.5 max-h-[72px] overflow-y-auto"
@@ -712,6 +1199,7 @@ export default function EmailPreviewEditor({
               </button>
             ))}
           </div>
+          )}
 
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] text-text-tertiary">
@@ -731,6 +1219,19 @@ export default function EmailPreviewEditor({
                   {fr ? 'Revenir au texte d’origine' : 'Restore original'}
                 </button>
               ) : null}
+              {/* Toujours sous la main quand on regarde l'aperçu (04-courriel:588). */}
+              {ongletApercu && lecture.pret && (
+                <button
+                  type="button"
+                  onClick={() => void envoyerEssai()}
+                  disabled={essaiEnCours}
+                  className="rounded-md border border-outline/60 bg-surface px-3 py-1.5 text-[11px] font-semibold text-text-secondary hover:bg-surface-secondary disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                >
+                  {essaiEnCours
+                    ? (fr ? 'Envoi…' : 'Sending…')
+                    : (fr ? 'M’envoyer un essai' : 'Send me a test')}
+                </button>
+              )}
               <button
                 onClick={fermer}
                 className="px-3 py-1.5 rounded-md text-[11px] text-text-secondary hover:bg-surface-tertiary transition-colors"
@@ -739,10 +1240,10 @@ export default function EmailPreviewEditor({
               </button>
               <button
                 onClick={enregistrer}
-                disabled={!modifie || enregistrement}
+                disabled={!modifie || enregistrement || objetTropLong}
                 className={cn(
                   'px-4 py-1.5 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1.5',
-                  modifie && !enregistrement
+                  modifie && !enregistrement && !objetTropLong
                     ? 'bg-primary text-white hover:bg-primary/90'
                     : 'bg-surface-tertiary text-text-tertiary cursor-not-allowed',
                 )}

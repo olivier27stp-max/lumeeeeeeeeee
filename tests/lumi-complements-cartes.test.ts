@@ -184,6 +184,78 @@ describe('compléments des cartes de Lumi', () => {
   });
 });
 
+describe('la carte annonce les automatisations que l’action va déclencher', () => {
+  const regles = [
+    { id: id(100), name: 'Demande d’avis', trigger_event: 'job.completed', is_active: true, steps: [{ type: 'attente' }, { type: 'action', action: { type: 'request_review' } }, { type: 'action', action: { type: 'send_sms' } }], actions: [] },
+    { id: id(101), name: 'Tâche interne', trigger_event: 'job.completed', is_active: true, steps: [], actions: [{ type: 'create_task' }] },
+    { id: id(102), name: 'Ancienne relance', trigger_event: 'job.completed', is_active: false, steps: [], actions: [{ type: 'send_email' }] },
+    { id: id(103), name: 'Confirmation de visite', trigger_event: 'appointment.created', is_active: true, steps: [], actions: [{ type: 'send_email' }] },
+    { id: id(104), name: 'Supprimée', trigger_event: 'appointment.created', is_active: true, deleted_at: '2026-01-01', steps: [], actions: [{ type: 'send_sms' }] },
+  ];
+
+  it('terminer un job nomme les automatisations actives qui écrivent au client, pas les autres', async () => {
+    const t = await texte('update_job_status', { job_id: id(6), status: 'completed' }, base({ automation_rules: regles }));
+    expect(t).toBe('Automatisations déclenchées : « Demande d’avis » (demande d’avis, texto au client) — si leurs conditions sont remplies');
+  });
+
+  it('un autre statut ne déclenche rien ; une visite planifiée annonce la confirmation', async () => {
+    expect(await texte('update_job_status', { job_id: id(6), status: 'in_progress' }, base({ automation_rules: regles }))).toBe('');
+    expect(await texte('add_visit', { job_id: id(6) }, base({ automation_rules: regles }))).toMatch(/« Confirmation de visite » \(courriel au client\)/);
+    expect(await texte('add_visit', { job_id: id(6) }, base({ automation_rules: regles }))).not.toMatch(/Supprimée/);
+  });
+
+  it('entreprise en pause : la carte dit que rien ne part pour l’instant', async () => {
+    const ctx = base({ automation_rules: regles, company_settings: [{ automations_paused: true }] });
+    expect(await texte('update_job_status', { job_id: id(6), status: 'completed' }, ctx)).toMatch(/aucune pour l’instant : toutes les automatisations sont arrêtées/);
+  });
+
+  it('annuler une visite garde la visite visée ET annonce les automatisations', async () => {
+    const ctx = base({
+      schedule_events: [{ id: id(21), job_id: id(6), start_at: dans(2), status: 'scheduled' }],
+      automation_rules: [{ id: id(105), name: 'Avis d’annulation', trigger_event: 'appointment.cancelled', is_active: true, steps: [], actions: [{ type: 'send_sms' }] }],
+    });
+    const t = await texte('cancel_visit', { job_id: id(6) }, ctx);
+    expect(t).toMatch(/^Visite visée : /);
+    expect(t).toMatch(/Automatisations déclenchées : « Avis d’annulation » \(texto au client\)/);
+  });
+
+  it('aucune automatisation sur l’événement : aucune ligne', async () => {
+    expect(await texte('schedule_job', { job_id: id(6) }, base({}))).toBe('');
+  });
+});
+
+describe('activer une automatisation : la carte dit ce qui va partir (A-13)', () => {
+  const parcours = { id: id(110), trigger_event: 'invoice.overdue', steps: [
+    { type: 'action', action: { type: 'send_sms', config: { body: 'Bonjour [client_name], votre facture est en retard.' } } },
+    { type: 'attente' },
+    { type: 'action', action: { type: 'send_email', config: { subject: 'Rappel de facture', body: '<p>Bonjour,</p><p>Un petit rappel.</p>' } } },
+    { type: 'action', action: { type: 'create_task', config: { title: 'Appeler le client' } } },
+  ], actions: [{ type: 'send_sms', config: { body: 'reflet périmé' } }] };
+
+  it('déclencheur en clair, chaque message exact dans l’ordre du parcours, et à qui', async () => {
+    const t = await texte('toggle_automation_rule', { rule_id: id(110), is_active: true }, base({ automation_rules: [parcours] }));
+    expect(t).toMatch(/^Se déclenche quand : /);
+    expect(t).not.toMatch(/invoice\.overdue/);
+    expect(t).toMatch(/Message 1 \(texto\) : Bonjour \[client_name\], votre facture est en retard\./);
+    expect(t).toMatch(/Message 2 \(courriel\) : Objet : Rappel de facture — Bonjour,/);
+    expect(t).not.toMatch(/reflet périmé|Appeler le client|<p>/);
+    expect(t).toMatch(/Envoyé à : chaque client concerné par l’événement/);
+  });
+
+  it('règle sans parcours : les messages viennent de la liste d’actions', async () => {
+    const simple = { id: id(111), trigger_event: 'job.completed', steps: [], actions: [{ type: 'send_sms', config: { body: 'Merci pour votre confiance !' } }] };
+    expect(await texte('toggle_automation_rule', { rule_id: id(111), is_active: true }, base({ automation_rules: [simple] }))).toMatch(/Message 1 \(texto\) : Merci pour votre confiance !/);
+  });
+
+  it('mettre en pause n’ajoute rien ; une règle sans envoi le dit ; entreprise à l’arrêt signalée', async () => {
+    expect(await texte('toggle_automation_rule', { rule_id: id(110), is_active: false }, base({ automation_rules: [parcours] }))).toBe('');
+    const interne = { id: id(112), trigger_event: 'job.completed', steps: [], actions: [{ type: 'create_task', config: {} }] };
+    expect(await texte('toggle_automation_rule', { rule_id: id(112), is_active: true }, base({ automation_rules: [interne] }))).toMatch(/aucun : cette automatisation n’écrit pas au client/);
+    const arret = base({ automation_rules: [parcours], company_settings: [{ automations_paused: true }] });
+    expect(await texte('toggle_automation_rule', { rule_id: id(110), is_active: true }, arret)).toMatch(/rien ne partira tant qu’elles ne sont pas reprises/);
+  });
+});
+
 describe('cartes des outils ajoutés le 2026-10-01', () => {
   it('une automatisation créée depuis un modèle dit lequel, et qu’elle naît éteinte', async () => {
     const { MODELES_AUTOMATISATION } = await import('../server/lib/automationTemplates');

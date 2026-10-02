@@ -13,10 +13,10 @@
  */
 import crypto from 'node:crypto';
 
-export const VERSION_PROMPT = 'v2026-10-01.1';
+export const VERSION_PROMPT = 'v2026-10-02.1';
 
 /** Empreinte figée du bloc stable de promptSystemeLumi (fr, sans souvenirs). Recalculée par le test. */
-export const EMPREINTE_PROMPT_ATTENDUE = '32b715a7d979';
+export const EMPREINTE_PROMPT_ATTENDUE = 'bf8d92d1ef51';
 
 export function empreintePrompt(stable: string): string {
   return crypto.createHash('sha256').update(stable, 'utf8').digest('hex').slice(0, 12);

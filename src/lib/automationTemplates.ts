@@ -16,6 +16,7 @@
    ═════════════════════════════════════════════════════════════ */
 
 import type { Etape } from './sequenceTypes';
+import { localizeAutomationName } from './automationNames';
 
 export type CategorieModele =
   | 'soumissions'
@@ -251,9 +252,21 @@ export function trierModeles(modeles: readonly ModeleAutomatisation[], tri: TriM
   return copie.sort((a, b) => b.ajoute_le.localeCompare(a.ajoute_le) || nom(a).localeCompare(nom(b), fr ? 'fr' : 'en'));
 }
 
-/** « Relance » déjà pris → « Relance (2) », puis « Relance (3) »… */
+/**
+ * « Relance » déjà pris → « Relance (2) », puis « Relance (3) »…
+ *
+ * Un nom existant est pris sous TOUTES ses formes affichées : un préréglage est
+ * stocké sous son nom anglais (« Contract Signed ») et montré traduit
+ * (« Contrat signé »). Comparer aux seuls noms stockés donnait à la copie le nom
+ * exact d'une ligne déjà à l'écran — deux « Contrat signé » impossibles à
+ * distinguer (triage « modèles », 02-chaque-modele:351).
+ */
 export function nomDisponible(nom: string, existants: Iterable<string>): string {
-  const pris = new Set([...existants].map((n) => n.trim().toLowerCase()));
+  const pris = new Set<string>();
+  for (const existant of existants) {
+    const n = existant.trim();
+    for (const forme of [n, localizeAutomationName(n, 'fr'), localizeAutomationName(n, 'en')]) pris.add(forme.trim().toLowerCase());
+  }
   if (!pris.has(nom.trim().toLowerCase())) return nom;
   for (let i = 2; ; i += 1) {
     const candidat = `${nom} (${i})`;

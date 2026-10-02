@@ -30,22 +30,36 @@ describe('API — les deux canaux sont modifiables', () => {
     expect(api).toContain("actionType === 'send_email' && subject !== undefined");
   });
 
+  /* 2026-10-01 : l'écriture d'un message ne part plus du navigateur vers la
+     table — elle passe par `PATCH /api/automations/rules/:id/messages`. Les
+     deux règles ci-dessous sont donc tenues par le SERVEUR ; on les y vérifie,
+     et on vérifie que le navigateur n'écrit plus la table lui-même. Le
+     comportement est prouvé par tests/automations-finale/t/messages-route.test.ts. */
+  const route = read('server/routes/automation-messages.ts');
+  const logique = read('server/lib/automation-messages.ts');
+
   it('seule l’action visée est modifiée', () => {
-    // Une règle porte souvent SMS + courriel : modifier l'un ne doit pas
-    // écraser l'autre.
-    expect(api).toContain('a.type === actionType');
+    // Une règle porte souvent SMS + courriel — ou DEUX textos : modifier l'un
+    // ne doit pas écraser l'autre. On écrit l'action désignée, par son index.
+    expect(logique).toContain('i === vise.indexAction');
+    expect(logique).toContain('e.id === vise.etapeId');
   });
 
   it('une écriture filtrée par la RLS lève au lieu de faire semblant', () => {
     // Sans `.select()`, PostgREST renvoie un succès pour 0 ligne touchée :
     // l'utilisateur croirait avoir enregistré son texte.
-    const fn = api.slice(
-      api.indexOf('export async function updateRuleMessage'),
-      api.indexOf('@deprecated'),
-    );
-    expect(fn).toContain(".select('id')");
-    expect(fn).toContain('!updated || updated.length === 0');
-    expect(fn).toContain('Modification refusée');
+    expect(route).toContain(".select('id')");
+    expect(route).toContain('!ecrites || ecrites.length === 0');
+    expect(route).toContain('Modification refusée');
+    // Et le navigateur relaie le refus du serveur au lieu d'annoncer un succès.
+    const fn = api.slice(api.indexOf('export async function ecrireMessageDeRegle'), api.indexOf('export function texteDuMessage'));
+    expect(fn).toContain('if (!reponse.ok)');
+    expect(fn).toContain('messageDuServeur(rendu)');
+  });
+
+  it('le navigateur n’écrit plus la table des automatisations lui-même', () => {
+    expect(api).not.toMatch(/\.from\('automation_rules'\)\s*\.(update|insert|delete|upsert)\(/);
+    expect(api).toContain('`/api/automations/rules/${id}/messages`');
   });
 
   it('l’ancienne fonction reste, marquée obsolète', () => {

@@ -18,6 +18,7 @@ import { demarrerMoteur } from '../harnais/moteur';
 import { sessionDe, COMPTES } from '../harnais/bureau-test';
 import { demanderALumi, deciderCarte, depenseDepuis, arreterApiLumi, type SessionLumi, type ReponseLumi } from '../harnais/lumi-api';
 import { htmlVersTexte } from '../../../src/lib/emailBodyText';
+import { projeterFormatOrigine } from '../../../src/lib/sequenceTypes';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
 let jeton = '';
@@ -50,7 +51,27 @@ type Etape = {
   conditions?: Record<string, unknown>;
   action?: { type: string; config?: Record<string, unknown> };
 };
-interface Regle { id: string; name: string; trigger_event: string; conditions: Record<string, unknown>; steps: Etape[] | null; is_active: boolean }
+interface Regle { id: string; name: string; trigger_event: string; conditions: Record<string, unknown>; steps: Etape[] | null; actions?: unknown; delay_seconds?: number | null; is_active: boolean }
+
+/**
+ * Les deux outils par lesquels Lumi peut créer une automatisation. Depuis que les
+ * modèles de Lume existent, une demande qui correspond à un modèle (« un rappel la
+ * veille du rendez-vous », « demande un avis Google quand la job est terminée ») passe
+ * par `create_automation_from_template` : c'est le bon geste, pas un recul.
+ */
+const OUTIL_TEXTE = 'create_automation_from_text';
+const OUTIL_MODELE = 'create_automation_from_template';
+
+/**
+ * Le parcours de la règle créée : `steps`, ou — pour une règle née d'un modèle au
+ * format d'origine (`actions` + `delay_seconds`) — sa projection en étapes, la même
+ * que celle du moteur et de l'éditeur. Les vérifications de structure s'appliquent
+ * donc aux DEUX chemins.
+ */
+function etapesDe(r: Regle): Etape[] {
+  if (Array.isArray(r.steps) && r.steps.length > 0) return r.steps;
+  return projeterFormatOrigine({ actions: r.actions, delay_seconds: r.delay_seconds }) as unknown as Etape[];
+}
 
 /** Le chemin principal : on suit `suivant`, et `alors` après un « si ». */
 function chemin(steps: Etape[]): Etape[] {
@@ -132,11 +153,11 @@ async function construire(demande: string, langue: 'fr' | 'en'): Promise<{ r1: R
   const depuis = new Date().toISOString();
   const r1 = await demanderALumi(s, demande);
   let r2: ReponseLumi | null = null;
-  if (r1.proposition?.tool === 'create_automation_from_text' && r1.conversation_id) {
+  if ((r1.proposition?.tool === OUTIL_TEXTE || r1.proposition?.tool === OUTIL_MODELE) && r1.conversation_id) {
     r2 = await deciderCarte(s, r1.conversation_id, r1.proposition.tool_use_id, 'confirm');
   }
   const { data } = await b.admin.from('automation_rules')
-    .select('id, name, trigger_event, conditions, steps, is_active')
+    .select('id, name, trigger_event, conditions, steps, actions, delay_seconds, is_active')
     .eq('org_id', b.orgA).eq('is_preset', false).gte('created_at', depuis)
     // Les règles d'autres fichiers de la suite portent une marque « [QA-AUTO … ] ».
     .not('name', 'like', '[QA-AUTO%').order('created_at');
@@ -147,7 +168,7 @@ async function construire(demande: string, langue: 'fr' | 'en'): Promise<{ r1: R
 function diagnostic(x: { r1: ReponseLumi; r2: ReponseLumi | null; regle: Regle | null }): string {
   return JSON.stringify({
     texte: x.r1.texte.slice(0, 300), outils: x.r1.outils, proposition: x.r1.proposition, statut: x.r1.statut, erreur: x.r1.erreur,
-    recu: x.r2?.texte, regle: x.regle && { trigger: x.regle.trigger_event, conditions: x.regle.conditions, jetons: jetons(x.regle.steps ?? []), messages: messages(x.regle.steps ?? []) },
+    recu: x.r2?.texte, regle: x.regle && { trigger: x.regle.trigger_event, conditions: x.regle.conditions, jetons: jetons(etapesDe(x.regle)), messages: messages(etapesDe(x.regle)) },
   });
 }
 
@@ -160,6 +181,15 @@ interface Cas {
   ordre: Array<string | RegExp>;
   /** Vérifications supplémentaires : true ou un message d'échec. */
   plus?: (r: Regle) => true | string;
+  /**
+   * La demande correspond à un MODÈLE de Lume : Lumi peut la créer par l'un ou
+   * l'autre outil. Tout le reste s'applique tel quel à la règle créée
+   * (déclencheur, ordre des étapes, langue des messages, brouillon).
+   * `canal` : le canal que la personne a DEMANDÉ — il doit être dans le parcours ;
+   * et si le modèle apporte en plus un canal qu'elle n'a pas demandé (un
+   * courriel alors qu'elle a dit « par texto »), Lumi doit l'avoir DIT.
+   */
+  modeleAdmis?: { canal?: 'send_sms' | 'send_email' };
 }
 
 const JOUR = 86400;
@@ -179,11 +209,13 @@ const CAS: Cas[] = [
     id: 'I-002', langue: 'fr',
     demande: 'Crée un rappel automatique par texto la veille de chaque rendez-vous.',
     declencheur: 'appointment.created', ordre: [`avant:${JOUR}`, 'send_sms'],
+    modeleAdmis: { canal: 'send_sms' },
   },
   {
     id: 'I-003', langue: 'fr',
     demande: 'Crée une automatisation qui demande un avis Google au client quand une job est terminée.',
     declencheur: 'job.completed', ordre: [/^(request_review|send_sms|send_email)$/],
+    modeleAdmis: {},
   },
   {
     id: 'I-004', langue: 'fr',
@@ -211,6 +243,7 @@ const CAS: Cas[] = [
     id: 'I-007', langue: 'en',
     demande: 'Create an automation that texts the client a reminder 2 hours before their appointment.',
     declencheur: 'appointment.created', ordre: ['avant:7200', 'send_sms'],
+    modeleAdmis: { canal: 'send_sms' },
   },
   {
     id: 'I-008', langue: 'en',
@@ -279,6 +312,7 @@ const CAS: Cas[] = [
     id: 'I-019', langue: 'en',
     demande: 'Create an automation that asks the client for a Google review as soon as a job is completed.',
     declencheur: 'job.completed', ordre: [/^(request_review|send_sms|send_email)$/],
+    modeleAdmis: {},
   },
   {
     id: 'I-020', langue: 'fr',
@@ -292,19 +326,39 @@ describe('I — Lumi crée la règle demandée (vrai modèle, vrai chemin)', () 
     it(`[${c.id}] ${c.langue.toUpperCase()} « ${c.demande.slice(0, 90)}… » → ${Array.isArray(c.declencheur) ? c.declencheur.join('|') : c.declencheur}`, async () => {
       // Langue du bureau = langue de la demande (une entreprise anglophone écrit en anglais).
       await b.admin.from('company_settings').update({ default_language: c.langue }).eq('org_id', b.orgA);
+      // Chaque demande est jouée pour elle-même : sans ce ménage, deux demandes qui mènent au MÊME
+      // modèle (I-003 en français, I-019 en anglais) se voient répondre « déjà fait » par
+      // l'anti-doublon tant que la première copie existe — et rien n'est créé. L'anti-doublon a
+      // ses propres tests (40-iklm-lumi-outils, I-034 et I-035).
+      await b.admin.from('agent_actions').delete().eq('org_id', b.orgA);
       const x = await construire(c.demande, c.langue);
       const d = diagnostic(x);
       expect(x.r1.statut, d).toBe(200);
-      expect(x.r1.proposition?.tool, `Lumi n’a pas proposé de créer l’automatisation — ${d}`).toBe('create_automation_from_text');
+      // L'un ou l'autre outil SEULEMENT pour les demandes qui correspondent à un modèle ; ailleurs, la création libre.
+      const outilsAdmis = c.modeleAdmis ? [OUTIL_TEXTE, OUTIL_MODELE] : [OUTIL_TEXTE];
+      expect(outilsAdmis, `Lumi n’a pas proposé de créer l’automatisation — ${d}`).toContain(x.r1.proposition?.tool);
       expect(x.r2?.executes.every((e) => e.ok), `exécution refusée — ${d}`).toBe(true);
       expect(x.regle, `aucune règle en base — ${d}`).not.toBeNull();
       const r = x.regle!;
       expect(r.is_active, 'une règle créée par Lumi naît en pause').toBe(false);
       const attendus = Array.isArray(c.declencheur) ? c.declencheur : [c.declencheur];
       expect(attendus, `déclencheur — ${d}`).toContain(r.trigger_event);
-      const j = jetons(r.steps ?? []);
+      // Mêmes exigences par les deux outils : le bon moment, les bonnes étapes, la bonne langue.
+      const etapes = etapesDe(r);
+      const j = jetons(etapes);
       expect(dansLOrdre(j, c.ordre), `étapes ${JSON.stringify(j)} ≠ attendu ${c.ordre.map(String).join(' → ')} — ${d}`).toBe(true);
-      expect(enLangue(messages(r.steps ?? []), c.langue), d).toBe(true);
+      expect(enLangue(messages(etapes), c.langue), d).toBe(true);
+      if (c.modeleAdmis?.canal) {
+        const envois = etapes.filter((e) => e.type === 'action').map((e) => String(e.action?.type)).filter((t) => t === 'send_sms' || t === 'send_email');
+        expect(envois, `le canal demandé (${c.modeleAdmis.canal}) n’est pas dans le parcours — ${d}`).toContain(c.modeleAdmis.canal);
+        const nonDemande = c.modeleAdmis.canal === 'send_sms' ? 'send_email' : 'send_sms';
+        if (envois.includes(nonDemande)) {
+          // Un canal en plus, que la personne n'a pas demandé : Lumi doit l'avoir dit (dans sa réponse ou dans le reçu).
+          const dit = `${x.r1.texte} ${x.r2?.texte ?? ''}`;
+          const motif = nonDemande === 'send_email' ? /courriel|e-?mail/i : /texto|sms|\btext\b/i;
+          expect(dit, `le parcours envoie aussi ${nonDemande === 'send_email' ? 'un courriel' : 'un texto'} que la personne n’a pas demandé, et Lumi ne l’a pas dit — ${d}`).toMatch(motif);
+        }
+      }
       if (c.plus) expect(c.plus(r), d).toBe(true);
     });
   }

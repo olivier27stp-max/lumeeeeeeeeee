@@ -102,6 +102,30 @@ async function ex(nom: string, args: Record<string, any> | null | (() => Record<
     return null;
   }
 }
+/**
+ * Relecture après écriture (2026-10-01). « OK » ci-dessus veut seulement dire que l'outil n'a pas
+ * levé : un outil peut répondre « fait » sans avoir rien écrit (mauvaise colonne ignorée, filtre
+ * qui ne touche aucune ligne, écriture dans un reflet que personne ne lit). Ici on RELIT la base
+ * avec le client de service et on compare à ce que l'outil devait écrire. Un écart est une erreur
+ * de la batterie, au nom de l'outil suivi de « (relecture) ».
+ */
+async function relire(nom: string, quoi: string, verifier: () => Promise<boolean | null | undefined>): Promise<void> {
+  if (SEULEMENT && !SEULEMENT.has(nom)) return;
+  // L'outil n'a pas tourné ou a déjà échoué : pas de relecture à faire.
+  const dernier = [...resultats].reverse().find((r) => r.outil === nom);
+  if (!dernier || dernier.verdict !== 'ok') return;
+  let ok = false; let detail = quoi;
+  try { ok = (await verifier()) === true; } catch (e) { detail = `${quoi} — lecture impossible : ${e instanceof Error ? e.message : String(e)}`; }
+  resultats.push({ outil: `${nom} (relecture)`, verdict: ok ? 'ok' : 'erreur', detail: ok ? quoi : `PAS ÉCRIT : ${detail}`, duree_ms: 0 });
+  console.log(ok ? `  LU   ${nom} — ${quoi}` : `  ERR  ${nom} (relecture) : ${detail}`);
+}
+/** Une ligne lue avec le client de service (hors RLS) : ce qui est VRAIMENT en base. */
+const ligne = async (table: string, id: string | undefined, colonnes: string): Promise<Record<string, any> | null> => {
+  if (!id) return null;
+  const { data } = await admin.from(table).select(colonnes).eq('id', id).maybeSingle();
+  return (data as Record<string, any> | null) ?? null;
+};
+
 const exclu = (nom: string, raison: string) => { if (!SEULEMENT || SEULEMENT.has(nom)) { resultats.push({ outil: nom, verdict: 'exclu', detail: raison, duree_ms: 0 }); } };
 
 console.log(`Exécution réelle — org ${orgId}, ${COMPTE}, API ${process.env.PORT}`);
@@ -186,6 +210,7 @@ await ex('archive_job', () => S.job && { job_id: S.job });
 // Les Archives (archived_at, pas la corbeille) : le job archivé revient par l'outil des Archives,
 // puis par archive_job (sans effet s'il est déjà revenu ; le filet si la restauration a échoué).
 await ex('restore_archived', () => S.job && { entity_type: 'job', entity_id: S.job });
+await relire('restore_archived', 'le job n’est plus archivé', async () => { const j = await ligne('jobs', S.job, 'id, archived_at'); return !!j && j.archived_at === null; });
 await ex('archive_job', () => S.job && { job_id: S.job, restore: true });
 
 // ── Devis, préréglages, modèles ──
@@ -214,12 +239,30 @@ await ex('delete_quote_template', () => S.mdevis && { template_id: S.mdevis });
 // Un prospect neuf pour le deal : un client qui a déjà un devis a déjà son deal ouvert, et l'outil refuse d'en ouvrir un second.
 await ex('create_lead', { first_name: 'Exec', last_name: 'ProspectDeal', phone: '514-555-0116' }, (r) => { S.leadDeal = trouver(r, null, 'lead_id', 'id'); });
 await ex('create_deal', () => S.leadDeal && { client_id: S.leadDeal, title: 'Exec deal', amount_cents: 120000 }, (r) => { S.dealExec = trouver(r, null, 'deal_id', 'id'); });
+await relire('create_deal', 'le deal existe, pour ce prospect, dans cette entreprise', async () => {
+  const d = await ligne('deals', S.dealExec, 'org_id, client_id, title, deleted_at');
+  return !!d && d.org_id === orgId && d.client_id === S.leadDeal && String(d.title).includes(`Exec-${R} deal`) && d.deleted_at === null;
+});
 await ex('update_deal', () => S.dealExec && { deal_id: S.dealExec, title: 'Exec deal 2', expected_close_date: jour(30) });
+await relire('update_deal', 'le titre et la fermeture visée ont changé', async () => {
+  const d = await ligne('deals', S.dealExec, 'title, expected_close_date');
+  return !!d && d.title === `Exec-${R} deal 2` && String(d.expected_close_date).slice(0, 10) === jour(30);
+});
 await ex('set_quote_discount_deposit', () => S.devis3 && { quote_id: S.devis3, discount_type: 'percentage', discount_value: 10, deposit_required: true, deposit_type: 'percentage', deposit_value: 25 });
+await relire('set_quote_discount_deposit', 'rabais de 10 % et dépôt de 25 % sur le devis', async () => {
+  const q = await ligne('quotes', S.devis3, 'discount_type, discount_value, discount_cents, deposit_required, deposit_type, deposit_value, total_cents, subtotal_cents');
+  // 9 000 ¢ de lignes, 10 % de rabais = 900 ¢ : le rabais doit aussi se voir dans les cents.
+  return !!q && q.discount_type === 'percentage' && Number(q.discount_value) === 10 && Number(q.discount_cents) === 900
+    && q.deposit_required === true && q.deposit_type === 'percentage' && Number(q.deposit_value) === 25;
+});
 await ex('set_quote_status', () => S.devis3 && { quote_id: S.devis3, status: 'awaiting_response' });
+await relire('set_quote_status', 'le devis est « en attente de réponse »', async () => (await ligne('quotes', S.devis3, 'status'))?.status === 'awaiting_response');
 await ex('set_quote_status', () => S.devis3 && { quote_id: S.devis3, status: 'approved' });
+await relire('set_quote_status', 'le devis est « approuvé »', async () => (await ligne('quotes', S.devis3, 'status'))?.status === 'approved');
 await ex('set_client_consent', () => S.client && { client_id: S.client, channel: 'email', granted: true });
+await relire('set_client_consent', 'le consentement courriel est daté sur la fiche', async () => !!(await ligne('clients', S.client, 'email_consent_at'))?.email_consent_at);
 await ex('set_client_consent', () => S.client && { client_id: S.client, channel: 'email', granted: false });
+await relire('set_client_consent', 'le consentement courriel est retiré de la fiche', async () => { const c = await ligne('clients', S.client, 'id, email_consent_at'); return !!c && c.email_consent_at === null; });
 
 // ── Factures, paiements, récurrentes, modèles, relances ──
 await ex('create_invoice', () => S.client && { client_id: S.client, subject: 'Exec facture', items: [{ description: 'Lavage', qty: 1, unit_price_cents: 10000 }], due_date: jour(30) }, (r) => { S.facture = trouver(r, null, 'invoice_id', 'id'); });
@@ -284,18 +327,51 @@ await ex('start_break', () => ({ ...(S.punch ? { entry_id: S.punch } : {}) }));
 await ex('end_break', () => ({ ...(S.punch ? { entry_id: S.punch } : {}) }));
 await ex('punch_out', () => ({ ...(S.punch ? { entry_id: S.punch } : {}), notes: 'exec' }));
 // Lot paie (2026-10-01) : corriger, fermer de force, supprimer un pointage — sur les pointages créés ici.
-await ex('update_time_entry', () => S.punch && { entry_id: S.punch, clock_in_at: new Date(Date.now() - 2 * 3_600_000).toISOString() });
+{
+  const arrivee = new Date(Date.now() - 2 * 3_600_000);
+  arrivee.setSeconds(0, 0);
+  await ex('update_time_entry', () => S.punch && { entry_id: S.punch, clock_in_at: arrivee.toISOString() });
+  // La paie additionne punch_in_at : c'est LUI qui doit avoir bougé, pas seulement l'heure affichée.
+  await relire('update_time_entry', 'l’horodatage que la paie lit (punch_in_at) est celui demandé', async () => {
+    const e = await ligne('time_entries', S.punch, 'punch_in_at');
+    return !!e?.punch_in_at && Math.abs(new Date(e.punch_in_at).getTime() - arrivee.getTime()) < 60_000;
+  });
+}
 await ex('punch_in', { notes: 'exec 2' }, (r) => { S.punch2 = trouver(r, null, 'entry_id', 'id'); });
 await ex('force_punch_out', () => S.punch2 && { entry_id: S.punch2 });
+await relire('force_punch_out', 'le pointage a une sortie et il est terminé', async () => { const e = await ligne('time_entries', S.punch2, 'punch_out_at, status'); return !!e?.punch_out_at && e.status === 'completed'; });
 await ex('delete_time_entry', () => S.punch2 && { entry_id: S.punch2 });
+await relire('delete_time_entry', 'le pointage n’existe plus', async () => !!S.punch2 && (await ligne('time_entries', S.punch2, 'id')) === null);
 await ex('delete_time_entry', () => S.punch && { entry_id: S.punch });
-S.commission = trouver(await lire('list_commissions', { status: 'pending', limit: 5 }), null, 'commission_id', 'id');
-if (S.commission) {
-  await ex('approve_commission', { commission_id: S.commission });
-  await ex('mark_commission_paid', { commission_id: S.commission });
-} else {
-  exclu('approve_commission', 'aucune commission en attente dans l’org QA de staging');
-  exclu('mark_commission_paid', 'aucune commission en attente dans l’org QA de staging');
+// Commissions : l'org QA n'en a aucune. On en pose UNE, de test, avec le client de service (une règle et une
+// commission en attente au nom du technicien), on l'approuve et on la verse par les outils, puis on retire les deux lignes.
+{
+  let regleCommission: string | undefined;
+  if ((!SEULEMENT || SEULEMENT.has('approve_commission') || SEULEMENT.has('mark_commission_paid')) && S.tech) {
+    const { data: regle } = await admin.from('fs_commission_rules').insert({ org_id: orgId, name: suffixer('Exec règle de commission'), type: 'flat', flat_amount: 25, is_active: false }).select('id').maybeSingle();
+    regleCommission = regle?.id;
+    // Rattachée à une facture de l'org : sans facture, une commission en attente n'est qu'une ESTIMATION
+    // (job pas encore payé), que l'outil refuse d'approuver — à raison.
+    const { data: uneFacture } = await admin.from('invoices').select('id').eq('org_id', orgId).is('deleted_at', null).limit(1).maybeSingle();
+    if (regleCommission && uneFacture?.id) {
+      const { data: c } = await admin.from('fs_commission_entries').insert({ org_id: orgId, user_id: S.tech, rule_id: regleCommission, invoice_id: uneFacture.id, status: 'pending', amount: 25, base_amount: 250, description: suffixer('Exec commission') }).select('id').maybeSingle();
+      S.commission = c?.id;
+    }
+  }
+  if (S.commission) {
+    const vue = JSON.stringify(await lire('list_commissions', { status: 'pending', limit: 100 })).includes(String(S.commission));
+    resultats.push({ outil: 'list_commissions (relecture)', verdict: vue ? 'ok' : 'erreur', detail: vue ? 'la commission de test est dans la liste' : 'PAS VUE : la commission en attente posée en base n’apparaît pas dans list_commissions', duree_ms: 0 });
+    console.log(vue ? '  LU   list_commissions — la commission de test est dans la liste' : '  ERR  list_commissions (relecture) : la commission de test est absente de la liste');
+    await ex('approve_commission', { commission_id: S.commission });
+    await relire('approve_commission', 'la commission est « approuvée », avec son approbateur', async () => { const c = await ligne('fs_commission_entries', S.commission, 'status, approved_by, approved_at'); return c?.status === 'approved' && c.approved_by === userId && !!c.approved_at; });
+    await ex('mark_commission_paid', { commission_id: S.commission });
+    await relire('mark_commission_paid', 'la commission est « versée », avec sa date', async () => { const c = await ligne('fs_commission_entries', S.commission, 'status, paid_at'); return c?.status === 'paid' && !!c.paid_at; });
+    await admin.from('fs_commission_entries').delete().eq('id', S.commission).eq('org_id', orgId);
+  } else {
+    exclu('approve_commission', 'la commission de test n’a pas pu être posée sur staging (aucun technicien repère, ou insertion refusée)');
+    exclu('mark_commission_paid', 'la commission de test n’a pas pu être posée sur staging (aucun technicien repère, ou insertion refusée)');
+  }
+  if (regleCommission) await admin.from('fs_commission_rules').delete().eq('id', regleCommission).eq('org_id', orgId);
 }
 await ex('approve_timesheet', () => S.tech && { user_id: S.tech, from: jour(-7), to: jour(0) });
 await ex('add_payroll_adjustment', () => S.tech && { user_id: S.tech, amount_cents: 100, note: 'exec' });
@@ -338,9 +414,13 @@ await ex('set_automation_language', { language: 'fr' });
 // Lot entreprise (2026-10-01). Les automatisations nées ici sont des brouillons éteints, et repartent à la corbeille.
 S.modeleAuto = trouver(await lire('list_automation_templates', { language: 'fr' }), null, 'template_key');
 await ex('create_automation_from_template', () => S.modeleAuto && { template_key: S.modeleAuto }, (r) => { S.regleModele = trouver(r, null, 'rule_id', 'id'); });
+await relire('create_automation_from_template', 'l’automatisation existe dans cette entreprise, ÉTEINTE', async () => { const a = await ligne('automation_rules', S.regleModele, 'org_id, is_active, deleted_at'); return !!a && a.org_id === orgId && a.is_active === false && a.deleted_at === null; });
 await ex('rename_automation_rule', () => S.regleModele && { rule_id: S.regleModele, name: 'Exec automatisation' });
+await relire('rename_automation_rule', 'le nom a changé, et rien ne s’est allumé', async () => { const a = await ligne('automation_rules', S.regleModele, 'name, is_active'); return a?.name === `Exec-${R} automatisation` && a.is_active === false; });
 await ex('duplicate_automation_rule', () => S.regleModele && { rule_id: S.regleModele }, (r) => { S.regleCopie = trouver(r, null, 'rule_id', 'id'); });
+await relire('duplicate_automation_rule', 'la copie est une AUTRE règle, éteinte', async () => { const a = await ligne('automation_rules', S.regleCopie, 'id, org_id, is_active'); return !!a && S.regleCopie !== S.regleModele && a.org_id === orgId && a.is_active === false; });
 await ex('delete_automation_rule', () => S.regleCopie && { rule_id: S.regleCopie });
+await relire('delete_automation_rule', 'la copie est à la corbeille', async () => !!(await ligne('automation_rules', S.regleCopie, 'deleted_at'))?.deleted_at);
 await ex('delete_automation_rule', () => S.regleModele && { rule_id: S.regleModele });
 // La règle créée par texte s'accumulait à chaque passe : elle a maintenant son outil de suppression.
 if (S.regleCreee) await ex('delete_automation_rule', { rule_id: S.regleCreee });
@@ -349,13 +429,22 @@ if (S.regleCreee) await ex('delete_automation_rule', { rule_id: S.regleCreee });
 {
   const { data: pause } = await admin.from('company_settings').select('automations_paused').eq('org_id', orgId).maybeSingle();
   if (pause?.automations_paused === true) exclu('pause_all_automations', 'l’org QA est déjà en pause : la reprendre ferait repartir des envois arrêtés exprès');
-  else { await ex('pause_all_automations', { paused: true }); await ex('pause_all_automations', { paused: false }); }
+  else {
+    const etat = async () => (await admin.from('company_settings').select('automations_paused').eq('org_id', orgId).maybeSingle()).data?.automations_paused;
+    await ex('pause_all_automations', { paused: true });
+    await relire('pause_all_automations', 'l’entreprise est en pause', async () => (await etat()) === true);
+    await ex('pause_all_automations', { paused: false });
+    await relire('pause_all_automations', 'l’entreprise n’est plus en pause', async () => (await etat()) === false);
+  }
 }
 // Le site web de l'entreprise, modifié puis remis à sa valeur d'origine.
 {
   const { data: avant } = await admin.from('company_settings').select('website').eq('org_id', orgId).maybeSingle();
+  const site = async () => (await admin.from('company_settings').select('website').eq('org_id', orgId).maybeSingle()).data?.website;
   await ex('update_company_settings', { website: 'https://exec.example.com' });
+  await relire('update_company_settings', 'le site web est celui demandé', async () => String(await site()).includes('exec.example.com'));
   await ex('update_company_settings', { website: avant?.website ?? '' });
+  await relire('update_company_settings', 'le site web est revenu à sa valeur d’origine', async () => ((await site()) ?? '') === (avant?.website ?? ''));
 }
 await ex('create_tax_config', { name: suffixer('Exec taxe'), rate: 1.5, region: 'QC', country: 'CA' }, (r) => { S.taxe = trouver(r, null, 'tax_id', 'id'); });
 if (!S.taxe) S.taxe = trouver(await lire('get_tax_config'), suffixer('Exec taxe'), 'tax_id', 'id');
@@ -400,6 +489,9 @@ await ex('update_course_lesson', () => S.lecon && { lesson_id: S.lecon, title: '
 await ex('update_course', () => S.cours && { course_id: S.cours, description: 'Exec' });
 await ex('publish_course', () => S.cours && { course_id: S.cours, publish: true });
 await ex('assign_course', () => S.cours && S.tech && { course_id: S.cours, user_ids: [S.tech] });
+
+// ── Mission finale (agent L, 2026-10-02) : modifier la STRUCTURE d'une automatisation en une phrase ──
+await ex('update_automation_from_text', () => S.regle && { rule_id: S.regle, instruction: 'Ajoute à la fin une attente de 2 jours, puis une tâche interne « Rappeler le client ».' });
 
 // ── Ménage : le client de test, ses jobs, les prospects (convertis ou non) — sinon les évaluations tombent dessus ──
 if (S.jobDuLead) await ex('delete_job', { job_id: S.jobDuLead });

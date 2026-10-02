@@ -41,7 +41,7 @@ import { estDemandeDAction } from '../lib/lumi/demande-action';
 import { langueDuMessage } from '../lib/lumi/langue-message';
 import { reponseAidePartageable } from '../lib/lumi/cache-aide-global';
 import { repererFiches } from '../lib/lumi/reperage';
-import { sujetParRegle } from '../lib/lumi/sujet-par-regle';
+import { sujetParRegle, parleDAutomatisations } from '../lib/lumi/sujet-par-regle';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { reponseAideMulti } from '../lib/support/aide-multi';
 import { peutRepondreHorsScope, reponseHorsScope } from '../lib/lumi/hors-scope';
@@ -55,6 +55,7 @@ import { sousAgentDepuisVerdict, focusDuSousAgent, effortDuSousAgent, outilsDuSo
 import { indiceOutils } from '../lib/lumi/indices-outils';
 import type { IdTopic } from '../lib/lumi/topics';
 import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
+import { fileLumi, LumiOccupe, messageLumiOccupe } from '../lib/lumi/file-attente';
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
 import { journaliserTrace, normaliserEnonce, enoncePourTrace, masquerCoordonnees, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
@@ -67,6 +68,8 @@ import { demasquerIds, instantaneRefs, restaurerRefs, espaceRefsDe } from '../li
 import { recollerDictee } from '../lib/agent/texte-dicte';
 import { logger } from '../lib/logger';
 import { assainirPourApi, fenetreAvecRappel } from '../lib/lumi/historique';
+import { contexteDeLaPage, automatisationsCitees, sujetDeLaConversation, estUneSuite } from '../lib/lumi/contexte-automatisation';
+import { entrerDansContexteLumi } from '../lib/lumi/contexte-appel';
 
 const router = Router();
 router.use(maxBodySize());
@@ -79,6 +82,16 @@ const chatSchema = z.object({
   language: z.enum(['fr', 'en']).optional(),
   // D'où vient le message (mesure pour lumi_traces) : jamais une autorisation, jamais un identifiant.
   origine: z.enum(ORIGINES_TRACE as [OrigineTrace, ...OrigineTrace[]]).optional(),
+  /**
+   * La page d'où l'on parle à Lumi — aujourd'hui, l'éditeur d'une automatisation.
+   * Un REPÈRE, jamais une autorisation : le serveur relit la règle avec le jeton de
+   * la personne (RLS) et n'envoie au modèle que ce qu'il a lu lui-même.
+   */
+  contexte_page: z.object({
+    type: z.literal('automatisation'),
+    rule_id: z.string().regex(UUID),
+    non_enregistre: z.boolean().optional(),
+  }).optional().nullable(),
 });
 const executeSchema = z.object({
   conversation_id: z.string().regex(UUID),
@@ -337,6 +350,11 @@ async function contexteTour(req: Request, res: Response) {
   return { auth, admin, budget, credits, systeme, promptCtx, language, accessToken, fuseau, userName };
 }
 
+/** L'usage du tour, plus celui des appels au modèle lancés par ses outils (génération d'un parcours). */
+function sommeUsages(a: UsageAgrege, b: UsageAgrege): UsageAgrege {
+  return { input_tokens: a.input_tokens + b.input_tokens, cache_5m: a.cache_5m + b.cache_5m, cache_1h: a.cache_1h + b.cache_1h, cache_lu: a.cache_lu + b.cache_lu, output_tokens: a.output_tokens + b.output_tokens };
+}
+
 async function executerTourSse(opts: {
   req: Request; res: Response; ctx: NonNullable<Awaited<ReturnType<typeof contexteTour>>>;
   conversationId: string; historique: Msg[]; nouveauxAvant: Msg[];
@@ -354,8 +372,16 @@ async function executerTourSse(opts: {
   routeur?: ResultatRouteur | null;
   /** Sous-agent (topic sûr du routeur) : seuls ses outils sont chargés, le sujet est ajouté au bloc variable (B7). */
   sousAgent?: IdTopic | null;
+  /**
+   * L'automatisation dont on parle (page ouverte, nom cité) : ajoutée au contexte du
+   * tour, APRÈS le point de cache — jamais dans le préfixe, jamais dans l'historique.
+   */
+  contexteAutomatisation?: string | null;
 }) {
   const { res, ctx, conversationId } = opts;
+  // Ce que les outils du tour ont besoin de savoir (conversation, langue), et ce que leurs
+  // propres appels au modèle coûtent (génération d'un parcours) : voir contexte-appel.ts.
+  const appelLumi = entrerDansContexteLumi(conversationId, ctx.language === 'en' ? 'en' : 'fr');
   const emettreSse = ouvrirSse(res);
   // La trace du tour se construit au fil des événements : outils qui ont
   // tourné, usage de chaque appel au modèle. Elle part à la fin, sans bloquer.
@@ -448,7 +474,15 @@ async function executerTourSse(opts: {
     const reperage = opts.enonce && reglages.modele_autorise
       ? await repererFiches(opts.enonce, { client: ctx.auth.client, orgId: ctx.auth.orgId, espaceRefs: cleRefs, langue: ctx.language, outilsPermis })
       : null;
-    const resultat: ResultatTour = !reglages.modele_autorise ? { nouveauxMessages: [], proposition: null, texte: '', cost_cents: 0, plafond: true } : await tourLumi({
+    // Garde de charge : un nombre borné de tours d'agent en même temps (file-attente.ts).
+    // Sans place dans le délai, rien ne part au modèle : la personne lit un message clair.
+    let occupe = false;
+    let liberer: (() => void) | null = null;
+    if (reglages.modele_autorise) {
+      try { liberer = await fileLumi.prendre(); } catch (e) { if (!(e instanceof LumiOccupe)) throw e; occupe = true; }
+    }
+    if (occupe) logger.warn('[lumi] tour refusé : aucune place libre dans le délai', { orgId: ctx.auth.orgId, ...fileLumi.etat() });
+    const resultat: ResultatTour = !reglages.modele_autorise || occupe ? { nouveauxMessages: [], proposition: null, texte: '', cost_cents: 0, plafond: true } : await tourLumi({
       client: ctx.auth.client,
       orgId: ctx.auth.orgId,
       userId: ctx.auth.user.id,
@@ -463,6 +497,7 @@ async function executerTourSse(opts: {
         heurePourLumi(ctx.fuseau, ctx.language),
         opts.enonce ? indiceOutils(opts.enonce, ctx.language, new Set(opts.sousAgent ? outilsDuSousAgent(opts.sousAgent) : OUTILS_DE_BASE)) : null,
         reperage,
+        opts.contexteAutomatisation ?? null,
       ].filter((x): x is string => !!x).join('\n\n'),
       sousAgent: opts.sousAgent ?? null,
       outilsPermis,
@@ -487,13 +522,15 @@ async function executerTourSse(opts: {
           requestId: requestId ?? null,
         });
       },
-    });
+    }).finally(() => liberer?.());
+    // Une génération lancée par un outil du tour (F-02) : son coût et ses tokens rejoignent la trace du tour.
+    if (appelLumi.imbrique.appels > 0) { resultat.cost_cents += appelLumi.imbrique.cout_cents; usage = sommeUsages(usage, appelLumi.imbrique.usage); }
     if (resultat.plafond) {
       // Plafond dur atteint : rien n'est parti au modèle pour cette étape ;
       // message gabarit (0 token), les actions rapides restent servies.
       // Deux plafonds, deux messages : celui de la plateforme n'a rien à voir avec
       // les crédits du client (avant, il lisait « tes crédits sont épuisés »).
-      const texte = !plafondJour.autorise ? messagePausePlateforme(ctx.language) : messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());
+      const texte = occupe ? messageLumiOccupe(ctx.language === 'en' ? 'en' : 'fr') : !plafondJour.autorise ? messagePausePlateforme(ctx.language) : messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());
       if (!ferme) emettreSse('text', { type: 'text', delta: texte });
       resultat.nouveauxMessages.push({ role: 'assistant', content: [{ type: 'text', text: texte }] });
       resultat.texte = resultat.texte ? `${resultat.texte}\n\n${texte}` : texte;
@@ -515,7 +552,7 @@ async function executerTourSse(opts: {
     // Un refus du modèle, une réponse coupée ou un tour inachevé ne sont PAS des
     // succès : avant, ils étaient tracés « ok » et la qualité mesurée mentait.
     const issue = resultat.proposition ? 'proposition' : erreurModele === 'refusal' ? 'refus' : erreurModele ? 'erreur' : 'ok';
-    void tracer(issue, resultat.cost_cents, resultat.plafond ? (!plafondJour.autorise ? 'plafond_plateforme' : 'budget_epuise') : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
+    void tracer(issue, resultat.cost_cents, resultat.plafond ? (occupe ? 'file_pleine' : !plafondJour.autorise ? 'plafond_plateforme' : 'budget_epuise') : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
       stop_reason: resultat.stop_reason ?? null, appels_modele: resultat.appels_modele ?? 0, outils_charges: resultat.outils_charges ?? 0,
       premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}), ...(resultat.reprises_modele ? { reprises_modele: resultat.reprises_modele } : {}),
     });
@@ -588,7 +625,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
   try {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;
-    const { conversation_id, message: messageRecu, origine = 'texte' } = req.body as z.infer<typeof chatSchema>;
+    const { conversation_id, message: messageRecu, origine = 'texte', contexte_page } = req.body as z.infer<typeof chatSchema>;
+    // Les étages sans modèle (listes, actions directes) parlent aussi la langue de la personne.
+    entrerDansContexteLumi(conversation_id ?? null, ctx.language === 'en' ? 'en' : 'fr');
     // Dictée du clavier du téléphone (elle ne passe pas par notre transcription) : « sous missions » → « soumissions ».
     const message = recollerDictee(messageRecu);
     // La clé porte la personne : nul ne peut occuper la conversation d'un autre.
@@ -648,6 +687,18 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       language: langueTour, fuseau: ctx.fuseau,
       prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
     };
+    // ── De QUELLE automatisation parle-t-on ? (mission finale, P1-3 : contexte-automatisation.ts) ──
+    // La page ouverte (l'éditeur), un nom d'automatisation cité dans le message, ou la suite
+    // d'une conversation qui portait déjà sur une automatisation. Lu par du code, sans modèle ;
+    // donné au tour APRÈS le point de cache. Fait AVANT les étages sans modèle : une question sur UNE
+    // automatisation nommée (« what does my Quote follow-up automation do? ») recevait un article d'aide
+    // sur les modèles de devis (C15).
+    const optionsAuto = { client: ctx.auth.client, orgId: ctx.auth.orgId, espaceRefs: espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId), langue: ctx.language === 'en' ? 'en' as const : 'fr' as const };
+    const [pageOuverte, citees] = await Promise.all([
+      contexte_page?.type === 'automatisation' ? contexteDeLaPage(contexte_page, optionsAuto) : Promise.resolve(null),
+      automatisationsCitees(message, optionsAuto, historique),
+    ]);
+    const contexteAutomatisation = [pageOuverte, citees.contexte].filter((x): x is string => !!x).join('\n\n') || null;
     // Étage « aide » : une question SUR LE PRODUIT (« comment je change de
     // plan », « mon paiement a échoué ») a une réponse écrite à la main, la
     // même pour tout le monde. Elle était déjà gratuite dans le chat de
@@ -668,7 +719,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // avant lui, répondait « aucune limite, dans tous les forfaits » (passe de
     // référence du 2026-10-01). Une lecture reconnue passe avant un article.
     const raccourciReconnu = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
-    if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message) && !raccourciReconnu) {
+    if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message) && !raccourciReconnu && !contexteAutomatisation) {
       const aide = reponseFaqPour(message, langueTour, 'tu') ?? null;
       const article = aide ? null : reponseAideDirecte(message, langueTour, { premierMessage: true, voix: 'tu' });
       // Plusieurs questions collées d'un coup : chacune a sa réponse écrite,
@@ -738,7 +789,11 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       });
     }
     const directe = enAttente.length || repli ? null : detecterActionDirecte(message);
-    if (directe) {
+    // ACTIVER une automatisation ne se prépare pas sans le modèle : au-dessus de la carte, le serveur écrit ce
+    // qui partira (déclencheur, messages mot pour mot, portée) et refuse un texte d'exemple ou un parcours
+    // incomplet — c'est l'orchestrateur qui le porte (avant-carte.ts). Mettre en pause reste direct.
+    const activationDAutomatisation = directe?.id === 'automatisation-bascule' && directe.args?.is_active === true;
+    if (directe && !activationDAutomatisation) {
       const debut = Date.now();
       // Le rôle est lu ici (2 lectures en base) seulement quand une action directe est reconnue.
       const rep = await repondreActionDirecte(directe, { ...ctxRaccourci, maintenant: new Date(), outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId), espaceRefs: espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId) });
@@ -776,7 +831,11 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     const premierMessage = historique.length === 0 && !enAttente.length && !repli;
     const vecteur = premierMessage ? embed(message) : null;
     // Jamais de cache pour une demande de document ou de mémoire (voir enonceCachable).
-    if (premierMessage && enonceCachable(message)) {
+    // Jamais quand une automatisation est visée (page ouverte, nom cité) : « explique-moi ce qu'elle
+    // fait » dépend de CE qui est enregistré maintenant — l'éditeur l'a peut-être changé depuis, et
+    // la réponse mémorisée serait servie à tort.
+    const sansAutomatisationVisee = !contexte_page && !contexteAutomatisation;
+    if (premierMessage && sansAutomatisationVisee && enonceCachable(message)) {
       const debut = Date.now();
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: message };
       let hit: { texte: string; fiches: Fiche[]; outils: string[] } | null = await lireReponse(p);
@@ -838,6 +897,17 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // l'énoncé, et « il a-tu des factures pas payées ? » après une fiche
     // client était routé vers TOUS les retards (sondage du 2026-09-16).
     // Jamais après un repli ni avec une proposition en attente.
+    const sujetPrecedent = sujetDeLaConversation(historique);
+    // Le sujet est IMPOSÉ quand on sait qu'il s'agit d'une automatisation : ses outils sont chargés
+    // d'office. Avant, « change le message de la relance » partait vers les relances de PAIEMENT.
+    // Pareil quand la phrase PARLE d'automatisations sans en nommer une (« arrête toutes mes automatisations ») :
+    // sans ses outils, Lumi tentait de les arrêter une à une jusqu'à épuiser sa sortie (C18).
+    const sujetAuto: IdTopic | null = contexteAutomatisation || parleDAutomatisations(message) ? 'rapports' : null;
+    // « active-la », « celle des devis », « non, plus court » dans une conversation sur une
+    // automatisation : le vocabulaire seul tromperait la règle (« devis ») — le routeur, qui voit
+    // l'échange précédent, tranche ; et s'il n'est pas sûr, on garde le sujet (plus bas).
+    const suiteAutomatisation = sujetPrecedent === 'rapports' && historique.length > 0 && estUneSuite(message);
+
     let routeur: ResultatRouteur | null = null;
     if (modeRouteur() === 'actif' && !enAttente.length && !repli) {
       const debut = Date.now();
@@ -847,7 +917,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       // Un ORDRE au vocabulaire sans ambiguïté : le sujet vient d'une règle (0 ¢, 0 s). Pour un
       // ordre, le routeur ne sert qu'à choisir le jeu d'outils — son raccourci n'est jamais servi.
       const sujetRegle = estDemandeDAction(message) ? sujetParRegle(message) : null;
-      routeur = sujetRegle ? resultatParRegle(sujetRegle) : await classifier(message, contexteRouteur(historique));
+      if (sujetAuto) routeur = resultatParRegle(sujetAuto);
+      else if (suiteAutomatisation && sujetRegle !== 'rapports') routeur = await classifier(message, contexteRouteur(historique));
+      else routeur = sujetRegle ? resultatParRegle(sujetRegle) : await classifier(message, contexteRouteur(historique));
       const coutRouteur = routeur.usage ? coutEnCents(MODELE_ROUTEUR, routeur.usage) : 0;
       if (routeur.usage) {
         void journaliserUsage(ctx.admin, {
@@ -947,8 +1019,14 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
 
     // B7 : un topic sûr sans action déterministe → le modèle part avec les outils de ce sous-agent seulement.
     // Arrivé ici, aucun raccourci n'a répondu : une action du routeur a donc été écartée, son sujet reste bon.
-    const sousAgent = sousAgentDepuisVerdict(routeur, { actionEcartee: true });
-    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, sousAgent, ...(repli ? { action: 'repli', params: { candidat_retrait: enoncePourTrace(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
+    const sousAgentRouteur = sousAgentDepuisVerdict(routeur, { actionEcartee: true });
+    // Le routeur n'a pas tranché (il hésite, ou n'a pas été consulté : carte en attente, repli) dans
+    // une conversation qui portait sur une automatisation : on GARDE ses outils. Avant, le jeu
+    // d'outils changeait en plein milieu — « ajoute un délai de 3 jours » recevait « il faut refaire
+    // la règle au complet », au double du prix (F-13). Un verdict sûr pour un autre sujet l'emporte.
+    const routeurSur = !!routeur?.verdict && routeur.statut === 'ok' && routeur.verdict.confidence >= SEUIL_CONFIANCE;
+    const sousAgent: IdTopic | null = sujetAuto ?? sousAgentRouteur ?? (sujetPrecedent === 'rapports' && !routeurSur ? 'rapports' : null);
+    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, sousAgent, contexteAutomatisation, ...(repli ? { action: 'repli', params: { candidat_retrait: enoncePourTrace(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage && !contexte_page, vecteur } });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');
@@ -1090,6 +1168,9 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
 
     const blocs: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
     const execute: ReçuExecution[] = [];
+    // Les outils exécutés ici savent dans quelle conversation et dans quelle langue ils tournent ;
+    // un appel au modèle qu'ils lancent (génération d'un parcours) est compté dans la trace (F-02).
+    const appelLumi = entrerDansContexteLumi(conversation_id, ctx.language === 'en' ? 'en' : 'fr');
     for (const a of enAttente) {
       if (decision === 'cancel') {
         blocs.push({ type: 'tool_result', tool_use_id: a.tool_use_id, content: JSON.stringify({ cancelled: true, note: "L'utilisateur a annulé cette action ; elle n'a pas été exécutée." }) });
@@ -1131,7 +1212,12 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: conversation_id, canal: 'lumi', origine: 'carte',
       enonce: null, etage: ETAGE.interface, action: decision, outils: enAttente.map((a) => a.tool),
-      resultat: decision === 'cancel' ? 'ok' : (execute.every((e) => e.ok) ? 'ok' : 'erreur'), model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+      resultat: decision === 'cancel' ? 'ok' : (execute.every((e) => e.ok) ? 'ok' : 'erreur'),
+      // La génération lancée par l'outil (création ou modification d'une automatisation) : la trace
+      // affichait « 0 ¢, aucun modèle » alors qu'un appel de 3,25 ¢ et 30 s venait de partir (F-02).
+      model: appelLumi.imbrique.model, usage: appelLumi.imbrique.usage, costCents: appelLumi.imbrique.cout_cents,
+      ...(appelLumi.imbrique.appels ? { params: { appels_imbriques: appelLumi.imbrique.appels } } : {}),
+      dureeMs: Date.now() - debut,
     });
     return res.end();
   } catch (error: any) {

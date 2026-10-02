@@ -100,27 +100,87 @@ function LogoMarquee({ fr }: { fr: boolean }) {
   );
 }
 
-/* ── Quatre fonctions, texte et capture en alternance. Le contenu vient de
-   fonctionsData (mêmes textes et captures que les pages « En savoir plus »),
-   dans l'ordre d'une job : demande → soumission → dispatch → facture. ── */
-const FEATURE_SLUGS = ['clients', 'soumissions', 'calendrier', 'finances'];
+/* ── Quatre fonctions, texte et capture en alternance, dans l'ordre d'une
+   job : demande → pipeline → avis → facture. Les trois premières rangées
+   sont propres à l'accueil (formulaire de demande intégré au site du client,
+   pipeline et ses automatisations par étape, demande d'avis) ; la dernière
+   reprend fonctionsData (mêmes textes et captures que les pages « En savoir plus »). ── */
+type FeatureRow = { slug: string; job: Bi; title: Bi; lead: Bi; shot: string; alt: Bi; w: number; h: number };
+const REQUEST_FORM_ROW: FeatureRow = {
+  slug: 'clients',
+  job: { fr: 'Formulaire de demande', en: 'Request form' },
+  title: { fr: 'Ton formulaire de demande, branché sur ton site.', en: 'Your request form, plugged into your own website.' },
+  lead: {
+    fr: "Garde ton site actuel. Colle le code d'intégration dans ta page et le formulaire Lume y apparaît. Chaque demande crée le client et le lead dans ton pipeline, sans rien retaper.",
+    en: 'Keep your current website. Paste the embed code into your page and the Lume form shows up there. Every request creates the client and the lead in your pipeline, with nothing retyped.',
+  },
+  shot: '/landing/fonction-formulaire.webp',
+  alt: { fr: 'Constructeur du formulaire de demande dans Lume', en: 'Request form builder in Lume' },
+  w: 720,
+  h: 606,
+};
+/* Étapes et pipelines : PipelineDetail ; déclencheurs par étape
+   deal.stage_entered / stage_exited / stage_idle (eventBus). Pas de capture du
+   pipeline dans /public/landing : on montre la liste des automatisations. */
+const PIPELINE_ROW: FeatureRow = {
+  slug: 'pipeline',
+  job: { fr: 'Pipeline de vente', en: 'Sales pipeline' },
+  title: { fr: 'Ton pipeline, tes étapes, tes automatisations.', en: 'Your pipeline, your stages, your automations.' },
+  lead: {
+    fr: "Monte ton pipeline comme tu vends : tes étapes, dans ton ordre. Chaque étape a ses propres automatisations : un texto, un courriel ou une tâche part quand un lead y entre, en sort ou y dort trop longtemps.",
+    en: 'Build your pipeline the way you sell: your stages, in your order. Each stage has its own automations: a text, an email or a task goes out when a lead enters it, leaves it or sits there too long.',
+  },
+  shot: '/landing/fonction-automatisations.webp',
+  alt: { fr: 'Automatisations par étape dans Lume', en: 'Per-stage automations in Lume' },
+  w: 760,
+  h: 640,
+};
+/* Avis : workflow de server/lib/reviews.ts — lien envoyé à tous à la fin de
+   la job (sauf champ client « noreview »), choix Google / Facebook sur
+   /survey/:token, sans note préalable (le « review gating » est interdit). */
+const REVIEWS_ROW: FeatureRow = {
+  slug: 'avis',
+  job: { fr: 'Avis clients', en: 'Client reviews' },
+  title: { fr: 'Les avis Google et Facebook rentrent tout seuls.', en: 'Google and Facebook reviews come in on their own.' },
+  lead: {
+    fr: "Quand la job est terminée, ton client reçoit un texto et un courriel avec un lien. Il choisit Google ou Facebook et laisse son avis en 30 secondes. Toi, tu n'as plus rien à demander.",
+    en: "When the job is done, your client gets a text and an email with a link. They pick Google or Facebook and leave a review in 30 seconds. You don't have to ask anymore.",
+  },
+  shot: '/landing/fonction-avis.webp',
+  alt: { fr: "Texto de demande d'avis et page de choix Google ou Facebook", en: 'Review request text and Google or Facebook choice page' },
+  w: 840,
+  h: 540,
+};
+/* Images des fonctions : maquettes HTML calquées sur les vraies captures
+   (scripts/marketing/fonction-*.html), rendues en 2,5x. Les captures de l'app
+   n'existent qu'en 1x et devenaient floues une fois agrandies sur un écran
+   Retina. */
+const ZOOM_SHOTS: Record<string, { shot: string; alt: Bi; w: number; h: number }> = {
+  finances: { shot: '/landing/fonction-finances.webp', alt: { fr: 'Factures payées, en attente et en retard dans Lume', en: 'Paid, pending and overdue invoices in Lume' }, w: 800, h: 500 },
+};
+const FEATURE_ROWS: FeatureRow[] = [
+  REQUEST_FORM_ROW,
+  PIPELINE_ROW,
+  REVIEWS_ROW,
+  ...['finances'].flatMap((slug) => {
+    const f = FONCTIONS.find((x) => x.slug === slug);
+    return f ? [{ slug, job: f.job, title: f.title, lead: f.lead, ...ZOOM_SHOTS[slug] }] : [];
+  }),
+];
 
 export function FeatureRows({ fr }: { fr: boolean }) {
-  const rows = FEATURE_SLUGS.map((slug) => FONCTIONS.find((f) => f.slug === slug)).filter((f) => f !== undefined);
   return (
     <section className="hs-feat">
       <p className="ha-kicker">{fr ? 'Les fonctions' : 'The features'}</p>
       <h2>{fr ? 'De la demande au paiement, sans rien retaper.' : 'From request to payment, with nothing retyped.'}</h2>
-      {rows.map((f) => (
+      {FEATURE_ROWS.map((f) => (
         <div key={f.slug} className="hs-frow">
           <div className="hs-ftxt">
             <em>{pick(fr, f.job)}</em>
             <h3>{pick(fr, f.title)}</h3>
             <p>{pick(fr, f.lead)}</p>
-            <ul>{f.points.slice(0, 3).map((pt) => <li key={pt.t.en}>{pick(fr, pt.t)}</li>)}</ul>
-            <Link to={`/fonctions/${f.slug}`} className="hs-link">{fr ? 'En savoir plus →' : 'Learn more →'}</Link>
           </div>
-          <img src={f.shot} alt={pick(fr, f.shotAlt)} loading="lazy" decoding="async" width={1800} height={f.slug === 'clients' ? 967 : 1125} />
+          <img src={f.shot} alt={pick(fr, f.alt)} loading="lazy" decoding="async" width={f.w} height={f.h} />
         </div>
       ))}
     </section>
@@ -337,8 +397,6 @@ export const SECTIONS_CSS = `
 .hs-ftxt em { font-style:normal; font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:800; color:var(--forest); }
 .hs-ftxt h3 { margin:8px 0 0; font-size:clamp(24px,2.4vw,32px); font-weight:800; letter-spacing:-.025em; line-height:1.12; color:#111; }
 .hs-ftxt p { margin:12px 0 0; font-size:15.5px; line-height:1.55; color:#171717; max-width:48ch; }
-.hs-ftxt ul { list-style:none; margin:16px 0 0; padding:0; display:grid; gap:10px; }
-.hs-ftxt li { position:relative; padding-left:18px; font-size:14.5px; line-height:1.5; color:#171717; } .hs-ftxt li::before { content:""; position:absolute; left:0; top:8px; width:8px; height:8px; border-radius:50%; background:var(--mint); }
 .hs-frow img { width:100%; height:auto; border-radius:14px; border:1px solid rgba(11,92,173,.12); box-shadow:0 30px 60px -30px rgba(0,0,0,.35); }
 .hs-rtabs { display:flex; gap:4px; background:#f1f1ef; border-radius:999px; padding:4px; width:max-content; max-width:100%; margin-top:18px; overflow:auto; }
 .hs-rtabs button { border:0; background:transparent; font-size:13px; font-weight:600; color:#555; padding:8px 16px; border-radius:999px; cursor:pointer; white-space:nowrap; font-family:inherit; } .hs-rtabs button[aria-selected="true"] { background:#111; color:#fff; }

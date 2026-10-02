@@ -47,6 +47,7 @@ const BUREAUX = {
   zz: { org: '93daa0c7-b749-4200-9755-dbeee62ce32d', cas: 'evals/lumi/cas-resolus', proprios: ['eval.proprio1@lume-qa.test', 'eval.proprio2@lume-qa.test', 'eval.proprio3@lume-qa.test', 'qa.map.owner@lume.test'], tech: 'qa.lumi.tech@lume.test' },
   eval2: { org: '5930d318-b207-40f3-9e14-f8898a02e240', cas: 'evals/lumi/cas-resolus-eval2', proprios: [1, 2, 3, 4].map((n) => `eval2.proprio${n}@lume-qa.test`), tech: 'eval2.tech@lume-qa.test' },
   eval3: { org: '7f859087-0f5e-4604-8a20-315be43be4c3', cas: 'evals/lumi/cas-resolus-eval3', proprios: [1, 2, 3, 4].map((n) => `eval3.proprio${n}@lume-qa.test`), tech: 'eval3.tech@lume-qa.test' },
+  eval4: { org: 'da121990-9319-47d7-9788-54f2fec23471', cas: 'evals/lumi/cas-resolus-eval4', proprios: [1, 2, 3, 4].map((n) => `eval4.proprio${n}@lume-qa.test`), tech: 'eval4.tech@lume-qa.test' },
 };
 /** Seuil des évals : sous ce taux de réussite, le verdict n'est pas « prêt ». Relevé par la mission après chaque passe propre. */
 const SEUIL_EVALS_PCT = Number(process.env.LUMI_SEUIL_EVALS_PCT ?? 90);
@@ -104,7 +105,7 @@ function lancer(cmd, argv, opts = {}) {
 if (PROD) {
   const nom = v('--bureau', 'eval2');
   const bureau = BUREAUX[nom];
-  if (!bureau) { console.error(`--bureau inconnu : ${nom} (zz, eval2, eval3)`); process.exit(3); }
+  if (!bureau) { console.error(`--bureau inconnu : ${nom} (zz, eval2, eval3, eval4)`); process.exit(3); }
   if (!existsSync(ENV_FILE)) { console.error(`fichier d'environnement absent : ${ENV_FILE} (LUMI_ENV_FILE)`); process.exit(3); }
   rapport.bureau = nom;
   const node = (script, argv) => lancer('node', [`--env-file=${ENV_FILE}`, '--import', 'tsx', script, ...argv]);

@@ -59,12 +59,18 @@ const ENTITE_DU_DECLENCHEUR: Record<string, string> = {
   'date.reached': 'client',
   /*
    * Un appel venu de l'EXTÉRIEUR ne porte aucune entité CRM : il porte
-   * l'id du webhook. Le catalogue annonce `lead` parce qu'il propose les
+   * l'id de sa trace. Le catalogue annonce `lead` parce qu'il propose les
    * variables d'un prospect (c'est l'usage : un formulaire de site crée
-   * un prospect), mais le serveur émet bien `automation_webhook`. `'*'`
-   * dit exactement ça : aucune promesse à tenir sur le type.
+   * un prospect), mais le serveur émet `automation_webhook_receipt`
+   * (server/routes/webhooks-entrants.ts).
+   *
+   * Cette table disait `'*'` (« aucune promesse à tenir sur le type ») : la
+   * matrice ci-dessous ne voyait donc pas que les six actions liées à un
+   * devis, une facture, un rendez-vous ou une opportunité étaient offertes
+   * et publiables sur ce déclencheur, pour échouer à chaque passage (triage
+   * actions du 2026-10-01, ligne 6). L'entité réelle y est maintenant.
    */
-  'webhook.received': '*',
+  'webhook.received': 'automation_webhook_receipt',
   'deal.stage_entered': 'deal',
   'deal.stage_idle': 'deal',
 };
@@ -92,6 +98,9 @@ describe('le catalogue ne promet pas ce que le moteur refusera', () => {
         ['appointment', 'schedule_event'],
         ['agreement', 'job'],
         ['lead', 'client'],
+        // Un appel de l'extérieur n'apporte aucune fiche : le catalogue dit
+        // « lead » pour proposer les variables d'un prospect, rien de plus.
+        ['lead', 'automation_webhook_receipt'],
       ];
       return paires.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
     };
