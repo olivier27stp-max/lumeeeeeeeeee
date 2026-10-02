@@ -171,10 +171,11 @@ beforeEach(() => {
   droits.role = 'owner';
   droits.permissions = null;
   adresse = '';
-  vi.mocked(api.getAutomationRules).mockResolvedValue([regle()]);
+  // `mockReset` : une réponse « une fois » restée en file (test interrompu) ne fuit pas dans le test suivant.
+  vi.mocked(api.getAutomationRules).mockReset().mockResolvedValue([regle()]);
   echecsMock.mockResolvedValue([]);
   vi.mocked(api.getAutomationLanguage).mockResolvedValue('fr');
-  statsMock.mockResolvedValue({ par_regle: {}, par_etape: null, texto_configure: true });
+  statsMock.mockReset().mockResolvedValue({ par_regle: {}, par_etape: null, texto_configure: true });
   vi.mocked(confirmer).mockResolvedValue(true);
   vi.mocked(apercuClientsInactifs).mockResolvedValue(0);
   vi.mocked(builder.chargerDossiers).mockResolvedValue([]);
@@ -300,6 +301,58 @@ describe('03-onglets-etats:229 et 10-volume:210 — « À vérifier » ne dit «
     expect(noms).toEqual(['A bruyante', 'B discrète']);
     expect(texte()).toContain('205 échec(s) dans les 7 derniers jours');
     expect(texte()).toContain('1 échec(s) dans les 7 derniers jours');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+describe('06-menu-actions:255 — le tableau reste à l’écran pendant un rechargement', () => {
+  const dupliquerLaLigne = async () => {
+    const b = bouton(/^Actions pour Relance 1$/) as HTMLButtonElement;
+    b.focus();
+    await cliquer(b);
+    await cliquer(Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((m) => m.textContent === 'Dupliquer'));
+    return b;
+  };
+
+  it('après « Dupliquer », le tableau n’est jamais retiré : la copie arrive dans la liste en place', async () => {
+    const r = regle({ name: 'Relance 1' });
+    vi.mocked(builder.dupliquerAutomatisation).mockResolvedValue({ id: 'copie' } as never);
+    let liberer: (v: api.AutomationRule[]) => void = () => undefined;
+    vi.mocked(api.getAutomationRules).mockResolvedValueOnce([r]).mockReturnValueOnce(new Promise((ok) => { liberer = ok; }));
+    await rendre();
+    let retire = false;
+    const veille = new MutationObserver(() => { if (!conteneur.querySelector('table')) retire = true; });
+    veille.observe(conteneur, { childList: true, subtree: true });
+    await dupliquerLaLigne();
+    // La relecture est en cours : avant, une roue remplaçait TOUT le tableau.
+    expect(api.getAutomationRules).toHaveBeenCalledTimes(2);
+    expect(conteneur.querySelector('table')).not.toBeNull();
+    expect(texte()).toContain('Relance 1');
+    await act(async () => { liberer([r, regle({ id: 'copie', name: 'Relance 1 (copie)' })]); });
+    await laisser();
+    veille.disconnect();
+    expect(texte()).toContain('Relance 1 (copie)');
+    expect(retire).toBe(false);
+  });
+
+  it('le focus revient au bouton « ⋮ » de la ligne (il n’a pas disparu), pas au corps de la page', async () => {
+    vi.mocked(builder.dupliquerAutomatisation).mockResolvedValue({ id: 'copie' } as never);
+    await rendre();
+    const b = await dupliquerLaLigne();
+    await laisser();
+    expect(b.isConnected).toBe(true);
+    expect(document.activeElement).toBe(b);
+  });
+
+  it('la PREMIÈRE lecture, elle, montre toujours la roue ; et « Réessayer » après une panne aussi', async () => {
+    let liberer: (v: api.AutomationRule[]) => void = () => undefined;
+    vi.mocked(api.getAutomationRules).mockRejectedValueOnce(new Error('panne')).mockReturnValueOnce(new Promise((ok) => { liberer = ok; }));
+    await rendre();
+    await cliquer(bouton(/^Réessayer$/));
+    expect(conteneur.querySelector('.animate-spin')).not.toBeNull();
+    await act(async () => { liberer([regle()]); });
+    await laisser();
+    expect(conteneur.querySelector('table')).not.toBeNull();
   });
 });
 

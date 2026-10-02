@@ -658,6 +658,13 @@ export default function Automations() {
    * plus ancienne arrivée après ramenait une liste périmée (launch 2026-09-28).
    */
   const dernierChargement = useRef(0);
+  /**
+   * La liste a déjà été lue une fois : un RECHARGEMENT (après « Dupliquer », une suppression, un
+   * rangement…) ne retire plus le tableau pour le remplacer par une roue. L'écran clignotait et la
+   * position de lecture était perdue (triage `06-menu-actions:255`). La roue ne sert qu'à la
+   * première lecture, et après une panne.
+   */
+  const dejaLue = useRef(false);
   /*
    * Les chiffres de la liste. Avant, les échecs étaient lus à part, depuis le navigateur, sur
    * les 200 lignes les plus récentes du bureau : au-delà, les pastilles étaient fausses et des
@@ -694,10 +701,11 @@ export default function Automations() {
   const load = useCallback(async () => {
     const numero = ++dernierChargement.current;
     const perime = () => numero !== dernierChargement.current;
-    setLoading(true);
+    if (!dejaLue.current) setLoading(true);
     try {
       const data = await getAutomationRules();
       if (perime()) return;
+      dejaLue.current = true;
       setEchecChargement(false);
       /*
        * Dédoublonnage par `preset_key` : d'anciennes migrations ont semé le
@@ -725,6 +733,8 @@ export default function Automations() {
     } catch (e: any) {
       if (perime()) return;
       console.error('Failed to load rules:', e.message);
+      // Après une panne, « Réessayer » repasse par la roue : il n'y a plus de tableau à garder.
+      dejaLue.current = false;
       setEchecChargement(true);
       toast.error(fr ? 'Impossible de charger les automatisations' : 'Failed to load automations');
     } finally {
