@@ -164,17 +164,8 @@ const CAS: Cas[] = [
       return { entityType: 'job', entityId: j.id, metadata: { client_id: c.id }, changer: async () => { await ok(b.admin.rpc('soft_delete_client', { p_org_id: b.orgA, p_client_id: c.id }), 'client supprimé'); } };
     },
   },
-  {
-    id: 'B9-15', titre: 'client FUSIONNÉ dans une autre fiche (fusionner_clients)', declencheur: 'note.added',
-    preparer: async (m) => {
-      const absorbe = await creerClient(b, m);
-      const garde = await creerClient(b, `${m} gardé`);
-      return {
-        entityType: 'client', entityId: absorbe.id,
-        changer: async () => { await ok(b.admin.rpc('fusionner_clients', { p_org: b.orgA, p_garder: garde.id, p_absorber: absorbe.id }), 'fusion'); },
-      };
-    },
-  },
+  // (B9-15, la fusion de deux fiches, est jugé à part plus bas : la décision de la mission est que la relance
+  //  SUIT la fiche gardée — un message part donc, à la bonne fiche — au lieu de « rien ne part ».)
   {
     id: 'B9-16', titre: 'étiquette RETIRÉE avant le message de « Étiquette ajoutée »', declencheur: 'client.tagged',
     preparer: async (m) => {
@@ -295,6 +286,57 @@ describe('point 9/13 — la situation change pendant le délai : RIEN ne doit pa
       expect(r.statuts).toContain('cancelled');
     });
   }
+});
+
+describe('point 13 — FUSION de deux fiches pendant qu’une relance attend sur la fiche absorbée (B-16)', () => {
+  /*
+   * Attente AJUSTÉE par l'agent M. B attendait « aucun message » (la relance était annulée, avec le motif
+   * « le client a été supprimé »). Décision de la mission : la relance SUIT la fiche gardée quand c'est sûr ;
+   * sinon elle s'arrête avec le bon motif, « fiche fusionnée ». C'est `fusionner_clients` qui le fait, dans sa
+   * transaction (migration proposée M-03, appliquée à la pile locale).
+   */
+  const creerPaire = async (m: string) => ({ absorbe: await creerClient(b, m), garde: await creerClient(b, `${m} gardé`) });
+  const fusionner = async (garde: string, absorbe: string) =>
+    ok<Record<string, unknown>>(b.admin.rpc('fusionner_clients', { p_org: b.orgA, p_garder: garde, p_absorber: absorbe }), 'fusion');
+
+  it('[B9-15] la relance suit la fiche GARDÉE : elle part, une fois, à la fiche qui existe encore', async () => {
+    const m = marque('B9-15');
+    const { absorbe, garde } = await creerPaire(m);
+    const id = await regle(b, m, { trigger_event: 'note.added', delay_seconds: UN_JOUR, actions: [courriel(m, 'Message différé')] });
+    await emettre(b, 'note.added', 'client', absorbe.id);
+    await attendreTaches(b, id, 1);
+    const r = await fusionner(garde.id, absorbe.id);
+    expect(Number(r.relances_suivies)).toBeGreaterThanOrEqual(1);
+    await avancer(b, id);
+    const [t] = await tachesDe(b, id);
+    expect([t.status, t.entity_id]).toEqual(['completed', garde.id]);
+    const envois = await envoisAvec(b, m);
+    expect(envois).toHaveLength(1);
+    const fiche = await ok<{ email: string }>(b.admin.from('clients').select('email').eq('id', garde.id).single(), 'fiche gardée');
+    expect(envois[0].destinataire).toBe(fiche.email);
+  });
+
+  it('[B9-15b] la fiche gardée est DÉJÀ dans la même automatisation : la relance de la fiche absorbée s’arrête, motif « fiche fusionnée » (pas « client supprimé »), et un seul message part', async () => {
+    const m = marque('B9-15b');
+    const { absorbe, garde } = await creerPaire(m);
+    const id = await regle(b, m, { trigger_event: 'note.added', delay_seconds: UN_JOUR, actions: [courriel(m, 'Message différé')] });
+    await emettre(b, 'note.added', 'client', absorbe.id);
+    await emettre(b, 'note.added', 'client', garde.id);
+    await attendreTaches(b, id, 2);
+    const r = await fusionner(garde.id, absorbe.id);
+    // (Les règles « Note ajoutée » des tests précédents de ce fichier, encore publiées, ont elles aussi une relance
+    //  sur chaque fiche : le compte de la fonction est global — on juge NOTRE règle sur ses tâches, plus bas.)
+    expect(Number(r.relances_arretees)).toBeGreaterThanOrEqual(1);
+    await avancer(b, id);
+    const taches = await tachesDe(b, id);
+    const arretee = taches.find((t) => t.entity_id === absorbe.id)!;
+    expect(arretee.status).toBe('cancelled');
+    expect(String(arretee.last_error)).toMatch(/fusionnée/i);
+    expect(String(arretee.last_error)).not.toMatch(/supprimé/i);
+    expect(arretee.action_config.motif_code).toBe('fiche_fusionnee');
+    expect((await journauxDe(b, id)).filter((j) => j.result_data?.saute_code === 'fiche_fusionnee')).toHaveLength(1);
+    expect(await envoisAvec(b, m)).toHaveLength(1);
+  });
 });
 
 describe('point 9 — la raison de l’arrêt est lisible (« ignoré : condition plus valide »)', () => {
