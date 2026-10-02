@@ -710,6 +710,42 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     verifier(await v2.inputValue() === '', `des lettres : le champ montre « ${await v2.inputValue()} » (jamais « NaN »)`);
     await page.context().close();
   },
+
+  /** Déclencheurs 05:470 et 05:501 — étape « Si… » : lignes illisibles signalées ; « est l'un de » montré, modifiable, jamais effacé. */
+  async d470() {
+    const DE_LUMI = { source: { in: ['web', 'facebook'] }, statut: { not_in: ['perdu'] } };
+    const regle = await creerRegle({ trigger_event: 'quote.sent', conditions: {}, steps: [
+      { id: 's1', type: 'si', conditions: DE_LUMI, alors: 'e1', sinon: null },
+      action('create_notification', { title: 'Devis à suivre' }),
+    ] });
+    const conditionsEnBase = async () => ((await etapes(regle.id))[0] as { conditions?: Record<string, unknown> }).conditions ?? {};
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    await page.getByRole('button', { name: /^Si…/ }).click();
+    const p = panneau(page);
+    const zone = p.getByLabel('Conditions');
+    verifier(await zone.inputValue() === 'source est l’un de web, facebook\nstatut n’est aucun de perdu', `la zone montre les conditions de Lumi : ${JSON.stringify(await zone.inputValue())}`);
+    await zone.click();
+    await zone.press('ControlOrMeta+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('montant 5000');
+    verifier(await enregistrer(page).isDisabled(), '« montant 5000 » (sans signe) : « Enregistrer » est retenu');
+    verifier(await p.getByRole('alert').getByText(/Ligne illisible « montant 5000 »/).isVisible(), 'la ligne illisible est nommée');
+    await pause(4500);
+    verifier(JSON.stringify(await conditionsEnBase()) === JSON.stringify(DE_LUMI), 'rien n’est parti : la base garde les conditions d’origine');
+    await page.keyboard.press('ControlOrMeta+Backspace');
+    await page.keyboard.type('> 100');
+    verifier(await zone.inputValue() === 'source est l’un de web, facebook\nstatut n’est aucun de perdu\nmontant > 100', `la ligne corrigée : ${JSON.stringify(await zone.inputValue())}`);
+    await enregistrer(page).click();
+    await pause(5000);
+    const apres = await conditionsEnBase();
+    verifier(JSON.stringify(apres.source) === JSON.stringify(DE_LUMI.source) && JSON.stringify(apres.statut) === JSON.stringify(DE_LUMI.statut) && JSON.stringify(apres.montant) === JSON.stringify({ gt: 100 }),
+      `les deux conditions d’origine ont survécu, la troisième est ajoutée : ${JSON.stringify(apres)}`);
+    await page.reload();
+    await page.getByRole('button', { name: /^Si…/ }).click();
+    verifier((await p.getByLabel('Conditions').inputValue()).split('\n').length === 3, 'relu après rechargement : trois lignes');
+    await page.context().close();
+  },
 };
 
 const demandes = process.argv.slice(2);

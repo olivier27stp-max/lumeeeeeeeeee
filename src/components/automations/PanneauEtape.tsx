@@ -47,70 +47,10 @@ import {
 import type { ChampPerso, ObjetChamp } from '../../lib/champs/types';
 import { htmlVersTexte, texteVersHtml, variablesInconnues, variableLisible } from '../../lib/emailBodyText';
 import { confirmer } from '../ui/ConfirmDialog';
+import { analyserConditions, conditionsConservees, texteDesConditions } from '../../lib/conditionsEtapeSi';
 
-/** Les conditions d'une étape « si », en texte modifiable. */
-/** L'opérateur, tel qu'on l'ecrit : `montant > 5000`. */
-const SIGNES: Array<[string, string]> = [
-  ['gte', '>='], ['lte', '<='], ['gt', '>'], ['lt', '<'], ['neq', '!='], ['eq', '='],
-];
-
-function texteDesConditions(etape: Etape): string {
-  if (etape.type !== 'si') return '';
-  const lignes: string[] = [];
-  for (const [cle, v] of Object.entries(etape.conditions ?? {})) {
-    // Les conditions de champs personnalisés ont leur propre éditeur : les
-    // écrire ici donnerait « champs_perso = [object Object] ».
-    if (cle === 'champs_perso') continue;
-    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-      // Un intervalle (`{ gte, lt }`) s'ecrit sur DEUX lignes : c'est ce
-      // qu'on relit le mieux, et l'analyse les recolle sur la meme cle.
-      for (const [op, signe] of SIGNES) {
-        if (op in (v as Record<string, unknown>)) {
-          lignes.push(cle + ' ' + signe + ' ' + String((v as Record<string, unknown>)[op]));
-        }
-      }
-      continue;
-    }
-    lignes.push(cle + ' = ' + String(v));
-  }
-  return lignes.join(String.fromCharCode(10));
-}
-
-/** Le texte saisi → l'objet `conditions`. Une ligne incomplète est ignorée. */
-/** Un nombre pur (montant, quantité) reste un nombre. */
-const NOMBRE_SEUL = /^-?[0-9]+([.][0-9]+)?$/;
-
-function analyserConditions(texte: string): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const ligne of texte.split(String.fromCharCode(10))) {
-    // `>=` et `<=` d'abord : sinon `>` couperait `>=` en deux.
-    const trouve = SIGNES
-      .map(([op, signe]) => ({ op, signe, i: ligne.indexOf(signe) }))
-      .filter((x) => x.i > 0)
-      .sort((a, b) => (a.i - b.i) || (b.signe.length - a.signe.length))[0];
-    if (!trouve) continue;
-
-    const cle = ligne.slice(0, trouve.i).trim();
-    const val = ligne.slice(trouve.i + trouve.signe.length).trim();
-    if (!cle || !val) continue;
-
-    if (trouve.op === 'eq') {
-      // L'égalité reste écrite à plat : c'est la forme d'origine, que
-      // portent toutes les règles existantes.
-      out[cle] = val;
-      continue;
-    }
-
-    // Un montant s'écrit en chiffres : on le garde en nombre pour que la
-    // comparaison ne dépende pas d'une conversion plus loin.
-    const valeur = NOMBRE_SEUL.test(val) ? Number(val) : val;
-    const existant = out[cle];
-    out[cle] = (existant !== null && typeof existant === 'object' && !Array.isArray(existant))
-      ? { ...(existant as Record<string, unknown>), [trouve.op]: valeur }
-      : { [trouve.op]: valeur };
-  }
-  return out;
-}
+/** Les conditions d'une étape « si », en texte modifiable (règles : src/lib/conditionsEtapeSi.ts). */
+const texteSi = (etape: Etape, fr: boolean): string => (etape.type === 'si' ? texteDesConditions(etape.conditions, fr) : '');
 
 /**
  * Les conditions de champs d'une étape « si », à GARDER quand le texte est
@@ -326,7 +266,7 @@ export default function PanneauEtape({
    * On garde donc le texte tel quel pendant la saisie, et on ne l'analyse
    * qu'au moment d'enregistrer.
    */
-  const [conditionsTexte, setConditionsTexte] = useState(() => texteDesConditions(etape));
+  const [conditionsTexte, setConditionsTexte] = useState(() => texteSi(etape, fr));
   /** Champs dont la version anglaise, inchangée, a été déclarée « toujours valable ». */
   const [anglaisConfirme, setAnglaisConfirme] = useState<string[]>([]);
 
@@ -360,7 +300,7 @@ export default function PanneauEtape({
     setBase(version);
     setBrouillon(version);
     setDelaiSaisi(saisieDelaiDe(version));
-    setConditionsTexte(texteDesConditions(version));
+    setConditionsTexte(texteSi(version, fr));
     setAnglaisConfirme([]);
     setConflit(null);
   };
@@ -384,7 +324,7 @@ export default function PanneauEtape({
     if (JSON.stringify(recue) === JSON.stringify(base)) return;
     const brouillonActuel = JSON.stringify(saisie.current.brouillon);
     const intact = brouillonActuel === JSON.stringify(base)
-      && saisie.current.conditionsTexte === texteDesConditions(base);
+      && saisie.current.conditionsTexte === texteSi(base, fr);
     // Rien de tapé ici — ou exactement ce qui vient d'arriver : la nouvelle version, sans question.
     if (intact || brouillonActuel === JSON.stringify(recue)) prendre(recue);
     else setConflit(modifieePar === 'lumi' ? 'lumi' : 'autre');
@@ -401,8 +341,8 @@ export default function PanneauEtape({
   const modifie = useMemo(
     // Une étape NEUVE est tout entière une saisie non enregistrée.
     () => nouvelle || (brouillon.id === base.id
-      && (JSON.stringify(brouillon) !== JSON.stringify(base) || conditionsTexte !== texteDesConditions(base))),
-    [brouillon, base, conditionsTexte, nouvelle],
+      && (JSON.stringify(brouillon) !== JSON.stringify(base) || conditionsTexte !== texteSi(base, fr))),
+    [brouillon, base, conditionsTexte, nouvelle, fr],
   );
   useEffect(() => { onModifie?.(modifie); }, [modifie, onModifie]);
   useEffect(() => () => onModifie?.(false), [onModifie]);
@@ -458,9 +398,41 @@ export default function PanneauEtape({
       });
   }, [brouillon, base, modele, anglaisConfirme]);
 
+  /*
+   * ÉTAPE « SI… » : CE QUE LA ZONE « CONDITIONS » NE SAIT PAS LIRE OU ÉCRIRE
+   * N'EST JAMAIS JETÉ EN SILENCE (triage déclencheurs, 05:470 et 05:501).
+   *   · une ligne illisible (« montant 5000 », « statut = ») est signalée et
+   *     retient l'enregistrement — avant, elle était ignorée : la condition
+   *     partait vide et le parcours suivait toujours « si oui » ;
+   *   · une condition que le texte ne peut pas porter est gardée telle quelle
+   *     (`conservees`) et montrée en lecture seule — avant, le premier
+   *     enregistrement l'effaçait.
+   */
+  const origineSi = base.type === 'si' ? base.conditions : null;
+  const lignesIllisibles = useMemo(
+    () => (brouillon.type === 'si' ? analyserConditions(conditionsTexte, origineSi).illisibles : []),
+    [brouillon.type, conditionsTexte, origineSi],
+  );
+  const conservees = useMemo(
+    () => (brouillon.type === 'si' ? conditionsConservees(brouillon.conditions) : {}),
+    [brouillon],
+  );
+  /** Le texte de la zone → les `conditions` de l'étape : lignes lisibles + conditions conservées + champs personnalisés. */
+  const conditionsSaisies = (texte: string): Record<string, unknown> => ({
+    ...conservees,
+    ...analyserConditions(texte, origineSi).conditions,
+    ...champsPersoDe(brouillon),
+  });
+
   /** Ce qui empêche d'enregistrer, dit avant de cliquer. */
   const problemes = useMemo(() => {
     const out: string[] = [];
+    if (brouillon.type === 'si') {
+      for (const l of lignesIllisibles) {
+        out.push(fr ? `Ligne illisible « ${l.ligne} » : ${l.fr}` : `Unreadable line “${l.ligne}”: ${l.en}`);
+      }
+      return out;
+    }
     if (brouillon.type === 'attendre') {
       // Un champ vidé le temps de retaper le nombre : pas « 0 », rien — on le dit.
       if (nombreSaisi(delaiSaisi.texte) === null) {
@@ -526,7 +498,7 @@ export default function PanneauEtape({
         : `“${v.champ.en}” changed, not its English version: update it, empty it, or confirm it still holds.`);
     }
     return out;
-  }, [brouillon, modele, fr, declencheur, objetChamps, champsPerso, versionsAnglaises, delaiSaisi]);
+  }, [brouillon, modele, fr, declencheur, objetChamps, champsPerso, versionsAnglaises, delaiSaisi, lignesIllisibles]);
 
   /** Variables écrites dans les textes de l'action que le serveur ne saura pas remplir. */
   const inconnues = useMemo(() => {
@@ -1006,8 +978,8 @@ export default function PanneauEtape({
                 </label>
                 <p className="mb-2 text-[11px] text-text-tertiary">
                   {fr
-                    ? 'Une ligne par condition : champ = valeur, ou une comparaison (montant > 5000, created_at >= 2026-06-01). Deux lignes sur le même champ font un intervalle. Le parcours suit « alors » quand toutes sont vraies.'
-                    : 'One condition per line: field = value, or a comparison (amount > 5000, created_at >= 2026-06-01). Two lines on the same field make a range. The journey follows “then” when all are true.'}
+                    ? 'Une ligne par condition : champ = valeur, une comparaison (montant > 5000, created_at >= 2026-06-01), ou une liste (source est l’un de web, facebook ; statut n’est aucun de perdu). Deux lignes sur le même champ font un intervalle. Le parcours suit « alors » quand toutes sont vraies.'
+                    : 'One condition per line: field = value, a comparison (amount > 5000, created_at >= 2026-06-01), or a list (source is one of web, facebook; status is none of lost). Two lines on the same field make a range. The journey follows “then” when all are true.'}
                 </p>
 
                 {/*
@@ -1029,7 +1001,7 @@ export default function PanneauEtape({
                         setConditionsTexte(ajout);
                         setBrouillon({
                           ...(brouillon as EtapeSi),
-                          conditions: { ...analyserConditions(ajout), ...champsPersoDe(brouillon) },
+                          conditions: conditionsSaisies(ajout),
                         });
                       }}
                       className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-text-secondary transition-colors hover:border-accent hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -1051,11 +1023,34 @@ export default function PanneauEtape({
                     setConditionsTexte(e.target.value);
                     setBrouillon({
                       ...(brouillon as EtapeSi),
-                      conditions: { ...analyserConditions(e.target.value), ...champsPersoDe(brouillon) },
+                      conditions: conditionsSaisies(e.target.value),
                     });
                   }}
                   className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 font-mono text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 />
+                {lignesIllisibles.length > 0 && (
+                  <div role="alert" className="mt-1.5 rounded-lg border border-danger/40 bg-danger-light px-3 py-2 text-[11px] text-danger">
+                    {lignesIllisibles.map((l, i) => (
+                      <p key={`${i}-${l.ligne}`}>
+                        {fr ? `Ligne illisible « ${l.ligne} » : ${l.fr}` : `Unreadable line “${l.ligne}”: ${l.en}`}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {Object.keys(conservees).length > 0 && (
+                  <div className="mt-1.5 rounded-lg border border-border bg-surface-secondary px-3 py-2 text-[11px] text-text-secondary">
+                    <p className="font-medium text-text-primary">
+                      {fr
+                        ? 'Conditions avancées, conservées telles quelles (non modifiables ici) :'
+                        : 'Advanced conditions, kept as they are (not editable here):'}
+                    </p>
+                    <ul className="mt-1 space-y-0.5 font-mono">
+                      {Object.entries(conservees).map(([cle, v]) => (
+                        <li key={cle} className="break-all">{cle} : {JSON.stringify(v)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {/* Conditions sur les champs personnalisés de la fiche,
                     jugées sur les valeurs ACTUELLES quand on arrive ici. */}
                 <ConditionsChampsEtape

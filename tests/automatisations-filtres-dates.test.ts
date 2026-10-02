@@ -15,6 +15,7 @@ import { evaluateConditions } from '../server/lib/automationEngine';
 import type { CRMEvent } from '../server/lib/eventBus';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { analyserConditions } from '../src/lib/conditionsEtapeSi';
 
 /** Un événement minimal qui porte les métadonnées à filtrer. */
 function evt(metadata: Record<string, unknown>): CRMEvent {
@@ -119,15 +120,22 @@ describe('les anciens filtres marchent toujours', () => {
  * n'acceptait que `champ = valeur` : un filtre de date était
  * inexprimable, donc inexistant pour l'utilisateur.
  *
- * On relit la logique du panneau depuis le fichier : elle n'est pas
- * exportée (c'est un détail interne du composant), mais ce qu'elle
- * produit part en base et décide qui reçoit le message.
+ * La logique vivait dans le panneau, non exportée : ces tests relisaient son
+ * SOURCE. Depuis le triage « déclencheurs » (05:470 / 05:501) elle vit dans
+ * src/lib/conditionsEtapeSi.ts, exportée : on éprouve maintenant ce qu'elle
+ * PRODUIT — ce qui part en base et décide qui reçoit le message.
  */
 describe('écrire un filtre dans le panneau', () => {
   const src = readFileSync(resolve(__dirname, '../src/components/automations/PanneauEtape.tsx'), 'utf8');
+  const lire = (texte: string) => analyserConditions(texte).conditions;
 
   it('les 6 signes sont reconnus', () => {
-    expect(src).toMatch(/\['gte', '>='\], \['lte', '<='\], \['gt', '>'\], \['lt', '<'\]/);
+    expect(lire('a = x')).toEqual({ a: 'x' });
+    expect(lire('a != x')).toEqual({ a: { neq: 'x' } });
+    expect(lire('a > 5')).toEqual({ a: { gt: 5 } });
+    expect(lire('a >= 5')).toEqual({ a: { gte: 5 } });
+    expect(lire('a < 5')).toEqual({ a: { lt: 5 } });
+    expect(lire('a <= 5')).toEqual({ a: { lte: 5 } });
   });
 
   it('`>=` est cherché AVANT `>` — sinon il serait coupé en deux', () => {
@@ -136,18 +144,19 @@ describe('écrire un filtre dans le panneau', () => {
      * Sans le tri par longueur, on lirait l'opérateur `>` et une valeur
      * « = 5 » — un filtre silencieusement faux.
      */
-    expect(src).toMatch(/b\.signe\.length - a\.signe\.length/);
+    expect(lire('montant >= 5')).toEqual({ montant: { gte: 5 } });
+    expect(lire('montant <= 5')).toEqual({ montant: { lte: 5 } });
   });
 
   it('deux lignes sur le même champ font un intervalle', () => {
     // C'est la façon d'écrire « créé en juin » sans inventer une syntaxe.
-    expect(src).toMatch(/\.\.\.\(existant as Record<string, unknown>\), \[trouve\.op\]: valeur/);
+    expect(lire('created_at >= 2026-06-01\ncreated_at < 2026-07-01')).toEqual({ created_at: { gte: '2026-06-01', lt: '2026-07-01' } });
   });
 
   it('l’égalité reste écrite à plat', () => {
     // Toutes les règles existantes portent cette forme : la changer
     // casserait leurs conditions au premier enregistrement.
-    expect(src).toMatch(/if \(trouve\.op === 'eq'\) \{[\s\S]{0,300}?out\[cle\] = val;/);
+    expect(lire('statut = envoye\nmontant = 5000')).toEqual({ statut: 'envoye', montant: '5000' });
   });
 
   it('l’aide explique la comparaison, sinon personne ne la découvre', () => {

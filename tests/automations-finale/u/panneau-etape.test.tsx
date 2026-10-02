@@ -541,3 +541,112 @@ describe('lignes 8 et 9 — une saisie que le serveur refuserait est refusée DA
     expect(texte()).toContain('“Due in (days)” must be at most 365.');
   });
 });
+
+// ─── Triage « déclencheurs », 05-etapes-controle:470 et :501 ────
+
+describe('étape « Si… » — ce que la zone « Conditions » ne sait pas lire ou écrire n’est jamais jeté en silence', () => {
+  const si = (conditions: Record<string, unknown>): Etape => ({ id: 's1', type: 'si', conditions, alors: null, sinon: null });
+  const zone = () => champ<HTMLTextAreaElement>('Conditions')!;
+  const conditionsEnregistrees = () => {
+    const e = enregistrees.at(-1);
+    return e?.type === 'si' ? e.conditions : null;
+  };
+  const alerte = () => conteneur.querySelector('[role="alert"]')?.textContent ?? '';
+
+  it('05:470 — « montant 5000 » (sans signe) et « statut = » (sans valeur) : signalées, « Enregistrer » est retenu, rien ne part', async () => {
+    await monterEtape(si({}));
+    expect(enregistrer().disabled).toBe(false);
+    saisir(zone(), 'montant 5000\nstatut =');
+    expect(enregistrer().disabled).toBe(true);
+    expect(alerte()).toContain('Ligne illisible « montant 5000 » : il manque un signe (=, !=, >, >=, <, <=) ou « est l’un de » entre le champ et la valeur.');
+    expect(alerte()).toContain('Ligne illisible « statut = » : il manque la valeur.');
+    cliquer(enregistrer());
+    expect(enregistrees).toEqual([]);
+  });
+
+  it('05:470 — … corriger les lignes lève le refus, et ce qui est tapé est ce qui part', async () => {
+    await monterEtape(si({}));
+    saisir(zone(), 'montant 5000\nstatut =');
+    saisir(zone(), 'montant > 5000\nstatut = envoye');
+    expect(alerte()).toBe('');
+    expect(enregistrer().disabled).toBe(false);
+    cliquer(enregistrer());
+    expect(conditionsEnregistrees()).toEqual({ montant: { gt: 5000 }, statut: 'envoye' });
+  });
+
+  it('05:470 — une ligne en cours de frappe (« statut ») est signalée sans être effacée de la zone', async () => {
+    await monterEtape(si({ source: 'web' }));
+    saisir(zone(), 'source = web\nstatut');
+    expect(zone().value).toBe('source = web\nstatut');
+    expect(enregistrer().disabled).toBe(true);
+  });
+
+  it('05:470 — en anglais', async () => {
+    await monterEtape(si({}), { fr: false });
+    saisir(zone(), 'amount 5000');
+    expect(alerte()).toBe('Unreadable line “amount 5000”: a sign (=, !=, >, >=, <, <=) or “is one of” is missing between the field and the value.');
+  });
+
+  const DE_LUMI = { source: { in: ['web', 'facebook'] }, statut: { not_in: ['perdu'] } };
+
+  it('05:501 — des conditions « est l’un de » posées par Lumi ou un modèle : la zone les MONTRE', async () => {
+    await monterEtape(si(DE_LUMI));
+    expect(zone().value).toBe('source est l’un de web, facebook\nstatut n’est aucun de perdu');
+    expect(alerte()).toBe('');
+    expect(enregistrer().disabled).toBe(false);
+  });
+
+  it('05:501 — ajouter une condition ne les efface pas : les trois sont enregistrées, les deux d’origine à l’identique', async () => {
+    await monterEtape(si(DE_LUMI));
+    saisir(zone(), `${zone().value}\nmontant > 100`);
+    cliquer(enregistrer());
+    expect(conditionsEnregistrees()).toEqual({ ...DE_LUMI, montant: { gt: 100 } });
+  });
+
+  it('05:501 — elles se modifient : une valeur de plus dans la liste, « n’est aucun de » tapé à la main', async () => {
+    await monterEtape(si(DE_LUMI));
+    saisir(zone(), "source est l'un de web, facebook, appel\nstatut n’est aucun de perdu, annule");
+    expect(alerte()).toBe('');
+    cliquer(enregistrer());
+    expect(conditionsEnregistrees()).toEqual({ source: { in: ['web', 'facebook', 'appel'] }, statut: { not_in: ['perdu', 'annule'] } });
+  });
+
+  it('05:501 — ouvrir et enregistrer sans rien toucher ne réécrit rien', async () => {
+    await monterEtape(si(DE_LUMI));
+    cliquer(enregistrer());
+    expect(conditionsEnregistrees()).toEqual(DE_LUMI);
+  });
+
+  it('une condition que le texte ne peut pas porter (opérateur inconnu, valeur à virgule) est montrée en lecture seule et CONSERVÉE à l’enregistrement', async () => {
+    const avancees = { source: 'web', ville: { in: ['Montréal, QC', 'Laval'] }, note: { contains: 'vip' } };
+    await monterEtape(si(avancees));
+    expect(zone().value).toBe('source = web');
+    expect(texte()).toContain('Conditions avancées, conservées telles quelles (non modifiables ici) :');
+    expect(texte()).toContain('ville : {"in":["Montréal, QC","Laval"]}');
+    expect(texte()).toContain('note : {"contains":"vip"}');
+    saisir(zone(), 'source = web\nmontant >= 250');
+    cliquer(enregistrer());
+    expect(conditionsEnregistrees()).toEqual({ ...avancees, montant: { gte: 250 } });
+  });
+
+  it('… même en vidant la zone : seules les lignes du texte s’en vont', async () => {
+    const avancees = { source: 'web', note: { contains: 'vip' } };
+    await monterEtape(si(avancees));
+    saisir(zone(), '');
+    cliquer(enregistrer());
+    expect(conditionsEnregistrees()).toEqual({ note: { contains: 'vip' } });
+  });
+
+  it('les conditions de champs personnalisés (`champs_perso`) restent portées à côté du texte', async () => {
+    const champsPerso = [{ field_id: 'aaaaaaaa-0000-4000-8000-00000000c001', op: 'gt', value: 20 }];
+    await monterEtape(si({ source: { in: ['web'] }, champs_perso: champsPerso }));
+    saisir(zone(), `${zone().value}\nstatut != perdu`);
+    cliquer(enregistrer());
+    expect(conditionsEnregistrees()).toEqual({ source: { in: ['web'] }, statut: { neq: 'perdu' }, champs_perso: champsPerso });
+  });
+
+  it('interface en anglais : les listes s’écrivent « is one of » / « is none of »', async () => {
+    await monterEtape(si(DE_LUMI), { fr: false });
+    expect(zone().value).toBe('source is one of web, facebook\nstatut is none of perdu');
+  });
+});
