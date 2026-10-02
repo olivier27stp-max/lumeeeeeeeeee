@@ -1100,7 +1100,7 @@ async function executeRuleActions(
       const prochaine = nextSendTime(new Date(), rule.settings, fuseau);
       const issue = issueHorsHeures(prochaine, fuseau);
       // Confirmation REPORTÉE : elle reste transactionnelle (launch M10).
-      const actionReportee = { ...action, trigger_event: event.type, event_metadata: event.metadata, report_heures_calmes: true, motif_code: issue.code };
+      const actionReportee = { ...action, action_index: i, trigger_event: event.type, event_metadata: event.metadata, report_heures_calmes: true, motif_code: issue.code };
       // supabase-js ne lève jamais : l'erreur (dont le doublon 23505) arrive
       // dans la réponse, pas dans un catch.
       const { data: reportee, error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
@@ -1293,6 +1293,7 @@ async function planifierRepriseImmediate(
     entity_id: event.entityId,
     action_config: {
       ...action,
+      action_index: index,
       trigger_event: event.type,
       event_metadata: event.metadata,
       reprise_immediate: true,
@@ -1465,7 +1466,8 @@ async function scheduleDelayedActions(
       automation_rule_id: rule.id,
       entity_type: event.entityType,
       entity_id: event.entityId,
-      action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
+      // `action_index` : à l'échéance, la tâche exécute la version COURANTE de cette action (point 15).
+      action_config: { ...action, action_index: i, trigger_event: event.type, event_metadata: event.metadata },
       execute_at: executeAt.toISOString(),
       status: 'pending',
       execution_key: executionKey,
@@ -2268,6 +2270,58 @@ export async function recalerRappelsDeVisite(
 }
 
 /**
+ * MODIFIER UNE AUTOMATISATION ACTIVE — ce qu'exécute une tâche déjà en file
+ * (mission finale, point 15).
+ *
+ * La tâche porte une COPIE de son action, prise le jour de sa planification.
+ * L'exécuter telle quelle donnait un mélange : le client en cours recevait
+ * l'ANCIEN message de l'étape en attente, puis le NOUVEAU de la suivante
+ * (relue, elle, dans la règle). Le comportement décidé :
+ *
+ *   1. une exécution en cours suit la version COURANTE du parcours à sa
+ *      prochaine étape — c'est l'action de l'étape telle qu'elle est écrite
+ *      AUJOURD'HUI qui part ;
+ *   2. une étape qui attend garde l'échéance déjà fixée : modifier un délai
+ *      ne déplace pas les attentes en cours (il vaut pour les suivantes) ;
+ *   3. l'étape où un client attend a été supprimée, ou remplacée par autre
+ *      chose : l'exécution s'arrête proprement — « étape retirée du
+ *      parcours » —, sans erreur et sans sauter à une autre étape.
+ *
+ * Pour un PARCOURS, l'étape se retrouve par son identifiant. Pour une règle
+ * « à plat », par le rang de l'action (`action_index`, posé à la
+ * planification) : si l'action de ce rang n'est plus du même type, elle a
+ * été remplacée. Une tâche d'avant ce rang garde sa copie.
+ *
+ * Rend l'action à exécuter, ou `'retiree'`.
+ */
+export function actionCouranteDeLaTache(task: {
+  step_id?: string | null;
+  action_config?: Record<string, any> | null;
+  automation_rules?: { steps?: unknown; actions?: unknown } | null;
+}): { type: string; config: Record<string, any> } | 'retiree' {
+  const copie = { type: String(task.action_config?.type ?? ''), config: (task.action_config?.config ?? {}) as Record<string, any> };
+  const regle = task.automation_rules;
+  if (!regle) return copie;
+
+  if (task.step_id) {
+    const etape = Array.isArray(regle.steps) ? trouverEtape(regle.steps as Etape[], task.step_id) : null;
+    // (Étape introuvable : traité juste avant, « étape supprimée ».)
+    if (!etape) return copie;
+    const tacheDAction = copie.type !== '__sequence__';
+    // Une action devenue une attente ou une condition (ou l'inverse) : remplacée.
+    if (tacheDAction !== (etape.type === 'action')) return 'retiree';
+    if (etape.type !== 'action') return copie;
+    return { type: String(etape.action?.type ?? ''), config: (etape.action?.config ?? {}) as Record<string, any> };
+  }
+
+  const rang = task.action_config?.action_index;
+  if (typeof rang !== 'number' || !Array.isArray(regle.actions)) return copie;
+  const actuelle = (regle.actions as Array<{ type?: unknown; config?: unknown }>)[rang];
+  if (!actuelle || String(actuelle.type ?? '') !== copie.type) return 'retiree';
+  return { type: copie.type, config: (actuelle.config ?? {}) as Record<string, any> };
+}
+
+/**
  * Les types d'actions que la règle exécute — celles de son parcours si c'en
  * est un (`estParcours`), sinon ses `actions`. La revalidation s'en sert pour
  * ne pas rejuger contre la règle ce qu'elle modifie elle-même.
@@ -2407,7 +2461,22 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
     // porte donc une relance ou un suivi, jamais une confirmation attendue.
     // Les deux canaux sont concernés — auparavant seuls les SMS l'étaient, et
     // un courriel de relance pouvait partir à 3h du matin.
-    const taskType = task.action_config?.type;
+    /*
+     * MODIFIER UNE AUTOMATISATION ACTIVE (mission finale, point 15) : la tâche
+     * exécute la version COURANTE de son étape, pas la copie prise le jour où
+     * elle a été planifiée. Étape remplacée par autre chose : arrêt propre,
+     * « étape retirée du parcours » — voir `actionCouranteDeLaTache`.
+     */
+    const courante = actionCouranteDeLaTache(task);
+    if (courante === 'retiree') {
+      await arreterTache(supabase, task, {
+        code: 'etape_retiree',
+        motif: 'Étape supprimée du parcours : envoi annulé.',
+        saute: 'Étape retirée du parcours : elle a été remplacée pendant l’attente',
+      }, { siPending: true });
+      continue;
+    }
+    const taskType = courante.type;
     const reglagesRegle = (task.automation_rules?.settings ?? null) as ReglagesRegle | null;
     // Même fuseau pour le TEST et pour le REPORT : les calculer dans deux
     // fuseaux différents ferait retomber la tâche hors fenêtre en boucle.
@@ -2482,8 +2551,10 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
 
     try {
       const actionConfig = task.action_config;
-      const actionType = actionConfig.type as ActionType;
-      const config = actionConfig.config || {};
+      // La version COURANTE de l'action (point 15) ; le reste de la tâche —
+      // déclencheur, métadonnées, échéance — est celui de sa planification.
+      const actionType = courante.type as ActionType;
+      const config = courante.config;
 
       /*
        * REVALIDATION (mission finale, point 9) — LE seul endroit où une

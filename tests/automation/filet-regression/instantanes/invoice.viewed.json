@@ -95,6 +95,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#a3a38c79afb7",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -345,6 +346,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#a1e2d6f73412",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -573,6 +575,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#6cb3dc7f8665",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -891,6 +894,7 @@
      "action_config": {
       "type": "request_review",
       "config": "#44136fa355b3",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -1194,6 +1198,7 @@
      "action_config": {
       "type": "envoyer_slack",
       "config": "#fe65e37fbb3f",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -1390,6 +1395,7 @@
      "action_config": {
       "type": "ajouter_etiquette",
       "config": "#2d8b10f3737a",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -1593,6 +1599,7 @@
      "action_config": {
       "type": "retirer_etiquette",
       "config": "#2d8b10f3737a",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -1810,6 +1817,7 @@
      "action_config": {
       "type": "modifier_client",
       "config": "#ed5009044ce8",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -2029,6 +2037,7 @@
      "action_config": {
       "type": "assigner_responsable",
       "config": "#d1e2bb013481",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -2236,6 +2245,7 @@
      "action_config": {
       "type": "ajouter_note",
       "config": "#adb1dea6cd43",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -2440,6 +2450,7 @@
      "action_config": {
       "type": "create_task",
       "config": "#a9b25e94286f",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -2675,6 +2686,7 @@
      "action_config": {
       "type": "envoyer_facture",
       "config": "#44136fa355b3",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -2926,6 +2938,7 @@
      "action_config": {
       "type": "webhook",
       "config": "#b00540570a83",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -3169,6 +3182,7 @@
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -3435,6 +3449,7 @@
      "action_config": {
       "type": "arreter_automatisation",
       "config": "#51bd67fafc36",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",
@@ -3643,6 +3658,7 @@
      "action_config": {
       "type": "update_custom_field",
       "config": "#1202742ba8b1",
+      "action_index": 0,
       "trigger_event": "invoice.viewed",
       "event_metadata": {
        "invoice_id": "aaaaaaaa-0000-4000-8000-000000000005",

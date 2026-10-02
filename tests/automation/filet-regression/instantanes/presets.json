@@ -599,6 +599,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#25247803c687",
+      "action_index": 0,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -622,6 +623,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#dfc73400a5e1",
+      "action_index": 1,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -645,6 +647,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#ebabeaef9ead",
+      "action_index": 2,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -1038,6 +1041,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#83b62d770b8e",
+      "action_index": 0,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -1061,6 +1065,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#969816faa79d",
+      "action_index": 1,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -1338,6 +1343,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#875ab59c164b",
+      "action_index": 0,
       "trigger_event": "quote.approved",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -1361,6 +1367,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#4cafe906b5f8",
+      "action_index": 1,
       "trigger_event": "quote.approved",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -1384,6 +1391,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#06e7b06f47ac",
+      "action_index": 2,
       "trigger_event": "quote.approved",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -2008,6 +2016,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#aff9f8fcd428",
+      "action_index": 0,
       "trigger_event": "quote.approved",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -2031,6 +2040,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#af14004d7af4",
+      "action_index": 1,
       "trigger_event": "quote.approved",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -2054,6 +2064,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#5ab07ee6583b",
+      "action_index": 2,
       "trigger_event": "quote.approved",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -2443,6 +2454,7 @@
      "action_config": {
       "type": "request_review",
       "config": "#44136fa355b3",
+      "action_index": 0,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -2466,6 +2478,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#67dc4420a993",
+      "action_index": 1,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -2822,6 +2835,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#dc9f2179e243",
+      "action_index": 0,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -2845,6 +2859,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#bc0d2bf43552",
+      "action_index": 1,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -2868,6 +2883,7 @@
      "action_config": {
       "type": "create_task",
       "config": "#73d570b5c481",
+      "action_index": 2,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -2891,6 +2907,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#da4114af9c1c",
+      "action_index": 3,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -2914,6 +2931,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#ce4d4e94da7d",
+      "action_index": 4,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -3511,6 +3529,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#16a179c66fb2",
+      "action_index": 0,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -3534,6 +3553,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#1fc7dc511d61",
+      "action_index": 1,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -3819,6 +3839,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#0b97620f2be6",
+      "action_index": 0,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -3842,6 +3863,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#7aab6658aea4",
+      "action_index": 1,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -3865,6 +3887,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#5ee633867f22",
+      "action_index": 2,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -3888,6 +3911,7 @@
      "action_config": {
       "type": "create_task",
       "config": "#47d91b2e2945",
+      "action_index": 3,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -3911,6 +3935,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#72522adb1e38",
+      "action_index": 4,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -4514,6 +4539,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#c77c8211c829",
+      "action_index": 0,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -4537,6 +4563,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#6b4fcb0e7d0f",
+      "action_index": 1,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -4560,6 +4587,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#be9e83db46f6",
+      "action_index": 2,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -4961,6 +4989,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#eb32d21e5378",
+      "action_index": 0,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -4984,6 +5013,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#b37dd08af955",
+      "action_index": 1,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -5007,6 +5037,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#df27d643fd5d",
+      "action_index": 2,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -5030,6 +5061,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#764ebd00dbab",
+      "action_index": 3,
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -5528,6 +5560,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#9cdea3e04bed",
+      "action_index": 0,
       "trigger_event": "appointment.created",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -5552,6 +5585,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#7fac4f076238",
+      "action_index": 1,
       "trigger_event": "appointment.created",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -5576,6 +5610,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#b911286f0f3e",
+      "action_index": 2,
       "trigger_event": "appointment.created",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -5970,6 +6005,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#ba373118c395",
+      "action_index": 0,
       "trigger_event": "appointment.created",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -5994,6 +6030,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#dc005386958a",
+      "action_index": 1,
       "trigger_event": "appointment.created",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -6257,6 +6294,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#09e58757cf0c",
+      "action_index": 0,
       "trigger_event": "appointment.created",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -6281,6 +6319,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#e3b94c23ff0f",
+      "action_index": 1,
       "trigger_event": "appointment.created",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -6305,6 +6344,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#2c1ae35dd3c1",
+      "action_index": 2,
       "trigger_event": "appointment.created",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -6707,6 +6747,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#1261efb4ad38",
+      "action_index": 0,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -6732,6 +6773,7 @@
      "action_config": {
       "type": "create_task",
       "config": "#e71226639879",
+      "action_index": 1,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -6757,6 +6799,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#bca20496000e",
+      "action_index": 2,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -6782,6 +6825,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#849b75f1549c",
+      "action_index": 3,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -7261,6 +7305,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#1586211fe3b5",
+      "action_index": 0,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -7286,6 +7331,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#333eb1c2291b",
+      "action_index": 1,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -7546,6 +7592,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#28c5ada64ef1",
+      "action_index": 0,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -7571,6 +7618,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#8e596bcc40f7",
+      "action_index": 1,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -7856,6 +7904,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#279ebff79397",
+      "action_index": 0,
       "trigger_event": "appointment.cancelled",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -7879,6 +7928,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#99485c576008",
+      "action_index": 1,
       "trigger_event": "appointment.cancelled",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -7902,6 +7952,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#fe27ff1787dc",
+      "action_index": 2,
       "trigger_event": "appointment.cancelled",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -8514,6 +8565,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#edeb988cb2be",
+      "action_index": 0,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -8537,6 +8589,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#13ac279c8305",
+      "action_index": 1,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -8807,6 +8860,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#39d29698d7cb",
+      "action_index": 0,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -8831,6 +8885,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#c17208d867fe",
+      "action_index": 1,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -8855,6 +8910,7 @@
      "action_config": {
       "type": "create_task",
       "config": "#ecc6d8491f05",
+      "action_index": 2,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -8879,6 +8935,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#c9d6c87c2271",
+      "action_index": 3,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -8903,6 +8960,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#0ef252c5d477",
+      "action_index": 4,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -9505,6 +9563,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#46ba60f74397",
+      "action_index": 0,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -9529,6 +9588,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#e0b23edf40ee",
+      "action_index": 1,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -9553,6 +9613,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#a28b38b905b5",
+      "action_index": 2,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -9951,6 +10012,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#f5190bbb895e",
+      "action_index": 0,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -9975,6 +10037,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#ffc7b78985c5",
+      "action_index": 1,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -9999,6 +10062,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#5f9c34214be2",
+      "action_index": 2,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -10378,6 +10442,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#c01dc1dd2e54",
+      "action_index": 0,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -10402,6 +10467,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#0c83f8e16e48",
+      "action_index": 1,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -10426,6 +10492,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#ddc05c954c68",
+      "action_index": 2,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -10828,6 +10895,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#ae0f35456823",
+      "action_index": 0,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -10852,6 +10920,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#1f69f9c94df1",
+      "action_index": 1,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -10876,6 +10945,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#b2b1a9e8f2b4",
+      "action_index": 2,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -10900,6 +10970,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#e3d537773e84",
+      "action_index": 3,
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -11399,6 +11470,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#03578ceff410",
+      "action_index": 0,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -11422,6 +11494,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#bc54dd8d116a",
+      "action_index": 1,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -11445,6 +11518,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#9992b90b5c3a",
+      "action_index": 2,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -11838,6 +11912,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#f528843b213d",
+      "action_index": 0,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -11861,6 +11936,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#83bfe0393845",
+      "action_index": 1,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -12118,6 +12194,7 @@
      "action_config": {
       "type": "send_email",
       "config": "#1b1b9e168680",
+      "action_index": 0,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -12141,6 +12218,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#4e41dc897066",
+      "action_index": 1,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -12164,6 +12242,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#f751ee11d3ff",
+      "action_index": 2,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -12561,6 +12640,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#b4e71f33de39",
+      "action_index": 0,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -12586,6 +12666,7 @@
      "action_config": {
       "type": "create_notification",
       "config": "#54de8491f1c6",
+      "action_index": 1,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -12611,6 +12692,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#9adc8e9adc5a",
+      "action_index": 2,
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -12972,6 +13054,7 @@
      "action_config": {
       "type": "send_sms",
       "config": "#16737f2f5ca1",
+      "action_index": 0,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -12995,6 +13078,7 @@
      "action_config": {
       "type": "log_activity",
       "config": "#5e35a1ee7b5e",
+      "action_index": 1,
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",

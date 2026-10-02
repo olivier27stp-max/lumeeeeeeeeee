@@ -29,6 +29,26 @@
        franchies pour une entité ;
      · chaque étape franchie est comptée dans la tâche, donc la borne survit
        à un redémarrage du serveur.
+
+   ── MODIFIER UNE AUTOMATISATION ACTIVE (mission finale, point 15) ──
+   Des clients sont DANS le parcours quand son propriétaire le modifie. Ce
+   qui se passe pour eux, décidé une fois et prouvé par des tests :
+     1. Une exécution en cours suit la version COURANTE du parcours à sa
+        prochaine étape. La tâche en file porte une copie de son action,
+        prise à la planification ; à l'échéance, c'est l'action de l'étape
+        telle qu'elle est écrite AUJOURD'HUI qui part
+        (`actionCouranteDeLaTache`, automationEngine.ts). Le client ne
+        reçoit donc plus l'ancien texte d'une étape déjà réécrite.
+     2. Une étape qui attend garde l'échéance déjà fixée : modifier un
+        délai ne déplace pas les attentes en cours ; le nouveau délai vaut
+        pour les attentes planifiées ensuite.
+     3. L'étape où un client attend a été supprimée, ou remplacée (nouvel
+        identifiant, ou autre nature) : son exécution s'arrête proprement —
+        tâche annulée, « étape retirée du parcours » au journal
+        (`etape_retiree`) —, sans erreur, sans reprise, et sans sauter à une
+        autre étape. On ne devine pas où le remettre.
+   La suite d'une étape exécutée est toujours relue dans la règle courante
+   (`etapeSuivante`) : c'était déjà le cas.
    ═══════════════════════════════════════════════════════════════ */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
