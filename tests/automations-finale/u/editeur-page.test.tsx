@@ -442,6 +442,112 @@ describe('S-01 — « Ouvrir » une 2e automatisation sur réseau lent : chacune
   });
 });
 
+// ─── Triage « éditeur », 05b-canevas-outils-origine:303 ─────────
+
+describe('05b:303 — `actions` suit le parcours : un parcours converti se vide vraiment, sans retomber au « format d’origine »', () => {
+  const D_ORIGINE = [{ type: 'send_sms', config: { body: 'Texto d’origine' } }];
+  const PROVISOIRE = [{ type: 'send_sms', config: { body: 'À compléter' } }];
+  /** Une automatisation fournie : pas d'étapes, des `actions`. */
+  const origine = (over: Record<string, unknown> = {}) => regle({ steps: null, actions: D_ORIGINE, ...over });
+  const dernierPatch = () => api.modifier.mock.calls.at(-1)?.[1] as Record<string, unknown> | undefined;
+  const avancer = async (ms: number) => {
+    await act(async () => { vi.advanceTimersByTime(ms); });
+    await attendre();
+  };
+  async function convertir() {
+    cliquer(boutonExact('Convertir en parcours modifiable'));
+    await attendre(12);
+  }
+
+  it('« Convertir » écrit les étapes ET `actions` en accord, en une seule écriture', async () => {
+    etat.regles = [origine()];
+    await ouvrir();
+    expect(container.textContent).toContain('Parcours au format d’origine');
+    await convertir();
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(dernierPatch()).toEqual({
+      steps: [{ id: 'origine-0', type: 'action', action: { type: 'send_sms', config: { body: 'Texto d’origine' } }, suivant: null }],
+      actions: D_ORIGINE,
+    });
+    expect(container.textContent).not.toContain('Parcours au format d’origine');
+  });
+
+  it('supprimer la dernière étape d’un parcours converti : un canevas VIDE — elle ne revient pas en lecture seule — et la base reçoit un parcours vide', async () => {
+    etat.regles = [origine()];
+    await ouvrir();
+    await convertir();
+    vi.useFakeTimers();
+    cliquer(container.querySelector('button[aria-label="Options de l’étape Envoyer un texto"]'));
+    cliquer(bouton('Supprimer l’action'));
+    await attendre();
+
+    expect(container.textContent).not.toContain('Parcours au format d’origine');
+    expect(container.textContent).not.toContain('Texto d’origine');
+    expect(cartes()).toEqual([]);
+    expect(bouton('Ajouter une première étape')).toBeDefined();
+
+    await avancer(3000);
+    // Le parcours vide ET son reflet partent ensemble : plus aucune copie de l'ancien message.
+    expect(dernierPatch()).toMatchObject({ steps: [], actions: PROVISOIRE });
+  });
+
+  it('chaque enregistrement d’un parcours envoie `actions` en accord avec ses étapes', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    saisir(panneauEtape()?.querySelector('textarea'), 'Texto réécrit');
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    await avancer(3000);
+    expect(dernierPatch()?.actions).toEqual([
+      { type: 'send_sms', config: { body: 'Texto réécrit' } },
+      { type: 'create_task', config: { title: 'Rappeler [client_name]' } },
+    ]);
+  });
+
+  it('renommer une règle au format d’origine, sans toucher à son parcours, ne réécrit PAS ses `actions`', async () => {
+    etat.regles = [origine()];
+    await ouvrir();
+    vi.useFakeTimers();
+    cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Fournie, renommée');
+    await avancer(3000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(dernierPatch()).not.toHaveProperty('actions');
+    expect(dernierPatch()?.name).toBe('Fournie, renommée');
+  });
+
+  it('« Annuler » ne remonte pas avant la conversion (il viderait le parcours)', async () => {
+    etat.regles = [origine()];
+    await ouvrir();
+    await convertir();
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Annuler"]')?.disabled).toBe(true);
+  });
+
+  it('Lumi remplace une règle au format d’origine, puis « Annuler » : elle redevient ce qu’elle était, à l’écran ET dans ce qui est enregistré', async () => {
+    etat.regles = [origine()];
+    api.lumi.mockImplementation(async () => ({
+      nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Fait.', autre: null,
+      steps: [{ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Texto de LUMI' } }, suivant: null }],
+    }));
+    await ouvrir();
+    vi.useFakeTimers();
+    saisir(container.querySelector('textarea[id$="-prompt"]'), 'réécris ce message pour moi');
+    cliquer(boutonExact('Construire') ?? boutonExact('Envoyer'));
+    await attendre(12);
+    await avancer(3000);
+    expect(dernierPatch()).toMatchObject({ actions: [{ type: 'send_sms', config: { body: 'Texto de LUMI' } }] });
+
+    cliquer(container.querySelector('button[aria-label="Annuler"]'));
+    await attendre(2);
+    expect(container.textContent).toContain('Parcours au format d’origine');
+    expect(container.textContent).toContain('Texto d’origine');
+    await avancer(3000);
+    expect(dernierPatch()).toMatchObject({ steps: [], actions: D_ORIGINE });
+  });
+});
+
 // ─── Triage « éditeur », S-04 ───────────────────────────────────
 
 describe('S-04 — un refus du serveur (400, 422) n’est pas une panne : dit comme un refus, jamais renvoyé, et l’étape est désignée', () => {

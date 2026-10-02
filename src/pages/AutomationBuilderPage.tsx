@@ -90,7 +90,7 @@ import {
   trouverAction,
   trouverDeclencheur,
 } from '../lib/automationCatalogue';
-import { problemesPublication } from '../lib/publicationAutomatisation';
+import { actionsDuParcours, problemesPublication } from '../lib/publicationAutomatisation';
 import { useModuleAccess } from '../hooks/useModuleAccess';
 import { apercuClientsInactifs } from '../lib/reservationApi';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
@@ -977,7 +977,7 @@ export default function AutomationBuilderPage() {
           ? 'Automatisation quittée sans enregistrer : une étape était incomplète.'
           : 'Automation left without saving: a step was incomplete.');
       } else if (d.aRegle && d.incompletes === 0 && (d.etat === 'modifie' || d.etat === 'en_cours' || d.etat === 'refuse')) {
-        ecrireRegle(precedente, { name: d.nom, steps: d.steps }).catch((e: unknown) => {
+        ecrireRegle(precedente, { name: d.nom, ...d.contenu(d.steps) }).catch((e: unknown) => {
           console.error('[automatisations] enregistrement au changement d’automatisation impossible', e);
           captureClientException(e, { where: 'AutomationBuilderPage.changementDeRegle' });
           toast.error(d.fr
@@ -1068,6 +1068,9 @@ export default function AutomationBuilderPage() {
         setSteps(etapes);
         setHistorique([etapes]);
         setPosition(0);
+        // Rien n'a encore touché le parcours : ses `actions` restent celles de la base.
+        parcoursTouche.current = false;
+        actionsDOrigine.current = trouvee && estFormatOrigine({ steps: etapes, actions: trouvee.actions }) ? trouvee.actions : null;
         setAutresAutomatisations(d.autres.filter((r) => r.id !== id).map((r) => ({ id: r.id, nom: r.name })));
       })
       .catch((e: unknown) => {
@@ -1153,6 +1156,43 @@ export default function AutomationBuilderPage() {
   /** Dès le premier message, le fil s'ouvre en panneau à gauche. */
   const lumiLateral = lumiDisponible && (echangesLumi.length > 0 || genere);
 
+  /*
+   * `actions` SUIT LE PARCOURS (triage éditeur, 05b:303 ; constat A-02).
+   *
+   * La règle porte deux copies de ses messages : `steps` et `actions`.
+   * L'éditeur n'écrivait que `steps` : un parcours CONVERTI gardait dans
+   * `actions` son ancien message, et dès qu'on supprimait sa dernière étape la
+   * règle retombait au « format d'origine » — l'étape supprimée revenait, en
+   * lecture seule, et continuait de partir.
+   *
+   * Dès que le parcours est touché ici, `actions` en devient le reflet
+   * (`actionsDuParcours`), à l'écran ET dans chaque enregistrement. Une règle
+   * qu'on n'a pas touchée garde ses `actions` (la renommer ne les réécrit pas).
+   */
+  const parcoursTouche = useRef(false);
+  /**
+   * Les `actions` d'une règle CHARGÉE au format d'origine : « annuler »
+   * jusqu'au point de départ doit la rendre telle qu'elle était, pas vide.
+   * Oubliées à la conversion — après elle, un parcours vide est un parcours vide.
+   */
+  const actionsDOrigine = useRef<AutomationRule['actions'] | null>(null);
+  const refletActions = useCallback((etapes: Etape[]): AutomationRule['actions'] => (
+    etapes.length === 0 && actionsDOrigine.current
+      ? actionsDOrigine.current
+      : actionsDuParcours(etapes, frBascule.current) as AutomationRule['actions']
+  ), []);
+  /** Ce qu'un enregistrement du parcours envoie : les étapes, et leur reflet dès que le parcours a été touché. */
+  const contenuParcours = useCallback((etapes: Etape[]): Pick<BrouillonAutomatisation, 'steps' | 'actions'> | Pick<BrouillonAutomatisation, 'steps'> => (
+    parcoursTouche.current
+      ? { steps: etapes, actions: refletActions(etapes) as BrouillonAutomatisation['actions'] }
+      : { steps: etapes }
+  ), [refletActions]);
+  /** Le parcours vient de changer ICI : l'écran porte aussitôt des `actions` en accord. */
+  const accorderActions = useCallback((etapes: Etape[]) => {
+    parcoursTouche.current = true;
+    setRegle((r) => (r ? { ...r, actions: refletActions(etapes) } : r));
+  }, [refletActions]);
+
   /** Empile une version du parcours — c'est ce que « annuler » remontera. */
   const memoriser = useCallback((nouvelles: Etape[]) => {
     setHistorique((prev) => {
@@ -1163,14 +1203,16 @@ export default function AutomationBuilderPage() {
     });
     setPosition((p) => p + 1);
     setSteps(nouvelles);
+    accorderActions(nouvelles);
     setEtatSauvegarde('modifie');
-  }, [position]);
+  }, [position, accorderActions]);
 
   const annuler = () => {
     if (position <= 0) return;
     setModifieePar('autre');
     setPosition((p) => p - 1);
     setSteps(historique[position - 1]);
+    accorderActions(historique[position - 1]);
     setEtatSauvegarde('modifie');
   };
 
@@ -1179,6 +1221,7 @@ export default function AutomationBuilderPage() {
     setModifieePar('autre');
     setPosition((p) => p + 1);
     setSteps(historique[position + 1]);
+    accorderActions(historique[position + 1]);
     setEtatSauvegarde('modifie');
   };
 
@@ -1497,7 +1540,7 @@ export default function AutomationBuilderPage() {
          */
         if (essai > 0 && etatSauvegardeCourant.current !== 'en_cours') return;
         try {
-          await ecrire({ name: nom.trim() || regle.name, steps });
+          await ecrire({ name: nom.trim() || regle.name, ...contenuParcours(steps) });
           echecsSauvegarde.current = 0;
           /*
            * On confirme même si l'effet a été relancé : le serveur a bien
@@ -1678,7 +1721,7 @@ export default function AutomationBuilderPage() {
        */
       if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse') {
         try {
-          await ecrire({ name: nom.trim() || regle.name, steps });
+          await ecrire({ name: nom.trim() || regle.name, ...contenuParcours(steps) });
           setRefus(null);
           setEtatSauvegarde('a_jour');
         } catch (e: unknown) {
@@ -1784,9 +1827,20 @@ export default function AutomationBuilderPage() {
     setConversionEnCours(true);
     try {
       // Par `ecrire` : la conversion porte la garde de version comme toute écriture.
-      const maj = await ecrire({ steps: conversion.etapes });
+      // … et `actions` part avec, en accord : aucune copie de l'ancien format ne reste en base.
+      const maj = await ecrire({
+        steps: conversion.etapes,
+        actions: actionsDuParcours(conversion.etapes, fr) as BrouillonAutomatisation['actions'],
+      });
+      const converties = (maj.steps as Etape[] | undefined) ?? [];
       setRegle(maj);
-      setSteps((maj.steps as Etape[] | undefined) ?? []);
+      setSteps(converties);
+      // C'est désormais un parcours : vidé, il est VIDE (plus de retour au
+      // format d'origine), et « annuler » ne remonte pas avant la conversion.
+      actionsDOrigine.current = null;
+      parcoursTouche.current = true;
+      setHistorique([converties]);
+      setPosition(0);
       if (ouvrir) montrerEtape(ouvrir);
       toast.success(fr ? 'Parcours converti — il est modifiable' : 'Journey converted — it is editable');
     } catch (e: unknown) {
@@ -1840,8 +1894,8 @@ export default function AutomationBuilderPage() {
    */
   const sortieGeree = useRef(false);
   // Une règle disparue (404) n'a plus rien à enregistrer au départ.
-  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue && !modifieeAilleurs });
-  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue && !modifieeAilleurs };
+  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, contenu: contenuParcours, aRegle: !!regle && !disparue && !modifieeAilleurs });
+  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, contenu: contenuParcours, aRegle: !!regle && !disparue && !modifieeAilleurs };
   useEffect(() => () => {
     const d = etatAuDepart.current;
     if (sortieGeree.current || !d.aRegle) return;
@@ -1852,7 +1906,7 @@ export default function AutomationBuilderPage() {
       return;
     }
     if ((d.etat !== 'modifie' && d.etat !== 'en_cours' && d.etat !== 'refuse') || d.incompletes > 0) return;
-    d.ecrire({ name: d.nom, steps: d.steps }).catch((e: unknown) => {
+    d.ecrire({ name: d.nom, ...d.contenu(d.steps) }).catch((e: unknown) => {
       console.error('[automatisations] enregistrement au départ impossible', e);
       captureClientException(e, { where: 'AutomationBuilderPage.depart' });
       toast.error(d.fr
@@ -1878,7 +1932,7 @@ export default function AutomationBuilderPage() {
     let echecEnregistrement = false;
     if (regle && etapesIncompletes === 0 && (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse')) {
       try {
-        await ecrire({ name: nom.trim() || regle.name, steps });
+        await ecrire({ name: nom.trim() || regle.name, ...contenuParcours(steps) });
         setRefus(null);
         setEtatSauvegarde('a_jour');
       } catch (e: unknown) {
@@ -2370,7 +2424,7 @@ export default function AutomationBuilderPage() {
                   return;
                 }
                 if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse') {
-                  await ecrire({ name: nom.trim() || regle.name, steps });
+                  await ecrire({ name: nom.trim() || regle.name, ...contenuParcours(steps) });
                   setRefus(null);
                   setEtatSauvegarde('a_jour');
                 }

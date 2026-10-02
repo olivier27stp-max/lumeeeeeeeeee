@@ -127,6 +127,47 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await page.context().close();
   },
 
+  /** 05b:303 — parcours converti du format d'origine : supprimer la dernière étape le vide vraiment. */
+  async c303() {
+    const regle = await creerRegle({ steps: null, actions: [{ type: 'send_sms', config: { body: 'Texto d’origine' } }] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    await page.getByRole('button', { name: 'Convertir en parcours modifiable' }).click();
+    await page.getByText('Parcours converti — il est modifiable').waitFor({ timeout: 60_000 });
+    await pause(1000);
+    const convertie = await lireRegle(regle.id);
+    verifier(Array.isArray(convertie.steps) && (convertie.steps as unknown[]).length === 1, 'converti : une étape en base');
+    await page.getByRole('button', { name: /^Options de l’étape/ }).click();
+    await page.getByRole('button', { name: 'Supprimer l’action', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Supprimer' }).click();
+    await page.getByRole('button', { name: 'Ajouter une première étape' }).waitFor({ timeout: 20_000 });
+    verifier(await page.getByText('Parcours au format d’origine').count() === 0, 'canevas vide : l’étape supprimée ne revient pas sous « Parcours au format d’origine »');
+    await pause(6000);
+    const videe = await lireRegle(regle.id);
+    verifier(((videe.steps as unknown[] | null) ?? []).length === 0, 'la base n’a plus d’étape');
+    verifier(JSON.stringify(videe.actions) === JSON.stringify([{ type: 'send_sms', config: { body: 'À compléter' } }]), `\`actions\` ne garde pas l’ancien message (${JSON.stringify(videe.actions)})`);
+    await page.reload();
+    await page.getByRole('button', { name: 'Ajouter une première étape' }).waitFor({ timeout: 120_000 });
+    verifier(await page.getByText('Parcours au format d’origine').count() === 0, 'après rechargement : toujours un canevas vide');
+    await page.context().close();
+  },
+
+  /** 05b:303 — automatisation PUBLIÉE : supprimer sa seule étape est refusé, la base est intacte. */
+  async c303b() {
+    const regle = await creerRegle({ trigger_event: 'client.untagged', steps: [action('create_task', { title: 'Tâche' })], actions: [{ type: 'create_task', config: { title: 'Ancienne tâche' } }], is_active: true });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    await page.getByRole('button', { name: /^Options de l’étape/ }).click();
+    await page.getByRole('button', { name: 'Supprimer l’action', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Supprimer' }).click();
+    await page.getByRole('alert').filter({ hasText: 'Cette automatisation est publiée' }).first().waitFor({ timeout: 20_000 });
+    const relue = await lireRegle(regle.id);
+    verifier((relue.steps as unknown[]).length === 1 && relue.is_active === true, 'refusé : la règle publiée garde son étape');
+    verifier(await page.getByText('nouvel essai automatique').count() === 0, 'sans « nouvel essai automatique »');
+    await admin.from('automation_rules').update({ is_active: false }).eq('id', regle.id);
+    await page.context().close();
+  },
+
   /** S-04 — « Attendre » en dernière étape : un refus dit comme un refus, sans boucle ; puis la suite s'enregistre. */
   async s04() {
     const regle = await creerRegle({ steps: [action('send_sms', { body: 'Texto ALPHA' })] });

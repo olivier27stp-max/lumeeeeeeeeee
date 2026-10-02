@@ -237,7 +237,11 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
   }
 
   const fr = langueDe(req) === 'fr';
-  const probleme = verifierCoherence(req.body, fr);
+  // Dans un PARCOURS, `actions` n'est que le reflet des étapes, réparties dans le
+  // temps : deux étapes identiques y sont légitimes. Le refus des doublons ne
+  // vaut que pour une règle simple, où tout part ensemble.
+  const aDesEtapes = Array.isArray(req.body.steps) && req.body.steps.length > 0;
+  const probleme = verifierCoherence(aDesEtapes ? { ...req.body, actions: undefined } : req.body, fr);
   if (probleme) return res.status(400).json({ error: probleme });
   // Un déclencheur en rodage, pas offert à cette entreprise : la règle ne partirait jamais.
   if (!(await declencheurOffertA(auth.client, auth.orgId, req.body.trigger_event))) {
@@ -656,10 +660,32 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   }
 
   const fr = langueDe(req) === 'fr';
+  /** Les étapes telles qu'elles SERONT après cette modification. */
+  const etapesApres: unknown[] = Array.isArray('steps' in patch ? patch.steps : existante.steps)
+    ? (('steps' in patch ? patch.steps : existante.steps) as unknown[]) : [];
+  /*
+   * UNE AUTOMATISATION PUBLIÉE NE SE VIDE PAS (triage éditeur, 05b:303).
+   * Retirer toutes les étapes d'un parcours publié le faisait retomber au
+   * « format d'origine » : le moteur relisait `actions` — l'ancien message,
+   * resté là depuis la conversion — et continuait de l'envoyer, alors que
+   * l'écran venait de le « supprimer ». On refuse, sauf si la même
+   * modification la repasse en brouillon.
+   */
+  const avaitDesEtapes = Array.isArray(existante.steps) && existante.steps.length > 0;
+  if (existante.is_active && patch.is_active !== false && avaitDesEtapes && etapesApres.length === 0) {
+    return res.status(422).json({
+      error: fr
+        ? 'Cette automatisation est publiée : on ne peut pas lui retirer toutes ses étapes. Gardez-en au moins une, ou repassez-la en brouillon d’abord.'
+        : 'This automation is published: you cannot remove all of its steps. Keep at least one, or switch it back to draft first.',
+      code: 'publiee_cassee',
+    });
+  }
   const probleme = verifierCoherence({
     trigger_event: patch.trigger_event ?? existante.trigger_event,
     delay_seconds: patch.delay_seconds ?? existante.delay_seconds,
-    actions: patch.actions,
+    // Reflet d'un PARCOURS (étapes réparties dans le temps) : deux étapes
+    // identiques y sont légitimes — le refus des doublons vaut pour une règle simple.
+    actions: etapesApres.length > 0 ? undefined : patch.actions,
     // Seulement si ce PATCH écrit les conditions : une règle déjà hors bornes
     // reste renommable, déplaçable, dépubliable.
     conditions: patch.conditions,

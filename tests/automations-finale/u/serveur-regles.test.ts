@@ -73,6 +73,73 @@ beforeEach(() => {
   etat.tables = { automation_rules: [regle()], automation_scheduled_tasks: [], automation_folders: [], org_features: [], custom_fields: [] };
 });
 
+// ─── Triage « éditeur », 05b-canevas-outils-origine:303 ─────────
+
+describe('05b:303 — une automatisation PUBLIÉE ne se vide pas ; `actions` peut refléter un parcours', () => {
+  const MESSAGE = 'Cette automatisation est publiée : on ne peut pas lui retirer toutes ses étapes. Gardez-en au moins une, ou repassez-la en brouillon d’abord.';
+  /** Un parcours CONVERTI : `actions` porte encore l'ancien message (ce que « Convertir » laissait). */
+  const convertie = (sup: Ligne = {}) => regle({ actions: [{ type: 'send_sms', config: { body: 'Texte d’origine' } }], ...sup });
+
+  it('publiée : retirer toutes ses étapes est refusé (422), rien n’est écrit — elle ne retombe pas au « format d’origine »', async () => {
+    etat.tables.automation_rules = [convertie({ is_active: true })];
+    for (const vide of [[], null]) {
+      const r = await appeler('PATCH', `/automations/rules/${REGLE}`, { name: 'Relance', steps: vide });
+      expect(r.status).toBe(422);
+      expect(r.json).toEqual({ error: MESSAGE, code: 'publiee_cassee' });
+    }
+    expect(ecritures()).toEqual([]);
+    expect((enBase().steps as unknown[]).length).toBe(1);
+  });
+
+  it('en anglais', async () => {
+    etat.tables.automation_rules = [convertie({ is_active: true })];
+    const r = await appeler('PATCH', `/automations/rules/${REGLE}`, { steps: [] }, { 'Accept-Language': 'en' });
+    expect(r.status).toBe(422);
+    expect(r.json.error).toBe('This automation is published: you cannot remove all of its steps. Keep at least one, or switch it back to draft first.');
+  });
+
+  it('… sauf si la même modification la repasse en brouillon', async () => {
+    etat.tables.automation_rules = [convertie({ is_active: true })];
+    const r = await appeler('PATCH', `/automations/rules/${REGLE}`, { steps: [], is_active: false, actions: [{ type: 'send_sms', config: { body: 'À compléter' } }] });
+    expect(r.status).toBe(200);
+    expect(enBase().is_active).toBe(false);
+    expect(enBase().steps).toBeNull();
+  });
+
+  it('un brouillon se vide : les étapes ET le reflet `actions` envoyé par l’éditeur sont écrits ensemble', async () => {
+    etat.tables.automation_rules = [convertie()];
+    const r = await appeler('PATCH', `/automations/rules/${REGLE}`, { name: 'Relance', steps: [], actions: [{ type: 'send_sms', config: { body: 'À compléter' } }] });
+    expect(r.status).toBe(200);
+    expect(enBase().steps).toBeNull();
+    expect(enBase().actions).toEqual([{ type: 'send_sms', config: { body: 'À compléter' } }]);
+  });
+
+  it('publiée, une étape en moins mais il en reste : accepté', async () => {
+    etat.tables.automation_rules = [convertie({ is_active: true, steps: [{ ...texto('Un'), suivant: 'e2' }, { ...texto('Deux'), id: 'e2' }] })];
+    const r = await appeler('PATCH', `/automations/rules/${REGLE}`, { steps: [texto('Un')], actions: [{ type: 'send_sms', config: { body: 'Un' } }] });
+    expect(r.status).toBe(200);
+  });
+
+  it('deux étapes identiques dans un PARCOURS : le reflet `actions` qui les porte toutes les deux est accepté', async () => {
+    const deux = [{ ...texto('Rappel'), suivant: 'e2' }, { ...texto('Rappel'), id: 'e2' }];
+    const reflet = [{ type: 'send_sms', config: { body: 'Rappel' } }, { type: 'send_sms', config: { body: 'Rappel' } }];
+    const r = await appeler('PATCH', `/automations/rules/${REGLE}`, { steps: deux, actions: reflet });
+    expect(r.status).toBe(200);
+    expect(enBase().actions).toEqual(reflet);
+    // À la création aussi.
+    const creee = await appeler('POST', '/automations/rules', { name: 'Neuve', trigger_event: 'quote.sent', delay_seconds: 0, steps: deux, actions: reflet });
+    expect(creee.status).toBe(201);
+  });
+
+  it('… mais une règle SIMPLE (sans parcours) avec deux actions identiques reste refusée : elles partiraient ensemble', async () => {
+    etat.tables.automation_rules = [regle({ steps: null })];
+    const reflet = [{ type: 'send_sms', config: { body: 'Rappel' } }, { type: 'send_sms', config: { body: 'Rappel' } }];
+    const r = await appeler('PATCH', `/automations/rules/${REGLE}`, { actions: reflet });
+    expect(r.status).toBe(400);
+    expect(r.json.error).toBe('Deux actions identiques : le client recevrait le même message en double.');
+  });
+});
+
 // ─── Priorité — constat A-09 ────────────────────────────────────
 
 describe('A-09 — garde de version : une écriture PÉRIMÉE de l’éditeur n’écrase plus ce que Lumi (ou un autre onglet) vient d’écrire', () => {
