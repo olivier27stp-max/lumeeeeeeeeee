@@ -237,22 +237,39 @@ describe('F — anti-spam : plafonds', () => {
     return { envois, logs: await journaux(regle), client };
   }
 
-  it('[F-080] textos commerciaux : le 4e au même client en 24 h est refusé (plafond 3)', async () => {
-    const { envois, logs } = await quatreEnvoisDiffereS('send_sms');
+  /*
+   * Mission finale : le plafond n'est plus un ÉCHEC (« Frequency cap reached
+   * for +1514… », ligne rouge avec le numéro du client) mais un SAUT —
+   * `result_success = true`, `saute_code = 'plafond_frequence'`, une phrase
+   * française sans le destinataire (il reste dans `to`). Ce qui ne change
+   * pas : 3 messages partent, le 4e ne part pas.
+   */
+  const sautsPlafond = (logs: Array<{ result_success: boolean; result_data: unknown }>) => logs
+    .filter((l) => (l.result_data as { saute_code?: string } | null)?.saute_code === 'plafond_frequence');
+
+  it('[F-080] textos commerciaux : le 4e au même client en 24 h est sauté (plafond 3), sans échec', async () => {
+    const { envois, logs, client } = await quatreEnvoisDiffereS('send_sms');
     expect(envois, JSON.stringify(logs)).toHaveLength(3);
-    expect(logs.filter((l) => l.result_success)).toHaveLength(3);
-    const refus = logs.filter((l) => !l.result_success);
-    expect(refus).toHaveLength(1);
-    expect(refus[0].result_error).toMatch(/Frequency cap reached .*\(max 3 /);
+    expect(logs.filter((l) => !l.result_success), 'le plafond n’est plus un échec').toHaveLength(0);
+    const sautes = sautsPlafond(logs);
+    expect(sautes).toHaveLength(1);
+    expect(logs.filter((l) => l.result_success && !(l.result_data as { saute?: string } | null)?.saute)).toHaveLength(3);
+    const donnees = sautes[0].result_data as { saute: string; to: string };
+    expect(donnees.saute).toMatch(/Limite d’envois atteinte .*3 messages commerciaux en 24 h/);
+    expect(donnees.saute, 'le numéro du client ne doit pas être dans la phrase').not.toMatch(/\+?\d{7,}/);
+    expect(donnees.to.replace(/\D/g, '').slice(-10)).toBe(String(client.phone).replace(/\D/g, '').slice(-10));
     expect(appelsTwilio).toHaveLength(0);
   });
 
-  it('[F-081] courriels commerciaux : le 4e au même client en 24 h est refusé (plafond 3)', async () => {
-    const { envois, logs } = await quatreEnvoisDiffereS('send_email');
+  it('[F-081] courriels commerciaux : le 4e au même client en 24 h est sauté (plafond 3), sans échec', async () => {
+    const { envois, logs, client } = await quatreEnvoisDiffereS('send_email');
     expect(envois, JSON.stringify(logs)).toHaveLength(3);
-    const refus = logs.filter((l) => !l.result_success);
-    expect(refus).toHaveLength(1);
-    expect(refus[0].result_error).toMatch(/Frequency cap reached .*\(max 3 /);
+    expect(logs.filter((l) => !l.result_success), 'le plafond n’est plus un échec').toHaveLength(0);
+    const sautes = sautsPlafond(logs);
+    expect(sautes).toHaveLength(1);
+    const donnees = sautes[0].result_data as { saute: string; to: string };
+    expect(donnees.saute, 'l’adresse du client ne doit pas être dans la phrase').not.toContain('@');
+    expect(donnees.to).toBe(client.email);
     await b.admin.from('email_unsubscribes').delete().eq('org_id', b.orgA).ilike('email', 'fgh-%@lume-qa.test').eq('category', 'pending');
   });
 

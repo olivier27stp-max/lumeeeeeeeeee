@@ -144,8 +144,12 @@ describe('[G-015] envoi MARKETING immédiat, drapeau éteint (le moteur ne pose 
 
   it('[G-015] plafond appliqué : le client déjà à 3 messages commerciaux en 24 h ne reçoit pas le 4e', async () => {
     const r = await executeSendEmail(config as any, vars, contexteImmediat(AVEC_CONSENTEMENT, true, 3) as any);
-    expect(r.success).toBe(false);
-    expect(r.error).toMatch(/Frequency cap/);
+    // Mission finale : le plafond n'est plus un échec mais un SAUT — rien
+    // n'est en panne, le parcours du client continue. Le destinataire reste
+    // dans `to`, jamais dans la phrase montrée à l'écran.
+    expect(r.success).toBe(true);
+    expect(r.data).toMatchObject({ saute_code: 'plafond_frequence', to: 'alice@exemple.test' });
+    expect(String((r.data as any).saute)).not.toContain('alice@exemple.test');
     expect(envois).toHaveLength(0);
   });
 

@@ -52,7 +52,7 @@ Fichiers : `integration/30-fgh-rls.test.ts`, `integration/30-fgh-routes.test.ts`
 | F-063 | arreter_automatisation (toutes) | même entity_id qu'une tâche de B | tâche de B intacte | PASS |
 | F-070 | injection prénom / nom `<script>`, `<img onerror>` | courriel | échappés dans envois_simules.corps ; expéditeur sans balise | PASS |
 | F-071 | injection par champ perso à clé `…_html` | courriel | échappé | PASS après 66fbe647 (FAIL avant : `<img onerror>` actif) |
-| F-080 | plafond par client, texto commercial | 4 envois / 24 h | 3 partent, le 4e échoue « Frequency cap (max 3) » | PASS |
+| F-080 | plafond par client, texto commercial | 4 envois / 24 h | 3 partent, le 4e est sauté (`plafond_frequence`), sans échec | PASS |
 | F-081 | plafond par client, courriel commercial | 4 envois / 24 h | idem | PASS |
 | F-082 | étalement par bureau | 30 textos dans la minute | le suivant est reporté (+60 s, `report_rafale`) | PASS |
 | F-083 | mesure du plafond global | règle ayant déjà 500 textos aujourd'hui | le 501e part | PASS (mesure) |

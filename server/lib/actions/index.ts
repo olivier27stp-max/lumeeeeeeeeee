@@ -159,7 +159,12 @@ export type CodeSaut =
   | 'deja_envoye'
   | 'boucle'
   | 'identite_manquante'
-  | 'client_sans_avis';
+  | 'client_sans_avis'
+  // Liste unique des issues : src/lib/automationMotifs.ts.
+  | 'plafond_frequence'
+  | 'avis_desactives'
+  | 'sans_lien_avis'
+  | 'sans_cible';
 
 /** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
 function saute(motif: string, code: CodeSaut = 'desabonne'): ActionResult {
@@ -167,6 +172,36 @@ function saute(motif: string, code: CodeSaut = 'desabonne'): ActionResult {
 }
 
 const DEJA_ENVOYE = 'Déjà envoyé lors d’une tentative précédente';
+
+/**
+ * Le plafond de messages commerciaux (3 par client et par 24 h) est atteint.
+ *
+ * Ce n'est PAS un échec (mission finale) : rien n'est en panne, et le
+ * réessayer donnerait le même refus. L'envoi est SAUTÉ — le parcours du
+ * client continue, l'étape suivante part à son heure, aucune notification
+ * d'échec. La phrase ne porte ni le numéro ni l'adresse du client : le
+ * destinataire reste dans `to`, comme pour un envoi.
+ */
+function sautePlafond(to: string): ActionResult {
+  return {
+    success: true,
+    data: {
+      saute: `Limite d’envois atteinte : ce client a déjà reçu ${PLAFOND_MSG_COMMERCIAUX_24H} messages commerciaux en 24 h`,
+      saute_code: 'plafond_frequence' satisfies CodeSaut,
+      to,
+    },
+  };
+}
+
+/**
+ * L'action n'avait RIEN à modifier pour cette fiche (aucune opportunité liée,
+ * déjà dans l'étape, responsable déjà assigné…). Ni un échec ni une
+ * exécution : un saut, avec la phrase qui dit quoi. `detail` garde les clés
+ * d'avant (`aucun_deal`, `deja_dans_l_etape`…) pour qui les lisait.
+ */
+function sansCible(motif: string, detail: Record<string, unknown> = {}): ActionResult {
+  return { success: true, data: { saute: motif, saute_code: 'sans_cible' satisfies CodeSaut, ...detail } };
+}
 
 /**
  * Le même message est-il déjà parti vers ce destinataire depuis `depuis` ?
@@ -1439,7 +1474,7 @@ export async function executeSendEmail(
 
     // Plafond anti-spam, tous canaux confondus par destinataire.
     if (await depassePlafondFrequence(ctx, 'email', to)) {
-      return { success: false, error: `Frequency cap reached for ${to} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
+      return sautePlafond(to);
     }
 
     /* Le lien de désabonnement n'a de sens que sur un message COMMERCIAL.
@@ -1643,7 +1678,7 @@ export async function executeSendSms(
 
   // Plafond anti-spam : pas plus de N messages commerciaux / client / 24h.
   if (await depassePlafondFrequence(ctx, 'sms', to)) {
-    return { success: false, error: `Frequency cap reached for ${optOutPhone} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
+    return sautePlafond(optOutPhone);
   }
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'body', ctx.langue));
@@ -2256,10 +2291,7 @@ export async function executeRequestReview(
   // compte dans le plafond de messages commerciaux par destinataire — sinon
   // un client déjà à 3 messages en 24 h recevait en plus courriel + texto.
   const ctxPlafond: ActionContext = { ...ctx, commercial: true };
-  const auPlafond = (canal: 'sms' | 'email', dest: string) => ({
-    success: false as const,
-    error: `Frequency cap reached for ${dest} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — ${canal === 'sms' ? 'SMS' : 'email'} review request skipped`,
-  });
+  const auPlafond = (_canal: 'sms' | 'email', dest: string): ActionResult => sautePlafond(dest);
   const emailResult: ActionResult = !vars.client_email
     ? { success: false, error: 'Client has no email address.' }
     : await depassePlafondFrequence(ctxPlafond, 'email', vars.client_email)
@@ -2329,6 +2361,14 @@ export async function executeRequestReview(
   });
   if (activityError) {
     console.error(`[actions/request_review] activity_log insert failed (org ${ctx.orgId}, ${ctx.entityType} ${ctx.entityId}):`, activityError.message);
+  }
+
+  // Rien n'est parti parce que le plafond de messages commerciaux est atteint
+  // sur un canal joignable : un saut, pas un échec — le parcours continue.
+  const auPlafondDeFrequence = [emailResult, smsResult]
+    .some((r) => r.success && (r.data as { saute_code?: string } | undefined)?.saute_code === 'plafond_frequence');
+  if (!sent && auPlafondDeFrequence) {
+    return sautePlafond(vars.client_email || vars.client_phone || '');
   }
 
   // Rien n'est parti parce que le client s'est désabonné de chaque canal
