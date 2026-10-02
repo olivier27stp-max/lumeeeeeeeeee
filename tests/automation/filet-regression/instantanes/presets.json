@@ -120,6 +120,8 @@
      },
      "result_success": true,
      "result_data": {
+      "saute": "Ce pipeline n’a pas l’étape visée : l’opportunité n’a pas été déplacée",
+      "saute_code": "sans_cible",
       "pas_d_etape_cible": true
      },
      "result_error": null,
@@ -168,6 +170,8 @@
      },
      "result_success": true,
      "result_data": {
+      "saute": "Ce pipeline n’a pas d’étape « gagné » : l’opportunité n’a pas été déplacée",
+      "saute_code": "sans_cible",
       "pas_d_etape_cible": true
      },
      "result_error": null,
@@ -220,6 +224,8 @@
      },
      "result_success": true,
      "result_data": {
+      "saute": "Ce pipeline n’a pas l’étape visée : l’opportunité n’a pas été déplacée",
+      "saute_code": "sans_cible",
       "pas_d_etape_cible": true
      },
      "result_error": null,

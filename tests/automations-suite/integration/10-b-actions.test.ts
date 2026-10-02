@@ -276,7 +276,15 @@ describe('[B] actions sur la fiche client', () => {
     const parId = Object.fromEntries((data ?? []).map((c) => [c.id, c.assigned_to]));
     expect(parId[vide.id]).toBe(b.users.techA);
     expect(parId[pris.id]).toBe(b.users.proprioA);
-    expect(logs.find((l) => l.entity_id === pris.id)!.result_data).toEqual({ ignore: 'un responsable était déjà assigné' });
+    // Mission finale : « rien à modifier » n'est plus une exécution réussie
+    // sans mot dire, c'est un saut `sans_cible` avec sa phrase (la clé
+    // `ignore` d'avant est gardée pour qui la lisait).
+    expect(logs.find((l) => l.entity_id === pris.id)!.result_data).toEqual({
+      saute: 'Un responsable était déjà assigné : il n’a pas été remplacé',
+      saute_code: 'sans_cible',
+      ignore: 'un responsable était déjà assigné',
+    });
+    expect((logs.find((l) => l.entity_id === vide.id)!.result_data as { saute?: string } | null)?.saute).toBeUndefined();
   });
 
   it('[B-116] ajouter_note : ligne notes rendue, rattachée au client', async () => {
@@ -344,7 +352,14 @@ describe('[B] actions sur la fiche client', () => {
     const id2 = await regle(`${m} bis`, 'note.added', [{ type: 'request_review', config: {} }]);
     await noter(client.id, 'Deuxième note');
     const [l2] = await journalFinal(id2);
-    expect(l2).toMatchObject({ result_success: false, result_error: 'A review request was already sent to this client in the last 7 days.' });
+    // Mission finale : l'anti-doublon de 7 jours n'est plus un ÉCHEC (ligne
+    // rouge et notification pour une demande qui ne devait justement pas
+    // repartir) mais un saut `deja_envoye`.
+    expect(l2).toMatchObject({
+      result_success: true,
+      result_error: null,
+      result_data: { saute: 'Une demande d’avis a déjà été envoyée à ce client dans les 7 derniers jours', saute_code: 'deja_envoye' },
+    });
     const { count } = await b.admin.from('review_requests').select('id', { count: 'exact', head: true }).eq('org_id', b.orgA).eq('client_id', client.id);
     expect(count).toBe(1);
   });

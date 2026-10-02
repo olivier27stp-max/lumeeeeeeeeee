@@ -2149,10 +2149,11 @@ export async function executeRequestReview(
     .limit(1)
     .maybeSingle();
   if (cs && cs.review_enabled === false) {
-    return { success: false, error: 'Review requests are disabled in Settings → Customer reviews.' };
+    // Pas un échec : l'entreprise a coupé les demandes d'avis. Sautée, le parcours continue.
+    return saute('Demandes d’avis désactivées (Réglages → Avis clients)', 'avis_desactives');
   }
   if (reviewDestinations(cs).length === 0) {
-    return { success: false, error: 'No Google or Facebook review link configured. Set one in Settings → Customer reviews.' };
+    return saute('Aucun lien d’avis Google ou Facebook configuré (Réglages → Avis clients)', 'sans_lien_avis');
   }
 
   // 2. Determine client_id and job_id from entity
@@ -2222,7 +2223,7 @@ export async function executeRequestReview(
       .maybeSingle();
 
     if (recentReview) {
-      return { success: false, error: 'A review request was already sent to this client in the last 7 days.' };
+      return saute('Une demande d’avis a déjà été envoyée à ce client dans les 7 derniers jours', 'deja_envoye');
     }
   }
 
@@ -2498,7 +2499,7 @@ export async function executeMoveDealStage(
   if (ctx.entityType === 'quote') {
     deal = await dealDeLaSoumission(ctx);
     // Aucune opportunité liée : rien à déplacer, et ce n'est pas un échec.
-    if (!deal) return { success: true, data: { aucun_deal: true } };
+    if (!deal) return sansCible('Aucune opportunité liée à cette soumission : rien à déplacer', { aucun_deal: true });
   } else {
     const { data, error: dealErr } = await ctx.supabase
       .from('deals')
@@ -2523,8 +2524,8 @@ export async function executeMoveDealStage(
     const actuelle = (etapes ?? []).find((e) => e.id === etapeActuelle);
     const gagnee = (etapes ?? []).filter((e) => e.kind === 'won')
       .sort((a, b) => Number(a.position) - Number(b.position))[0];
-    if (!gagnee) return { success: true, data: { pas_d_etape_cible: true } };
-    if (!actuelle || actuelle.kind !== 'open') return { success: true, data: { deja_ailleurs: true } };
+    if (!gagnee) return sansCible('Ce pipeline n’a pas d’étape « gagné » : l’opportunité n’a pas été déplacée', { pas_d_etape_cible: true });
+    if (!actuelle || actuelle.kind !== 'open') return sansCible('L’opportunité n’est plus dans une étape ouverte : elle n’a pas été déplacée', { deja_ailleurs: true });
     config = { ...config, stage_id: gagnee.id as string };
   }
 
@@ -2536,13 +2537,13 @@ export async function executeMoveDealStage(
       .eq('pipeline_id', deal.pipeline_id).eq('org_id', ctx.orgId).is('archived_at', null)
       .in('role_systeme', [config.vers_role, config.depuis_role].filter(Boolean) as string[]);
     const vers = (roles ?? []).find((r) => r.role_systeme === config.vers_role);
-    if (!vers) return { success: true, data: { pas_d_etape_cible: true } };
+    if (!vers) return sansCible('Ce pipeline n’a pas l’étape visée : l’opportunité n’a pas été déplacée', { pas_d_etape_cible: true });
     if (config.depuis_role) {
       const depuis = (roles ?? []).find((r) => r.role_systeme === config.depuis_role);
       // Seulement depuis l'étape prévue : un deal déjà plus loin (ou
       // ailleurs) ne recule JAMAIS.
       if (!depuis || deal.stage_id !== depuis.id) {
-        return { success: true, data: { deja_ailleurs: true } };
+        return sansCible('L’opportunité est déjà plus loin, ou ailleurs, dans le pipeline : elle n’a pas été déplacée', { deja_ailleurs: true });
       }
     } else {
       // Sans étape de départ imposée : seulement vers l'AVANT, et jamais un
@@ -2551,7 +2552,7 @@ export async function executeMoveDealStage(
         .from('pipeline_stages').select('position, kind')
         .eq('id', deal.stage_id).eq('org_id', ctx.orgId).maybeSingle();
       if (!actuelle || actuelle.kind !== 'open' || Number(actuelle.position) >= Number(vers.position)) {
-        return { success: true, data: { deja_ailleurs: true } };
+        return sansCible('L’opportunité est déjà plus loin, ou ailleurs, dans le pipeline : elle n’a pas été déplacée', { deja_ailleurs: true });
       }
     }
     config = { ...config, stage_id: vers.id as string };
@@ -2560,7 +2561,7 @@ export async function executeMoveDealStage(
 
   if (deal.stage_id === cible) {
     // Pas une erreur : la règle a déjà produit son effet.
-    return { success: true, data: { deja_dans_l_etape: true, stage_id: cible } };
+    return sansCible('L’opportunité est déjà dans cette étape', { deja_dans_l_etape: true, stage_id: cible });
   }
 
   const { data: etape, error: etapeErr } = await ctx.supabase
@@ -2883,7 +2884,7 @@ export async function executeAssignerResponsable(
   // était déjà responsable, et c'est exactement ce qu'on voulait respecter.
   if (!data || data.length === 0) {
     if (config.seulement_si_vide === 'true') {
-      return { success: true, data: { ignore: 'un responsable était déjà assigné' } };
+      return sansCible('Un responsable était déjà assigné : il n’a pas été remplacé', { ignore: 'un responsable était déjà assigné' });
     }
     return { success: false, error: 'Client introuvable.' };
   }
