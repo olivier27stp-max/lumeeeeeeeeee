@@ -1,0 +1,19 @@
+diff --git a/server/routes/automation-rules.ts b/server/routes/automation-rules.ts
+index b8a5f7bb..99676d00 100644
+--- a/server/routes/automation-rules.ts
++++ b/server/routes/automation-rules.ts
+@@ -767,7 +767,13 @@ router.post('/automations/templates/utiliser', validate(automationModeleUtiliser
+       logger.error('[automation-templates] lecture des noms échouée', { message: nomsErr.message });
+       return { status: 500, body: { error: 'Impossible de créer l’automatisation.' } };
+     }
+-    const en = reglages?.default_language === 'en';
++    /* Le NOM et la description de la copie sont des libellés d'INTERFACE (ils
++       ne partent à aucun client) : ils suivent la langue de l'interface
++       (`Accept-Language`), celle dans laquelle l'aperçu vient d'annoncer le
++       modèle — pas la langue des messages du bureau. Interface anglaise, bureau
++       qui écrit en français : l'aperçu disait « Contract signed », l'éditeur
++       ouvrait « Contrat signé » (triage « modèles », 02-chaque-modele:246). */
++    const en = langueDe(req) === 'en';
+     const nom = nomDisponible(en ? modele.nom.en : modele.nom.fr, (noms ?? []).map((n) => String(n.name ?? '')));
+     let compteur = 0;
+     // Toujours un PARCOURS, modifiable étape par étape dans l'éditeur. Un
