@@ -1,0 +1,53 @@
+<!doctype html>
+<!-- Maquette du parcours de demande d'avis, pour la fonction « Avis clients » de l'accueil :
+     le texto envoyé à la fin de la job (DEFAULT_REVIEW_SMS_BODY_FR, server/lib/reviews.ts)
+     et la page /survey/:token (SatisfactionSurvey.tsx) avec le choix Google / Facebook.
+     Données fictives. Régénérer : capture Playwright au viewport de html/body, deviceScaleFactor 2.5, puis WebP qualité 90 → public/landing/fonction-avis.webp -->
+<html lang="fr"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Inter, -apple-system, system-ui, sans-serif; color: #111; -webkit-font-smoothing: antialiased; background: #fafafa; overflow: hidden; }
+svg.ic { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.card { background: #fff; border: 1px solid #ebebeb; border-radius: 16px; }
+.lab { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #8a8a8a; }
+html, body { width: 840px; height: 540px; background: #f3f4f6; }
+.wrap { display: grid; grid-template-columns: 330px 1fr; gap: 28px; padding: 34px 34px; align-items: center; height: 100%; }
+.phone { background: #fff; border: 1px solid #e5e7eb; border-radius: 26px; padding: 16px 16px 22px; box-shadow: 0 24px 50px -30px rgba(0,0,0,.35); }
+.ph-top { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 14px; border-bottom: 1px solid #f0f0f0; }
+.av { width: 42px; height: 42px; border-radius: 50%; background: #dff3ec; color: #1F5F4F; display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+.ph-top b { font-size: 13px; font-weight: 600; }
+.ph-top small { font-size: 10.5px; color: #9ca3af; }
+.tag { display: flex; justify-content: center; margin: 14px 0 10px; }
+.tag span { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 600; color: #1F5F4F; background: #dff3ec; border-radius: 999px; padding: 4px 10px; }
+.bub { background: #e9e9eb; color: #111; font-size: 13px; line-height: 1.45; border-radius: 18px 18px 18px 6px; padding: 10px 13px; }
+.bub u { color: #2563eb; text-decoration: none; }
+.time { font-size: 10px; color: #9ca3af; margin: 6px 0 0 6px; }
+.sv { background: #fff; border-radius: 18px; padding: 28px 30px; box-shadow: 0 24px 50px -28px rgba(0,0,0,.3); text-align: center; }
+.sv .co { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #9ca3af; }
+.sv h1 { font-size: 19px; font-weight: 700; margin-top: 10px; line-height: 1.3; }
+.sv .re { font-size: 12.5px; color: #6b7280; margin-top: 6px; } .sv .re b { color: #374151; }
+.sv .iv { font-size: 13px; color: #4b5563; line-height: 1.5; margin-top: 12px; }
+.sv label { display: block; text-align: left; font-size: 12.5px; font-weight: 500; color: #374151; margin-top: 18px; }
+.ta { margin-top: 6px; height: 62px; border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; text-align: left; font-size: 12.5px; color: #9ca3af; }
+.btn { display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border-radius: 12px; color: #fff; font-size: 13.5px; font-weight: 600; margin-top: 10px; }
+.btn.g { background: #171717; } .btn.f { background: #1877F2; }
+.btn svg { width: 17px; height: 17px; }
+</style></head><body><div class="wrap">
+<div class="phone">
+<div class="ph-top"><span class="av">AN</span><b>ABC Nettoyage</b><small>Texto · numéro de l'entreprise</small></div>
+<div class="tag"><span><svg class="ic" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M20 6 9 17l-5-5"/></svg>Job terminée · envoi automatique</span></div>
+<div class="bub">Bonjour Marie, merci d'avoir choisi ABC Nettoyage ! Un avis Google ou Facebook nous aiderait énormément : <u>lumecrm.net/survey/8f3k…</u></div>
+<p class="time">Aujourd'hui 16:42</p>
+</div>
+<div class="sv">
+<p class="co">ABC Nettoyage</p>
+<h1>Bonjour Marie, merci de nous avoir fait confiance !</h1>
+<p class="re">Concernant : <b>Nettoyage de gouttières</b></p>
+<p class="iv">Merci beaucoup ! Votre avis compte énormément pour une petite entreprise comme la nôtre. Prendriez-vous 30 secondes pour partager votre expérience ?</p>
+<label>Un mot sur votre expérience ? (facultatif)</label>
+<div class="ta">Écrivez votre commentaire dans vos mots…</div>
+<div class="btn g"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Laisser un avis Google</div>
+<div class="btn f"><svg class="ic" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>Laisser un avis Facebook</div>
+</div>
+</div></body></html>

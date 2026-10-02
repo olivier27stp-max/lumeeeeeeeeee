@@ -48,6 +48,8 @@ export interface BureauEval { prefixe: string; nom: string; entreprise: string }
 export const BUREAUX_EVAL: BureauEval[] = [
   { prefixe: 'eval2', nom: '[TEST] QA Lumi éval 2 — ne pas utiliser', entreprise: 'Lavage Rive-Sud (éval 2)' },
   { prefixe: 'eval3', nom: '[TEST] QA Lumi éval 3 — ne pas utiliser', entreprise: 'Lavage Rive-Sud (éval 3)' },
+  // Ajouté le 2026-10-02 : la passe complète d'après les correctifs du soir, les bureaux 2 et 3 ayant atteint leur garde du jour.
+  { prefixe: 'eval4', nom: '[TEST] QA Lumi éval 4 — ne pas utiliser', entreprise: 'Lavage Rive-Sud (éval 4)' },
 ];
 const NB_PROPRIETAIRES = 4;
 export interface CompteEval { cle: string; courriel: string; nom: string; role: 'owner' | 'technician' }

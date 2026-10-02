@@ -1,20 +1,20 @@
 # LUMI_READINESS — Lumi et l'agent de support sont-ils prêts pour le 26 octobre ?
 
-État au 2026-10-01, fin de journée. Tout ce qui est chiffré ici a été mesuré **en production**, dans des bureaux de test (aucun vrai client, tous les envois simulés), et jugé par du code — aucun modèle ne note un autre modèle.
+État au 2026-10-02, 1 h UTC (soir du 1er octobre à Montréal). Tout ce qui est chiffré ici a été mesuré **en production**, dans des bureaux de test (aucun vrai client, tous les envois simulés), et jugé par du code — aucun modèle ne note un autre modèle.
 
 ## Verdict
 
-**Pas prêt aujourd'hui. Prêt pour le 26 octobre si trois choses sont faites avant — et aucune des trois n'est dans le code de Lumi.**
+**Lumi est prêt pour le 26 octobre, à une condition qui n'est pas dans son code : donner de la marge à la base de production.**
 
-Lumi lui-même tient. Il réussit 93,7 % des 221 demandes du jeu d'évaluation (81,3 % le matin même). Les tests de sécurité passent. Une conversation de 50 tours garde ce qu'on lui a dit au début. La cause des « Lumi n'a pas pu répondre » est trouvée, corrigée et rejouée en prod sans plantage. L'agent de support donne les bons prix et le bon contenu des forfaits, transfère quand il le faut et n'agit jamais dans le CRM.
+Lumi réussit 95,9 % des 221 demandes du jeu d'évaluation (81,3 % le matin du 1er octobre), jouées d'un seul tenant sur le code en production, sans aucun plantage. Les tests de sécurité passent. Une conversation de 50 tours garde ce qu'on lui a dit au début. L'agent de support donne les bons prix et le bon contenu des forfaits, transfère quand il le faut et n'agit jamais dans le CRM.
 
-Ce qui bloque le lancement :
+Ce qui reste :
 
-1. **La base de production est petite.** Huit conversations Lumi en même temps l'ont couchée pendant 65 minutes le 1er octobre (section « La panne » plus bas). Depuis, un garde-fou gratuit est en place : Lumi ne mène plus que quatre conversations à la fois, les suivantes attendent leur place. Il reste à passer la base au format au-dessus (2 Go au lieu de 1, environ 5 $ de plus par mois) et à poser une alerte de disponibilité. C'est la condition qui pèse le plus.
-2. **Le plafond de la plateforme, 50 $ par jour pour tous les clients réunis**, met Lumi en pause pour tout le monde quand il est atteint. Rien à payer tant qu'il n'est pas atteint ; à relever quand le nombre de clients actifs le justifie (il laisse environ 3 800 demandes par jour).
-3. **Une passe complète à rejouer d'un seul tenant**, une fois la base grossie. Celle d'aujourd'hui a été coupée en deux par la panne, quatre correctifs sont arrivés après elle, et les tests critiques ont tourné avec le modèle de repli. Une heure de mesure, à faire demain.
+1. **La base de production n'a que 1 Go de mémoire.** Huit conversations Lumi en même temps l'ont couchée pendant 65 minutes le 1er octobre (section « La panne » plus bas). Deux protections gratuites sont maintenant en place : Lumi ne mène plus que quatre conversations à la fois, et l'équipe reçoit un message Slack quand la base ne répond plus. Elles limitent le risque, elles ne l'enlèvent pas : passer la base au format au-dessus (2 Go, environ 5 $ de plus par mois) reste à faire avant le lancement. C'est ta décision.
+2. **Les tests de sécurité à rejouer avec le modèle principal.** Ils ont tourné avec le modèle de repli. Les protections testées sont dans le code, pas dans le modèle ; c'est une vérification de quinze minutes, pas un risque connu.
+3. **Le plafond de la plateforme, 50 $ par jour pour tous les clients réunis.** Rien à payer tant qu'il n'est pas atteint ; à relever quand le nombre de clients actifs le justifie (il laisse environ 3 600 demandes par jour).
 
-Une quatrième décision est légale plutôt que technique : aucune purge des conversations n'existe (Loi 25).
+Une décision est légale plutôt que technique : aucune purge des conversations n'existe (Loi 25).
 
 ## Résultats par phase
 
@@ -27,29 +27,32 @@ Une quatrième décision est légale plutôt que technique : aucune purge des co
 | 4 — Robustesse des conversations | 50 tours, références, revirements, coupures, deux appareils, entrées bizarres, vocal, pannes | **37 PASS · 0 FAIL · 3 non couverts** (40 tests) | Un échec trouvé, corrigé et rejoué en prod : la dictée d'un silence inventait une phrase. La conversation de 50 tours passe sans erreur ; ce qui est dit aux tours 3 et 4 est encore honoré aux tours 47 et 48. Non couverts : bruit et accent dans de vrais enregistrements (il n'y en a pas), panne du fournisseur du modèle (elle ne se provoque pas). |
 | 5 — Cohérence | Mêmes mots partout, agent de support, Lumi ↔ automatisations | **PASS, avec des écarts connus** | `LUMI_GLOSSARY.md` + 4 tests de vocabulaire (12 écarts connus, marqués). Support : 93 tests en prod, 85 PASS, 2 FAIL, 6 à relire par un humain. Les deux échecs donnent la bonne page mais pas le nom exact du bouton (« Changer » la période du classement ; ce que le client peut faire d'une soumission reçue). Prix, forfaits, fonctions qui n'existent pas, transfert à un humain, refus d'agir dans le CRM, injection, langue : aucun échec. Automatisations (session voisine, `AUTOMATIONS_TEST_REPORT.md`) : 710 cas, 697 PASS, 0 FAIL, 13 non couverts ; les 40 cas Lumi ↔ automatisations passent. |
 | 6 — Coût | `LUMI_COST_REPORT.md` | **PASS** | Un tour d'agent : 1,57 ¢ → 1,30 ¢ à caches chauds, pendant que la qualité montait. Aucune optimisation livrée au prix de la qualité. |
-| 7 — Boucle de correction | Cause → correctif → test → tout rejouer | **PASS pour la phase 4 · une décision en attente pour la phase 3** | Phase 4 : 0 échec. Phase 3 : le seul échec restant (aucune purge des conversations) demande ta décision, pas un correctif. Chaque correctif a son test de régression ; ceux trouvés par les batteries y sont rejoués. Limite : le jeu complet n'a pas été rejoué d'un seul tenant après les derniers correctifs (condition 3 du verdict). |
+| 7 — Boucle de correction | Cause → correctif → test → tout rejouer | **PASS pour la phase 4 · une décision en attente pour la phase 3** | Phase 4 : 0 échec. Phase 3 : le seul échec restant (aucune purge des conversations) demande ta décision, pas un correctif. Chaque correctif a son test de régression. Le jeu complet a été rejoué d'un seul tenant après le dernier correctif : 95,9 %, aucun plantage. |
 | 8 — CI et rapport | `npm run test:lumi`, ce rapport | **PASS** (une action de ta part, voir la décision 12) | `npm run test:lumi` : environ 1 700 tests sans réseau + les batteries de prod à la demande, un seul flux à la fois ; rapport JSON et markdown. Job CI « Lumi (npm run test:lumi) » en place ; il ne bloque une fusion que si tu le déclares obligatoire dans GitHub. |
 
 ## Ce que Lumi réussit, en chiffres
 
-Même jeu de 221 demandes, joué trois fois dans la journée :
+Même jeu de 221 demandes, joué quatre fois :
 
-| | Départ (16 h 15 UTC) | Après les lots 2 à 5 (18 h 42) | Fin de journée (22 h 13) |
-|---|---:|---:|---:|
-| Réussite | 81,3 % | 90,5 % | **93,7 %** |
-| Bon outil appelé | 85,5 % | 94,1 % | **95,0 %** |
-| Actions sensibles (78 cas) | 87,2 % | 92,3 % | **96,2 %** |
-| Réponses sans modèle (aide écrite, raccourcis) | 68,0 % | 90,0 % | **90,5 %** |
-| Injection, extraction des consignes, hors-sujet | 100 % | 100 % | 100 % |
-| Tours plantés | 0 | 4 | 4 (0 au rejeu, après correctif) |
-| Coût moyen d'une demande | — | 1,105 ¢ | ≈ 1,2 ¢ |
+| | Départ (16 h 15 UTC) | Après les lots 2 à 5 (18 h 42) | Après la panne (22 h 13) | Passe finale (0 h 51) |
+|---|---:|---:|---:|---:|
+| Réussite | 81,3 % | 90,5 % | 93,7 % | **95,9 %** |
+| Bon outil appelé | 85,5 % | 94,1 % | 95,0 % | **96,4 %** |
+| Actions sensibles (78 cas) | 87,2 % | 92,3 % | 96,2 % | **97,4 %** |
+| Plusieurs actions dans une phrase (13 cas) | 61,5 % | 69,2 % | 69,2 % | **92,3 %** |
+| Réponses sans modèle (aide écrite, raccourcis) | 68,0 % | 90,0 % | 90,5 % | **95,0 %** |
+| Injection, extraction des consignes, hors-sujet | 100 % | 100 % | 100 % | 100 % |
+| Tours plantés | 0 | 4 | 4 | **0** |
+| Coût moyen d'une demande | — | 1,105 ¢ | ≈ 1,2 ¢ | 1,39 ¢ |
 
-La troisième passe a été coupée par la panne : 145 demandes jouées avant, 80 rejouées après, une seule à la fois. Elle tourne sur le jeu d'outils d'avant les 30 nouveaux outils livrés le soir même (#875), dont l'effet n'est pas mesuré.
+La passe finale est la seule jouée d'un seul tenant sur le code définitif : bureau de test neuf, une demande à la fois, 28 minutes, tous les correctifs du soir et les 30 nouveaux outils (#875) en place. La troisième avait été coupée en deux par la panne.
 
-- **Quand le modèle répond, il réussit 95,8 % du temps** (191 demandes). Les réponses sans modèle : 90,5 %.
-- **Les 14 échecs** : 4 plantages d'une même cause, corrigée depuis ; 8 choix d'outil ou de formulation du modèle (un nom d'outil visible dans une réponse, un devis relu au lieu d'être dupliqué, « payant » lu comme rentabilité) ; 2 réponses d'aide incomplètes.
-- **Les 4 demandes plantées, rejouées en prod après les correctifs** : aucune ne plante, 3 réussissent. La quatrième cherche « Nathalie Coté » et ne trouve pas la fiche « Nathalie Côté » : la recherche par nom dépend encore de l'accent tapé. En comptant ce rejeu, la passe serait à 95,0 % ; je garde 93,7 %, le résultat de la passe elle-même.
-- **Les demandes à plusieurs actions restent le point faible** : 9 sur 13 dans la passe. Trois des quatre échecs étaient le plantage corrigé.
+- **Quand le modèle répond, il réussit 95,9 % du temps** (196 demandes). Les réponses sans modèle : 95 %.
+- **Aucun plantage.** Les quatre demandes qui finissaient en « Lumi n'a pas pu répondre » passent.
+- **Les demandes à plusieurs actions ne sont plus le point faible** : 12 sur 13.
+- **Les 9 échecs qui restent** sont des choix du modèle, pas des pannes : deux réponses d'aide données sans ouvrir la documentation, une qui ne cite pas Lume Payments, un devis relu au lieu d'être dupliqué, un autre relu au lieu d'être converti en job, « meilleurs clients » lu comme rentabilité, un rapport complet là où un résumé suffisait, les adresses d'un client non listées, une note oubliée après un paiement.
+- **Par catégorie** : automatisations, communications, équipe, mémoire, planification, terrain et sécurité à 100 % ; facturation 96,7 % ; clients 95,7 % ; devis 90,9 % ; rapports 89,5 % ; aide 75 %.
+- **Le coût monte un peu** (1,39 ¢ par demande) pour deux raisons : une seule demande à la fois garde les caches moins chauds, et les nouveaux outils alourdissent cinq sujets. Voir « Coût ».
 
 ## Bugs trouvés et corrigés
 
@@ -132,9 +135,9 @@ Détail complet dans `LUMI_COST_REPORT.md`.
 | | Avant | Après |
 |---|---:|---:|
 | Un tour d'agent (Sonnet), caches chauds, même jeu de demandes | 1,57 ¢ | 1,30 ¢ |
-| Une demande moyenne (agent + réponses gratuites) | — | ≈ 1,2 ¢ |
+| Une demande moyenne (agent + réponses gratuites) | — | 1,2 à 1,4 ¢ |
 | Conversation de 7 000 tokens : écriture en cache par tour | ≈ 1,75 ¢ | ≈ 0,14 ¢ |
-| Tours plantés payés pour rien | 4 sur 221 | 4 (0 au rejeu, après correctif) |
+| Tours plantés payés pour rien | 4 sur 221 | 0 sur 221 |
 | Une question au support servie par le modèle | — | 1,0 à 1,5 ¢ |
 
 **Par client**, avec 1 000 crédits par mois (30 $ de coût réel) :
@@ -161,13 +164,10 @@ De 20 h 36 à 21 h 41 UTC (16 h 36 à 17 h 41, heure de Montréal), la base de p
 ## Risques restants
 
 - **La base de production** (décision 1) : le garde-fou borne la charge de Lumi, pas celle du reste de l'app. Tant que la base reste à 1 Go, une pointe d'usage ailleurs (import, automatisations en rafale) peut encore la mettre à genoux.
-- **Quatre correctifs livrés après la dernière passe** : le plantage sur la recherche d'outil (`6a8b2ffa`), le plafond du tour à cache froid (`84505af8`), la réponse en anglais (`d41372ab`), le contenu des forfaits (`d950c130`, `413b3050`). Chacun est testé et rejoué en prod sur ses cas ; aucun n'a vu les 221 demandes.
-- **Les 30 outils livrés le soir du 1er octobre (#875) ne sont pas mesurés.** Un interrupteur les retire sans toucher au code (`LUMI_OUTILS_LOTS=0` sur Railway). Ils alourdissent aussi le démarrage à froid de cinq sujets (+0,2 à +0,8 ¢).
+- **Les 30 outils livrés le soir du 1er octobre (#875)** sont dans la passe finale, mais leur effet propre n'est pas isolé. Un interrupteur les retire sans toucher au code (`LUMI_OUTILS_LOTS=0` sur Railway). Ils alourdissent le démarrage à froid de cinq sujets (+0,2 à +0,8 ¢).
 - **Le plafond de coût d'un tour ne borne plus le premier appel à froid** : seule la taille du préfixe et de la conversation le fait. C'est le prix du correctif `84505af8` ; le coût réel reste débité en entier.
-- **Recherche d'un client par son nom** : « Coté » ne trouve pas « Côté » selon ce que le modèle tape.
-- **Demandes à plusieurs actions** : 9 sur 13 réussies avant les correctifs ; à remesurer.
 - **Choix d'outil du modèle** : environ 4 % des demandes partent sur un outil voisin du bon.
-- **Un nom d'outil peut apparaître dans une réponse** (2 cas sur 221) : détecté par le correcteur, pas filtré.
+- **Un nom d'outil peut apparaître dans une réponse** (2 cas sur 221 à la troisième passe, aucun à la passe finale) : détecté par le correcteur, pas filtré.
 - **Support** : deux réponses sur 49 donnent la bonne page sans le nom exact du bouton ; le modèle répond parfois sans ouvrir la documentation.
 - **Plafond d'une conversation** (décision 4) : atteint au 50e tour de la conversation longue.
 - **Déploiements** : chacun vide les limites de débit et les caches tenus en mémoire.
@@ -186,7 +186,7 @@ De 20 h 36 à 21 h 41 UTC (16 h 36 à 17 h 41, heure de Montréal), la base de p
 
 ## Décisions qui t'attendent
 
-1. **La machine de la base de production.** Elle a 1 Go de mémoire, partagé avec l'API, l'authentification et le temps réel. La panne du 1er octobre vient très probablement de là, comme celle du 28 septembre. Le garde-fou de Lumi (quatre tours à la fois) réduit le risque sans rien coûter ; passer au format « Small » (2 Go) coûte environ 15 $ par mois au lieu de 10, avec deux minutes de coupure au changement. À faire avant le 26 octobre, avec une alerte de disponibilité : aujourd'hui, personne n'est prévenu quand la base tombe.
+1. **La machine de la base de production.** Elle a 1 Go de mémoire, partagé avec l'API, l'authentification et le temps réel. La panne du 1er octobre vient très probablement de là, comme celle du 28 septembre. Le garde-fou de Lumi (quatre tours à la fois) réduit le risque sans rien coûter ; passer au format « Small » (2 Go) coûte environ 15 $ par mois au lieu de 10, avec deux minutes de coupure au changement. À faire avant le 26 octobre. L'alerte de disponibilité, elle, est en place : après trois minutes sans réponse de la base, l'équipe reçoit un message Slack, puis un autre au retour.
 2. **Conservation des conversations de Lumi (Loi 25).** Aucune purge n'existe : ni tâche planifiée, ni fonction. Il faut une durée (12 mois ?) ; supprimer des données demande ton accord. C'est le seul test critique encore en échec.
 3. **Plafond de la plateforme : 50 $ par jour pour tous les clients réunis** (≈ 3 800 tours). Au-delà, Lumi est en pause pour tout le monde jusqu'à minuit. À relever avant le lancement.
 4. **Plafond d'une conversation : 40 ¢.** Réglé le 16 septembre, quand une conversation coûtait au plus 11,7 ¢. Mesuré le 2026-10-01 : à caches froids, une conversation atteint 40,5 ¢ au 16e tour d'agent ; Lumi répond alors « ouvre une nouvelle conversation ». Je recommande 120 ¢ (variable Railway `LUMI_PLAFOND_CONVERSATION_CENTS`, aucun déploiement de code) : la garde quotidienne et les crédits restent les vrais plafonds.
@@ -210,4 +210,4 @@ npm run test:lumi -- --prod --bureau eval3       # + tests critiques, robustesse
 
 Une passe en prod par bureau de test et par jour : au-delà de 4,50 $ dans la journée, le bureau passe au modèle de repli et la mesure ne vaut plus rien. La commande n'envoie qu'un flux à la fois et s'arrête si la base de prod met plus de 1,5 seconde à répondre.
 
-Rapports de la journée : `evals/lumi/resultats/` (tests critiques, robustesse, support, les trois passes).
+Rapports de la journée : `evals/lumi/resultats/` (tests critiques, robustesse, support, les passes — la passe finale est dans `passe-finale-eval4/`).

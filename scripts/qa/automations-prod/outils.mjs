@@ -15,7 +15,7 @@
  */
 import { chromium, firefox, webkit } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -169,7 +169,21 @@ export async function ouvrir(o = {}) {
     page, context, browser, base: SITE, m, jeton: s.access_token,
     /** Répond au bandeau de témoins s'il est là (il recouvre le bas de l'écran). */
     temoins: async () => { const b = page.getByRole('button', { name: /Tout refuser|Reject all/ }); if (await b.count()) await b.first().click().catch(() => undefined); },
-    fermer: async () => { await context.close().catch(() => undefined); await browser.close().catch(() => undefined); },
+    fermer: async () => {
+      // L'app renouvelle son jeton en cours de visite : celui gardé au départ ne vaut alors plus rien
+      // (un jeton de rafraîchissement déjà servi ferme la session entière — vu en prod le 2026-10-01,
+      // le script suivant atterrissait sur la page d'accueil). On garde donc la session TELLE QUE L'APP LA LAISSE.
+      try {
+        if (page.url().startsWith(SITE)) {
+          const brut = await page.evaluate(() => localStorage.getItem('lume-auth-token'));
+          const laissee = brut ? JSON.parse(brut) : null;
+          const fichier = join(SESSIONS, `${(o.email ?? COMPTES.proprietaire).replace(/[^a-z0-9]+/gi, '_')}.json`);
+          if (laissee?.access_token && laissee?.refresh_token) writeFileSync(fichier, JSON.stringify(laissee));
+          else rmSync(fichier, { force: true });
+        }
+      } catch { /* onglet déjà fermé : la session gardée est retirée au prochain échec de connexion */ }
+      await context.close().catch(() => undefined); await browser.close().catch(() => undefined);
+    },
   };
 }
 
