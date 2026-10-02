@@ -53,11 +53,15 @@ const toasts = vi.hoisted(() => ({
   /** Les boutons d'action des toasts de succès (« Ouvrir »…), par libellé. */
   actions: [] as Array<{ label: string; onClick: () => void }>,
 }));
+type OptionsToast = { action?: { label: string; onClick: () => void } };
 
 vi.mock('sonner', () => ({
   toast: Object.assign(vi.fn(), {
-    error: (m: string) => { toasts.erreur.push(String(m)); },
-    success: (m: string, o?: { action?: { label: string; onClick: () => void } }) => {
+    error: (m: string, o?: OptionsToast) => {
+      toasts.erreur.push(String(m));
+      if (o?.action) toasts.actions.push(o.action);
+    },
+    success: (m: string, o?: OptionsToast) => {
       toasts.succes.push(String(m));
       if (o?.action) toasts.actions.push(o.action);
     },
@@ -435,6 +439,97 @@ describe('S-01 — « Ouvrir » une 2e automatisation sur réseau lent : chacune
     expect(patch.name).toBe('Réponse du client');
     expect(texteDe(patch.steps)).toContain('Texto de la DEUXIÈME, corrigé');
     expect(version).toBe('V-deuxieme');
+  });
+});
+
+// ─── Triage « éditeur », 12-enregistrement:86 ───────────────────
+
+describe('débit dépassé (429) — l’enregistrement automatique réessaie vraiment, et l’indicateur ne reste pas sur « Enregistrement… »', () => {
+  const tropVite = (retryApresMs?: number) => Object.assign(
+    new Error('Too many requests. Please try again later.'), { status: 429, ...(retryApresMs ? { retryApresMs } : {}) },
+  );
+  async function renommer(nom: string) {
+    const champNom = () => container.querySelector('input[aria-label="Nom de l’automatisation"]');
+    if (!champNom()) cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(champNom(), nom);
+  }
+  const avancer = async (ms: number) => {
+    await act(async () => { vi.advanceTimersByTime(ms); });
+    await attendre();
+  };
+
+  it('un 429, puis le serveur accepte : le nouvel essai part 1,5 s plus tard, et l’indicateur finit sur « Enregistré »', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementationOnce(async () => { throw tropVite(); });
+    await renommer('Relance devis v2');
+    await avancer(3000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(barreDuHaut()).toContain('Enregistrement…');
+    await avancer(1400);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    await avancer(200);
+    expect(api.modifier).toHaveBeenCalledTimes(2);
+    expect((api.modifier.mock.calls[1][1] as { name: string }).name).toBe('Relance devis v2');
+    expect(barreDuHaut()).toContain('Enregistré');
+    expect(barreDuHaut()).not.toContain('Enregistrement…');
+    // Jamais l'erreur brute, ni aucun message tant que la reprise réussit.
+    expect(toasts.erreur).toEqual([]);
+  });
+
+  it('le serveur indique quand réessayer (`Retry-After`) : l’essai attend ce délai', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementationOnce(async () => { throw tropVite(5000); });
+    await renommer('Relance devis v2');
+    await avancer(3000);
+    await avancer(4000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    await avancer(1100);
+    expect(api.modifier).toHaveBeenCalledTimes(2);
+    expect(barreDuHaut()).toContain('Enregistré');
+  });
+
+  it('trois 429 de suite : c’est dit en clair, avec « Réessayer » — qui renvoie tout de suite', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw tropVite(); });
+    await renommer('Relance devis v2');
+    await avancer(3000);
+    await avancer(1500);
+    await avancer(4000);
+    expect(api.modifier).toHaveBeenCalledTimes(3);
+    expect(toasts.erreur).toEqual(['Trop de modifications d’un coup — on réessaie dans un instant.']);
+    expect(toasts.erreur.join('\n')).not.toMatch(/Too many requests/i);
+    // L'indicateur ne prétend ni « Enregistré » ni un enregistrement en cours.
+    expect(barreDuHaut()).toContain('Modifié');
+    expect(barreDuHaut()).not.toContain('Enregistrement…');
+
+    // « Réessayer » : sans attendre le prochain essai automatique (6 s).
+    api.modifier.mockImplementation(async (id: string, patch: Record<string, unknown>) => ({ ...regle({ id }), ...patch }));
+    const reessayer = toasts.actions.find((a) => a.label === 'Réessayer');
+    expect(reessayer).toBeDefined();
+    await act(async () => { reessayer?.onClick(); });
+    await avancer(50);
+    expect(api.modifier).toHaveBeenCalledTimes(4);
+    expect(barreDuHaut()).toContain('Enregistré');
+  });
+
+  it('une modification faite pendant l’attente de la reprise : c’est ELLE qui part, pas la version périmée', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementationOnce(async () => { throw tropVite(); });
+    await renommer('Relance devis v2');
+    await avancer(3000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    await renommer('Relance devis v3');
+    await avancer(1500);
+    // La reprise de « v2 » ne part pas : une modification plus récente a repris la main.
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    await avancer(1500);
+    expect(api.modifier).toHaveBeenCalledTimes(2);
+    expect((api.modifier.mock.calls[1][1] as { name: string }).name).toBe('Relance devis v3');
+    expect(barreDuHaut()).toContain('Enregistré');
   });
 });
 

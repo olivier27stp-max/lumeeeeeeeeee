@@ -102,7 +102,13 @@ async function erreurDe(reponse: Response, repli: string): Promise<Error> {
   } catch {
     // Corps illisible : le repli dit déjà l'essentiel.
   }
-  return Object.assign(new Error(message), { status: reponse.status, ...(code ? { code } : {}) });
+  // 429 : le délai que le serveur demande avant un nouvel essai (`Retry-After`, en secondes).
+  const apres = Number(reponse.headers?.get?.('Retry-After'));
+  return Object.assign(new Error(message), {
+    status: reponse.status,
+    ...(code ? { code } : {}),
+    ...(Number.isFinite(apres) && apres > 0 ? { retryApresMs: apres * 1000 } : {}),
+  });
 }
 
 export async function chargerAutomatisations(): Promise<{

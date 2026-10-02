@@ -1414,6 +1414,18 @@ export default function AutomationBuilderPage() {
    * puis 48 s au plus) jusqu'au retour du serveur.
    */
   const echecsSauvegarde = useRef(0);
+  /** L'état d'enregistrement du dernier rendu, lu par une reprise en cours (voir plus bas). */
+  const etatSauvegardeCourant = useRef(etatSauvegarde);
+  etatSauvegardeCourant.current = etatSauvegarde;
+  /** « Réessayer » (bouton du message d'échec) : le prochain essai part tout de suite. */
+  const essaiSansDelai = useRef(false);
+  const [essaiDemande, setEssaiDemande] = useState(0);
+  const reessayerEnregistrement = useCallback(() => {
+    echecsSauvegarde.current = 0;
+    essaiSansDelai.current = true;
+    setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? actuel : 'modifie'));
+    setEssaiDemande((n) => n + 1);
+  }, []);
   useEffect(() => {
     // Règle disparue (404) : plus rien à enregistrer, donc plus d'essai.
     // Modifiée ailleurs (409) : pareil — on attend « Recharger », on n'écrase rien.
@@ -1421,8 +1433,8 @@ export default function AutomationBuilderPage() {
     // on enregistre après elle, avec la bonne version.
     if (etatSauvegarde !== 'modifie' || !regle || disparue || modifieeAilleurs || genere) return;
     if (etapesIncompletes > 0) { setEtatSauvegarde('incomplet'); return; }
-    let annule = false;
-    const delai = 3000 * 2 ** Math.min(echecsSauvegarde.current, 4);
+    const delai = essaiSansDelai.current ? 0 : 3000 * 2 ** Math.min(echecsSauvegarde.current, 4);
+    essaiSansDelai.current = false;
 
     const minuterie = setTimeout(async () => {
       /*
@@ -1449,7 +1461,18 @@ export default function AutomationBuilderPage() {
       // relancerait pour rien.
       const attentes = [1500, 4000];
       for (let essai = 0; essai <= attentes.length; essai++) {
-        if (annule) return;
+        /*
+         * LA REPRISE APRÈS UN 429 (triage éditeur, 12-enregistrement:86). Elle
+         * s'arrêtait sur un drapeau `annule` que posait le nettoyage de CET
+         * effet — relancé par notre propre passage à « en cours ». Le premier
+         * essai partait, jamais le deuxième : l'indicateur restait sur
+         * « Enregistrement… » pour de bon et rien n'atteignait la base.
+         *
+         * Une reprise ne s'abandonne que si elle n'a plus lieu d'être : l'écran
+         * n'est plus « en cours » (une modification plus récente a repris la
+         * main, et son propre enregistrement partira).
+         */
+        if (essai > 0 && etatSauvegardeCourant.current !== 'en_cours') return;
         try {
           await ecrire({ name: nom.trim() || regle.name, steps });
           echecsSauvegarde.current = 0;
@@ -1475,9 +1498,12 @@ export default function AutomationBuilderPage() {
             return;
           }
           const message = e instanceof Error ? e.message : String(e);
-          const tropVite = /too many requests|429|rate limit/i.test(message);
+          const tropVite = (e as { status?: unknown } | null)?.status === 429 || /too many requests|429|rate limit/i.test(message);
           if (tropVite && essai < attentes.length) {
-            await new Promise((r) => setTimeout(r, attentes[essai]));
+            // Le délai que le serveur indique (`Retry-After`), sinon un délai court croissant.
+            const indique = Number((e as { retryApresMs?: unknown } | null)?.retryApresMs);
+            const attente = Number.isFinite(indique) && indique > 0 ? Math.min(Math.max(indique, attentes[essai]), 15_000) : attentes[essai];
+            await new Promise((r) => setTimeout(r, attente));
             continue;
           }
           echecsSauvegarde.current += 1;
@@ -1490,15 +1516,19 @@ export default function AutomationBuilderPage() {
               : 'Too many changes at once — retrying in a moment.')
             : (fr
               ? `Enregistrement impossible pour le moment — nouvel essai automatique. (${message})`
-              : `Could not save right now — retrying automatically. (${message})`), { id: 'enregistrement-auto' });
+              : `Could not save right now — retrying automatically. (${message})`), {
+            id: 'enregistrement-auto',
+            // Sans attendre le prochain essai automatique (espacé de plus en plus).
+            action: { label: fr ? 'Réessayer' : 'Try again', onClick: reessayerEnregistrement },
+          });
           // Même raison : ne jamais rester bloqué sur « en cours ».
           setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
           return;
         }
       }
     }, delai);
-    return () => { annule = true; clearTimeout(minuterie); };
-  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire, disparue, modifieeAilleurs, genere]);
+    return () => { clearTimeout(minuterie); };
+  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire, disparue, modifieeAilleurs, genere, essaiDemande, reessayerEnregistrement]);
 
   // Dès que la dernière étape vide est remplie, on repart en enregistrement.
   useEffect(() => {

@@ -127,6 +127,27 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await page.context().close();
   },
 
+  /** 12-enregistrement:86 — après un 429, un nouvel essai part et l'enregistrement finit par passer. */
+  async e429() {
+    const regle = await creerRegle({ steps: [action('send_sms', { body: 'Texto BRAVO' })] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    let refus = 0;
+    await page.route(`**/api/automations/rules/${regle.id}`, (route) => {
+      if (route.request().method() !== 'PATCH' || refus >= 1) return route.continue();
+      refus += 1;
+      return route.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ error: 'Too many requests. Please try again later.' }) });
+    });
+    await carte(page, 'Envoyer un texto').click();
+    await zoneTexto(page).fill('Texto BRAVO après le plafond');
+    await enregistrer(page).click();
+    await page.locator('header').getByText('Enregistré', { exact: true }).waitFor({ timeout: 20_000 });
+    verifier(refus === 1, 'le serveur a répondu 429 une fois');
+    verifier((await etapes(regle.id))[0]?.action?.config?.body === 'Texto BRAVO après le plafond', 'l’indicateur dit « Enregistré » et la modification est en base');
+    verifier(await page.getByText(/Too many requests/i).count() === 0, 'jamais « Too many requests » à l’écran');
+    await page.context().close();
+  },
+
   /** A-09 — l'éditeur ouvert n'écrase pas ce qui a été écrit ailleurs : 409, bandeau, « Recharger ». */
   async a09() {
     const regle = await creerRegle({ trigger_event: 'invoice.overdue', steps: [action('send_sms', { body: 'Texte d’origine' })] });
