@@ -820,6 +820,49 @@ export default function AutomationBuilderPage() {
       });
       // Garder la conversation a touché la règle : sa version est celle-ci.
       noterVersion(idReel.current, propose.updated_at);
+      /*
+       * EN LIGNE : ON DEMANDE AVANT D'APPLIQUER (triage éditeur, S-03). Sur une
+       * automatisation PUBLIÉE, la proposition entrait dans le parcours comme
+       * sur un brouillon, et l'enregistrement automatique la mettait en ligne
+       * trois secondes plus tard, sans aucune question — sous un message qui
+       * disait « en pause, à publier quand tu es prêt ».
+       *
+       * La proposition est montrée ; elle n'entre dans le parcours qu'après un
+       * oui explicite. Sur un brouillon, rien ne change : rien ne part.
+       */
+      const enLigne = !!regle && !!idReel.current && fileBascule.etatAffiche(idReel.current, regle.is_active);
+      if (enLigne) {
+        const applique = await confirmer({
+          title: fr ? 'Appliquer les changements de Lumi ?' : 'Apply Lumi’s changes?',
+          message: [
+            fr
+              ? 'Cette automatisation est en ligne : appliquer les changements de Lumi ?'
+              : 'This automation is live: apply Lumi’s changes?',
+            ...(propose.resume ? [propose.resume] : []),
+            fr
+              ? 'Ils s’appliqueront dès le prochain déclenchement. Sans votre accord, le parcours en ligne ne change pas.'
+              : 'They take effect at the next trigger. Without your approval, the live journey does not change.',
+          ].join('\n\n'),
+          confirmLabel: fr ? 'Appliquer' : 'Apply',
+        });
+        if (!applique) {
+          setEchangesLumi((e) => [
+            ...e,
+            { role: 'user' as const, content: demande },
+            {
+              role: 'assistant' as const,
+              content: `${propose.resume || (fr ? 'Parcours proposé.' : 'Path proposed.')}\n\n${fr
+                ? '— Non appliqué : le parcours en ligne est inchangé.'
+                : '— Not applied: the live journey is unchanged.'}`,
+            },
+          ]);
+          setPrompt('');
+          toast.info(fr
+            ? 'Changements de Lumi non appliqués : le parcours en ligne est inchangé.'
+            : 'Lumi’s changes were not applied: the live journey is unchanged.');
+          return;
+        }
+      }
       // Le panneau d'étape resté ouvert saura QUI vient de changer son étape.
       setModifieePar('lumi');
       memoriser(propose.steps as Etape[]);
@@ -916,9 +959,14 @@ export default function AutomationBuilderPage() {
        * Plus de coût affiché (P2-10) : construire une automatisation est
        * OFFERT depuis le 2026-09-28, hors budget Lumi — le champ le dit.
        */
-      toast.success(fr
-        ? 'Lumi a construit le parcours — en pause, à publier quand tu es prêt.'
-        : 'Lumi built the path — paused, publish it when you are ready.');
+      // … sauf sur une automatisation EN LIGNE, où « en pause » serait faux.
+      toast.success(enLigne
+        ? (fr
+          ? 'Changements de Lumi appliqués — l’automatisation est en ligne : ils valent dès le prochain déclenchement.'
+          : 'Lumi’s changes applied — the automation is live: they take effect at the next trigger.')
+        : (fr
+          ? 'Lumi a construit le parcours — en pause, à publier quand tu es prêt.'
+          : 'Lumi built the path — paused, publish it when you are ready.'));
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
       /*

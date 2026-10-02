@@ -442,6 +442,87 @@ describe('S-01 — « Ouvrir » une 2e automatisation sur réseau lent : chacune
   });
 });
 
+// ─── Triage « éditeur », S-03 ───────────────────────────────────
+
+describe('S-03 — sur une automatisation PUBLIÉE, Lumi ne remplace pas le parcours en ligne sans question', () => {
+  const lumiPropose = () => api.lumi.mockImplementation(async () => ({
+    nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Relance de devis : un texto après 2 jours.', autre: null,
+    steps: [{ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Texto de LUMI' } }, suivant: null }],
+  }));
+  async function demander() {
+    saisir(container.querySelector('textarea[id$="-prompt"]'), 'refais ma relance de devis en un seul texto');
+    cliquer(boutonExact('Construire') ?? boutonExact('Envoyer'));
+    await attendre(12);
+  }
+  const avancer = async (ms: number) => {
+    await act(async () => { vi.advanceTimersByTime(ms); });
+    await attendre();
+  };
+
+  it('la proposition est montrée dans une question ; refusée, le parcours en ligne ne change pas et RIEN n’est enregistré', async () => {
+    etat.regles = [regle({ is_active: true })];
+    lumiPropose();
+    confirmerMock.mockImplementationOnce(async () => false);
+    await ouvrir();
+    vi.useFakeTimers();
+    await demander();
+
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    const question = confirmerMock.mock.calls[0][0] as { title: string; message: string; confirmLabel: string };
+    expect(question.title).toBe('Appliquer les changements de Lumi ?');
+    expect(question.message).toContain('Cette automatisation est en ligne : appliquer les changements de Lumi ?');
+    expect(question.message).toContain('Relance de devis : un texto après 2 jours.');
+    expect(question.confirmLabel).toBe('Appliquer');
+
+    // Refusé : le canevas garde le parcours en ligne, et l'enregistrement automatique n'a rien à écrire.
+    expect(cartes()).toEqual(['Envoyer un texto', 'Créer une tâche']);
+    expect(container.textContent).not.toContain('Texto de LUMI');
+    await avancer(10_000);
+    expect(api.modifier).not.toHaveBeenCalled();
+    expect(toasts.info.join('\n')).toContain('Changements de Lumi non appliqués : le parcours en ligne est inchangé.');
+    expect(toasts.succes.join('\n')).not.toContain('Lumi a construit le parcours');
+    // Le fil garde la trace de la proposition — et dit qu'elle n'a pas été appliquée.
+    expect(container.textContent).toContain('— Non appliqué : le parcours en ligne est inchangé.');
+  });
+
+  it('acceptée : le parcours est remplacé, et le message ne dit pas « en pause »', async () => {
+    etat.regles = [regle({ is_active: true })];
+    lumiPropose();
+    await ouvrir();
+    vi.useFakeTimers();
+    await demander();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(cartes()).toEqual(['Envoyer un texto']);
+    expect(toasts.succes.join('\n')).toContain('Changements de Lumi appliqués — l’automatisation est en ligne');
+    expect(toasts.succes.join('\n')).not.toContain('en pause');
+    await avancer(3000);
+    expect(JSON.stringify(derniersSteps())).toContain('Texto de LUMI');
+  });
+
+  it('sur un BROUILLON : aucune question, comme avant', async () => {
+    lumiPropose();
+    await ouvrir();
+    await demander();
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(cartes()).toEqual(['Envoyer un texto']);
+    expect(toasts.succes.join('\n')).toContain('Lumi a construit le parcours — en pause, à publier quand tu es prêt.');
+  });
+
+  it('en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    etat.regles = [regle({ is_active: true })];
+    lumiPropose();
+    confirmerMock.mockImplementationOnce(async () => false);
+    await ouvrir();
+    saisir(container.querySelector('textarea[id$="-prompt"]'), 'rebuild my quote follow-up as one text');
+    cliquer(boutonExact('Build') ?? boutonExact('Send'));
+    await attendre(12);
+    expect(confirmerMock.mock.calls[0][0]).toMatchObject({ title: 'Apply Lumi’s changes?', confirmLabel: 'Apply' });
+    expect(String((confirmerMock.mock.calls[0][0] as { message: string }).message)).toContain('This automation is live: apply Lumi’s changes?');
+    expect(toasts.info.join('\n')).toContain('Lumi’s changes were not applied: the live journey is unchanged.');
+  });
+});
+
 // ─── Triage « éditeur », 05b-canevas-outils-origine:303 ─────────
 
 describe('05b:303 — `actions` suit le parcours : un parcours converti se vide vraiment, sans retomber au « format d’origine »', () => {

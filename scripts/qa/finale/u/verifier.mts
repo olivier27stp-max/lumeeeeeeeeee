@@ -127,6 +127,31 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await page.context().close();
   },
 
+  /** S-03 — automatisation PUBLIÉE : la proposition de Lumi demande une confirmation avant d'être appliquée. */
+  async s03() {
+    const regle = await creerRegle({ trigger_event: 'client.untagged', steps: [action('send_sms', { body: 'Texto EN LIGNE' })], is_active: true });
+    const page = await ouvrirPage();
+    await lumiReecritLeTexto(page);
+    await ouvrirEditeur(page, regle.id);
+    const demander = async () => {
+      await page.getByLabel('Décris ton automatisation').fill('change le message de l’automatisation');
+      await page.getByRole('button', { name: /^(Construire|Envoyer)$/ }).click();
+      await page.getByRole('dialog').filter({ hasText: 'Appliquer les changements de Lumi ?' }).waitFor({ timeout: 30_000 });
+    };
+    await demander();
+    verifier(await page.getByRole('dialog').getByText('Cette automatisation est en ligne : appliquer les changements de Lumi ?').isVisible(), 'la question est posée, avec la proposition');
+    await page.getByRole('dialog').getByRole('button', { name: 'Annuler', exact: true }).click();
+    await pause(6000);
+    verifier((await etapes(regle.id))[0]?.action?.config?.body === 'Texto EN LIGNE', 'refusé : le parcours en ligne est inchangé en base');
+    await demander();
+    await page.getByRole('dialog').getByRole('button', { name: 'Appliquer', exact: true }).click();
+    await pause(6000);
+    verifier((await etapes(regle.id))[0]?.action?.config?.body === DE_LUMI, 'accepté : le texte de Lumi est en base');
+    verifier(await page.getByText('en pause, à publier').count() === 0, 'aucun message « en pause » sur une automatisation publiée');
+    await admin.from('automation_rules').update({ is_active: false }).eq('id', regle.id);
+    await page.context().close();
+  },
+
   /** 05b:303 — parcours converti du format d'origine : supprimer la dernière étape le vide vraiment. */
   async c303() {
     const regle = await creerRegle({ steps: null, actions: [{ type: 'send_sms', config: { body: 'Texto d’origine' } }] });
