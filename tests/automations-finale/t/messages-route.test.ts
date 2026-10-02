@@ -190,15 +190,85 @@ describe('la route valide ce qu’aucun écran ne peut plus contourner', () => {
     expect(base.ecritures).toHaveLength(0);
   });
 
-  it('les deux versions dans la même écriture (`version_en`), et seulement avec le français', async () => {
+  it('les deux langues dans la même écriture (`autre_version`), dans un sens comme dans l’autre', async () => {
     poser({ actions: [courriel('Objet', '<p>Corps</p>', { subject_en: 'Subject', body_en: '<p>Body</p>' })] });
-    const r = await appeler('r1', { canal: 'send_email', texte: '<p>Corps corrigé</p>', objet: 'Objet', version_en: { texte: '<p>Fixed body</p>', objet: 'Subject' } });
+    const r = await appeler('r1', { canal: 'send_email', texte: '<p>Corps corrigé</p>', objet: 'Objet', autre_version: { texte: '<p>Fixed body</p>', objet: 'Subject' } });
     expect(r.status).toBe(200);
     expect(base.ecritures).toHaveLength(1);
     expect(enBase().actions[0].config).toEqual({ subject: 'Objet', body: '<p>Corps corrigé</p>', subject_en: 'Subject', body_en: '<p>Fixed body</p>' });
-    const refus = await appeler('r1', { canal: 'send_email', langue: 'en', texte: '<p>x</p>', version_en: { texte: '<p>y</p>' } });
-    expect(refus.status).toBe(400);
-    expect(refus.json.code).toBe('corps_invalide');
+    // Le texte écrit est l'anglais ; l'autre langue est alors le français.
+    const sens = await appeler('r1', { canal: 'send_email', langue: 'en', texte: '<p>Body, again</p>', autre_version: { texte: '<p>Corps, encore</p>' } });
+    expect(sens.status).toBe(200);
+    expect(enBase().actions[0].config).toEqual({ subject: 'Objet', body: '<p>Corps, encore</p>', subject_en: 'Subject', body_en: '<p>Body, again</p>' });
+  });
+});
+
+describe('les deux langues d’un message — l’ordre « retirer l’autre version » (règle du 2026-10-01)', () => {
+  const FR = 'Bonjour, votre rendez-vous est confirmé.';
+  const EN = 'Hi, your appointment is confirmed.';
+
+  it('sans l’ordre, rien n’est retiré : écrire une langue laisse l’autre telle quelle', async () => {
+    poser({ actions: [sms(FR, { body_en: EN })] });
+    expect((await appeler('r1', { canal: 'send_sms', texte: 'Bonjour, à demain.' })).status).toBe(200);
+    expect(enBase().actions).toEqual([sms('Bonjour, à demain.', { body_en: EN })]);
+    expect((await appeler('r1', { canal: 'send_sms', langue: 'en', texte: 'Hi, see you tomorrow.' })).status).toBe(200);
+    expect(enBase().actions).toEqual([sms('Bonjour, à demain.', { body_en: 'Hi, see you tomorrow.' })]);
+  });
+
+  it('texte écrit en français + retirer : la version anglaise DISPARAÎT du message (jamais `body_en: ""`)', async () => {
+    poser({ actions: [sms(FR, { body_en: EN })] });
+    const r = await appeler('r1', { canal: 'send_sms', langue: 'fr', texte: 'Bonjour, à demain.', retirer_autre_version: true });
+    expect(r.status).toBe(200);
+    expect(enBase().actions).toEqual([sms('Bonjour, à demain.')]);
+    expect('body_en' in enBase().actions[0].config).toBe(false);
+  });
+
+  it('texte écrit en anglais + retirer : le texte anglais devient LE texte du message, il n’en reste qu’un', async () => {
+    poser({ actions: [sms(FR, { body_en: EN })] });
+    const r = await appeler('r1', { canal: 'send_sms', langue: 'en', texte: 'Hi, see you tomorrow.', retirer_autre_version: true });
+    expect(r.status).toBe(200);
+    expect(enBase().actions).toEqual([sms('Hi, see you tomorrow.')]);
+  });
+
+  it('courriel : l’objet suit le corps, dans les deux sens', async () => {
+    const C = { subject_en: 'Your appointment', body_en: '<p>See you tomorrow.</p>' };
+    poser({ actions: [courriel('Votre rendez-vous', '<p>À demain.</p>', C)] });
+    expect((await appeler('r1', { canal: 'send_email', langue: 'en', objet: 'Your appointment tomorrow', retirer_autre_version: true })).status).toBe(200);
+    expect(enBase().actions[0].config).toEqual({ subject: 'Your appointment tomorrow', body: '<p>See you tomorrow.</p>' });
+    poser({ actions: [courriel('Votre rendez-vous', '<p>À demain.</p>', C)] });
+    expect((await appeler('r1', { canal: 'send_email', objet: 'Votre rendez-vous de jeudi', retirer_autre_version: true })).status).toBe(200);
+    expect(enBase().actions[0].config).toEqual({ subject: 'Votre rendez-vous de jeudi', body: '<p>À demain.</p>' });
+    // Version anglaise sans objet propre : l'objet de base reste celui du message.
+    poser({ actions: [courriel('Votre rendez-vous', '<p>À demain.</p>', { body_en: '<p>See you tomorrow.</p>' })] });
+    expect((await appeler('r1', { canal: 'send_email', langue: 'en', texte: '<p>See you soon.</p>', retirer_autre_version: true })).status).toBe(200);
+    expect(enBase().actions[0].config).toEqual({ subject: 'Votre rendez-vous', body: '<p>See you soon.</p>' });
+  });
+
+  it('dans un parcours : l’étape ET le reflet `actions` perdent la version retirée', async () => {
+    poser({ steps: [{ id: 'e1', type: 'action', action: sms(FR, { body_en: EN }), suivant: null }], actions: [sms(FR, { body_en: EN })] });
+    expect((await appeler('r1', { canal: 'send_sms', etape_id: 'e1', texte: 'Bonjour, à demain.', retirer_autre_version: true })).status).toBe(200);
+    expect((enBase().steps as Array<{ action: unknown }>)[0].action).toEqual(sms('Bonjour, à demain.'));
+    expect(enBase().actions).toEqual([sms('Bonjour, à demain.')]);
+  });
+
+  it('l’ordre seul suffit (on retire sans rien réécrire)', async () => {
+    poser({ actions: [sms(FR, { body_en: EN })] });
+    expect((await appeler('r1', { canal: 'send_sms', retirer_autre_version: true })).status).toBe(200);
+    expect(enBase().actions).toEqual([sms(FR)]);
+  });
+
+  it('refus : retirer le français d’un message sans anglais (il ne resterait rien) ; écrire ET retirer l’autre version', async () => {
+    poser({ actions: [sms(FR)] });
+    const rien = await appeler('r1', { canal: 'send_sms', langue: 'en', retirer_autre_version: true });
+    expect(rien.status).toBe(400);
+    expect(rien.json).toEqual({
+      error: 'Ce message n’a pas de version anglaise : il n’y a rien à garder si on retire le texte français. Rien n’a été enregistré.',
+      code: 'message_vide',
+    });
+    const deux = await appeler('r1', { canal: 'send_sms', texte: 'Bonjour', autre_version: { texte: 'Hello' }, retirer_autre_version: true });
+    expect(deux.status).toBe(400);
+    expect(deux.json.code).toBe('corps_invalide');
+    expect(base.ecritures).toHaveLength(0);
   });
 
   it('un corps mal formé est refusé : clé inconnue, canal inconnu, rien à écrire', async () => {

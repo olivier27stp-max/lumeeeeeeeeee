@@ -33,13 +33,16 @@ import { getCurrentOrgId } from '../lib/orgApi';
 import {
   getAutomationRules,
   toggleAutomationRule,
-  updateRuleMessage,
+  ecrireMessageDeRegle,
   getAutomationLanguage,
   texteDuMessage,
-  avecTexteDuMessage,
   messagesDeRegle,
+  versionPrincipale,
+  aAutreVersion,
   type AutomationRule,
+  type EcritureMessage,
 } from '../lib/automationRulesApi';
+import AutreVersionMessage, { nomAutreVersion, phraseLangueDesMessages, type ChoixAutreVersion } from '../components/automations/AutreVersionMessage';
 import { localizeAutomationName } from '../lib/automationNames';
 import { libelleSegments } from '../lib/smsSegments';
 import { ChevronDown, Pencil } from 'lucide-react';
@@ -490,9 +493,19 @@ export function AutomationSmsSection({ isFr }: { isFr: boolean }) {
    * une version anglaise (`body_en`), qui part À LA PLACE du français quand
    * cette langue est l'anglais : l'écran montrait et modifiait le français, que
    * les clients d'un bureau anglophone ne reçoivent pas (même racine que
-   * 03-texto:345). `null` = pas lue : on montre le français, sans rien affirmer.
+   * 03-texto:345). `null` = pas lue : on montre le texte de base, et on le dit.
+   *
+   * LES DEUX LANGUES (règle du 2026-10-01, voir `AutreVersionMessage`) : le
+   * champ principal porte le texte qui PART ; l'autre langue, quand le texto en
+   * a une, est dans un bloc replié juste en dessous. Corriger le texte
+   * principal sans l'autre ne bloque rien : le bloc se déplie et offre de la
+   * retirer (coché d'office) ou de la garder.
    */
   const [langueBureau, setLangueBureau] = useState<'fr' | 'en' | null>(null);
+  /** L'autre langue du texto ouvert : son texte, ce qu'on en fait s'il est périmé, et le pli du bloc. */
+  const [draftAutre, setDraftAutre] = useState('');
+  const [choixAutre, setChoixAutre] = useState<ChoixAutreVersion>('retirer');
+  const [autreDeplie, setAutreDeplie] = useState(false);
 
   useEffect(() => {
     getAutomationRules()
@@ -506,15 +519,21 @@ export function AutomationSmsSection({ isFr }: { isFr: boolean }) {
 
   /** Les textos de la règle, dans l'ordre : ceux du parcours quand elle en a un (le moteur ne lit alors plus `actions`). */
   const textos = (r: AutomationRule) => messagesDeRegle(r, 'send_sms');
-  /** Ce texto porte-t-il une version anglaise ? */
-  const aVersionAnglaise = (r: AutomationRule) => {
-    const en = textos(r)[0]?.config.body_en;
-    return typeof en === 'string' && en.trim() !== '';
-  };
-  /** La version qu'on montre et qu'on écrit : celle qui PART. */
-  const versionQuiPart = (r: AutomationRule): 'fr' | 'en' => (langueBureau === 'en' && aVersionAnglaise(r) ? 'en' : 'fr');
+  /** La langue du champ principal : celle qui PART. */
+  const versionQuiPart = (r: AutomationRule): 'fr' | 'en' => versionPrincipale(textos(r)[0]?.config, langueBureau);
   // Le texte qui PART : le premier texto de la règle, dans la langue du bureau.
   const smsBody = (r: AutomationRule) => texteDuMessage(r, 'send_sms', versionQuiPart(r));
+  /** L'autre langue du texto, s'il en porte une : laquelle, et son texte. */
+  const autreVersion = (r: AutomationRule): 'fr' | 'en' => (versionQuiPart(r) === 'fr' ? 'en' : 'fr');
+  const porteAutreVersion = (r: AutomationRule) => aAutreVersion(textos(r)[0]?.config, versionQuiPart(r));
+  const texteAutre = (r: AutomationRule) => {
+    if (!porteAutreVersion(r)) return '';
+    const valeur = textos(r)[0]?.config[autreVersion(r) === 'en' ? 'body_en' : 'body'];
+    return typeof valeur === 'string' ? valeur : '';
+  };
+  /** Le texte principal a changé, pas l'autre langue : elle n'est plus à jour. */
+  const autrePerimee = (r: AutomationRule) => porteAutreVersion(r)
+    && draftBody.trim() !== smsBody(r).trim() && draftAutre === texteAutre(r);
 
   async function handleToggle(rule: AutomationRule) {
     const next = !rule.is_active;
@@ -529,9 +548,19 @@ export function AutomationSmsSection({ isFr }: { isFr: boolean }) {
   async function handleSaveBody(rule: AutomationRule) {
     setSavingBody(true);
     try {
-      const version = versionQuiPart(rule);
-      await updateRuleMessage(rule.id, 'send_sms', draftBody.trim(), undefined, { langue: version });
-      setRules((prev) => prev.map((r) => (r.id === rule.id ? avecTexteDuMessage(r, 'send_sms', draftBody.trim(), version === 'en' ? 'body_en' : 'body') : r)));
+      const champ = (langue: 'fr' | 'en', texte: string): EcritureMessage => (langue === 'en' ? { body_en: texte } : { body: texte });
+      const autre = autreVersion(rule);
+      const autreModifiee = porteAutreVersion(rule) && draftAutre !== texteAutre(rule);
+      // L'autre langue s'en va si on l'a vidée, ou si elle est périmée et qu'on a laissé « La retirer ».
+      const retirer = (autreModifiee && !draftAutre.trim()) || (autrePerimee(rule) && choixAutre === 'retirer');
+      const ecriture: EcritureMessage = {
+        ...champ(versionQuiPart(rule), draftBody.trim()),
+        ...(autreModifiee && !retirer ? champ(autre, draftAutre.trim()) : {}),
+        ...(retirer ? { retirer: autre } : {}),
+      };
+      const { regle } = await ecrireMessageDeRegle(rule.id, 'send_sms', ecriture);
+      // L'état ENREGISTRÉ, relu par le serveur — pas ce que l'écran a envoyé.
+      if (regle) setRules((prev) => prev.map((r) => (r.id === rule.id ? regle : r)));
       setOpenId(null);
     } catch (e: unknown) {
       // L'échec était muet (aucun catch) : le texte semblait enregistré.
@@ -612,6 +641,9 @@ export function AutomationSmsSection({ isFr }: { isFr: boolean }) {
                           if (isOpen) { setOpenId(null); return; }
                           setOpenId(rule.id);
                           setDraftBody(smsBody(rule));
+                          setDraftAutre(texteAutre(rule));
+                          setChoixAutre('retirer');
+                          setAutreDeplie(false);
                         }}
                         className="flex flex-1 items-center justify-between gap-2 text-left min-w-0"
                       >
@@ -654,21 +686,29 @@ export function AutomationSmsSection({ isFr }: { isFr: boolean }) {
                           maxLength={320}
                           className="glass-input w-full resize-none text-[13px]"
                         />
-                        {/* Quelle version on modifie, et ce que devient l'autre : jamais périmée en silence. */}
-                        {(aVersionAnglaise(rule) || langueBureau === 'en') && (
-                          <p className="text-[11px] text-text-secondary leading-relaxed">
-                            {!aVersionAnglaise(rule)
-                              ? (isFr
-                                ? 'La langue des messages du bureau est l’anglais, mais ce texto n’a pas de version anglaise : c’est ce texte français qui part.'
-                                : 'The office message language is English, but this text has no English version: this French text is the one sent.')
-                              : versionQuiPart(rule) === 'en'
-                                ? (isFr
-                                  ? 'Version anglaise — celle qui part : la langue des messages du bureau est l’anglais. La version française se modifie dans Automatisations.'
-                                  : 'English version — the one sent: the office message language is English. The French version is edited in Automations.')
-                                : (isFr
-                                  ? 'Version française — celle qui part. Ce texto a aussi une version anglaise, que cet écran ne modifie pas : mettez-la à jour dans Automatisations.'
-                                  : 'French version — the one sent. This text also has an English version, which this screen does not change: update it in Automations.')}
-                          </p>
+                        {/* Dans quelle langue les messages partent — donc quel texte est au-dessus. */}
+                        <p className="text-[11px] text-text-secondary leading-relaxed">
+                          {phraseLangueDesMessages(isFr, langueBureau, versionQuiPart(rule), 'texto')}
+                        </p>
+                        {/* L'autre langue : repliée, modifiable ; périmée, elle se déplie et offre le choix. */}
+                        {porteAutreVersion(rule) && (
+                          <AutreVersionMessage
+                            fr={isFr}
+                            langue={autreVersion(rule)}
+                            perimee={autrePerimee(rule)}
+                            choix={choixAutre}
+                            onChoix={setChoixAutre}
+                            deplie={autreDeplie}
+                            onDeplie={setAutreDeplie}
+                          >
+                            <textarea
+                              aria-label={`${isFr ? 'Texte du SMS' : 'SMS text'} — ${label} — ${nomAutreVersion(isFr, autreVersion(rule))}`}
+                              value={draftAutre}
+                              onChange={(e) => setDraftAutre(e.target.value)}
+                              rows={3}
+                              className="glass-input w-full resize-none text-[13px]"
+                            />
+                          </AutreVersionMessage>
                         )}
                         <p className="text-[10.5px] text-text-tertiary leading-relaxed">
                           {isFr ? 'Variables disponibles : ' : 'Available variables: '}

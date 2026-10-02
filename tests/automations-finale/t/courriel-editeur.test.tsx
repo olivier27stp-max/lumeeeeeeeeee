@@ -37,7 +37,7 @@ vi.mock('sonner', () => {
 });
 
 import { base, remettre, ligne } from './faux-supabase';
-import { monter, demonter, bouton, boutonPresent, champ, champs, cliquer, saisir, texteEcran, jusqua } from './banc-composants';
+import { monter, demonter, bouton, boutonPresent, champ, champs, choix, cliquer, saisir, texteEcran, jusqua } from './banc-composants';
 import { brancherServeur, arreterServeur } from './serveur-messages';
 import EmailPreviewEditor from '../../../src/components/automations/EmailPreviewEditor';
 
@@ -530,122 +530,185 @@ describe('04-courriel:793 — échec de « M’envoyer un essai » : l’écran 
   });
 });
 
-describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’éditeur montre et modifie le courriel qui part', () => {
+describe('04-courriel:834 et la règle des deux langues — l’éditeur montre et modifie le courriel qui PART ; l’autre langue est dans un bloc replié', () => {
   const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
   const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };
   const langueDuBureau = (l: 'fr' | 'en') => { base.tables.company_settings[0].default_language = l; };
-  const version = (nom: string) => Array.from(document.body.querySelectorAll('button')).find((b) => (b.textContent ?? '').startsWith(nom));
   const paragraphes = () => champs('Paragraphe').map((c) => c.value);
   const config = () => enBase().actions[0].config;
   const objetPret = () => jusqua(() => champs<HTMLInputElement>('Objet du courriel').length === 1);
+  const TITRE_EN = 'Version anglaise — utilisée seulement si vos messages partent en anglais';
+  const TITRE_FR = 'Version française — utilisée seulement si vos messages partent en français';
+  const RETIRER = 'La retirer (vos clients recevront le texte ci-dessus)';
+  const GARDER = 'La garder telle quelle';
+  const PERIMEE = 'Cette version n’est plus à jour.';
+  const enregistrer = async () => {
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
+  };
 
-  it('bureau en anglais : l’éditeur s’ouvre sur la version anglaise, dit que c’est elle qui part, et « Enregistrer » écrit `subject_en`', async () => {
+  it('bureau en anglais : l’éditeur s’ouvre sur le courriel anglais et dit que les messages partent en anglais ; le français est dans un bloc REPLIÉ', async () => {
     poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
     langueDuBureau('en');
     await ouvrir(FR);
     await objetPret();
     expect(objet().value).toBe('Your appointment');
     expect(paragraphes()).toEqual(['See you tomorrow.']);
-    expect(version('Version anglaise')?.getAttribute('aria-pressed')).toBe('true');
-    expect(version('Version anglaise')?.textContent).toContain('celle qui part');
-    expect(texteEcran()).toContain('Vos clients reçoivent la version anglaise');
-    await saisir(objet(), 'Your appointment tomorrow');
-    await cliquer(bouton('Enregistrer'));
-    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
-    expect(config()).toEqual({ ...FR, ...EN, subject_en: 'Your appointment tomorrow' });
+    expect(texteEcran()).toContain('Vos messages partent en anglais : c’est ce texte que vos clients reçoivent.');
+    expect(bouton(TITRE_FR).getAttribute('aria-expanded')).toBe('false');
+    // Replié : ni l'objet ni les lignes du français ne sont à l'écran.
+    expect(champs<HTMLInputElement>('Objet du courriel — Version française')).toHaveLength(0);
+    expect(texteEcran()).not.toContain(PERIMEE);
   });
 
-  it('la version française reste visible et modifiable, à un clic', async () => {
+  it('bureau en anglais : corriger l’anglais sans le français ne bloque pas — le bloc se déplie, « La retirer » est coché d’office, et l’anglais devient le seul texte', async () => {
     poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
     langueDuBureau('en');
     await ouvrir(FR);
     await objetPret();
-    await cliquer(version('Version française'));
-    expect(objet().value).toBe('Votre rendez-vous');
-    expect(paragraphes()).toEqual(['À demain.']);
-    // Revenir à l'anglais ne perd rien de ce qu'on a tapé en français.
-    await saisir(objet(), 'Votre rendez-vous de demain');
-    await cliquer(version('Version anglaise'));
-    expect(objet().value).toBe('Your appointment');
-    await cliquer(version('Version française'));
-    expect(objet().value).toBe('Votre rendez-vous de demain');
-  });
-
-  it('bureau en français, courriel qui porte une version anglaise : corriger le français sans l’anglais est signalé, et « Enregistrer » attend', async () => {
-    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
-    await ouvrir(FR);
-    await objetPret();
-    expect(version('Version française')?.getAttribute('aria-pressed')).toBe('true');
-    expect(version('Version française')?.textContent).toContain('celle qui part');
-    expect(objet().value).toBe('Votre rendez-vous');
-    await saisir(objet(), 'Votre rendez-vous de jeudi');
-    expect(texteEcran()).toContain('Le texte français a changé, pas sa version anglaise.');
-    expect(bouton('Enregistrer').disabled).toBe(true);
-    // « La version anglaise reste valable telle quelle » : on peut enregistrer, et l'anglais ne bouge pas.
-    await cliquer(document.body.querySelector('input[type="checkbox"]'));
+    await saisir(objet(), 'Your appointment tomorrow');
+    expect(bouton(TITRE_FR).getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain(PERIMEE);
+    expect(champ<HTMLInputElement>('Objet du courriel — Version française').value).toBe('Votre rendez-vous');
+    expect(champs('Paragraphe — Version française').map((c) => c.value)).toEqual(['À demain.']);
+    expect(choix(RETIRER).checked).toBe(true);
     expect(bouton('Enregistrer').disabled).toBe(false);
-    await cliquer(bouton('Enregistrer'));
-    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
-    expect(config()).toEqual({ ...FR, ...EN, subject: 'Votre rendez-vous de jeudi' });
-    expect(texteEcran()).not.toContain('Le texte français a changé');
-  });
-
-  it('les deux versions corrigées : une seule écriture, les deux en base', async () => {
-    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
-    await ouvrir(FR);
-    await objetPret();
-    await saisir(objet(), 'Votre rendez-vous de jeudi');
-    await cliquer(version('Version anglaise'));
-    await saisir(objet(), 'Your Thursday appointment');
-    expect(texteEcran()).not.toContain('Le texte français a changé');
-    await cliquer(bouton('Enregistrer'));
-    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
-    expect(base.ecritures).toHaveLength(1);
-    expect(config()).toMatchObject({ subject: 'Votre rendez-vous de jeudi', subject_en: 'Your Thursday appointment' });
+    await enregistrer();
+    // Un seul texte dans le courriel — celui que l'écran montrait. Pas de `body_en: ""`.
+    expect(config()).toEqual({ subject: 'Your appointment tomorrow', body: EN.body_en });
+    // L'écran suit : plus de bloc, rien à enregistrer, le même courriel sous les yeux.
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+    expect(objet().value).toBe('Your appointment tomorrow');
+    expect(paragraphes()).toEqual(['See you tomorrow.']);
     expect(texteEcran()).toContain('Aucune modification');
   });
 
-  it('la version anglaise vidée est retirée de la règle : le français part à tout le monde', async () => {
+  it('bureau en anglais : « La garder telle quelle » — `subject_en` est écrit, le français ne bouge pas', async () => {
     poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
     langueDuBureau('en');
     await ouvrir(FR);
     await objetPret();
-    await saisir(objet(), '');
-    while (boutonPresent('Supprimer cette ligne')) await cliquer(bouton('Supprimer cette ligne'));
-    await cliquer(bouton('Enregistrer'));
-    await jusqua(() => toasts.succes.includes('Courriel enregistré'));
-    expect(config()).toEqual(FR);
-    // Il ne reste que le français, et l'écran dit que c'est lui qui part.
-    expect(objet().value).toBe('Votre rendez-vous');
-    expect(version('Version anglaise')).toBeUndefined();
-    expect(texteEcran()).toContain('ce courriel n’a pas de version anglaise');
+    await saisir(objet(), 'Your appointment tomorrow');
+    await cliquer(choix(GARDER));
+    await enregistrer();
+    expect(config()).toEqual({ ...FR, ...EN, subject_en: 'Your appointment tomorrow' });
+    expect(texteEcran()).not.toContain(PERIMEE);
+    expect(texteEcran()).toContain('Aucune modification');
   });
 
-  it('bureau en anglais, courriel SANS version anglaise : l’écran dit que c’est le texte français qui part', async () => {
+  it('bureau en français, courriel qui porte une version anglaise : corrigé seul, « Enregistrer » reste actif et la version anglaise est RETIRÉE (choix d’office)', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR);
+    await objetPret();
+    expect(objet().value).toBe('Votre rendez-vous');
+    expect(texteEcran()).toContain('Vos messages partent en français : c’est ce texte que vos clients reçoivent.');
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('false');
+    await saisir(objet(), 'Votre rendez-vous de jeudi');
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain(PERIMEE);
+    expect(choix(RETIRER).checked).toBe(true);
+    expect(choix(GARDER).checked).toBe(false);
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    await enregistrer();
+    expect(config()).toEqual({ ...FR, subject: 'Votre rendez-vous de jeudi' });
+    expect('body_en' in config()).toBe(false);
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+  });
+
+  it('bureau en français : « La garder telle quelle » — la version anglaise reste, parce que l’utilisateur l’a choisi', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR);
+    await objetPret();
+    await saisir(objet(), 'Votre rendez-vous de jeudi');
+    await cliquer(choix(GARDER));
+    await enregistrer();
+    expect(config()).toEqual({ ...FR, ...EN, subject: 'Votre rendez-vous de jeudi' });
+    expect(texteEcran()).not.toContain(PERIMEE);
+    // Le bloc est toujours là, replié : la version anglaise existe encore.
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('l’autre langue se déplie à la main et s’y modifie ; les deux corrigées : rien n’est périmé, une seule écriture, les deux en base', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR);
+    await objetPret();
+    await cliquer(bouton(TITRE_EN));
+    const objetAnglais = () => champ<HTMLInputElement>('Objet du courriel — Version anglaise');
+    expect(objetAnglais().value).toBe('Your appointment');
+    expect(champs('Titre — Version anglaise').map((c) => c.value)).toEqual(['Hello,']);
+    await saisir(objetAnglais(), 'Your Thursday appointment');
+    await saisir(objet(), 'Votre rendez-vous de jeudi');
+    expect(texteEcran()).not.toContain(PERIMEE);
+    await enregistrer();
+    expect(base.ecritures).toHaveLength(1);
+    expect(config()).toEqual({ ...FR, ...EN, subject: 'Votre rendez-vous de jeudi', subject_en: 'Your Thursday appointment' });
+    expect(texteEcran()).toContain('Aucune modification');
+  });
+
+  it('l’autre langue modifiée seule : elle seule est écrite, et sa mise en forme intacte est gardée', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR);
+    await objetPret();
+    await cliquer(bouton(TITRE_EN));
+    await saisir(champ('Paragraphe — Version anglaise'), 'See you on Thursday.');
+    expect(texteEcran()).not.toContain(PERIMEE);
+    await enregistrer();
+    expect(config()).toEqual({ ...FR, subject_en: 'Your appointment', body_en: EN.body_en.replace('See you tomorrow.', 'See you on Thursday.') });
+  });
+
+  it('vider l’autre langue, c’est la retirer', async () => {
+    poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
+    await ouvrir(FR);
+    await objetPret();
+    await cliquer(bouton(TITRE_EN));
+    await saisir(champ('Titre — Version anglaise'), '');
+    await saisir(champ('Paragraphe — Version anglaise'), '');
+    await enregistrer();
+    expect(config()).toEqual(FR);
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+  });
+
+  it('bureau en anglais, version anglaise sans objet : l’objet de base est montré (c’est lui qui part) et n’est pas recopié en `subject_en`', async () => {
+    poser([{ type: 'send_email', config: { ...FR, body_en: EN.body_en } }]);
+    langueDuBureau('en');
+    await ouvrir(FR);
+    await objetPret();
+    expect(objet().value).toBe('Votre rendez-vous');
+    expect(paragraphes()).toEqual(['See you tomorrow.']);
+    await saisir(champ('Paragraphe'), 'See you soon.');
+    await cliquer(choix(GARDER));
+    await enregistrer();
+    expect(config()).toEqual({ ...FR, body_en: EN.body_en.replace('See you tomorrow.', 'See you soon.') });
+  });
+
+  it('bureau en anglais, courriel SANS version anglaise : un seul texte, l’écran dit que c’est lui qui part, pas de bloc', async () => {
     poser([{ type: 'send_email', config: FR }]);
     langueDuBureau('en');
     await ouvrir(FR);
     await objetPret();
     expect(objet().value).toBe('Votre rendez-vous');
-    expect(texteEcran()).toContain('La langue des messages du bureau est l’anglais, mais ce courriel n’a pas de version anglaise : c’est ce texte français qui part.');
+    expect(texteEcran()).toContain('Vos messages partent en anglais, mais ce courriel n’a qu’un texte : c’est lui que vos clients reçoivent.');
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
   });
 
-  it('bureau en français, courriel sans version anglaise : rien de plus à l’écran', async () => {
+  it('bureau en français, courriel sans version anglaise : pas de bloc', async () => {
     poser([{ type: 'send_email', config: FR }]);
     await ouvrir(FR);
     await objetPret();
-    expect(version('Version française')).toBeUndefined();
-    expect(texteEcran()).not.toContain('version anglaise');
+    expect(texteEcran()).toContain('Vos messages partent en français');
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+    expect(texteEcran()).not.toContain('Version anglaise');
   });
 
-  it('langue du bureau illisible : aucune version n’est dite « celle qui part »', async () => {
+  it('langue du bureau illisible : l’écran le dit, montre le texte de base, et l’autre langue reste à un clic', async () => {
     poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
     base.erreursLectureParTable.company_settings = { message: 'panne simulée' };
     const journal = vi.spyOn(console, 'error').mockImplementation(() => {});
     await ouvrir(FR);
     await objetPret();
-    expect(texteEcran()).not.toContain('celle qui part');
-    expect(texteEcran()).toContain('Impossible de lire la langue des messages du bureau pour le moment');
+    expect(objet().value).toBe('Votre rendez-vous');
+    expect(texteEcran()).toContain('La langue dans laquelle vos messages partent n’a pas pu être lue pour le moment : le texte affiché est le texte de base.');
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('false');
     journal.mockRestore();
   });
 
@@ -654,9 +717,12 @@ describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’
     poser([{ type: 'send_email', config: { ...FR, ...EN } }]);
     await ouvrir(FR, { fr: false });
     await jusqua(() => champs<HTMLInputElement>('Email subject').length === 1);
+    expect(texteEcran()).toContain('Your messages are sent in French: this is the text your clients receive.');
     await saisir(champ<HTMLInputElement>('Email subject'), 'Votre rendez-vous de jeudi');
-    expect(texteEcran()).toContain('The French text changed, not its English version.');
-    expect(texteEcran()).toContain('The English version still holds as is');
-    expect(version('French version')?.textContent).toContain('the one sent');
+    expect(bouton('English version — used only if your messages are sent in English').getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain('This version is no longer up to date.');
+    expect(choix('Remove it (your clients will receive the text above)').checked).toBe(true);
+    expect(choix('Keep it as is').checked).toBe(false);
+    expect(champ<HTMLInputElement>('Email subject — English version').value).toBe('Your appointment');
   });
 });

@@ -67,6 +67,14 @@ export function champ<T extends HTMLInputElement | HTMLTextAreaElement = HTMLTex
   return c;
 }
 
+/** Le bouton radio (ou la case) dont l'étiquette contient ce texte. */
+export function choix(libelle: string): HTMLInputElement {
+  const etiquette = Array.from(document.body.querySelectorAll('label')).find((l) => (l.textContent ?? '').includes(libelle));
+  const entree = etiquette?.querySelector('input') ?? (etiquette?.htmlFor ? document.getElementById(etiquette.htmlFor) : null);
+  if (!(entree instanceof HTMLInputElement)) throw new Error(`choix « ${libelle} » introuvable`);
+  return entree;
+}
+
 export async function cliquer(el: Element | null | undefined): Promise<void> {
   if (!el) throw new Error('rien à cliquer');
   await act(async () => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })); });

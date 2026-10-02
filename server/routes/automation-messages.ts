@@ -32,12 +32,25 @@
      index_action   règle à plat : l'index de l'action dans `actions`
      rang           à défaut : le rang parmi les messages de ce canal (0 = le premier)
      corps_lu, objet_lu   le texte français et l'objet lus à l'ouverture de l'écran
-     langue         'fr' (défaut) | 'en' — la version écrite par `texte` / `objet`
+     langue         'fr' (défaut) | 'en' — la langue du texte écrit par `texte` /
+                    `objet` : 'fr' = le texte de base (`body`, `subject`),
+                    'en' = la version anglaise (`body_en`, `subject_en`)
      texte, objet   le texte ; l'objet pour un courriel (un champ absent reste tel quel)
-     version_en     { texte, objet } : la version anglaise, écrite avec le français
-                    dans la même écriture (avec `langue: 'fr'` seulement)
-   Une version anglaise VIDE est retirée (le français part alors à tout le
-   monde) ; le français, lui, ne se vide pas.
+     autre_version  { texte, objet } : l'AUTRE langue, écrite dans la même écriture
+     retirer_autre_version   true : l'autre langue est RETIRÉE du message
+
+   LES DEUX LANGUES (règle fixée le 2026-10-01). L'écran montre et modifie le
+   texte de la langue dans laquelle le bureau envoie ses messages ; l'autre
+   langue, quand le message en porte une, est dans un bloc secondaire. Quand le
+   texte principal change sans l'autre, l'écran offre « La retirer » (coché
+   d'office) ou « La garder telle quelle » — c'est cet ordre que porte
+   `retirer_autre_version`. Rien n'est retiré sans cet ordre : une écriture qui
+   ne le porte pas laisse l'autre version telle quelle.
+     · `langue: 'fr'` + retirer : `body_en` et `subject_en` disparaissent.
+     · `langue: 'en'` + retirer : le texte anglais DEVIENT le texte de base, et
+       `body_en` / `subject_en` disparaissent — le message n'a plus qu'un texte.
+   Une version anglaise écrite VIDE est retirée elle aussi (jamais `body_en: ""`) ;
+   le texte de base, lui, ne se vide pas.
    ═══════════════════════════════════════════════════════════════ */
 
 import { Router } from 'express';
@@ -79,9 +92,11 @@ export const corpsMessageSchema = z.object({
   // Un champ absent reste tel quel (corriger l'objet sans renvoyer le corps).
   texte: texteBrut.optional(),
   objet: objetBrut.optional(),
-  version_en: z.object({ texte: texteBrut.optional(), objet: objetBrut.optional() }).strict().optional(),
+  autre_version: z.object({ texte: texteBrut.optional(), objet: objetBrut.optional() }).strict().optional(),
+  retirer_autre_version: z.boolean().optional(),
 }).strict().refine(
-  (c) => [c.texte, c.objet, c.version_en?.texte, c.version_en?.objet].some((v) => v !== undefined),
+  (c) => c.retirer_autre_version === true
+    || [c.texte, c.objet, c.autre_version?.texte, c.autre_version?.objet].some((v) => v !== undefined),
   { message: 'Rien à écrire : donnez un texte ou un objet.' },
 );
 
@@ -104,20 +119,27 @@ router.patch('/automations/rules/:id/messages', validate(corpsMessageSchema), as
 
   const corps = req.body as CorpsMessage;
   const courriel = corps.canal === 'send_email';
-  if (corps.version_en && corps.langue === 'en') {
+  if (corps.autre_version && corps.retirer_autre_version) {
     return res.status(400).json({
-      error: dire('`version_en` accompagne le texte français : elle ne s’emploie pas avec `langue: "en"`.', '`version_en` goes with the French text: it cannot be used with `langue: "en"`.'),
+      error: dire(
+        'On ne peut pas à la fois écrire l’autre version (`autre_version`) et la retirer (`retirer_autre_version`).',
+        'The other version cannot be both written (`autre_version`) and removed (`retirer_autre_version`).',
+      ),
       code: 'corps_invalide',
     });
   }
   const objetDe = (o: string | undefined) => (courriel ? o : undefined);
-  const ecriture: Ecriture = corps.langue === 'en'
-    ? { body_en: corps.texte, subject_en: objetDe(corps.objet) }
-    : {
-      body: corps.texte,
-      subject: objetDe(corps.objet),
-      ...(corps.version_en ? { body_en: corps.version_en.texte, subject_en: objetDe(corps.version_en.objet) } : {}),
-    };
+  const enAnglais = corps.langue === 'en';
+  const versions = (francais: { texte?: string; objet?: string } | undefined, anglais: { texte?: string; objet?: string } | undefined): Ecriture => ({
+    body: francais?.texte,
+    subject: objetDe(francais?.objet),
+    body_en: anglais?.texte,
+    subject_en: objetDe(anglais?.objet),
+  });
+  const ecriture: Ecriture = {
+    ...(enAnglais ? versions(corps.autre_version, corps) : versions(corps, corps.autre_version)),
+    ...(corps.retirer_autre_version ? { retirer: enAnglais ? 'fr' as const : 'en' as const } : {}),
+  };
 
   const { data: regle, error: eLecture } = await auth.client
     .from('automation_rules')
@@ -166,8 +188,19 @@ router.patch('/automations/rules/:id/messages', validate(corpsMessageSchema), as
   }
   const vise = trouve.message;
   const avant = vise.config as Config;
-  const apres = configApres(avant, corps.canal, ecriture);
   const texteDe = (c: Config, cle: string) => (typeof c[cle] === 'string' ? (c[cle] as string) : '');
+
+  // Retirer le français d'un message qui n'a pas d'anglais ne laisserait rien à envoyer.
+  if (ecriture.retirer === 'fr' && !texteVisible(texteDe(configApres(avant, corps.canal, { ...ecriture, retirer: undefined }), 'body_en'))) {
+    return res.status(400).json({
+      error: dire(
+        'Ce message n’a pas de version anglaise : il n’y a rien à garder si on retire le texte français. Rien n’a été enregistré.',
+        'This message has no English version: nothing would be left if the French text were removed. Nothing was saved.',
+      ),
+      code: 'message_vide',
+    });
+  }
+  const apres = configApres(avant, corps.canal, ecriture);
 
   // Le message qui part quand il n'y a pas d'autre version ne se vide jamais.
   if (!texteVisible(texteDe(apres, 'body'))) {

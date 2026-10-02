@@ -56,7 +56,12 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     }
   },
 
-  /** 04-courriel:834 — bureau en anglais : l'éditeur montre et modifie la version anglaise, celle qui part. */
+  /**
+   * 04-courriel:834 et la règle des deux langues (2026-10-01) — bureau en
+   * anglais : l'éditeur montre et modifie le courriel anglais, celui qui part ;
+   * le français est dans un bloc replié ; corriger l'anglais seul ne bloque
+   * rien et offre de retirer le français (d'office) ou de le garder.
+   */
   async courriel834() {
     const config = {
       subject: 'Votre rendez-vous', subject_en: 'Your appointment',
@@ -65,34 +70,46 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     };
     const r = await regle('bureau-anglais', [{ type: 'send_email', config }]);
     const page = await ouvrirPage();
-    try {
-      await langueDuBureau('en');
+    const blocFrancais = () => editeurCourriel(page).getByRole('button', { name: 'Version française — utilisée seulement si vos messages partent en français' });
+    const ouvrirEditeur = async () => {
       await ouvrirListe(page);
       await deplierMessages(page, r.nom);
       await page.getByRole('button', { name: 'Modifier', exact: true }).first().click();
       await objet(page).waitFor();
+    };
+    try {
+      await langueDuBureau('en');
+      await ouvrirEditeur();
       verifier(await objet(page).inputValue() === 'Your appointment', 'l’éditeur s’ouvre sur l’objet ANGLAIS, celui qui part');
-      const anglais = editeurCourriel(page).getByRole('button', { name: /^Version anglaise/ });
-      verifier(await anglais.getAttribute('aria-pressed') === 'true', 'la version anglaise est la version affichée');
-      verifier((await anglais.innerText()).includes('celle qui part'), 'l’écran dit que c’est la version anglaise qui part');
+      verifier(await editeurCourriel(page).getByText('Vos messages partent en anglais : c’est ce texte que vos clients reçoivent.').count() === 1, 'l’écran dit que les messages partent en anglais');
+      verifier(await blocFrancais().getAttribute('aria-expanded') === 'false', 'le français est dans un bloc REPLIÉ');
       await page.screenshot({ path: `${CAPTURES}/courriel834-anglais.png` });
+
+      // Corriger l'anglais seul : rien n'est bloqué, le bloc se déplie et offre le choix.
       await objet(page).fill('Your appointment tomorrow');
+      await editeurCourriel(page).getByText('Cette version n’est plus à jour.').waitFor();
+      verifier(await blocFrancais().getAttribute('aria-expanded') === 'true', 'le bloc du français se déplie de lui-même');
+      verifier(await page.getByLabel('La retirer (vos clients recevront le texte ci-dessus)').isChecked(), '« La retirer » est coché d’office');
+      verifier(await enregistrerCourriel(page).isEnabled(), '« Enregistrer » n’attend rien');
+      await page.screenshot({ path: `${CAPTURES}/courriel834-autre-perimee.png` });
+
+      // « La garder telle quelle » : l'anglais est écrit, le français ne bouge pas.
+      await page.getByLabel('La garder telle quelle').check();
       await enregistrerCourriel(page).click();
       await page.getByText('Courriel enregistré').waitFor();
-      const [a] = await actions(r.id);
-      verifier(a.config.subject_en === 'Your appointment tomorrow', 'la base : subject_en porte la correction');
-      verifier(a.config.subject === 'Votre rendez-vous' && a.config.body === config.body && a.config.body_en === config.body_en, 'la base : le français et le corps anglais n’ont pas bougé');
-      // La version française reste à un clic, et la corriger seule demande de revoir l'anglais.
-      await page.getByRole('button', { name: 'Modifier', exact: true }).first().click();
-      await objet(page).waitFor();
-      await editeurCourriel(page).getByRole('button', { name: /^Version française/ }).click();
-      verifier(await objet(page).inputValue() === 'Votre rendez-vous', 'la version française se lit à un clic');
-      await objet(page).fill('Votre rendez-vous de demain');
-      await page.getByText('Le texte français a changé, pas sa version anglaise.').waitFor();
-      verifier(await enregistrerCourriel(page).isDisabled(), '« Enregistrer » attend qu’on revoie la version anglaise');
-      await page.getByLabel('La version anglaise reste valable telle quelle').check();
-      verifier(await enregistrerCourriel(page).isEnabled(), 'une fois confirmée, on peut enregistrer');
-      await page.screenshot({ path: `${CAPTURES}/courriel834-francais-a-revoir.png` });
+      let [a] = await actions(r.id);
+      verifier(a.config.subject_en === 'Your appointment tomorrow', '« La garder » : subject_en porte la correction');
+      verifier(a.config.subject === 'Votre rendez-vous' && a.config.body === config.body && a.config.body_en === config.body_en, '« La garder » : le français et le corps anglais n’ont pas bougé');
+
+      // « La retirer » (d'office) : le courriel n'a plus qu'un texte — l'anglais.
+      await ouvrirEditeur();
+      await objet(page).fill('Your appointment on Thursday');
+      await editeurCourriel(page).getByText('Cette version n’est plus à jour.').waitFor();
+      await enregistrerCourriel(page).click();
+      await page.getByText('Courriel enregistré').waitFor();
+      [a] = await actions(r.id);
+      verifier(a.config.subject === 'Your appointment on Thursday' && a.config.body === config.body_en, '« La retirer » : le texte anglais est devenu LE texte du courriel');
+      verifier(!('body_en' in a.config) && !('subject_en' in a.config), '« La retirer » : plus de version anglaise à part (pas de `body_en: ""`)');
     } finally {
       await langueDuBureau('fr');
       await page.context().close();

@@ -131,6 +131,29 @@ export interface EcritureMessage {
    */
   body_en?: string;
   subject_en?: string;
+  /**
+   * La version qu'on RETIRE du message — le choix « La retirer » de l'écran
+   * (voir `AutreVersionMessage`). 'en' : la version anglaise disparaît. 'fr' :
+   * le texte anglais devient LE texte du message (qui n'en a plus qu'un). On
+   * ne peut pas, dans la même écriture, écrire la version qu'on retire.
+   */
+  retirer?: 'fr' | 'en';
+}
+
+/**
+ * La langue du texte que l'écran montre en PRINCIPAL : celle qui part. La
+ * version anglaise quand le bureau envoie ses messages en anglais et que le
+ * message en porte une ; sinon le texte de base (`champLocalise`, côté moteur).
+ */
+export function versionPrincipale(config: Record<string, any> | null | undefined, langueBureau: 'fr' | 'en' | null | undefined): 'fr' | 'en' {
+  const en = config?.body_en;
+  return langueBureau === 'en' && typeof en === 'string' && en.trim() !== '' ? 'en' : 'fr';
+}
+
+/** Le message porte-t-il une AUTRE version que la principale ? (Le texte de base, lui, existe toujours.) */
+export function aAutreVersion(config: Record<string, any> | null | undefined, principale: 'fr' | 'en'): boolean {
+  if (principale === 'en') return true;
+  return [config?.body_en, config?.subject_en].some((v) => typeof v === 'string' && v.trim() !== '');
 }
 
 /** Les étapes d'un parcours dans l'ordre où il les rencontre : le fil principal, puis les embranchements. */
@@ -350,7 +373,7 @@ export async function ecrireMessageDeRegle(
   actionType: TypeMessage,
   ecriture: EcritureMessage,
   cible: CibleMessage = {},
-): Promise<{ variablesInconnues: string[] }> {
+): Promise<{ variablesInconnues: string[]; regle: AutomationRule | null }> {
   const fr = interfaceEnFrancais();
   const estCourriel = actionType === 'send_email';
 
@@ -366,20 +389,23 @@ export async function ecrireMessageDeRegle(
 
   const francais = ecriture.body !== undefined || ecriture.subject !== undefined;
   const anglais = ecriture.body_en !== undefined || ecriture.subject_en !== undefined;
+  /* La langue du texte écrit. Quand on retire une version, c'est l'AUTRE ;
+     sinon le français s'il est écrit (l'anglais l'accompagne alors en « autre
+     version »), à défaut l'anglais. */
+  const langue: 'fr' | 'en' = ecriture.retirer ? (ecriture.retirer === 'fr' ? 'en' : 'fr') : (francais ? 'fr' : 'en');
   const corps = {
     canal: actionType,
     etape_id: cible.etapeId,
     rang: cible.rang,
     corps_lu: cible.corpsLu,
     objet_lu: cible.objetLu,
-    ...(francais
-      ? {
-        langue: 'fr',
-        texte: ecriture.body,
-        objet: ecriture.subject,
-        ...(anglais ? { version_en: { texte: ecriture.body_en, objet: ecriture.subject_en } } : {}),
-      }
-      : { langue: 'en', texte: ecriture.body_en, objet: ecriture.subject_en }),
+    langue,
+    ...(langue === 'fr'
+      ? { texte: ecriture.body, objet: ecriture.subject }
+      : { texte: ecriture.body_en, objet: ecriture.subject_en }),
+    ...(ecriture.retirer
+      ? { retirer_autre_version: true }
+      : (francais && anglais ? { autre_version: { texte: ecriture.body_en, objet: ecriture.subject_en } } : {})),
   };
 
   const reponse = await appelServeur(`/api/automations/rules/${id}/messages`, {
@@ -395,8 +421,12 @@ export async function ecrireMessageDeRegle(
       ? 'Enregistrement impossible pour le moment : rien n’a été modifié. Réessayez dans un instant.'
       : 'Could not save right now: nothing was changed. Try again in a moment.'));
   }
-  const inconnues = (rendu as { variables_inconnues?: unknown } | null)?.variables_inconnues;
-  return { variablesInconnues: Array.isArray(inconnues) ? inconnues.map(String) : [] };
+  const { variables_inconnues: inconnues, regle } = (rendu ?? {}) as { variables_inconnues?: unknown; regle?: unknown };
+  return {
+    variablesInconnues: Array.isArray(inconnues) ? inconnues.map(String) : [],
+    // L'état ENREGISTRÉ, relu par le serveur : c'est lui qu'un écran affiche ensuite.
+    regle: regle && typeof regle === 'object' ? (regle as AutomationRule) : null,
+  };
 }
 
 /**

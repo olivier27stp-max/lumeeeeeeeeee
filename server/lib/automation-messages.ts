@@ -73,6 +73,16 @@ export interface Ecriture {
   subject?: string;
   body_en?: string;
   subject_en?: string;
+  /**
+   * La version qu'on RETIRE du message — l'ordre « retirer l'autre version »
+   * de l'écran, appliqué après les champs ci-dessus.
+   *   'en' : `body_en` et `subject_en` disparaissent ; le texte de base part à tout le monde.
+   *   'fr' : le texte anglais DEVIENT le texte de base (`body`, `subject`), et
+   *          `body_en` / `subject_en` disparaissent — le message n'a plus qu'un
+   *          texte, celui que l'écran montrait. (`body` ne se vide pas : c'est
+   *          lui que le moteur envoie quand il n'y a pas d'autre version.)
+   */
+  retirer?: 'fr' | 'en';
 }
 
 /** Les étapes d'un parcours dans l'ordre où il les rencontre : le fil principal, puis les embranchements. */
@@ -202,6 +212,16 @@ export function configApres(config: Config | undefined, canal: Canal, ecriture: 
     if (valeur === undefined) continue;
     const vide = cle === 'body_en' ? !texteVisible(valeur) : !valeur.trim();
     if (vide) delete neuf[cle]; else neuf[cle] = valeur;
+  }
+  if (ecriture.retirer === 'en') {
+    delete neuf.body_en;
+    delete neuf.subject_en;
+  } else if (ecriture.retirer === 'fr' && typeof neuf.body_en === 'string' && texteVisible(neuf.body_en)) {
+    // Le texte anglais devient LE texte du message ; sans lui, il n'y a rien à garder (la route refuse avant).
+    neuf.body = neuf.body_en;
+    if (courriel && typeof neuf.subject_en === 'string' && neuf.subject_en.trim()) neuf.subject = neuf.subject_en;
+    delete neuf.body_en;
+    delete neuf.subject_en;
   }
   return neuf;
 }

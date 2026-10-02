@@ -26,7 +26,7 @@ vi.mock('sonner', () => ({
 
 import { base, remettre, ligne } from './faux-supabase';
 import { brancherServeur, arreterServeur } from './serveur-messages';
-import { monter, demonter, bouton, boutons, champ, champs, cliquer, saisir, jusqua, texteEcran } from './banc-composants';
+import { monter, demonter, bouton, boutons, champ, champs, choix, cliquer, saisir, jusqua, texteEcran } from './banc-composants';
 import { AutomationSmsSection } from '../../../src/pages/SettingsMessaging';
 
 type Action = { type: string; config: Record<string, unknown> };
@@ -163,50 +163,147 @@ describe('E-64 — le texto qu’on écrit dans les Réglages annonce son nombre
   });
 });
 
-describe('03-texto:345 (même racine) — bureau dont les messages partent en ANGLAIS : Réglages › Messagerie montre et modifie le texte qui part', () => {
+describe('03-texto:345 (même racine) et la règle des deux langues — Réglages › Messagerie montre et modifie le texte qui PART ; l’autre langue est dans un bloc replié', () => {
   const FR = 'Bonjour, votre rendez-vous est confirmé.';
   const EN = 'Hi, your appointment is confirmed.';
   const deplier = () => cliquer(boutons().find((b) => (b.textContent ?? '').includes('Confirmation')));
+  const principal = () => champ('Texte du SMS — Confirmation');
+  const TITRE_EN = 'Version anglaise — utilisée seulement si vos messages partent en anglais';
+  const TITRE_FR = 'Version française — utilisée seulement si vos messages partent en français';
+  const RETIRER = 'La retirer (vos clients recevront le texte ci-dessus)';
+  const GARDER = 'La garder telle quelle';
+  const PERIMEE = 'Cette version n’est plus à jour.';
+  const enregistrer = async () => {
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => base.ecritures.length === 1);
+  };
 
-  it('bureau en anglais : la ligne et le champ montrent l’anglais, « Enregistrer » écrit `body_en`, le français ne bouge pas', async () => {
+  it('bureau en anglais : la ligne et le champ montrent l’anglais, et l’écran dit dans quelle langue les messages partent ; le français est dans un bloc REPLIÉ', async () => {
     poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'en');
     await ouvrir();
     await jusqua(() => texteEcran().includes(EN));
     expect(texteEcran()).not.toContain(FR);
     await deplier();
-    expect(champ('Texte du SMS — Confirmation').value).toBe(EN);
-    expect(texteEcran()).toContain('Version anglaise — celle qui part : la langue des messages du bureau est l’anglais.');
-    await saisir(champ('Texte du SMS — Confirmation'), 'Hi, see you tomorrow.');
-    await cliquer(bouton('Enregistrer'));
-    await jusqua(() => base.ecritures.length === 1);
-    expect(enBase('r1').actions).toEqual([sms(FR, { body_en: 'Hi, see you tomorrow.' })]);
+    expect(principal().value).toBe(EN);
+    expect(texteEcran()).toContain('Vos messages partent en anglais : c’est ce texte que vos clients reçoivent.');
+    expect(bouton(TITRE_FR).getAttribute('aria-expanded')).toBe('false');
+    // Replié : le texte français n'est pas à l'écran.
+    expect(texteEcran()).not.toContain(FR);
+    expect(texteEcran()).not.toContain(PERIMEE);
+  });
+
+  it('bureau en anglais : corriger l’anglais sans le français ne bloque pas — le bloc se déplie, « La retirer » est coché d’office, et l’anglais devient le seul texte', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'en');
+    await ouvrir();
+    await deplier();
+    await saisir(principal(), 'Hi, see you tomorrow.');
+    expect(bouton(TITRE_FR).getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain(PERIMEE);
+    expect(champ('Texte du SMS — Confirmation — Version française').value).toBe(FR);
+    expect(choix(RETIRER).checked).toBe(true);
+    expect(choix(GARDER).checked).toBe(false);
+    expect(bouton('Enregistrer').disabled).toBe(false);
+    await enregistrer();
+    // Le message n'a plus qu'un texte — celui que l'écran montrait ; pas de `body_en: ""`.
+    expect(enBase('r1').actions).toEqual([sms('Hi, see you tomorrow.')]);
     await jusqua(() => texteEcran().includes('Hi, see you tomorrow.'));
   });
 
-  it('bureau en français, texto qui porte une version anglaise : on modifie le français, et l’écran dit que l’anglais reste à mettre à jour', async () => {
+  it('bureau en anglais : « La garder telle quelle » — l’anglais est écrit, le français ne bouge pas', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'en');
+    await ouvrir();
+    await deplier();
+    await saisir(principal(), 'Hi, see you tomorrow.');
+    await cliquer(choix(GARDER));
+    expect(choix(GARDER).checked).toBe(true);
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms(FR, { body_en: 'Hi, see you tomorrow.' })]);
+  });
+
+  it('bureau en français, texto qui porte une version anglaise : le champ porte le français ; corrigé seul, la version anglaise est RETIRÉE (choix d’office)', async () => {
     poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
     await ouvrir();
     await deplier();
-    expect(champ('Texte du SMS — Confirmation').value).toBe(FR);
-    expect(texteEcran()).toContain('Ce texto a aussi une version anglaise, que cet écran ne modifie pas : mettez-la à jour dans Automatisations.');
-    await saisir(champ('Texte du SMS — Confirmation'), 'Bonjour, à demain.');
-    await cliquer(bouton('Enregistrer'));
-    await jusqua(() => base.ecritures.length === 1);
+    expect(principal().value).toBe(FR);
+    expect(texteEcran()).toContain('Vos messages partent en français : c’est ce texte que vos clients reçoivent.');
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('false');
+    expect(texteEcran()).not.toContain(EN);
+    await saisir(principal(), 'Bonjour, à demain.');
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain(PERIMEE);
+    expect(choix(RETIRER).checked).toBe(true);
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms('Bonjour, à demain.')]);
+    expect('body_en' in enBase('r1').actions[0].config).toBe(false);
+  });
+
+  it('bureau en français : « La garder telle quelle » — la version anglaise reste, parce que l’utilisateur l’a choisi', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
+    await ouvrir();
+    await deplier();
+    await saisir(principal(), 'Bonjour, à demain.');
+    await cliquer(choix(GARDER));
+    await enregistrer();
     expect(enBase('r1').actions).toEqual([sms('Bonjour, à demain.', { body_en: EN })]);
   });
 
-  it('bureau en anglais, texto sans version anglaise : le français, et l’écran dit que c’est lui qui part', async () => {
+  it('le bloc se déplie à la main et l’autre langue s’y modifie : les deux corrigées, rien n’est périmé, les deux sont écrites', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
+    await ouvrir();
+    await deplier();
+    await cliquer(bouton(TITRE_EN));
+    expect(bouton(TITRE_EN).getAttribute('aria-expanded')).toBe('true');
+    const autre = () => champ('Texte du SMS — Confirmation — Version anglaise');
+    expect(autre().value).toBe(EN);
+    // L'autre langue seule : rien n'est périmé, et seul `body_en` change.
+    await saisir(autre(), 'Hi, see you tomorrow.');
+    expect(texteEcran()).not.toContain(PERIMEE);
+    await saisir(principal(), 'Bonjour, à demain.');
+    expect(texteEcran()).not.toContain(PERIMEE);
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms('Bonjour, à demain.', { body_en: 'Hi, see you tomorrow.' })]);
+  });
+
+  it('vider l’autre langue, c’est la retirer', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
+    await ouvrir();
+    await deplier();
+    await cliquer(bouton(TITRE_EN));
+    await saisir(champ('Texte du SMS — Confirmation — Version anglaise'), '');
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms(FR)]);
+  });
+
+  it('bureau en anglais, texto sans version anglaise : un seul texte, l’écran dit que c’est lui qui part, pas de bloc', async () => {
     poser([regle({ name: 'Confirmation', actions: [sms(FR)] })], 'en');
     await ouvrir();
     await deplier();
-    expect(champ('Texte du SMS — Confirmation').value).toBe(FR);
-    expect(texteEcran()).toContain('ce texto n’a pas de version anglaise : c’est ce texte français qui part.');
+    expect(principal().value).toBe(FR);
+    expect(texteEcran()).toContain('Vos messages partent en anglais, mais ce texto n’a qu’un texte : c’est lui que vos clients reçoivent.');
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+    await saisir(principal(), 'Hi, see you tomorrow.');
+    await enregistrer();
+    expect(enBase('r1').actions).toEqual([sms('Hi, see you tomorrow.')]);
   });
 
-  it('bureau en français, texto sans version anglaise : rien de plus à l’écran', async () => {
+  it('bureau en français, texto sans version anglaise : pas de bloc', async () => {
     poser([regle({ name: 'Confirmation', actions: [sms(FR)] })], 'fr');
     await ouvrir();
     await deplier();
-    expect(texteEcran()).not.toContain('version anglaise');
+    expect(texteEcran()).toContain('Vos messages partent en français');
+    expect(document.body.querySelector('[data-testid="autre-version"]')).toBeNull();
+    expect(texteEcran()).not.toContain('Version anglaise');
+  });
+
+  it('en interface anglaise, le bloc et ses deux choix sont en anglais', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
+    await ouvrir(false);
+    await deplier();
+    expect(texteEcran()).toContain('Your messages are sent in French: this is the text your clients receive.');
+    await saisir(champ('SMS text — Confirmation'), 'Bonjour, à demain.');
+    expect(bouton('English version — used only if your messages are sent in English').getAttribute('aria-expanded')).toBe('true');
+    expect(texteEcran()).toContain('This version is no longer up to date.');
+    expect(choix('Remove it (your clients will receive the text above)').checked).toBe(true);
+    expect(choix('Keep it as is').checked).toBe(false);
   });
 });

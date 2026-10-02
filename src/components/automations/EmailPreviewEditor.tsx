@@ -10,7 +10,7 @@
    Aucune balise n'est jamais visible.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useState, useMemo, useEffect, useCallback, useId, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { X, Loader2, Check, Plus, Trash2, Type, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
@@ -25,6 +25,7 @@ import { variablesPour, VARIABLES_PAR_TYPE } from '../../lib/variablesCourriel';
 import { trouverAction } from '../../lib/automationCatalogue';
 import { apercuCourriel, envoyerEssaiCourriel } from '../../lib/emailTemplatesApi';
 import { useChampsTous, variablesChampsPourCourriel } from '../champs/automatisations';
+import AutreVersionMessage, { nomAutreVersion, phraseLangueDesMessages, type ChoixAutreVersion } from './AutreVersionMessage';
 
 interface Props {
   /** Règle d'automatisation visée. Absent quand `enregistrerTexte` est fourni. */
@@ -117,10 +118,12 @@ let compteurId = 0;
  * champ et lui fait perdre le focus au milieu d'une phrase.
  */
 function ChampBloc({
-  bloc, fr, onChange, onFocus, prendLeFocus,
+  bloc, fr, onChange, onFocus, prendLeFocus, suffixeNom,
 }: {
   bloc: Bloc;
   fr: boolean;
+  /** Ajouté au nom du champ (« Paragraphe — Version anglaise ») : les lignes de l'autre langue ne portent pas le nom de celles du courriel. */
+  suffixeNom?: string;
   /** La ligne vient d'être ajoutée : elle reçoit le curseur, on peut taper tout de suite (04-courriel:443). */
   prendLeFocus?: boolean;
   onChange: (texte: string) => void;
@@ -142,7 +145,7 @@ function ChampBloc({
       onFocus={(e) => onFocus(e.currentTarget)}
       rows={1}
       placeholder={fr ? 'Écrivez ici…' : 'Type here…'}
-      aria-label={bloc.type === 'titre' ? (fr ? 'Titre' : 'Title') : bloc.type === 'puce' ? (fr ? 'Puce' : 'Bullet') : (fr ? 'Paragraphe' : 'Paragraph')}
+      aria-label={`${bloc.type === 'titre' ? (fr ? 'Titre' : 'Title') : bloc.type === 'puce' ? (fr ? 'Puce' : 'Bullet') : (fr ? 'Paragraphe' : 'Paragraph')}${suffixeNom ? ` — ${suffixeNom}` : ''}`}
       className={cn(
         'w-full bg-transparent border border-transparent rounded px-2 py-1 resize-none overflow-hidden',
         'hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none transition-colors',
@@ -163,6 +166,9 @@ const OBJET_MAX_AUTOMATISATION = trouverAction('send_email')?.champs.find((c) =>
 
 /** Au-delà de ce nombre de variables, la palette offre une recherche. */
 const SEUIL_RECHERCHE_VARIABLES = 12;
+
+/** Les lignes de l'autre langue ne deviennent pas la cible de « Insérer » : il vise le courriel affiché. */
+const pasDeCible = (): void => {};
 
 /** Découpe le texte converti en blocs manipulables. */
 function texteEnBlocs(texte: string): Bloc[] {
@@ -316,29 +322,40 @@ export default function EmailPreviewEditor({
    * anglophone corrigeait un texte que ses clients ne recevaient pas, pendant
    * que l'anglais, invisible, continuait de partir.
    *
-   * On montre donc la version qui PART, on dit laquelle, et l'autre reste à un
-   * clic. `blocs` et `objet` sont ceux de la version affichée.
+   * LA RÈGLE (fixée le 2026-10-01 ; elle remplace celle du commit 6e7bc921,
+   * qui montrait deux onglets et bloquait « Enregistrer ») :
+   *   · le courriel affiché — objet et lignes — est celui de la langue dans
+   *     laquelle le bureau ENVOIE ses messages (`principale`), et l'écran le dit ;
+   *   · l'AUTRE langue, quand le courriel en porte une, est dans un bloc replié
+   *     au-dessus du pied (`AutreVersionMessage`), dépliable et modifiable ;
+   *   · corriger le courriel affiché sans l'autre langue ne bloque rien : le
+   *     bloc se déplie, dit « Cette version n'est plus à jour. » et offre de la
+   *     retirer (coché d'office) ou de la garder telle quelle.
+   * `blocs` et `objet` sont ceux de la langue principale.
    */
   const modeRegle = !!ruleId && !enregistrerTexte;
   const [versions, setVersions] = useState<Record<Langue, Version>>(() => ({
     fr: { blocs: htmlEnBlocs(body), objet: subject },
     en: { blocs: [], objet: '' },
   }));
-  const [langue, setLangue] = useState<Langue>('fr');
-  const { blocs, objet } = versions[langue];
+  /** La langue du courriel affiché : celle qui part. Fixée à l'ouverture, une fois la règle relue. */
+  const [principale, setPrincipale] = useState<Langue>('fr');
+  const autre: Langue = principale === 'fr' ? 'en' : 'fr';
+  const { blocs, objet } = versions[principale];
   const setBlocs = useCallback((maj: (b: Bloc[]) => Bloc[]) => {
-    setVersions((v) => ({ ...v, [langue]: { ...v[langue], blocs: maj(v[langue].blocs) } }));
-  }, [langue]);
+    setVersions((v) => ({ ...v, [principale]: { ...v[principale], blocs: maj(v[principale].blocs) } }));
+  }, [principale]);
   const setObjet = useCallback((maj: string | ((o: string) => string)) => {
-    setVersions((v) => ({ ...v, [langue]: { ...v[langue], objet: typeof maj === 'function' ? maj(v[langue].objet) : maj } }));
-  }, [langue]);
-  /** Ce qu'on sait de la règle une fois relue. `pret` = on peut montrer le texte. */
-  const [lecture, setLecture] = useState<{ pret: boolean; aAnglais: boolean; langueBureau: Langue | null }>(
-    { pret: !modeRegle, aAnglais: false, langueBureau: null },
+    setVersions((v) => ({ ...v, [principale]: { ...v[principale], objet: typeof maj === 'function' ? maj(v[principale].objet) : maj } }));
+  }, [principale]);
+  /** Ce qu'on sait de la règle une fois relue. `pret` = on peut montrer le texte ; `aAutre` = le courriel porte l'autre langue. */
+  const [lecture, setLecture] = useState<{ pret: boolean; aAutre: boolean; langueBureau: Langue | null }>(
+    { pret: !modeRegle, aAutre: false, langueBureau: null },
   );
-  /** « La version anglaise reste valable telle quelle » : coché par l'utilisateur. */
-  const [anglaisConfirme, setAnglaisConfirme] = useState(false);
-  const idAnglaisConfirme = useId();
+  /** L'autre langue, périmée : « La retirer » (d'office) ou « La garder telle quelle ». */
+  const [choixAutre, setChoixAutre] = useState<ChoixAutreVersion>('retirer');
+  /** Le bloc de l'autre langue, déplié par l'utilisateur (périmée, elle l'est toujours). */
+  const [autreDeplie, setAutreDeplie] = useState(false);
   const [actif, setActif] = useState<number | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
   const [enregistre, setEnregistre] = useState(false);
@@ -446,8 +463,8 @@ export default function EmailPreviewEditor({
        traite avant les crochets : `{{client.x}}` passerait sinon pour la clé
        bancale `{client.x`. Champ connu → rien à dire ; inconnu → signalé tel
        qu'écrit, pour que l'auteur voie exactement ce qu'il a tapé. */
-    // Les deux versions partent aux clients : mêmes variables, même contrôle.
-    const ecrit = [versions.fr, ...(lecture.aAnglais ? [versions.en] : [])]
+    // Les deux langues peuvent partir aux clients : mêmes variables, même contrôle.
+    const ecrit = [versions[principale], ...(lecture.aAutre ? [versions[autre]] : [])]
       .map((v) => `${v.objet} ${blocsEnTexte(v.blocs)}`).join(' ');
     const texte = ecrit.replace(
       /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g,
@@ -504,7 +521,7 @@ export default function EmailPreviewEditor({
        passer « [prenom] » (triage « modèles », 04-courriel:620). */
     if (!typeCourriel) for (const cle of variablesInconnues(texte)) if (!connues.has(cle)) vues.add(cle);
     return [...vues];
-  }, [versions, lecture.aAnglais, variables]);
+  }, [versions, principale, autre, lecture.aAutre, variables]);
 
   // L'en-tête et le pied de page sont ajoutés par le SERVEUR à l'envoi
   // (`buildEmailLayout`), comme pour une facture ou un devis. Les afficher ici
@@ -550,14 +567,20 @@ export default function EmailPreviewEditor({
         console.error('[automations/courriel] langue des messages illisible', e);
       }
       if (!vivant) return;
+      /* La langue du courriel affiché : celle qui PART — l'anglais quand le
+         bureau envoie en anglais et que le courriel en a une version, sinon le
+         texte de base (c'est lui que le moteur envoie faute d'anglais). */
+      const quiPart: Langue = langueBureau === 'en' && !!anglais && anglais.body.trim() !== '' ? 'en' : 'fr';
       if (anglais) {
         const lu = anglais;
-        setVersions((v) => ({ ...v, en: { blocs: htmlEnBlocs(lu.body), objet: lu.subject } }));
+        // Sans objet anglais, c'est l'objet de base qui part avec le corps anglais : on montre celui-là.
+        const objetAnglais = lu.subject.trim() || quiPart !== 'en' ? lu.subject : subject;
+        setVersions((v) => ({ ...v, en: { blocs: htmlEnBlocs(lu.body), objet: objetAnglais } }));
         setEnBase((b) => ({ ...b, body_en: lu.body, subject_en: lu.subject }));
-        // On ouvre sur la version qui part.
-        if (langueBureau === 'en' && lu.body.trim()) setLangue('en');
       }
-      setLecture({ pret: true, aAnglais: !!anglais, langueBureau });
+      setPrincipale(quiPart);
+      // Le texte de base existe toujours : affiché en anglais, le courriel porte forcément l'autre langue.
+      setLecture({ pret: true, aAutre: quiPart === 'en' || !!anglais, langueBureau });
     })();
     return () => { vivant = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- à l'ouverture seulement : relire à chaque frappe remplacerait la saisie.
@@ -565,29 +588,27 @@ export default function EmailPreviewEditor({
 
   const initial = useMemo(() => ({
     fr: { blocs: texteCompare(htmlEnBlocs(enBase.body)), objet: enBase.subject },
-    en: { blocs: texteCompare(htmlEnBlocs(enBase.body_en)), objet: enBase.subject_en },
-  }), [enBase]);
-  const modifieFr = texteCompare(versions.fr.blocs) !== initial.fr.blocs || versions.fr.objet !== initial.fr.objet;
-  const modifieEn = lecture.aAnglais
-    && (texteCompare(versions.en.blocs) !== initial.en.blocs || versions.en.objet !== initial.en.objet);
-  const modifie = modifieFr || modifieEn;
+    en: {
+      blocs: texteCompare(htmlEnBlocs(enBase.body_en)),
+      // Affiché en anglais sans objet anglais : l'objet de base est celui qu'on a montré.
+      objet: enBase.subject_en.trim() || principale !== 'en' ? enBase.subject_en : enBase.subject,
+    },
+  }), [enBase, principale]);
+  const changee = (l: Langue) => texteCompare(versions[l].blocs) !== initial[l].blocs || versions[l].objet !== initial[l].objet;
+  const modifiePrincipale = changee(principale);
+  const modifieAutre = lecture.aAutre && changee(autre);
+  const modifie = modifiePrincipale || modifieAutre;
   /**
-   * Le français a changé ici, pas l'anglais : il partirait tel quel, périmé,
-   * sans que personne le voie. On le dit, et « Enregistrer » attend qu'on le
-   * mette à jour, qu'on le vide, ou qu'on confirme qu'il reste valable — la
-   * même règle, avec les mêmes mots, que le panneau d'étape de l'éditeur.
+   * Le courriel affiché a changé, pas son autre langue : elle n'est plus à
+   * jour. On ne bloque RIEN — le bloc de l'autre langue se déplie, le dit, et
+   * offre de la retirer (d'office) ou de la garder telle quelle.
    */
-  const anglaisARevoir = lecture.aAnglais && modifieFr && !modifieEn && blocsEnTexte(versions.en.blocs).trim() !== '';
-  const anglaisPerime = anglaisARevoir && !anglaisConfirme;
+  const autrePerimee = lecture.aAutre && modifiePrincipale && !modifieAutre;
+  /** L'autre langue s'en va : on l'a vidée, ou elle est périmée et « La retirer » est resté coché. */
+  const retirerAutre = (modifieAutre && !blocsEnTexte(versions[autre].blocs).trim()) || (autrePerimee && choixAutre === 'retirer');
   /** Un objet qu'on vient d'écrire et que le serveur refusera : dit ici, bouton grisé. */
-  const objetTropLong = modeRegle && (
-    (versions.fr.objet.length > OBJET_MAX_AUTOMATISATION && versions.fr.objet !== enBase.subject)
-    || (lecture.aAnglais && versions.en.objet.length > OBJET_MAX_AUTOMATISATION && versions.en.objet !== enBase.subject_en)
-  );
-  /** La version que les clients reçoivent — `null` quand la langue du bureau n'a pas pu être lue. */
-  const langueQuiPart: Langue | null = lecture.langueBureau === null
-    ? null
-    : lecture.langueBureau === 'en' && lecture.aAnglais && enBase.body_en.trim() ? 'en' : 'fr';
+  const objetTropLong = modeRegle && ([principale, ...(lecture.aAutre && !retirerAutre ? [autre] : [])] as Langue[])
+    .some((l) => versions[l].objet.length > OBJET_MAX_AUTOMATISATION && versions[l].objet !== initial[l].objet);
 
   /**
    * Ferme la fenêtre, en demandant confirmation si du travail serait perdu.
@@ -734,7 +755,7 @@ export default function EmailPreviewEditor({
   };
 
   const enregistrer = async () => {
-    if (!modifie || enregistrement || anglaisPerime || objetTropLong) return;
+    if (!modifie || enregistrement || objetTropLong) return;
     setEnregistrement(true);
     try {
       // Le HTML n'est reconstruit qu'ici : l'utilisateur ne l'a jamais vu.
@@ -744,26 +765,45 @@ export default function EmailPreviewEditor({
       } else if (ruleId) {
         // Une règle peut envoyer DEUX courriels : on écrit dans celui qu'on a
         // ouvert (désigné par le texte lu), jamais dans « tous les courriels ».
-        // Et seulement la ou les versions modifiées : une version anglaise
-        // vidée est retirée (le français part alors à tout le monde).
+        // Et seulement la ou les langues modifiées. L'autre langue, périmée ou
+        // vidée, n'est retirée que sur l'ordre que l'écran a montré.
+        const champs = (l: Langue): EcritureMessage => (l === 'fr'
+          ? { body: blocsVersHtml(versions.fr.blocs), subject: versions.fr.objet }
+          : {
+            body_en: blocsVersHtml(versions.en.blocs),
+            // Un objet anglais n'est créé que si on l'a écrit : sinon l'objet de base continue de partir.
+            ...(versions.en.objet !== initial.en.objet || enBase.subject_en.trim() ? { subject_en: versions.en.objet } : {}),
+          });
         const ecriture: EcritureMessage = {
-          ...(modifieFr ? { body: blocsVersHtml(versions.fr.blocs), subject: versions.fr.objet } : {}),
-          ...(modifieEn ? { body_en: blocsVersHtml(versions.en.blocs), subject_en: versions.en.objet } : {}),
+          ...(modifiePrincipale ? champs(principale) : {}),
+          ...(modifieAutre && !retirerAutre ? champs(autre) : {}),
+          ...(retirerAutre ? { retirer: autre } : {}),
         };
         await ecrireMessageDeRegle(ruleId, 'send_email', ecriture, { corpsLu: enBase.body, objetLu: enBase.subject });
-        const anglaisVide = modifieEn && !blocsEnTexte(versions.en.blocs).trim();
-        setEnBase((b) => ({
-          body: ecriture.body ?? b.body,
-          subject: ecriture.subject ?? b.subject,
-          body_en: anglaisVide ? '' : ecriture.body_en ?? b.body_en,
-          subject_en: ecriture.subject_en ?? b.subject_en,
-        }));
-        setAnglaisConfirme(false);
-        // Plus de version anglaise : il ne reste que le français à montrer.
-        if (anglaisVide && !versions.en.objet.trim()) {
-          setLecture((l) => ({ ...l, aAnglais: false }));
-          setLangue('fr');
+        if (retirerAutre && autre === 'fr') {
+          // Le français retiré : le texte anglais devient LE texte du courriel (c'est ce que le serveur a écrit).
+          const seul = versions.en;
+          setEnBase((b) => ({
+            body: ecriture.body_en ?? b.body_en,
+            subject: seul.objet.trim() ? seul.objet : b.subject,
+            body_en: '',
+            subject_en: '',
+          }));
+          setVersions({ fr: seul, en: { blocs: [], objet: '' } });
+          setPrincipale('fr');
+        } else {
+          setEnBase((b) => ({
+            body: ecriture.body ?? b.body,
+            subject: ecriture.subject ?? b.subject,
+            body_en: retirerAutre ? '' : ecriture.body_en ?? b.body_en,
+            subject_en: retirerAutre ? '' : ecriture.subject_en ?? b.subject_en,
+          }));
+          if (retirerAutre) setVersions((v) => ({ ...v, en: { blocs: [], objet: '' } }));
         }
+        // Il ne reste qu'un texte : plus de bloc « autre langue ».
+        if (retirerAutre) setLecture((l) => ({ ...l, aAutre: false }));
+        setChoixAutre('retirer');
+        setAutreDeplie(false);
       } else {
         // Ni destination injectée, ni règle : rien n'aurait été écrit, et
         // l'utilisateur aurait vu « enregistré » pour du travail perdu.
@@ -854,50 +894,11 @@ export default function EmailPreviewEditor({
           </button>
         </div>
 
-        {/* Quelle version on regarde, et laquelle part. */}
-        {modeRegle && lecture.pret && (lecture.aAnglais || lecture.langueBureau === 'en') && (
-          <div className="shrink-0 border-b border-outline/40 px-3 py-2 sm:px-5">
-            {lecture.aAnglais && (
-              <div role="group" aria-label={fr ? 'Version du courriel' : 'Email version'} className="flex flex-wrap items-center gap-1.5">
-                {(['fr', 'en'] as const).map((l) => (
-                  <button
-                    key={l}
-                    type="button"
-                    aria-pressed={langue === l}
-                    onClick={() => { setLangue(l); setActif(null); setCibleObjet(false); }}
-                    className={cn(
-                      'rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
-                      langue === l
-                        ? 'border-primary bg-primary/10 text-text-primary'
-                        : 'border-outline/50 text-text-tertiary hover:text-text-secondary',
-                    )}
-                  >
-                    {l === 'fr' ? (fr ? 'Version française' : 'French version') : (fr ? 'Version anglaise' : 'English version')}
-                    {langueQuiPart === l && (
-                      <span className="font-normal"> — {fr ? 'celle qui part' : 'the one sent'}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-            <p className={cn('text-[11px] leading-relaxed text-text-tertiary', lecture.aAnglais && 'mt-1')}>
-              {!lecture.aAnglais
-                ? (fr
-                  ? 'La langue des messages du bureau est l’anglais, mais ce courriel n’a pas de version anglaise : c’est ce texte français qui part.'
-                  : 'The office message language is English, but this email has no English version: this French text is the one sent.')
-                : lecture.langueBureau === null
-                  ? (fr
-                    ? 'Impossible de lire la langue des messages du bureau pour le moment : vérifiez les deux versions.'
-                    : 'The office message language cannot be read right now: check both versions.')
-                  : langueQuiPart === 'en'
-                    ? (fr
-                      ? 'Vos clients reçoivent la version anglaise : la langue des messages du bureau est l’anglais. Vide = le texte français part à tout le monde.'
-                      : 'Your clients receive the English version: the office message language is English. Empty = the French text goes to everyone.')
-                    : (fr
-                      ? 'Vos clients reçoivent la version française. La version anglaise part à la place du texte français quand la langue du bureau est l’anglais.'
-                      : 'Your clients receive the French version. The English version is sent instead of the French text when the office language is English.')}
-            </p>
-          </div>
+        {/* Dans quelle langue les messages partent — donc quel courriel on a sous les yeux. */}
+        {modeRegle && lecture.pret && (
+          <p data-testid="langue-des-messages" className="shrink-0 border-b border-outline/40 px-3 py-2 text-[11px] leading-relaxed text-text-tertiary sm:px-5">
+            {phraseLangueDesMessages(fr, lecture.langueBureau, principale, 'courriel')}
+          </p>
         )}
 
         {!lecture.pret ? (
@@ -1105,25 +1106,52 @@ export default function EmailPreviewEditor({
           </div>
         )}
 
-        {/* Le français a changé, pas l'anglais : mêmes mots que le panneau
-            d'étape de l'éditeur (PanneauEtape). */}
-        {anglaisARevoir && (
-          <div className="shrink-0 border-t border-amber-500/30 bg-amber-500/10 px-5 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
-            <p>
-              {fr
-                ? 'Le texte français a changé, pas sa version anglaise. Mettez-la à jour — ou videz-la pour que le français parte à tout le monde.'
-                : 'The French text changed, not its English version. Update it — or empty it so the French goes to everyone.'}
-            </p>
-            <label htmlFor={idAnglaisConfirme} className="mt-1.5 flex cursor-pointer items-center gap-2">
-              <input
-                id={idAnglaisConfirme}
-                type="checkbox"
-                checked={anglaisConfirme}
-                onChange={(e) => setAnglaisConfirme(e.target.checked)}
-                className="h-4 w-4 rounded border-outline text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-              />
-              <span>{fr ? 'La version anglaise reste valable telle quelle' : 'The English version still holds as is'}</span>
-            </label>
+        {/* L'AUTRE LANGUE du courriel : repliée, dépliable et modifiable. Périmée
+            (le courriel affiché a changé, pas elle), elle se déplie d'elle-même
+            et offre le choix — « Enregistrer » n'attend rien. */}
+        {modeRegle && lecture.pret && lecture.aAutre && (
+          <div className="shrink-0 border-t border-outline/40 px-3 py-2 sm:px-5">
+            <AutreVersionMessage
+              fr={fr}
+              langue={autre}
+              perimee={autrePerimee}
+              choix={choixAutre}
+              onChoix={setChoixAutre}
+              deplie={autreDeplie}
+              onDeplie={setAutreDeplie}
+            >
+              <div className="max-h-[28vh] space-y-1 overflow-y-auto rounded-md border border-outline/40 bg-white p-2">
+                <input
+                  value={versions[autre].objet}
+                  onChange={(e) => {
+                    const valeur = e.target.value;
+                    setVersions((v) => ({ ...v, [autre]: { ...v[autre], objet: valeur } }));
+                  }}
+                  placeholder={fr ? 'Objet du courriel' : 'Email subject'}
+                  aria-label={`${fr ? 'Objet du courriel' : 'Email subject'} — ${nomAutreVersion(fr, autre)}`}
+                  className="w-full rounded border border-transparent bg-transparent px-2 py-1 text-[13px] font-semibold text-text-primary hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                />
+                {versions[autre].blocs.map((bloc) => (
+                  <div key={bloc.id} className="flex items-start gap-1">
+                    {bloc.type === 'puce' && (
+                      <span className="select-none pt-1.5 text-[13px] text-text-tertiary">•</span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <ChampBloc
+                        bloc={bloc}
+                        fr={fr}
+                        suffixeNom={nomAutreVersion(fr, autre)}
+                        onChange={(texte) => setVersions((v) => ({
+                          ...v,
+                          [autre]: { ...v[autre], blocs: v[autre].blocs.map((b) => (b.id === bloc.id ? { ...b, texte } : b)) },
+                        }))}
+                        onFocus={pasDeCible}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </AutreVersionMessage>
           </div>
         )}
 
@@ -1212,10 +1240,10 @@ export default function EmailPreviewEditor({
               </button>
               <button
                 onClick={enregistrer}
-                disabled={!modifie || enregistrement || anglaisPerime || objetTropLong}
+                disabled={!modifie || enregistrement || objetTropLong}
                 className={cn(
                   'px-4 py-1.5 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1.5',
-                  modifie && !enregistrement && !anglaisPerime && !objetTropLong
+                  modifie && !enregistrement && !objetTropLong
                     ? 'bg-primary text-white hover:bg-primary/90'
                     : 'bg-surface-tertiary text-text-tertiary cursor-not-allowed',
                 )}
