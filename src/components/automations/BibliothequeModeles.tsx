@@ -264,6 +264,41 @@ function EtiquetteCategorie({ cle, fr }: { cle: CategorieModele; fr: boolean }) 
   );
 }
 
+/*
+ * LA RAISON D'UN ÉCHEC, EN MOTS (01-bibliotheque:525, :568 et :626).
+ *
+ * Réseau coupé, `fetch` lève « Failed to fetch » : c'est ce texte, brut et en
+ * anglais, que la fenêtre affichait. Et quand le serveur répond sans message
+ * (une page d'erreur de passerelle), l'API retombe sur une phrase écrite en
+ * français — affichée telle quelle sous un titre anglais.
+ */
+const REPLIS_DE_L_API: Record<'charger' | 'creer', string[]> = {
+  charger: ['Impossible de charger les modèles.'],
+  creer: ['Impossible de créer l’automatisation.', 'Impossible de créer l\'automatisation.'],
+};
+function raisonLisible(e: unknown, fr: boolean, quoi: 'charger' | 'creer'): string {
+  const brut = (e instanceof Error ? e.message : String(e ?? '')).trim();
+  if (e instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(brut)) {
+    const rien = quoi === 'creer' ? (fr ? ' Rien n’a été créé.' : ' Nothing was created.') : '';
+    return fr
+      ? `Connexion perdue — vérifiez votre réseau et réessayez.${rien}`
+      : `Connection lost — check your network and try again.${rien}`;
+  }
+  // Le serveur n'a rien dit d'utilisable : une phrase dans la langue de l'interface.
+  if (!brut || REPLIS_DE_L_API[quoi].includes(brut)) {
+    if (quoi === 'creer') {
+      return fr
+        ? 'Impossible de créer l’automatisation. Réessayez dans un instant.'
+        : 'Could not create the automation. Try again in a moment.';
+    }
+    return fr
+      ? 'Le serveur n’a pas répondu comme prévu. Réessayez dans un instant.'
+      : 'The server did not respond as expected. Try again in a moment.';
+  }
+  // La raison donnée par le serveur (déjà dans la langue de l'interface).
+  return brut;
+}
+
 function nouvelleCle(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -316,7 +351,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
       .then((m) => { if (vivant) setModeles(m); })
       .catch((e: unknown) => {
         console.error('[bibliotheque-modeles] chargement', e);
-        if (vivant) setErreur(e instanceof Error ? e.message : String(e));
+        if (vivant) setErreur(raisonLisible(e, fr, 'charger'));
       });
     return () => { vivant = false; };
   }, [open, essai]);
@@ -387,7 +422,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
       console.error('[bibliotheque-modeles] utiliser', e);
       // Nouvelle clé : réessayer après un échec doit pouvoir créer.
       cleIdempotence.current = nouvelleCle();
-      onErreur(e instanceof Error ? e.message : String(e));
+      onErreur(raisonLisible(e, fr, 'creer'));
     } finally {
       enCours.current = false;
       setEnvoi(false);
