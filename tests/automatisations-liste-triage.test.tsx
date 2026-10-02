@@ -304,6 +304,98 @@ describe('03-onglets-etats:229 et 10-volume:210 — « À vérifier » ne dit «
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('11-clavier:178, :209, :161 — les menus « ⋮ » et « Créer » au clavier', () => {
+  const menu = () => document.body.querySelector('[role="menu"]') as HTMLElement | null;
+  const actif = () => (document.activeElement?.textContent || '').replace(/\s+/g, ' ').trim();
+  const ouvrirActions = async () => {
+    const b = bouton(/^Actions pour Relance 1$/) as HTMLButtonElement;
+    b.focus();
+    await cliquer(b);
+    return b;
+  };
+
+  it('à l’ouverture du menu ⋮, le focus ENTRE dans le menu (rendu dans un portail, hors de l’ordre de tabulation)', async () => {
+    await rendre();
+    await ouvrirActions();
+    expect(menu()).not.toBeNull();
+    expect(document.activeElement).toBe(menu());
+    expect(menu()?.getAttribute('aria-label')).toBe('Actions pour Relance 1');
+  });
+
+  it('Tab parcourt Modifier, Dupliquer, Déplacer dans un dossier, Supprimer ; Maj+Tab remonte', async () => {
+    await rendre();
+    await ouvrirActions();
+    for (const attendu of ['Modifier', 'Dupliquer', 'Déplacer dans un dossier', 'Supprimer']) {
+      expect(await touche(document.activeElement, 'Tab')).toBe(true);
+      expect(actif()).toBe(attendu);
+    }
+    await touche(document.activeElement, 'Tab', { shiftKey: true });
+    expect(actif()).toBe('Déplacer dans un dossier');
+  });
+
+  it('les flèches, Début et Fin circulent entre les entrées, en boucle', async () => {
+    await rendre();
+    await ouvrirActions();
+    await touche(document.activeElement, 'ArrowDown');
+    expect(actif()).toBe('Modifier');
+    await touche(document.activeElement, 'ArrowUp');
+    expect(actif()).toBe('Supprimer');
+    await touche(document.activeElement, 'ArrowDown');
+    expect(actif()).toBe('Modifier');
+    await touche(document.activeElement, 'End');
+    expect(actif()).toBe('Supprimer');
+    await touche(document.activeElement, 'Home');
+    expect(actif()).toBe('Modifier');
+  });
+
+  it('Tab après la dernière entrée REFERME le menu et rend le focus au bouton (le navigateur poursuit de là)', async () => {
+    await rendre();
+    const b = await ouvrirActions();
+    await touche(document.activeElement, 'End');
+    // Pas de preventDefault : la tabulation continue, depuis le bouton, vers ce qui le suit.
+    expect(await touche(document.activeElement, 'Tab')).toBe(false);
+    expect(menu()).toBeNull();
+    expect(document.activeElement).toBe(b);
+    expect(b.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('Maj+Tab avant la première entrée referme aussi, et reste sur le bouton', async () => {
+    await rendre();
+    const b = await ouvrirActions();
+    expect(await touche(document.activeElement, 'Tab', { shiftKey: true })).toBe(true);
+    expect(menu()).toBeNull();
+    expect(document.activeElement).toBe(b);
+  });
+
+  it('Échap referme et rend le focus au bouton, depuis une entrée', async () => {
+    await rendre();
+    const b = await ouvrirActions();
+    await touche(document.activeElement, 'ArrowDown');
+    await touche(document.activeElement, 'Escape');
+    expect(menu()).toBeNull();
+    expect(document.activeElement).toBe(b);
+  });
+
+  it('menu « Créer » : le focus y entre, la flèche bas va sur « Partir de zéro », Tab sur « Construire avec Lumi »', async () => {
+    await rendre();
+    const creer = bouton(/^Créer$/) as HTMLButtonElement;
+    creer.focus();
+    await cliquer(creer);
+    expect(document.activeElement).toBe(menu());
+    await touche(document.activeElement, 'ArrowDown');
+    expect(actif()).toMatch(/^Partir de zéro/);
+    await touche(document.activeElement, 'Tab');
+    expect(actif()).toMatch(/^Construire avec Lumi/);
+    await touche(document.activeElement, 'Tab', { shiftKey: true });
+    expect(actif()).toMatch(/^Partir de zéro/);
+    await touche(document.activeElement, 'End');
+    await touche(document.activeElement, 'Tab');
+    expect(menu()).toBeNull();
+    expect(document.activeElement).toBe(creer);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('12-permissions:86 et :102 — « voir » sans « modifier » : la liste en lecture seule', () => {
   const lectureSeule = () => { droits.role = 'technician'; droits.permissions = { 'automations.read': true }; };
   const RAISON = 'Votre rôle permet de voir les automatisations, pas de les modifier.';

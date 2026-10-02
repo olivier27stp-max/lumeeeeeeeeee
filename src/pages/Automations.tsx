@@ -349,6 +349,40 @@ type CleTri = 'nom' | 'statut' | 'declenches' | 'en_cours' | 'modifiee' | 'creee
  *   7. pagination       Précédent · 1 · Suivant · 10 / page
  */
 /**
+ * LE CLAVIER D'UN MENU (`role="menu"`) — « Créer » et le « ⋮ » d'une ligne.
+ *
+ * Le menu « ⋮ » est dessiné dans un portail en fin de page (il était coupé par le tableau) : ses
+ * entrées ne suivaient plus son bouton dans l'ordre de tabulation, et Tab traversait toute la page
+ * avant d'y arriver (triage `11-clavier:178`). À l'ouverture le focus ENTRE dans le menu ; ici,
+ * les flèches, Début / Fin et Tab circulent entre ses entrées. En sortir (Tab après la dernière,
+ * Maj+Tab avant la première) le REFERME et rend le focus au bouton — un menu ne reste jamais
+ * ouvert derrière (`11-clavier:209`). Échap est géré au niveau du document.
+ */
+function clavierDeMenu(e: React.KeyboardEvent<HTMLElement>, fermer: () => void, ouvreur: HTMLElement | null) {
+  const entrees = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+  if (entrees.length === 0) return;
+  // -1 : le focus est sur le menu lui-même (il vient de s'ouvrir).
+  const i = entrees.indexOf(document.activeElement as HTMLElement);
+  const aller = (j: number) => { e.preventDefault(); entrees[j]?.focus(); };
+  switch (e.key) {
+    case 'ArrowDown': aller(i < 0 ? 0 : (i + 1) % entrees.length); return;
+    case 'ArrowUp': aller(i <= 0 ? entrees.length - 1 : i - 1); return;
+    case 'Home': aller(0); return;
+    case 'End': aller(entrees.length - 1); return;
+    case 'Tab': {
+      const j = e.shiftKey ? i - 1 : i + 1;
+      if (j >= 0 && j < entrees.length && !(e.shiftKey && i < 0)) { aller(j); return; }
+      fermer();
+      ouvreur?.focus({ preventScroll: true });
+      // Tab : le navigateur poursuit depuis le bouton, vers ce qui le suit. Maj+Tab : on reste sur le bouton.
+      if (e.shiftKey) e.preventDefault();
+      return;
+    }
+    default:
+  }
+}
+
+/**
  * Le nom d'une ligne : un bouton qui ouvre l'éditeur — ou, pour un rôle qui ne peut que VOIR,
  * le même contenu sans rien de cliquable (l'éditeur exige le droit de modifier).
  */
@@ -509,6 +543,17 @@ export default function Automations() {
    * place manque en bas.
    */
   const [posMenuLigne, setPosMenuLigne] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  /** Le menu ouvert (« Créer » ou « ⋮ » : un seul à la fois) et le bouton qui l'a ouvert. */
+  const refMenu = useRef<HTMLDivElement | null>(null);
+  const ouvreurMenu = useRef<HTMLElement | null>(null);
+  const fermerMenus = () => { setMenuCreer(false); setMenuLigne(null); setSousMenuDossier(null); };
+  useEffect(() => {
+    // À l'ouverture, le focus ENTRE dans le menu : Tab et les flèches partent de là.
+    if (menuCreer || menuLigne) { refMenu.current?.focus({ preventScroll: true }); return; }
+    // Refermé par le choix d'une entrée : elle a disparu avec lui, le focus retombait sur le corps de la page.
+    const actif = document.activeElement;
+    if ((!actif || actif === document.body) && ouvreurMenu.current?.isConnected) ouvreurMenu.current.focus({ preventScroll: true });
+  }, [menuCreer, menuLigne]);
 
   // ── Dossiers ──
   // Le bouton existait depuis #525 et ne faisait qu'afficher « bientôt ».
@@ -805,7 +850,11 @@ export default function Automations() {
     document.addEventListener('keydown', auClavier);
     // Le menu d'une ligne est ancré à la fenêtre : il ne suivrait pas un
     // défilement ou un redimensionnement. On le ferme plutôt que de le laisser flotter.
-    const auDefilement = () => { if (menuLigne) fermer(); };
+    // (Un défilement DANS le menu — le focus qui avance dans une longue liste de dossiers — ne compte pas.)
+    const auDefilement = (e: Event) => {
+      if (e.target instanceof Node && refMenu.current?.contains(e.target)) return;
+      if (menuLigne) fermer();
+    };
     window.addEventListener('scroll', auDefilement, true);
     window.addEventListener('resize', auDefilement);
     return () => {
@@ -1551,6 +1600,7 @@ export default function Automations() {
                 ref={boutonCreer}
                 onClick={(e) => {
                   e.stopPropagation();
+                  ouvreurMenu.current = e.currentTarget;
                   // Un seul menu à la fois : ce clic n'atteint pas le « clic
                   // ailleurs » du document, le menu « ⋮ » d'une ligne restait ouvert.
                   setMenuLigne(null);
@@ -1569,9 +1619,12 @@ export default function Automations() {
               {menuCreer && (
                 <div
                   role="menu"
+                  ref={refMenu}
                   tabIndex={-1}
+                  aria-label={fr ? 'Créer une automatisation' : 'Create a workflow'}
                   onClick={(e) => e.stopPropagation()}
-                  className="absolute right-0 z-30 mt-1.5 w-[300px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
+                  onKeyDown={(e) => clavierDeMenu(e, fermerMenus, ouvreurMenu.current)}
+                  className="absolute right-0 z-30 mt-1.5 w-[300px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   {DEPARTS.map((d) => (
                     <button
@@ -2142,6 +2195,7 @@ export default function Automations() {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    ouvreurMenu.current = e.currentTarget;
                                     const r = e.currentTarget.getBoundingClientRect();
                                     // ~260 px : la hauteur du menu avec son sous-menu de dossiers.
                                     const versLeHaut = window.innerHeight - r.bottom < 260 && r.top > 260;
@@ -2166,10 +2220,13 @@ export default function Automations() {
                                 {menuLigne === rule.id && posMenuLigne && createPortal(
                                   <div
                                     role="menu"
+                                    ref={refMenu}
                                     tabIndex={-1}
+                                    aria-label={fr ? `Actions pour ${localizeAutomationName(rule.name, language)}` : `Actions for ${localizeAutomationName(rule.name, language)}`}
                                     onClick={(e) => e.stopPropagation()}
+                                    onKeyDown={(e) => clavierDeMenu(e, fermerMenus, ouvreurMenu.current)}
                                     style={posMenuLigne}
-                                    className="fixed z-[60] max-h-[70vh] w-[210px] overflow-y-auto rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
+                                    className="fixed z-[60] max-h-[70vh] w-[210px] overflow-y-auto rounded-xl border border-border bg-surface-card p-1.5 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                   >
                                     {/*
                                       À la corbeille : restaurer, ou supprimer
