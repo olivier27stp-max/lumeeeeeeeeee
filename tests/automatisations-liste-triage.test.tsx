@@ -662,6 +662,46 @@ describe('04-filtres-recherche-tri:160 — panneau fermé, le bouton « Filtres 
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('04-filtres-recherche-tri:99 et :106 — la recherche ignore les accents et les espaces autour', () => {
+  const chercher = async (q: string) => {
+    await act(async () => {
+      const champ = conteneur.querySelector('#rech-automations') as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(champ, q);
+      champ.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await laisser();
+  };
+  const noms = () => Array.from(conteneur.querySelectorAll('tbody tr td:nth-child(2) span.font-medium')).map((n) => n.textContent);
+  beforeEach(() => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Élan d’été' }), regle({ name: 'Relance' }), regle({ name: 'Rappel' })]);
+  });
+
+  it('« elan d\'ete » (sans accents, apostrophe droite) trouve « Élan d’été »', async () => {
+    await rendre();
+    await chercher("elan d'ete");
+    expect(noms()).toEqual(['Élan d’été']);
+    await chercher('ÉLAN D’ÉTÉ');
+    expect(noms()).toEqual(['Élan d’été']);
+  });
+
+  it('des espaces autour du texte, ou en double au milieu, ne changent rien', async () => {
+    await rendre();
+    await chercher('  Relance  ');
+    expect(noms()).toEqual(['Relance']);
+    await chercher('elan   d’ete');
+    expect(noms()).toEqual(['Élan d’été']);
+    // Le champ, lui, garde ce qu'on a tapé.
+    expect((conteneur.querySelector('#rech-automations') as HTMLInputElement).value).toBe('elan   d’ete');
+  });
+
+  it('un champ qui ne contient que des espaces ne filtre rien et n’est pas « une recherche sans résultat »', async () => {
+    await rendre();
+    await chercher('   ');
+    expect(noms()).toEqual(['Élan d’été', 'Rappel', 'Relance']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 

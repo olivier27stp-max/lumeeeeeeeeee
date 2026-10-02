@@ -349,6 +349,20 @@ type CleTri = 'nom' | 'statut' | 'declenches' | 'en_cours' | 'modifiee' | 'creee
  *   7. pagination       Précédent · 1 · Suivant · 10 / page
  */
 /**
+ * Un texte tel que la RECHERCHE le compare : sans accents, sans casse, apostrophes et espaces
+ * unifiés, sans espaces autour. « elan d'ete » trouve « Élan d’été » ; un nom collé avec ses
+ * espaces autour se retrouve (triage `04-filtres-recherche-tri:99` et `:106`).
+ */
+function pourRecherche(s: string): string {
+  return s
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[’‘`]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * LE MESSAGE D'UNE ERREUR, dans la langue de l'écran.
  *
  * Quand le serveur ne donne aucun message (passerelle en panne, corps illisible), le client de
@@ -1224,11 +1238,12 @@ export default function Automations() {
     : onglet === 'corbeille' ? supprimees
     : vivantes.filter((r) => !r.is_preset || r.is_active || resteIci(r));
 
+  /** Ce qu'on cherche, tel qu'on le compare (vide = pas de recherche, même si le champ ne contient que des espaces). */
+  const recherche = pourRecherche(search);
   const filtrees = sourceOnglet.filter((r) => {
-    if (search) {
-      const q = search.toLowerCase();
-      const nom = localizeAutomationName(r.name, language).toLowerCase();
-      if (!nom.includes(q) && !(r.description || '').toLowerCase().includes(q)) return false;
+    if (recherche) {
+      const nom = pourRecherche(localizeAutomationName(r.name, language));
+      if (!nom.includes(recherche) && !pourRecherche(r.description || '').includes(recherche)) return false;
     }
     if (filterCategory !== 'all' && getCategory(r) !== filterCategory) return false;
     if (filterStatut === 'publiee' && !r.is_active && !resteIci(r)) return false;
