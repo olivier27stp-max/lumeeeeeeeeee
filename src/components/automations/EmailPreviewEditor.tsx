@@ -859,18 +859,8 @@ export default function EmailPreviewEditor({
                   : 'Preview unavailable right now. Your text is safe — go back to “Edit”.'}
               </p>
             )}
-            <div className="mx-auto mt-3 flex max-w-[600px] justify-center">
-              <button
-                type="button"
-                onClick={() => void envoyerEssai()}
-                disabled={essaiEnCours}
-                className="rounded-lg border border-outline/60 bg-surface px-4 py-2 text-[12.5px] font-semibold text-text-secondary hover:bg-surface-secondary disabled:opacity-60"
-              >
-                {essaiEnCours
-                  ? (fr ? 'Envoi…' : 'Sending…')
-                  : (fr ? 'M’envoyer un essai' : 'Send me a test')}
-              </button>
-            </div>
+            {/* « M'envoyer un essai » vit dans le pied de la fenêtre : sous un
+                cadre de 620 px, il fallait défiler pour le trouver. */}
             <p className="mx-auto mt-2 max-w-[600px] text-center text-[10px] leading-relaxed text-text-tertiary">
               {fr
                 ? 'Rendu par le serveur, avec le même gabarit qu’à l’envoi. Le montant et le bouton sont des exemples ; les valeurs entre crochets seront remplacées par les vraies données du client.'
@@ -1050,7 +1040,10 @@ export default function EmailPreviewEditor({
               et occupait à elle seule plus de la moitié de l'écran : le
               courriel qu'on écrit ne tenait plus que sur quelques lignes
               (audit du 2026-10-01). Elle défile, et se filtre en tapant. */}
-          {variables.length > SEUIL_RECHERCHE_VARIABLES && (
+          {/* Sur « Aperçu réel », pas de palette : « Insérer » y modifiait un
+              texte qu'on ne voit pas — le pied passait à « Modifications non
+              enregistrées » sans qu'on ait rien tapé (04-courriel:560). */}
+          {!ongletApercu && variables.length > SEUIL_RECHERCHE_VARIABLES && (
             <input
               type="search"
               value={filtreVariable}
@@ -1060,6 +1053,7 @@ export default function EmailPreviewEditor({
               className="mb-1.5 w-full max-w-[260px] rounded border border-outline/50 bg-surface px-2 py-1 text-[11px] text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             />
           )}
+          {!ongletApercu && (
           <div
             data-testid="palette-variables"
             className="flex flex-wrap items-center gap-1 mb-2.5 max-h-[72px] overflow-y-auto"
@@ -1083,6 +1077,7 @@ export default function EmailPreviewEditor({
               </button>
             ))}
           </div>
+          )}
 
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] text-text-tertiary">
@@ -1102,6 +1097,19 @@ export default function EmailPreviewEditor({
                   {fr ? 'Revenir au texte d’origine' : 'Restore original'}
                 </button>
               ) : null}
+              {/* Toujours sous la main quand on regarde l'aperçu (04-courriel:588). */}
+              {ongletApercu && lecture.pret && (
+                <button
+                  type="button"
+                  onClick={() => void envoyerEssai()}
+                  disabled={essaiEnCours}
+                  className="rounded-md border border-outline/60 bg-surface px-3 py-1.5 text-[11px] font-semibold text-text-secondary hover:bg-surface-secondary disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                >
+                  {essaiEnCours
+                    ? (fr ? 'Envoi…' : 'Sending…')
+                    : (fr ? 'M’envoyer un essai' : 'Send me a test')}
+                </button>
+              )}
               <button
                 onClick={fermer}
                 className="px-3 py-1.5 rounded-md text-[11px] text-text-secondary hover:bg-surface-tertiary transition-colors"

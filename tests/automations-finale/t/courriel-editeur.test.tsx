@@ -268,6 +268,39 @@ describe('04-courriel:538 et :547 — « Insérer » écrit là où est le curse
   });
 });
 
+describe('04-courriel:560 et :588 — sur « Aperçu réel » : pas de palette, et « M’envoyer un essai » sous la main', () => {
+  const C = { subject: OBJET, body: CORPS };
+  const palette = () => document.body.querySelector('[data-testid="palette-variables"]');
+
+  it('la palette « Insérer » n’est offerte que sur « Modifier » : regarder l’aperçu ne modifie rien', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    expect(palette()).not.toBeNull();
+    await cliquer(bouton('Aperçu réel'));
+    expect(palette()).toBeNull();
+    expect(boutonPresent('Prénom du client')).toBe(false);
+    expect(document.body.querySelector('input[type="search"]')).toBeNull();
+    expect(texteEcran()).toContain('Aucune modification');
+    // De retour sur « Modifier », elle est là, et rien n'a été touché.
+    await cliquer(bouton('Modifier'));
+    expect(palette()).not.toBeNull();
+    expect(texteEcran()).toContain('Aucune modification');
+  });
+
+  it('« M’envoyer un essai » est dans le pied de la fenêtre, à côté de « Enregistrer » — pas sous le cadre de l’aperçu', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    expect(boutonPresent('M’envoyer un essai')).toBe(false);
+    await cliquer(bouton('Aperçu réel'));
+    await jusqua(() => apercu.appels.length > 0);
+    const essai = bouton('M’envoyer un essai');
+    expect(essai.parentElement).toBe(bouton('Enregistrer').parentElement);
+    await cliquer(essai);
+    await jusqua(() => toasts.succes.includes('Essai envoyé à proprio@lume-qa.test'));
+    expect(apercu.essais).toHaveLength(1);
+  });
+});
+
 describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’éditeur montre et modifie le courriel qui part', () => {
   const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
   const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };
