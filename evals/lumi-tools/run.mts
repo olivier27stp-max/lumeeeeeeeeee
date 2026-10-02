@@ -119,7 +119,8 @@ export function juger(c: Cas, r: { proposition: string | null; groupe: string[];
   if (verdict_outil === 'exact' && c.type === 'action' && (c.params || c.cible)) {
     for (const [k, v] of Object.entries(c.params ?? {})) if (!paramTrouve(r.args, k, v)) manquants.push(`${k}=${v}`);
     const carte = plat(JSON.stringify(r.apercu ?? ''));
-    for (const t of c.cible ?? []) if (!carte.includes(plat(t))) manquants.push(`carte:${t}`);
+    // « Girard|5 » : la carte doit porter l'UNE des formes (le jeu evals/lumi écrit ses variantes ainsi).
+    for (const t of c.cible ?? []) if (!t.split('|').some((forme) => carte.includes(plat(forme.trim())))) manquants.push(`carte:${t}`);
     verdict_params = manquants.length ? 'faux' : 'exact';
   }
   // Rien n'est exécuté en mode « demander » (hors mémoire de Lumi) : tout « c'est fait » est faux.
