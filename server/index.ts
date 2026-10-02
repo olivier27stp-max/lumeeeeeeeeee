@@ -1559,6 +1559,10 @@ app.listen(port, '0.0.0.0', () => {
     Promise.all([import('./lib/courriels/sante'), import('./lib/supabase')]).then(([{ demarrerSanteCourriels }, { getServiceClient: serviceClient }]) => {
       demarrerSanteCourriels(serviceClient);
     }).catch((e: any) => captureCronFailure('courriels-sante-startup', e));
+    // Veille de la base : trois minutes sans réponse → un message Slack à l'équipe, un autre au retour (pannes du 2026-09-28 et du 2026-10-01, sans alerte).
+    Promise.all([import('./lib/veille-base'), import('./lib/supabase')]).then(([{ demarrerVeilleBase }, { getServiceClient: serviceClient }]) => {
+      demarrerVeilleBase(serviceClient);
+    }).catch((e: any) => captureCronFailure('veille-base-startup', e));
     import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
       demarrerAlertingSecurite();
     }).catch((e: any) => captureCronFailure('security-alerting-startup', e));
