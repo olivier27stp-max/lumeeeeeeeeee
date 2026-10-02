@@ -29,6 +29,7 @@ import { eventBus } from './eventBus';
 import { logger } from './logger';
 import { DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
 import { resolvePublicBaseUrl } from './helpers';
+import { dateActivation, decalerMois, ignoreLesCasExistants } from './automations-activation';
 
 /** Heure locale d'un fuseau (même calcul que le briefing de Lumi, sans l'importer). */
 function heureDansFuseau(fuseau: string, maintenant: Date): { heure: number } {
@@ -81,7 +82,9 @@ export async function balayerEntreprise(admin: SupabaseClient, orgId: string, ma
 
   const { data: regles, error } = await admin
     .from('automation_rules')
-    .select('id, conditions')
+    // `*` : la date d'activation (`activee_le`) n'existe qu'une fois sa
+    // migration appliquée ; la nommer ferait échouer toute la lecture avant.
+    .select('*')
     .eq('org_id', orgId)
     .eq('trigger_event', 'client.inactive')
     .eq('is_active', true)
@@ -97,10 +100,18 @@ export async function balayerEntreprise(admin: SupabaseClient, orgId: string, ma
   // seuil (une métadonnée liste est vraie si UN élément correspond). Avec une
   // seule valeur (le plafond le plus bas, le seuil borné), une règle à 50 par
   // heure à côté d'une règle à 25 ne partait jamais.
-  const seuils = new Map<number, { maxParHeure: number; moisEcrits: Set<unknown>; plafondsEcrits: Set<unknown> }>();
-  for (const r of regles as Array<{ conditions: Record<string, unknown> | null }>) {
+  //
+  // `depuis` : l'activation la plus ANCIENNE des règles du seuil — un client
+  // dont le seuil était franchi avant elle était « déjà inactif » pour toutes
+  // (point 10 : activer la règle ne relance pas d'un coup tous les clients
+  // déjà inactifs). `null` : une règle au moins n'a pas de date d'activation
+  // connue — pas de filtre, comme avant.
+  const seuils = new Map<number, { maxParHeure: number; moisEcrits: Set<unknown>; plafondsEcrits: Set<unknown>; depuis: number | null }>();
+  for (const r of regles as Array<{ conditions: Record<string, unknown> | null; activee_le?: string | null; updated_at?: string | null }>) {
     const { mois, maxParHeure } = reglagesInactivite(r.conditions);
-    const s = seuils.get(mois) ?? { maxParHeure, moisEcrits: new Set<unknown>([mois]), plafondsEcrits: new Set<unknown>([maxParHeure]) };
+    const activation = ignoreLesCasExistants(r) ? dateActivation(r) : null;
+    const s = seuils.get(mois) ?? { maxParHeure, moisEcrits: new Set<unknown>([mois]), plafondsEcrits: new Set<unknown>([maxParHeure]), depuis: activation };
+    s.depuis = s.depuis === null || activation === null ? null : Math.min(s.depuis, activation);
     s.maxParHeure = Math.min(s.maxParHeure, maxParHeure);
     if (r.conditions?.mois !== undefined && r.conditions?.mois !== null) s.moisEcrits.add(r.conditions.mois);
     if (r.conditions?.max_par_heure !== undefined && r.conditions?.max_par_heure !== null) s.plafondsEcrits.add(r.conditions.max_par_heure);
@@ -109,7 +120,7 @@ export async function balayerEntreprise(admin: SupabaseClient, orgId: string, ma
   }
 
   let emis = 0;
-  for (const [mois, { maxParHeure, moisEcrits, plafondsEcrits }] of seuils) {
+  for (const [mois, { maxParHeure, moisEcrits, plafondsEcrits, depuis: activation }] of seuils) {
     // Le plafond vaut pour L'ENTREPRISE : on compte tout ce qui est parti
     // dans la dernière heure, tous seuils confondus.
     const depuis = new Date(maintenant.getTime() - 3600_000).toISOString();
@@ -122,7 +133,22 @@ export async function balayerEntreprise(admin: SupabaseClient, orgId: string, ma
     const restant = maxParHeure - (count ?? 0);
     if (restant <= 0) continue;
 
-    const { data: candidats, error: rErr } = await admin.rpc('clients_inactifs', { p_org_id: orgId, p_mois: mois, p_limite: restant });
+    /*
+     * Sans date d'activation : les `restant` plus anciens, comme avant.
+     * Avec : seulement les clients dont le seuil est franchi APRÈS
+     * l'activation — leur dernier job terminé est postérieur à « activation −
+     * N mois ». Le filtre est posé sur le RÉSULTAT de la fonction (PostgREST),
+     * pas après coup : les clients déjà inactifs, les plus anciens, rempliraient
+     * sinon la limite à chaque passage et affameraient les nouveaux. Trois
+     * jours de marge (les mois n'ont pas tous la même longueur) : le moteur
+     * tranche ensuite au jour près, règle par règle (`casAnterieurALActivation`).
+     */
+    const { data: candidats, error: rErr } = activation === null
+      ? await admin.rpc('clients_inactifs', { p_org_id: orgId, p_mois: mois, p_limite: restant })
+      : await admin.rpc('clients_inactifs', { p_org_id: orgId, p_mois: mois, p_limite: 100000 })
+        .gte('dernier_job_at', new Date(decalerMois(activation, -mois) - 3 * 86_400_000).toISOString())
+        .order('dernier_job_at', { ascending: true })
+        .limit(restant);
     if (rErr) throw new Error(rErr.message);
     for (const c of (candidats ?? []) as Array<{ client_id: string; periode: string; dernier_job_at: string | null }>) {
       // Réserver AVANT d'émettre : deux passes concurrentes ne font partir
