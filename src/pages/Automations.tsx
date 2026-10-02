@@ -1525,7 +1525,12 @@ export default function Automations() {
           const r = rules.find((x) => x.id === id);
           return r ? localizeAutomationName(r.name, language) : id;
         };
-        toast.error(echecs.map((e) => `« ${nomDe(e.id)} » — ${e.erreur ?? ''}`).join('\n'), { duration: 15_000 });
+        // UN REFUS PAR LIGNE (triage `07-lot:159`). Les refus étaient joints par un saut de ligne que le
+        // toast n'affiche pas : deux refus tenaient sur une ligne continue, illisible.
+        toast.error(
+          <span className="whitespace-pre-line">{echecs.map((e) => `« ${nomDe(e.id)} » — ${e.erreur ?? ''}`).join('\n')}</span>,
+          { duration: 15_000 },
+        );
       }
       setCochees(new Set());
       await load();

@@ -1084,6 +1084,29 @@ describe('07-lot:179 — « Publier (0) » et « Repasser en brouillon (0) » so
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('07-lot:159 — deux refus de publication sont lisibles, un par ligne', () => {
+  it('le toast porte les deux refus dans un élément qui REND les sauts de ligne', async () => {
+    const a = regle({ name: 'A vide' });
+    const b = regle({ name: 'B vide' });
+    vi.mocked(api.getAutomationRules).mockResolvedValue([a, b]);
+    vi.mocked(builder.changerPublicationEnLot).mockResolvedValue([
+      { id: a.id, ok: false, erreur: 'Publication refusée : aucune étape.' },
+      { id: b.id, ok: false, erreur: 'Publication refusée : aucune étape.' },
+    ] as never);
+    await rendre();
+    await cliquer(caseDe(/^Tout cocher$/));
+    await cliquer(bouton(/^Publier \(2\)$/));
+    await laisser();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    const message = vi.mocked(toast.error).mock.calls[0][0] as React.ReactElement<{ className: string; children: string }>;
+    // Un élément, pas une chaîne nue : le saut de ligne d'une chaîne n'est pas rendu par le toast.
+    expect(React.isValidElement(message)).toBe(true);
+    expect(message.props.className).toContain('whitespace-pre-line');
+    expect(message.props.children).toBe('« A vide » — Publication refusée : aucune étape.\n« B vide » — Publication refusée : aucune étape.');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 

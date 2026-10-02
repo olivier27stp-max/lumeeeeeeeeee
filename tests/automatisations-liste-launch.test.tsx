@@ -36,7 +36,11 @@ const toasts = { erreur: [] as string[], succes: [] as string[] };
 
 vi.mock('sonner', () => ({
   toast: Object.assign(vi.fn(), {
-    error: (m: string) => { toasts.erreur.push(String(m)); },
+    // Le message peut être un élément (les refus d'un lot, un par ligne) : on en lit le texte.
+    error: (m: unknown) => {
+      const enfants = (m as { props?: { children?: unknown } } | null)?.props?.children;
+      toasts.erreur.push(String(enfants ?? m));
+    },
     success: (m: string) => { toasts.succes.push(String(m)); },
     info: vi.fn(),
   }),
