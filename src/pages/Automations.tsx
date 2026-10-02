@@ -2139,11 +2139,34 @@ export default function Automations() {
                             {fr ? 'Réessayer' : 'Try again'}
                           </button>
                         )}
+                        {/*
+                          Un bureau sans aucune automatisation : « Aucune automatisation », seul, ne
+                          disait ni pourquoi ni quoi faire (triage `03-onglets-etats:266`). L'état vide
+                          propose lui-même de créer — à qui en a le droit, et seulement quand la liste
+                          est vraiment vide (ni recherche, ni filtre, ni dossier ouvert).
+                        */}
+                        {onglet === 'toutes' && peutModifier && search.trim() === '' && filterCategory === 'all' && filterStatut === 'all' && dossierActif === null && (
+                          <>
+                            <p className="mt-1 text-[12px] text-text-secondary">
+                              {fr
+                                ? 'Partez de zéro, ou choisissez un modèle prêt à l’emploi dans le menu « Créer ».'
+                                : 'Start from scratch, or pick a ready-made template from the “Create workflow” menu.'}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => partirDeZero(false)}
+                              className="glass-button-primary mt-4 inline-flex items-center gap-1.5"
+                            >
+                              <Plus size={13} aria-hidden="true" />
+                              {fr ? 'Créer une automatisation' : 'Create an automation'}
+                            </button>
+                          </>
+                        )}
                         {onglet === 'toutes' && modeles.length > 0 && (
                           <button
                             type="button"
                             onClick={() => setOnglet('modeles')}
-                            className="glass-button mt-4 inline-flex items-center gap-1.5"
+                            className="glass-button ml-2 mt-4 inline-flex items-center gap-1.5"
                           >
                             <FileText size={13} aria-hidden="true" />
                             {fr ? 'Voir les automatisations prêtes à publier' : 'See ready-to-publish automations'}

@@ -531,6 +531,49 @@ describe('03-onglets-etats:86 et :96 — l’onglet ouvert est dans l’adresse'
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('03-onglets-etats:266 — l’état vide propose lui-même de créer', () => {
+  const vide = () => conteneur.querySelector('tbody td[colspan]') as HTMLElement;
+  const boutonsDuVide = () => Array.from(vide().querySelectorAll('button')).map((b) => (b.textContent || '').trim());
+
+  it('bureau sans aucune automatisation : « Aucune automatisation » + « Créer une automatisation », qui ouvre l’éditeur', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([]);
+    await rendre();
+    expect(vide().textContent).toContain('Aucune automatisation');
+    expect(boutonsDuVide()).toEqual(['Créer une automatisation']);
+    await cliquer(vide().querySelector('button'));
+    expect(adresse).toBe('/automations/nouvelle');
+  });
+
+  it('« Toutes » vide mais des préréglages à publier : les deux suites sont offertes', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ is_preset: true, preset_key: 'google_review', is_active: false })]);
+    await rendre();
+    expect(boutonsDuVide()).toEqual(['Créer une automatisation', 'Voir les automatisations prêtes à publier']);
+  });
+
+  it('pas dans « Corbeille » ni « À vérifier », ni pour un rôle en lecture seule', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([]);
+    await rendre();
+    await cliquer(onglet(/^Corbeille/));
+    expect(boutonsDuVide()).toEqual([]);
+    await cliquer(onglet(/^À vérifier/));
+    expect(boutonsDuVide()).toEqual([]);
+    await act(async () => racine!.unmount());
+    conteneur.remove();
+    droits.role = 'technician';
+    droits.permissions = { 'automations.read': true };
+    await rendre();
+    expect(vide().textContent).toContain('Aucune automatisation');
+    expect(boutonsDuVide()).toEqual([]);
+  });
+
+  it('en anglais : « Create an automation »', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([]);
+    await rendre('en');
+    expect(boutonsDuVide()).toEqual(['Create an automation']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
