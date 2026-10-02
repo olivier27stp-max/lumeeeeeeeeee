@@ -39,6 +39,8 @@ import { etatDesabonnement } from '../desabonnement';
 import { resolveTaxesForOrg, computeTaxLines, type TaxLine as LigneTaxe } from '../taxResolve';
 import { adresseInjoignable } from '../mailer';
 import { estPrereglageRetire } from '../../../src/lib/automationCatalogue';
+import { declencheurEnClair } from '../automations-etapes';
+import { langueDuTour } from '../lumi/contexte-appel';
 import type { AgentTool, ToolContext } from './tools';
 
 interface TaxLine { code: string; label: string; rate: number; enabled: boolean }
@@ -1031,7 +1033,7 @@ const listAutomations: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_automations',
-    description: 'List the automation rules: name, trigger event, active or not. To pause/enable one, change its message text or language → toggle_automation_rule, update_automation_message, update_automation_sms_body, set_automation_language.',
+    description: 'List the automations: name, trigger (in plain words), published or not. Only a list — to see what ONE automation does (steps, delays, exact message texts) → get_automation. To change one → toggle_automation_rule, update_automation_message, update_automation_from_text, rename/duplicate/delete_automation_rule.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -1048,9 +1050,12 @@ const listAutomations: AgentTool = {
     if (error) return erreurOutil('automations', error);
     // Un préréglage retiré (déclencheur que plus rien n'émet) n'est pas une
     // automatisation à proposer : Lumi l'annonçait « active ».
+    // Le déclencheur sous le nom que l'écran lui donne : la clé brute (« quote.sent »)
+    // finissait recopiée dans la réponse de Lumi (F-15).
+    const fr = langueDuTour() === 'fr';
     const automations = (data || [])
       .filter((r) => !estPrereglageRetire(r))
-      .map(({ preset_key: _cle, ...reste }) => reste);
+      .map(({ preset_key: _cle, trigger_event, ...reste }) => ({ ...reste, declencheur: declencheurEnClair(trigger_event, fr) }));
     return { count: automations.length, automations };
   },
 };
@@ -2619,6 +2624,13 @@ const getRecentAgentActions: AgentTool = {
       send_invoice: 'facture envoyée', mark_invoice_paid: 'facture marquée payée',
       send_sms: 'SMS envoyé', send_payment_reminders: 'rappels de paiement envoyés',
       add_note: 'note ajoutée', preference_memorisee: 'préférence mémorisée',
+      // Automatisations (A-17) : sans libellé, le journal disait « update automation sms body », sans dire laquelle.
+      create_automation_from_text: 'automatisation créée (en brouillon)', create_automation_from_template: 'automatisation créée depuis un modèle (en brouillon)',
+      update_automation_from_text: 'automatisation modifiée', update_automation_message: 'message d’une automatisation réécrit',
+      update_automation_sms_body: 'texto d’une automatisation réécrit', rename_automation_rule: 'automatisation renommée',
+      duplicate_automation_rule: 'automatisation dupliquée', delete_automation_rule: 'automatisation mise à la corbeille',
+      pause_all_automations: 'toutes les automatisations arrêtées ou reprises', set_automation_language: 'langue des messages automatiques changée',
+      construire_parcours_editeur: 'parcours modifié avec Lumi dans l’éditeur',
     };
     const heureLocale = (iso: string) => {
       try {
@@ -2630,12 +2642,15 @@ const getRecentAgentActions: AgentTool = {
     const actions = (data || []).map((a: any) => {
       const r = a.resultat || {};
       // Un repère lisible SANS jargon : numéro de pièce, nom, titre — jamais d'id.
+      const automatisation = /automation|parcours/.test(String(a.outil)) && typeof r.name === 'string' && r.name ? `« ${r.name} »` : null;
       const quoi = r.job?.job_number ? `job n° ${r.job.job_number}`
         : r.invoice?.invoice_number ? `facture n° ${r.invoice.invoice_number}`
         : r.quote?.quote_number ? `devis n° ${r.quote.quote_number}`
-        : r.client?.name || r.job?.title || r.task?.title || null;
+        : r.client?.name || r.job?.title || r.task?.title || automatisation || null;
+      // Activer et mettre en pause passent par le même outil : le journal dit lequel des deux.
+      const bascule = a.outil === 'toggle_automation_rule' ? (r.is_active === true ? 'automatisation publiée' : 'automatisation mise en pause') : null;
       return {
-        action: LIBELLE[a.outil] || String(a.outil).replace(/_/g, ' '),
+        action: bascule || LIBELLE[a.outil] || String(a.outil).replace(/_/g, ' '),
         ...(quoi ? { cible: quoi } : {}),
         quand: heureLocale(a.created_at),
       };
