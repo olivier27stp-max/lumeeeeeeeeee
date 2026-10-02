@@ -6,7 +6,7 @@
  * sans se coordonner. Quand une automatisation PUBLIÉE couvre la facture,
  * le cron la saute. On joue la VRAIE route du cron sur une base simulée.
  */
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 
@@ -57,7 +57,15 @@ process.env.PUBLIC_URL = process.env.PUBLIC_URL || 'https://app.lume.test';
 
 const lancer = () => fetch(url, { method: 'POST', headers: { 'x-cron-secret': 'secret-test', 'content-type': 'application/json' } });
 
-beforeEach(() => { etat.courriels.length = 0; });
+// Midi à Toronto, le jour même : une relance de paiement ne part que dans la fenêtre d'envoi de l'entreprise
+// (8 h-20 h, mission finale, point 11) — sans horloge figée, ce fichier échouait le soir.
+const MIDI = new Date(`${new Date().toISOString().slice(0, 10)}T16:00:00Z`);
+beforeEach(() => {
+  etat.courriels.length = 0;
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(MIDI);
+});
+afterEach(() => vi.useRealTimers());
 
 describe('relance de facture : une seule source', () => {
   it('sans automatisation de relance publiée : le cron relance (comme avant)', async () => {
