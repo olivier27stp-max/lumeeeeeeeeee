@@ -522,11 +522,13 @@ const toggleAutomationRule: AgentTool = {
  *
  * LE COÛT
  * On réutilise `genererParcours` tel quel plutôt que de faire raisonner
- * l'orchestrateur : un aller-retour Haiku, catalogue en cache, budget réservé
- * AVANT l'appel. Mesuré en production le 2026-09-25 : 0,32 ¢ pour un parcours
- * à deux étapes. Faire construire le JSON par l'orchestrateur (240 outils,
- * historique complet) coûterait plusieurs fois ce prix pour un résultat moins
- * fiable — le catalogue ne serait pas sous les yeux du modèle.
+ * l'orchestrateur : un aller-retour (Sonnet 5, catalogue en cache), budget
+ * réservé AVANT l'appel, 0,4 à 1 ¢ mesurés le 2026-10-02 (effort bas). Faire
+ * construire le JSON par l'orchestrateur (240 outils, historique complet)
+ * coûterait plusieurs fois ce prix pour un résultat moins fiable — le
+ * catalogue ne serait pas sous les yeux du modèle. La dépense est rattachée à
+ * la conversation en cours (`contexte-appel.ts`) : elle compte dans sa trace
+ * et dans son plafond.
  *
  * CE QU'IL N'EST PAS
  * Une écriture directe. L'outil PROPOSE ; l'automatisation naît **en pause**
@@ -534,6 +536,9 @@ const toggleAutomationRule: AgentTool = {
  * déclencher des envois aux clients en fermant un formulaire. L'utilisateur
  * l'active ensuite avec `toggle_automation_rule`, ce qui lui redemande
  * confirmation.
+ * NI un moyen de MODIFIER : « ajoute un délai », « seulement tel client » sur
+ * une automatisation existante créait un DOUBLON sans le filtre, que Lumi
+ * activait ensuite pour tous les clients (F-14). Modifier = `update_automation_from_text`.
  */
 const createAutomationFromText: AgentTool = {
   kind: 'write',
@@ -543,7 +548,8 @@ const createAutomationFromText: AgentTool = {
     description:
       'Create a NEW automation from a plain-language description (e.g. "after a quote is sent, wait 3 days then text a follow-up, then 2 more days and text again"). '
       + 'The rule is created PAUSED: tell the user it will not send anything until they enable it. '
-      + 'Use this only to create; to enable, rename or reword an existing one use toggle_automation_rule / update_automation_message.',
+      + 'ONLY to create one that does not exist yet. To change an existing automation (add or remove a step, a delay, a condition, a filter, the trigger, a message) use update_automation_from_text on THAT automation - '
+      + 'never create a second one to change the first. To enable, rename or reword: toggle_automation_rule / rename_automation_rule / update_automation_message.',
     parameters: {
       type: 'object',
       properties: {
@@ -564,7 +570,6 @@ const createAutomationFromText: AgentTool = {
 
       const { genererParcours } = await import('../lumi/generer-parcours');
       const { sequenceEtapes } = await import('../validation');
-      const { trouverDeclencheur } = await import('../../../src/lib/automationCatalogue');
       const { refAutomatisationInventee } = await import('../automations-publication');
       const admin = getServiceClient();
 
@@ -581,6 +586,7 @@ const createAutomationFromText: AgentTool = {
         userId: ctx.userId ?? null,
         demande: demande.trim(),
         langue,
+        canal: 'clavardage',
       });
       if (!resultat.parcours) {
         throw new Error(resultat.erreur ?? 'Je n\'ai pas réussi à construire ce parcours. Reformule-le.');
@@ -621,23 +627,20 @@ const createAutomationFromText: AgentTool = {
         ? { ...a, steps: verdictAutre.data }
         : null;
 
-      const { data, error } = await ctx.client
-        .from('automation_rules')
-        .insert({
-          org_id: ctx.orgId,
+      // UNE seule porte pour écrire une automatisation (`ecrireRegle`) : elle naît en brouillon,
+      // `actions` y redit le parcours (A-02, A-11 : vide, il le rendait invisible pour tout
+      // lecteur d'`actions`), et la ligne est relue.
+      const ecrite = await ecrireRegle({
+        client: ctx.client, orgId: ctx.orgId, ruleId: null, auteurId: ctx.userId ?? null, origine: 'lumi',
+        changements: {
           name: resultat.parcours.nom,
-          description: resultat.parcours.resume,
+          description: resultat.parcours.resume.slice(0, 500),
           trigger_event: resultat.parcours.trigger_event,
-          conditions: {},
-          delay_seconds: 0,
-          actions: [],
           steps: verdict.data,
-          // En pause à la naissance : voir l'en-tête de l'outil.
-          is_active: false,
-        })
-        .select('id, name, trigger_event, is_active');
-      if (error) throw error;
-      const row = ligneTouchee(data, 'L\'automatisation');
+        },
+      });
+      if (!ecrite.ok) throw new Error(ecrite.erreur);
+      const row = ecrite.regle;
 
       // La DEUXIÈME automatisation (autre déclencheur, ex. « quand le client
       // répond »), en pause elle aussi, avec sa limite « une fois par client
@@ -652,43 +655,43 @@ const createAutomationFromText: AgentTool = {
         } else if (!autre) {
           seconde = { creee: false, name: a.nom, manque: 'un parcours valide (à construire dans Automatisations)' };
         } else {
-          const { data: d2, error: e2 } = await ctx.client
-            .from('automation_rules')
-            .insert({
-              org_id: ctx.orgId,
+          const e2 = await ecrireRegle({
+            client: ctx.client, orgId: ctx.orgId, ruleId: null, auteurId: ctx.userId ?? null, origine: 'lumi',
+            changements: {
               name: autre.nom,
-              description: autre.resume,
+              description: autre.resume.slice(0, 500),
               trigger_event: autre.trigger_event,
-              conditions: {},
-              delay_seconds: 0,
-              actions: [],
               steps: autre.steps,
-              settings: autre.une_fois_par_client_jours ? { delai_entre_passages_jours: autre.une_fois_par_client_jours } : null,
-              is_active: false,
-            })
-            .select('id, name, trigger_event');
+              ...(autre.une_fois_par_client_jours ? { settings: { delai_entre_passages_jours: autre.une_fois_par_client_jours } } : {}),
+            },
+          });
           // La 1re est déjà en base : on le dit plutôt que de lever (l'empreinte
           // d'idempotence resterait libérée et une retentative la doublerait).
-          if (e2 || !d2?.length) {
-            console.error('[create_automation_from_text] 2e automatisation non créée', ctx.orgId, e2?.message ?? 'aucune ligne');
+          if (!e2.ok) {
+            console.error('[create_automation_from_text] 2e automatisation non créée', ctx.orgId, e2.erreur);
             seconde = { creee: false, name: autre.nom, manque: 'l’enregistrement a échoué — à créer dans Automatisations' };
           } else {
-            seconde = { creee: true, rule_id: d2[0].id, name: d2[0].name, trigger_event: d2[0].trigger_event };
+            seconde = { creee: true, rule_id: e2.regle.id, name: e2.regle.name, declencheur: declencheurEnClair(e2.regle.trigger_event, langueDuTour() === 'fr') };
           }
         }
       }
 
+      // RELUE en base (A-05) : Lumi cite les messages enregistrés, pas son intention.
+      const langueTour = langueDuTour();
+      const relue = row;
       return {
         created: true,
-        rule_id: row.id,
-        name: row.name,
-        trigger_event: row.trigger_event,
-        etapes: verdict.data.length,
-        resume: resultat.parcours.resume,
-        is_active: false,
+        rule_id: relue.id,
+        name: relue.name,
+        etapes: etapesDeLaRegle(relue).length,
+        is_active: relue.is_active === true,
+        automatisation: etatRelu(relue, langueTour),
         ...(seconde ? { deuxieme_automatisation: seconde } : {}),
         ...(seconde && !seconde.creee ? { warning: `La deuxième automatisation (« ${String(seconde.name)} ») n’a PAS été créée : il manque ${String(seconde.manque)}.` } : {}),
-        note: 'Créée EN PAUSE : rien ne partira tant qu\'elle n\'est pas activée. Elle est visible dans Automatisations, où le parcours peut être ajusté. Un filtre sur le déclencheur (montant, type de job…) ne se crée pas d\'ici : il s\'ajoute dans l\'éditeur.',
+        recu: langueTour === 'fr'
+          ? `Créée en brouillon : rien ne part tant qu’elle n’est pas activée. Déclencheur : ${declencheurEnClair(relue.trigger_event, true)}. Ce qu’elle fera :\n${etapesPourRecu(relue, 'fr')}`
+          : `Created as a draft: nothing is sent until it is enabled. Trigger: ${declencheurEnClair(relue.trigger_event, false)}. What it will do:\n${etapesPourRecu(relue, 'en')}`,
+        note: 'Créée EN PAUSE : rien ne partira tant qu\'elle n\'est pas activée. Elle est visible dans Automatisations. Pour l’ajuster (délai, étape, filtre par étiquette ou par montant) : update_automation_from_text.',
       };
     }, {
       // « Déjà fait » ne vaut que si l'automatisation créée existe encore :

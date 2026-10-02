@@ -20,6 +20,15 @@ import { resolve } from 'node:path';
 const RACINE = resolve(__dirname, '..');
 const SRC = readFileSync(resolve(RACINE, 'server/lib/agent/tools-reglages.ts'), 'utf8');
 const GEN = readFileSync(resolve(RACINE, 'server/lib/lumi/generer-parcours.ts'), 'utf8');
+// Depuis la mission finale (2026-10-02), aucun outil n'écrit `automation_rules` lui-même :
+// tous passent par `ecrireRegle`. Les garanties d'écriture se lisent donc LÀ.
+const ECR = readFileSync(resolve(RACINE, 'server/lib/automations-ecriture.ts'), 'utf8');
+/** L'insertion de `ecrireRegle` : de `.insert({` à sa fermeture. */
+function insertionDEcrireRegle(): string {
+  const i = ECR.indexOf('.insert({');
+  expect(i, 'insertion introuvable dans ecrireRegle').toBeGreaterThan(-1);
+  return ECR.slice(i, ECR.indexOf('})', i));
+}
 
 /** Le corps de l'outil, isolé pour que les assertions ne visent pas un voisin. */
 function corpsOutil(): string {
@@ -50,11 +59,17 @@ describe('la règle naît en pause — la garantie qui protège les clients', ()
   it('insère is_active à false', () => {
     // Le défaut inverse enverrait des messages dès le prochain déclencheur,
     // sans que personne ait relu le parcours.
-    expect(corpsOutil()).toContain('is_active: false');
+    // L'outil crée par `ecrireRegle` (ruleId null), et c'est elle qui insère — toujours en brouillon.
+    expect(corpsOutil()).toMatch(/ecrireRegle\(\{[\s\S]{0,160}ruleId: null/);
+    expect(corpsOutil()).not.toMatch(/\.insert\(/);
+    expect(insertionDEcrireRegle()).toContain('is_active: false');
   });
 
   it('ne rend jamais is_active true', () => {
     expect(corpsOutil()).not.toContain('is_active: true');
+    // `ecrireRegle` n'écrit JAMAIS la publication : ni à la création, ni dans une modification.
+    expect(ECR).not.toContain('is_active: true');
+    expect(ECR).not.toMatch(/for \(const cle of \[[^\]]*is_active/);
   });
 
   it('le dit à l’utilisateur dans sa réponse', () => {
@@ -115,9 +130,13 @@ describe('rien d’invalide n’atteint la base', () => {
   it('la proposition passe sequenceEtapes avant l’insertion', () => {
     const c = corpsOutil();
     const iVal = c.indexOf('sequenceEtapes');
-    const iIns = c.indexOf(".from('automation_rules')");
+    const iIns = c.indexOf('ecrireRegle({');
     expect(iVal, 'validation absente').toBeGreaterThan(-1);
+    expect(iIns, 'écriture absente').toBeGreaterThan(-1);
     expect(iVal).toBeLessThan(iIns);
+    // … et `ecrireRegle` revalide elle-même avant d'écrire (le schéma de la route porte `sequenceEtapes`).
+    expect(ECR.indexOf('automationRuleUpdateSchema.safeParse')).toBeGreaterThan(-1);
+    expect(ECR.indexOf('automationRuleUpdateSchema.safeParse')).toBeLessThan(ECR.indexOf('.insert({'));
   });
 
   it('une proposition refusée lève au lieu d’insérer', () => {
@@ -125,7 +144,10 @@ describe('rien d’invalide n’atteint la base', () => {
   });
 
   it('l’écriture est bornée à l’organisation', () => {
-    expect(corpsOutil()).toContain('org_id: ctx.orgId');
+    expect(corpsOutil()).toMatch(/ecrireRegle\(\{[\s\S]{0,80}orgId: ctx\.orgId/);
+    expect(insertionDEcrireRegle()).toContain('org_id: o.orgId');
+    // Lecture, modification et relecture : chacune filtrée par le bureau.
+    expect(ECR.match(/\.eq\('org_id', o\.orgId\)/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
   it('l’appel est idempotent', () => {
