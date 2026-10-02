@@ -121,7 +121,7 @@ export async function verifierAvantCarte(outil: string, args: Record<string, any
     if (outil === 'toggle_automation_rule' && args.is_active === true && regle.is_active !== true) {
       const exemples = textesDExemple({ ...regle, fr });
       if (exemples.length) {
-        return { genre: 'ferme', code: 'texte_exemple', message: 'Activation impossible : une étape porte encore le texte d’exemple de l’éditeur, qui partirait tel quel aux clients. Ne propose pas l’activation : dis-le, et propose d’écrire le vrai message d’abord.' };
+        return { genre: 'ferme', code: 'texte_exemple', message: 'Activation impossible : une étape porte encore le texte d’exemple de l’éditeur, qui partirait tel quel aux clients. Ne propose pas l’activation : dis-le, et DEMANDE si tu rédiges le vrai message — ne réécris rien de toi-même dans ce tour.' };
       }
       const bloquants = problemesBloquants(regle as Parameters<typeof problemesBloquants>[0], fr);
       if (bloquants.length) {

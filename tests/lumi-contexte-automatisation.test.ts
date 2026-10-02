@@ -166,6 +166,10 @@ describe('ce qui empêche d’activer est dit AVEC le contenu (C12)', () => {
     expect(r.nombre).toBe(1);
     expect(r.contexte).toMatch(/NE PEUT PAS être activée telle quelle/);
     expect(r.contexte).toMatch(/ne propose pas l’activation/);
+    // Passe complète du 2026-10-01 : « propose de corriger » était lu comme « réécris-le » — Lumi
+    // proposait un nouveau texto sans qu'on le lui demande. Il doit DEMANDER.
+    expect(r.contexte).toMatch(/DEMANDE si tu rédiges le vrai message/);
+    expect(r.contexte).toMatch(/ne réécris rien de toi-même/);
   });
 
   it('rien de tel pour une automatisation complète, ni pour une automatisation déjà publiée', async () => {

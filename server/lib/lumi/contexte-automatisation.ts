@@ -107,8 +107,8 @@ function resumeCompact(regle: RegleLue, langue: Langue): string {
     texteDuResume(resumeDeLaRegle(regle, langue, { maxMessage: 400 }), langue),
     ...(obstacles.length
       ? [fr
-        ? `NE PEUT PAS être activée telle quelle : ${obstacles.join(' · ')} Si on te demande de l’activer, dis-le clairement et propose de corriger d’abord — ne propose pas l’activation.`
-        : `CANNOT be enabled as is: ${obstacles.join(' · ')} If asked to enable it, say so plainly and offer to fix it first — do not propose enabling.`]
+        ? `NE PEUT PAS être activée telle quelle : ${obstacles.join(' · ')} Si on te demande de l’activer : dis-le clairement, et DEMANDE si tu rédiges le vrai message — ne propose pas l’activation, et ne réécris rien de toi-même dans ce tour (on ne te l’a pas demandé).`
+        : `CANNOT be enabled as is: ${obstacles.join(' · ')} If asked to enable it: say so plainly, and ASK whether you should write the real message — do not propose enabling, and do not rewrite anything on your own in this turn (you were not asked to).`]
       : []),
   ].join('\n');
 }
