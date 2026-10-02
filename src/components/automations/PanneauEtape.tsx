@@ -123,6 +123,29 @@ function sansAnglaisVide(etape: Etape): Etape {
 }
 
 /**
+ * LA BASE NE PORTE QUE CE QUE L'ÉCRAN MONTRE (triage actions, 03-champs-types:323
+ * et :336). Un champ CACHÉ par un autre réglage gardait sa valeur à
+ * l'enregistrement : « L'étiquette : VIP » à côté de « Retirer toutes les
+ * étiquettes », un `membre_id` à côté de « Pour qui : le propriétaire ». Le
+ * moteur ne les lit pas — mais revenir sur le réglage les ressuscitait, et tout
+ * lecteur de la configuration voyait un réglage que l'écran ne montre pas.
+ * La visibilité se juge sur la configuration FINALE (`champVisible`, la règle
+ * du catalogue, partagée avec la validation du serveur).
+ */
+function sansChampsCaches(etape: Etape): Etape {
+  if (etape.type !== 'action') return etape;
+  const modele = trouverAction(etape.action.type);
+  if (!modele) return etape;
+  const config = { ...etape.action.config };
+  for (const champ of modele.champs) {
+    if (champVisible(champ, config)) continue;
+    delete config[champ.cle];
+    delete config[cleAnglaise(champ.cle)];
+  }
+  return { ...etape, action: { ...etape.action, config } };
+}
+
+/**
  * L'étape telle qu'on l'enregistre, une fois RETIRÉES les autres versions
  * qu'on a choisi de retirer : il ne reste qu'un texte, sous la clé de base —
  * celle que le moteur lit quand la version demandée manque.
@@ -1232,7 +1255,7 @@ export default function PanneauEtape({
           onClick={() => onEnregistrer(brouillon.type === 'si'
             // Une ligne de champ incomplète bloquerait la branche pour toujours.
             ? { ...brouillon, conditions: sansConditionsIncompletes((brouillon.conditions ?? {}) as Record<string, unknown>) }
-            : versEnregistrement(pourEnregistrer(brouillon), reference.html))}
+            : versEnregistrement(pourEnregistrer(sansChampsCaches(brouillon)), reference.html))}
           disabled={problemes.length > 0 || conflit !== null}
           className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >

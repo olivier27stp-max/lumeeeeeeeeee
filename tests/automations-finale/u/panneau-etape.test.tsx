@@ -1017,3 +1017,52 @@ describe('l’autre langue retirée « sous le pli » : ce qu’« Enregistrer �
     expect(avis()?.textContent).toBe('The English version will be removed. View');
   });
 });
+
+// ─── Triage « actions », 03-champs-types:323 et :336 ────────────
+
+describe('03:323 et 03:336 — la base ne porte que ce que l’écran montre : un champ caché n’est pas enregistré', () => {
+  const MEMBRE = '99999999-0000-4000-8000-000000000001';
+  const case_ = (libelle: string) => Array.from(conteneur.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
+    .find((c) => conteneur.querySelector(`label[for="${c.id}"]`)?.textContent?.includes(libelle));
+
+  it('« Retirer une étiquette » : une étiquette saisie, puis « Retirer toutes les étiquettes » cochée → l’étiquette (cachée) n’est pas enregistrée', async () => {
+    await monter('retirer_etiquette', {}, { declencheur: 'client.tagged' });
+    saisir(champ('L’étiquette'), 'VIP QA');
+    cliquer(case_('Retirer toutes les étiquettes'));
+    expect(champ('L’étiquette')).toBeNull();
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual({ toutes: 'true' });
+  });
+
+  it('… décochée de nouveau AVANT d’enregistrer : l’étiquette est toujours là (rien n’est perdu pendant la saisie)', async () => {
+    await monter('retirer_etiquette', {}, { declencheur: 'client.tagged' });
+    saisir(champ('L’étiquette'), 'VIP QA');
+    cliquer(case_('Retirer toutes les étiquettes'));
+    cliquer(case_('Retirer toutes les étiquettes'));
+    expect(champ('L’étiquette')?.value).toBe('VIP QA');
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual({ toutes: 'false', etiquette: 'VIP QA' });
+  });
+
+  it('« Notifier l’équipe » : « Un membre précis » et un membre, puis retour à « Le propriétaire » → `membre_id` n’est pas enregistré', async () => {
+    await monter('create_notification', { title: 'Devis ouvert' }, { membres: [{ user_id: MEMBRE, nom: 'Tech QA' }] });
+    saisir(champ<HTMLSelectElement>('Pour qui'), 'membre');
+    saisir(champ<HTMLSelectElement>('Le membre'), MEMBRE);
+    saisir(champ<HTMLSelectElement>('Pour qui'), 'proprietaire');
+    expect(champ('Le membre')).toBeNull();
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual({ title: 'Devis ouvert', destinataire: 'proprietaire' });
+  });
+
+  it('une valeur cachée DÉJÀ en base (posée avant cette règle) s’en va au premier enregistrement', async () => {
+    await monter('retirer_etiquette', { toutes: 'true', etiquette: 'VIP QA' }, { declencheur: 'client.tagged' });
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual({ toutes: 'true' });
+  });
+
+  it('un champ VISIBLE garde sa valeur : rien d’autre n’est retiré', async () => {
+    await monter('create_notification', { title: 'Devis ouvert', destinataire: 'membre', membre_id: MEMBRE, par_courriel: 'true' }, { membres: [{ user_id: MEMBRE, nom: 'Tech QA' }] });
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual({ title: 'Devis ouvert', destinataire: 'membre', membre_id: MEMBRE, par_courriel: 'true' });
+  });
+});
