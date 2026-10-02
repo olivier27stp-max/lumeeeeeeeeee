@@ -1749,6 +1749,13 @@ async function handleEvent(event: CRMEvent) {
         const jours = rule.settings?.delai_entre_passages_jours;
         if (jours && await dejaPasseRecemment(engineConfig.supabase, rule, event, jours)) {
           logger.info(`[automationEngine] règle "${rule.name}" déjà passée pour ce client il y a moins de ${jours} j — ignorée`);
+          // Le journal le dit : sans cette ligne, « pourquoi ce client n'a
+          // rien reçu ? » n'avait aucune réponse à l'écran.
+          await journaliserRegleEcartee(engineConfig.supabase, rule, event, null, {
+            saute: `Déjà passé par cette automatisation il y a moins de ${jours} jour${Number(jours) > 1 ? 's' : ''}`,
+            saute_code: 'une_fois_par_client',
+            detail: { delai_entre_passages_jours: jours },
+          });
           continue;
         }
         aAgi = true;
