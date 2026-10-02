@@ -1036,7 +1036,18 @@ export default function Automations() {
     return () => { vivant = false; if (minuterie) clearTimeout(minuterie); };
   }, [peutModifier]);
 
+  /*
+   * UNE copie à la fois par automatisation (triage `06-menu-actions:217`). Pendant que la copie se
+   * crée, la roue remplace « ⋮ » mais le bouton reste cliquable : rouvrir le menu et recliquer
+   * « Dupliquer » créait une seconde copie.
+   */
+  const duplicationsEnVol = useRef(new Set<string>());
   const dupliquer = async (regle: AutomationRule, ouvrir = false) => {
+    if (duplicationsEnVol.current.has(regle.id)) {
+      toast.info(fr ? 'La copie est déjà en cours de création.' : 'The copy is already being created.', { id: `copie-${regle.id}` });
+      return;
+    }
+    duplicationsEnVol.current.add(regle.id);
     setOccupeId(regle.id);
     try {
       const copie = await dupliquerAutomatisation(regle.id);
@@ -1046,6 +1057,7 @@ export default function Automations() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
+      duplicationsEnVol.current.delete(regle.id);
       setOccupeId(null);
     }
   };
@@ -2229,6 +2241,7 @@ export default function Automations() {
                                   }}
                                   aria-haspopup="menu"
                                   aria-expanded={menuLigne === rule.id}
+                                  aria-busy={occupeId === rule.id}
                                   aria-label={fr ? `Actions pour ${localizeAutomationName(rule.name, language)}` : `Actions for ${localizeAutomationName(rule.name, language)}`}
                                   className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                 >

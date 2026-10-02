@@ -305,6 +305,42 @@ describe('03-onglets-etats:229 et 10-volume:210 — « À vérifier » ne dit «
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('06-menu-actions:217 — recliquer « Dupliquer » pendant que la copie se crée n’en crée pas une seconde', () => {
+  const choisirDupliquer = async () => {
+    await cliquer(bouton(/^Actions pour Relance 1$/));
+    await cliquer(Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((m) => m.textContent === 'Dupliquer'));
+  };
+
+  it('deux « Dupliquer » de suite : un seul appel au serveur ; le second dit que la copie est en cours', async () => {
+    let liberer: (v: unknown) => void = () => undefined;
+    vi.mocked(builder.dupliquerAutomatisation).mockReturnValue(new Promise((ok) => { liberer = ok; }) as never);
+    await rendre();
+    await choisirDupliquer();
+    // La roue remplace « ⋮ », le bouton reste cliquable (il l'annonce : aria-busy) et le menu se rouvre.
+    expect(bouton(/^Actions pour Relance 1$/)?.getAttribute('aria-busy')).toBe('true');
+    await choisirDupliquer();
+    expect(builder.dupliquerAutomatisation).toHaveBeenCalledTimes(1);
+    expect(toast.info).toHaveBeenCalledWith('La copie est déjà en cours de création.', expect.anything());
+    await act(async () => { liberer({ id: 'copie' }); });
+    await laisser();
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith('Copie créée — elle est en brouillon');
+  });
+
+  it('la copie finie (ou en échec), on peut dupliquer de nouveau', async () => {
+    vi.mocked(builder.dupliquerAutomatisation).mockRejectedValueOnce(new Error('panne')).mockResolvedValue({ id: 'copie' } as never);
+    await rendre();
+    await choisirDupliquer();
+    await laisser();
+    expect(toast.error).toHaveBeenCalledWith('panne');
+    await choisirDupliquer();
+    await laisser();
+    expect(builder.dupliquerAutomatisation).toHaveBeenCalledTimes(2);
+    expect(toast.success).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('06-menu-actions:255 — le tableau reste à l’écran pendant un rechargement', () => {
   const dupliquerLaLigne = async () => {
     const b = bouton(/^Actions pour Relance 1$/) as HTMLButtonElement;
