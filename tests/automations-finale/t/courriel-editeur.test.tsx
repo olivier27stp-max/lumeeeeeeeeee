@@ -477,6 +477,39 @@ describe('04-courriel:443 — la ligne ajoutée reçoit le curseur', () => {
   });
 });
 
+describe('04-courriel:478 — la corbeille d’une ligne se voit au clavier et au toucher', () => {
+  it('le bouton est nommé, et n’est plus invisible hors survol : focus de la ligne, focus du bouton, écran tactile', async () => {
+    const C = { subject: OBJET, body: CORPS };
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    const corbeille = bouton('Supprimer cette ligne');
+    expect(corbeille.getAttribute('aria-label')).toBe('Supprimer cette ligne');
+    const classes = corbeille.className.split(/\s+/);
+    // Caché par défaut, montré au survol (comme avant)…
+    expect(classes).toContain('opacity-0');
+    expect(classes).toContain('group-hover:opacity-100');
+    // … et aussi quand la ligne a le focus, quand le bouton l'a, et au doigt.
+    expect(classes).toContain('group-focus-within:opacity-100');
+    expect(classes).toContain('focus-visible:opacity-100');
+    expect(classes).toContain('pointer-coarse:opacity-100');
+    // Le groupe qui porte « group » est bien la ligne (le champ et sa corbeille).
+    expect(corbeille.closest('.group')?.querySelector('textarea')).not.toBeNull();
+  });
+});
+
+describe('04-courriel:683 — les onglets disent lequel est affiché', () => {
+  it('`aria-pressed` suit l’onglet actif', async () => {
+    const C = { subject: OBJET, body: CORPS };
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    expect(bouton('Modifier').getAttribute('aria-pressed')).toBe('true');
+    expect(bouton('Aperçu réel').getAttribute('aria-pressed')).toBe('false');
+    await cliquer(bouton('Aperçu réel'));
+    expect(bouton('Modifier').getAttribute('aria-pressed')).toBe('false');
+    expect(bouton('Aperçu réel').getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
 describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’éditeur montre et modifie le courriel qui part', () => {
   const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
   const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };

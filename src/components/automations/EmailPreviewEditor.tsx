@@ -824,8 +824,11 @@ export default function EmailPreviewEditor({
         {/* Deux onglets. « Modifier » garde l'édition sur place ; « Aperçu
             réel » montre ce que le serveur enverrait, sans rien redessiner. */}
         <div className="flex items-center gap-1 px-3 sm:px-5 pt-3 border-b border-outline/40">
+          {/* `aria-pressed` : un lecteur d'écran sait lequel des deux est
+              affiché (04-courriel:683). */}
           <button
             type="button"
+            aria-pressed={!ongletApercu}
             onClick={() => setOngletApercu(false)}
             className={cn(
               'px-3 py-2 text-[12px] font-semibold border-b-2 -mb-px transition-colors',
@@ -836,6 +839,7 @@ export default function EmailPreviewEditor({
           </button>
           <button
             type="button"
+            aria-pressed={ongletApercu}
             onClick={() => setOngletApercu(true)}
             className={cn(
               'px-3 py-2 text-[12px] font-semibold border-b-2 -mb-px transition-colors',
