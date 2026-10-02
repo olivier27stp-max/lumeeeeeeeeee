@@ -124,6 +124,18 @@ function estModifieeAilleurs(e: unknown): boolean {
     && (e as { code?: unknown }).code === 'modifiee_ailleurs';
 }
 
+/**
+ * Le serveur a-t-il REFUSÉ l'écriture (400, 403, 409, 422…) ? Ce n'est pas une
+ * panne : la demande elle-même ne passe pas (une valeur hors bornes, un
+ * parcours qui finit par une attente, une automatisation publiée qu'on
+ * casserait). La renvoyer telle quelle sera refusé pareil — on ne réessaie
+ * JAMAIS un refus (triage éditeur, S-04).
+ */
+function estRefus(e: unknown): boolean {
+  const statut = typeof e === 'object' && e !== null ? (e as { status?: unknown }).status : undefined;
+  return typeof statut === 'number' && [400, 403, 409, 410, 413, 422].includes(statut);
+}
+
 /** Bornes du zoom. Au-delà, on ne lit plus rien ; en deçà, on se perd. */
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.6;
@@ -311,7 +323,14 @@ export default function AutomationBuilderPage() {
   // ── État d'enregistrement, façon « Saved » de GHL ──
   // Trois états : à jour, en cours, en attente. L'utilisateur doit savoir si
   // son travail est en sécurité sans avoir à chercher un bouton.
-  const [etatSauvegarde, setEtatSauvegarde] = useState<'a_jour' | 'en_cours' | 'modifie' | 'incomplet'>('a_jour');
+  const [etatSauvegarde, setEtatSauvegarde] = useState<'a_jour' | 'en_cours' | 'modifie' | 'incomplet' | 'refuse'>('a_jour');
+  /**
+   * LE DERNIER REFUS DU SERVEUR (triage éditeur, S-04), gardé à l'écran tant
+   * que rien ne s'enregistre : sa phrase, et les étapes qu'il désigne. Un
+   * refus n'est pas réessayé — la prochaine modification du parcours repart,
+   * elle, en enregistrement.
+   */
+  const [refus, setRefus] = useState<{ message: string; etapes: string[] } | null>(null);
 
   /*
    * Le serveur refuse au-delà de 30 étapes (`ETAPES_MAX`, validation.ts) :
@@ -957,7 +976,7 @@ export default function AutomationBuilderPage() {
         toast.error(d.fr
           ? 'Automatisation quittée sans enregistrer : une étape était incomplète.'
           : 'Automation left without saving: a step was incomplete.');
-      } else if (d.aRegle && d.incompletes === 0 && (d.etat === 'modifie' || d.etat === 'en_cours')) {
+      } else if (d.aRegle && d.incompletes === 0 && (d.etat === 'modifie' || d.etat === 'en_cours' || d.etat === 'refuse')) {
         ecrireRegle(precedente, { name: d.nom, steps: d.steps }).catch((e: unknown) => {
           console.error('[automatisations] enregistrement au changement d’automatisation impossible', e);
           captureClientException(e, { where: 'AutomationBuilderPage.changementDeRegle' });
@@ -983,6 +1002,7 @@ export default function AutomationBuilderPage() {
       setApercu(null);
       setResumeLumi(null);
       setModifieeAilleurs(false);
+      setRefus(null);
       autreCreee.current = null;
     }
     idReel.current = suivante;
@@ -1075,6 +1095,7 @@ export default function AutomationBuilderPage() {
    */
   const recharger = useCallback(() => {
     setModifieeAilleurs(false);
+    setRefus(null);
     setEtapeEnAttente(null);
     echecsSauvegarde.current = 0;
     setEtatSauvegarde('a_jour');
@@ -1364,10 +1385,12 @@ export default function AutomationBuilderPage() {
   );
   /** Les étapes fautives, pour les signaler SUR le canevas (§6.5). */
   const etapesEnErreur = useMemo(
-    () => new Set(problemesVivants
-      .filter((p) => p.gravite === 'bloquant' && p.etapeId)
-      .map((p) => p.etapeId as string)),
-    [problemesVivants],
+    // … et celles que le serveur vient de refuser d'enregistrer.
+    () => new Set([
+      ...problemesVivants.filter((p) => p.gravite === 'bloquant' && p.etapeId).map((p) => p.etapeId as string),
+      ...(refus?.etapes ?? []),
+    ]),
+    [problemesVivants, refus],
   );
   const bloquantsVivants = useMemo(
     () => problemesVivants.filter((p) => p.gravite === 'bloquant'),
@@ -1482,6 +1505,7 @@ export default function AutomationBuilderPage() {
            * repart de lui-même en « modifié » — ce qu'on ne veut surtout
            * pas, c'est laisser « Enregistrement… » à jamais.
            */
+          setRefus(null);
           setEtatSauvegarde((actuel) => {
             if (actuel !== 'en_cours') return actuel;
             return JSON.stringify(steps) === envoye ? 'a_jour' : 'modifie';
@@ -1494,10 +1518,34 @@ export default function AutomationBuilderPage() {
            */
           // 409 « modifiée ailleurs » : même règle — le bandeau le dit et offre de recharger.
           if (estIntrouvable(e) || estModifieeAilleurs(e)) {
+            // Dit aussi par un message : le bandeau peut être hors de vue (onglet Journaux…).
+            if (estModifieeAilleurs(e)) toast.error(e instanceof Error ? e.message : String(e), { id: 'enregistrement-auto' });
             setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
             return;
           }
           const message = e instanceof Error ? e.message : String(e);
+          /*
+           * UN REFUS N'EST PAS UNE PANNE (triage éditeur, S-04). « Ajouter »
+           * puis « Attendre » en dernière étape — un geste normal — donnait
+           * « Enregistrement impossible pour le moment — nouvel essai
+           * automatique. (La séquence se termine par une attente…) », et le
+           * même parcours refusé repartait en boucle, 400 après 400.
+           *
+           * Un refus est DIT comme un refus, n'est jamais renvoyé, désigne
+           * l'étape quand le serveur la nomme, et reste à l'écran : rien ne
+           * s'enregistre tant qu'il n'est pas corrigé. La prochaine
+           * modification du parcours repart en enregistrement.
+           */
+          if (estRefus(e)) {
+            const indices = (e as { etapes?: unknown }).etapes;
+            const fautives = Array.isArray(indices)
+              ? indices.flatMap((i) => (typeof i === 'number' && steps[i] ? [steps[i].id] : []))
+              : [];
+            setRefus({ message, etapes: [...new Set(fautives)] });
+            toast.error(fr ? `Enregistrement refusé — ${message}` : `Save refused — ${message}`, { id: 'enregistrement-auto' });
+            setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'refuse' : actuel));
+            return;
+          }
           const tropVite = (e as { status?: unknown } | null)?.status === 429 || /too many requests|429|rate limit/i.test(message);
           if (tropVite && essai < attentes.length) {
             // Le délai que le serveur indique (`Retry-After`), sinon un délai court croissant.
@@ -1628,9 +1676,10 @@ export default function AutomationBuilderPage() {
        * secondes de modifications partent d'abord, sinon il jugerait
        * (et publierait) l'avant-dernière version du parcours.
        */
-      if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours') {
+      if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse') {
         try {
           await ecrire({ name: nom.trim() || regle.name, steps });
+          setRefus(null);
           setEtatSauvegarde('a_jour');
         } catch (e: unknown) {
           toast.error(e instanceof Error ? e.message : String(e));
@@ -1757,7 +1806,8 @@ export default function AutomationBuilderPage() {
   // « en cours » compte aussi : fermer l'onglet pendant l'enregistrement
   // peut couper la requête avant que le serveur l'ait reçue (P2-13).
   // … et un changement de déclencheur dont le serveur n'a pas encore répondu.
-  const travailNonEnregistre = declencheurEnVol || etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours';
+  // … et un parcours que le serveur REFUSE : il n'est pas en base.
+  const travailNonEnregistre = declencheurEnVol || etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse';
 
   /**
    * Prévenir avant de FERMER l'onglet.
@@ -1801,7 +1851,7 @@ export default function AutomationBuilderPage() {
         : 'Automation left without saving: a step was incomplete.');
       return;
     }
-    if ((d.etat !== 'modifie' && d.etat !== 'en_cours') || d.incompletes > 0) return;
+    if ((d.etat !== 'modifie' && d.etat !== 'en_cours' && d.etat !== 'refuse') || d.incompletes > 0) return;
     d.ecrire({ name: d.nom, steps: d.steps }).catch((e: unknown) => {
       console.error('[automatisations] enregistrement au départ impossible', e);
       captureClientException(e, { where: 'AutomationBuilderPage.depart' });
@@ -1826,9 +1876,10 @@ export default function AutomationBuilderPage() {
      * incomplète, ou le serveur qui refuse.
      */
     let echecEnregistrement = false;
-    if (regle && etapesIncompletes === 0 && (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours')) {
+    if (regle && etapesIncompletes === 0 && (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse')) {
       try {
         await ecrire({ name: nom.trim() || regle.name, steps });
+        setRefus(null);
         setEtatSauvegarde('a_jour');
       } catch (e: unknown) {
         console.error('[automatisations] enregistrement à la sortie impossible', e);
@@ -2242,6 +2293,12 @@ export default function AutomationBuilderPage() {
                 <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
                 {fr ? 'Modifiée ailleurs' : 'Changed elsewhere'}
               </span>
+            ) : etatSauvegarde === 'refuse' ? (
+              // « Modifié » laisserait croire que l'enregistrement va venir : il ne viendra pas.
+              <span className="inline-flex items-center gap-1.5 text-danger">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                {fr ? 'Refusé — à corriger' : 'Refused — to fix'}
+              </span>
             ) : etatSauvegarde === 'incomplet' ? (
               <span className="inline-flex items-center gap-1.5 text-warning">
                 <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
@@ -2312,8 +2369,9 @@ export default function AutomationBuilderPage() {
                   toast.info(fr ? 'Complétez les étapes en cours pour voir l’aperçu à jour.' : 'Complete the unfinished steps to see an up-to-date preview.');
                   return;
                 }
-                if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours') {
+                if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours' || etatSauvegarde === 'refuse') {
                   await ecrire({ name: nom.trim() || regle.name, steps });
+                  setRefus(null);
                   setEtatSauvegarde('a_jour');
                 }
                 setApercu(await apercuAutomatisation(idReel.current));
@@ -2367,6 +2425,30 @@ export default function AutomationBuilderPage() {
           >
             {fr ? 'Recharger' : 'Reload'}
           </button>
+        </div>
+      )}
+
+      {/* ══ Enregistrement refusé (S-04) : dit tant qu'il dure, avec ce qu'il
+          faut corriger et l'étape désignée quand le serveur la nomme. ══ */}
+      {etatSauvegarde === 'refuse' && refus && !modifieeAilleurs && (
+        <div role="alert" className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-danger/40 bg-danger/5 px-4 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-danger">
+              {fr
+                ? 'Enregistrement refusé : rien n’est enregistré tant que ce n’est pas corrigé.'
+                : 'Save refused: nothing is saved until this is fixed.'}
+            </p>
+            <p className="mt-0.5 text-[12px] text-text-secondary">{refus.message}</p>
+          </div>
+          {refus.etapes.length > 0 && (
+            <button
+              type="button"
+              onClick={() => { setOnglet('parcours'); ouvrirEtape(refus.etapes[0]); }}
+              className="shrink-0 rounded-lg border border-danger/50 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {fr ? 'Ouvrir l’étape' : 'Open the step'}
+            </button>
+          )}
         </div>
       )}
 

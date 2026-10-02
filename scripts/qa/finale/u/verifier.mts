@@ -127,6 +127,30 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await page.context().close();
   },
 
+  /** S-04 — « Attendre » en dernière étape : un refus dit comme un refus, sans boucle ; puis la suite s'enregistre. */
+  async s04() {
+    const regle = await creerRegle({ steps: [action('send_sms', { body: 'Texto ALPHA' })] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    const reponses: number[] = [];
+    page.on('response', (r) => { if (r.request().method() === 'PATCH' && r.url().includes(`/api/automations/rules/${regle.id}`)) reponses.push(r.status()); });
+    await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+    await tiroir(page).getByRole('button', { name: /^Attendre/ }).click();
+    await enregistrer(page).click();
+    await page.locator('header').getByText('Refusé — à corriger').waitFor({ timeout: 20_000 });
+    await pause(12_000);
+    verifier(reponses.filter((s) => s >= 400).length === 1, `le parcours refusé n’est envoyé qu’une fois (réponses : ${reponses.join(', ')})`);
+    verifier(await page.getByText('nouvel essai automatique').count() === 0, 'aucun « nouvel essai automatique »');
+    verifier(await page.getByRole('alert').filter({ hasText: 'se termine par une attente' }).first().isVisible(), 'le refus reste à l’écran, avec sa raison');
+    // On corrige : une étape après l'attente. Tout s'enregistre.
+    await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+    await tiroir(page).getByRole('button', { name: /Envoyer un texto/ }).click();
+    await enregistrer(page).click();
+    await page.locator('header').getByText('Enregistré', { exact: true }).waitFor({ timeout: 20_000 });
+    verifier((await etapes(regle.id)).length === 3, 'une fois corrigé, le parcours entier est en base');
+    await page.context().close();
+  },
+
   /** 12-enregistrement:86 — après un 429, un nouvel essai part et l'enregistrement finit par passer. */
   async e429() {
     const regle = await creerRegle({ steps: [action('send_sms', { body: 'Texto BRAVO' })] });

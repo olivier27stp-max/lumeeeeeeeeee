@@ -442,6 +442,142 @@ describe('S-01 — « Ouvrir » une 2e automatisation sur réseau lent : chacune
   });
 });
 
+// ─── Triage « éditeur », S-04 ───────────────────────────────────
+
+describe('S-04 — un refus du serveur (400, 422) n’est pas une panne : dit comme un refus, jamais renvoyé, et l’étape est désignée', () => {
+  const ATTENTE_FINALE = 'La séquence se termine par une attente : rien ne se passera après.';
+  const refus = (statut: number, message: string, plus: Record<string, unknown> = {}) => Object.assign(new Error(message), { status: statut, ...plus });
+  const alertes = () => Array.from(container.querySelectorAll('[role="alert"]')).map((a) => a.textContent ?? '');
+  const avancer = async (ms: number) => {
+    await act(async () => { vi.advanceTimersByTime(ms); });
+    await attendre();
+  };
+  /** Réécrit le texto de la carte donnée, par son panneau. */
+  async function reecrire(carte: string, texte: string) {
+    cliquer(carteEtape(carte));
+    await attendre(2);
+    saisir(panneauEtape()?.querySelector('textarea, input[type="text"]:not([id$="-nom"])'), texte);
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+  }
+
+  it('« Attendre » en dernière étape : un seul envoi, un message de REFUS (pas « pour le moment — nouvel essai automatique »), et aucun essai en boucle', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw refus(400, ATTENTE_FINALE); });
+    await ajouterParLeTiroir('Attendre');
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    await avancer(3000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+
+    expect(toasts.erreur).toEqual([`Enregistrement refusé — ${ATTENTE_FINALE}`]);
+    expect(toasts.erreur.join('\n')).not.toContain('nouvel essai automatique');
+    // L'indicateur ne dit ni « Modifié » (comme si ça allait venir) ni « Enregistré ».
+    expect(barreDuHaut()).toContain('Refusé — à corriger');
+    expect(barreDuHaut()).not.toContain('Modifié');
+    // Et le refus reste À L'ÉCRAN tant qu'il dure.
+    expect(alertes().join('\n')).toContain('Enregistrement refusé : rien n’est enregistré tant que ce n’est pas corrigé.');
+    expect(alertes().join('\n')).toContain(ATTENTE_FINALE);
+
+    // Deux minutes : le même parcours refusé n'est JAMAIS renvoyé.
+    await avancer(120_000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+  });
+
+  it('pendant que le refus dure, une AUTRE modification repart en enregistrement — acceptée, tout est enregistré et le refus disparaît', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementationOnce(async () => { throw refus(400, ATTENTE_FINALE); });
+    await ajouterParLeTiroir('Attendre');
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    await avancer(3000);
+    expect(barreDuHaut()).toContain('Refusé — à corriger');
+
+    await reecrire('Envoyer un texto', 'Texto réécrit');
+    expect(barreDuHaut()).toContain('Modifié');
+    await avancer(3000);
+    expect(api.modifier).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify((api.modifier.mock.calls[1][1] as { steps: unknown }).steps)).toContain('Texto réécrit');
+    expect(barreDuHaut()).toContain('Enregistré');
+    expect(alertes()).toEqual([]);
+  });
+
+  it('… et si elle est refusée aussi : un envoi par modification, pas plus', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw refus(400, ATTENTE_FINALE); });
+    await ajouterParLeTiroir('Attendre');
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    await avancer(3000);
+    await reecrire('Envoyer un texto', 'Texto réécrit');
+    await avancer(3000);
+    await avancer(120_000);
+    expect(api.modifier).toHaveBeenCalledTimes(2);
+    expect(barreDuHaut()).toContain('Refusé — à corriger');
+  });
+
+  it('le serveur désigne l’étape (rang 1 du parcours envoyé) : sa carte est bordée de rouge, et « Ouvrir l’étape » ouvre son panneau', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    const message = 'Étape 2 (« Créer une tâche ») : « À faire dans (jours) » doit être au plus 365.';
+    api.modifier.mockImplementation(async () => { throw refus(400, message, { etapes: [1] }); });
+    await reecrire('Envoyer un texto', 'Autre texto');
+    await avancer(3000);
+    expect(alertes().join('\n')).toContain(message);
+    expect(carteEtape('Créer une tâche')?.parentElement?.className).toContain('border-danger');
+    expect(carteEtape('Envoyer un texto')?.parentElement?.className).not.toContain('border-danger');
+    cliquer(boutonExact('Ouvrir l’étape'));
+    await attendre(2);
+    expect(panneauEtape()?.querySelector('h2')?.textContent).toBe('Créer une tâche');
+  });
+
+  it('casser une automatisation PUBLIÉE (422) : le refus seul, sans « pour le moment — nouvel essai automatique »', async () => {
+    etat.regles = [regle({ is_active: true })];
+    await ouvrir();
+    vi.useFakeTimers();
+    const message = 'Cette automatisation est publiée : cette modification l’empêcherait de fonctionner (« Créer une tâche » : « Titre de la tâche » est vide.). Corrigez-la, ou repassez-la en brouillon d’abord.';
+    api.modifier.mockImplementation(async () => { throw refus(422, message, { code: 'publiee_cassee' }); });
+    await reecrire('Envoyer un texto', 'Autre texto');
+    await avancer(3000);
+    await avancer(60_000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(toasts.erreur).toEqual([`Enregistrement refusé — ${message}`]);
+  });
+
+  it('quitter l’éditeur pendant un refus : « Quitter sans enregistrer ? »', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw refus(400, ATTENTE_FINALE); });
+    await reecrire('Envoyer un texto', 'Autre texto');
+    await avancer(3000);
+    confirmerMock.mockImplementationOnce(async () => false);
+    cliquer(bouton('Mes automatisations'));
+    await attendre(12);
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect((confirmerMock.mock.calls[0][0] as { title: string }).title).toBe('Quitter sans enregistrer ?');
+    expect(lieu()).toBe(`/automations/${ID}`);
+  });
+
+  it('en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    await ouvrir();
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw refus(400, 'A journey holds at most 30 steps.'); });
+    cliquer(carteEtape('Send a text message'));
+    await attendre(2);
+    saisir(container.querySelector('aside[aria-label="Edit step"] textarea'), 'Other text');
+    cliquer(boutonExact('Save action') ?? boutonExact('Save'));
+    await attendre(2);
+    await avancer(3000);
+    expect(toasts.erreur).toEqual(['Save refused — A journey holds at most 30 steps.']);
+    expect(barreDuHaut()).toContain('Refused — to fix');
+    expect(alertes().join('\n')).toContain('Save refused: nothing is saved until this is fixed.');
+  });
+});
+
 // ─── Triage « éditeur », 12-enregistrement:86 ───────────────────
 
 describe('débit dépassé (429) — l’enregistrement automatique réessaie vraiment, et l’indicateur ne reste pas sur « Enregistrement… »', () => {

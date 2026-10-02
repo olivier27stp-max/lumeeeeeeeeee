@@ -94,11 +94,21 @@ async function erreurDe(reponse: Response, repli: string): Promise<Error> {
   let message = repli;
   /** Le `code` du refus (`modifiee_ailleurs`, `publication_refusee`…), quand le serveur en pose un. */
   let code: string | undefined;
+  let etapes: number[] = [];
   try {
     const corps = await reponse.json();
     // La phrase lisible (`message`) avant le texte technique (`error`) d'un refus de permission.
     message = messageDuServeur(corps) ?? repli;
     if (typeof (corps as { code?: unknown } | null)?.code === 'string') code = (corps as { code: string }).code;
+    // Un refus de validation nomme ses champs (`details[].path`) : on en tire
+    // le RANG des étapes fautives (`steps`, n, …), pour les désigner à l'écran.
+    const details = (corps as { details?: unknown } | null)?.details;
+    if (Array.isArray(details)) {
+      etapes = [...new Set(details.flatMap((d) => {
+        const chemin = (d as { path?: unknown } | null)?.path;
+        return Array.isArray(chemin) && chemin[0] === 'steps' && typeof chemin[1] === 'number' ? [chemin[1]] : [];
+      }))];
+    }
   } catch {
     // Corps illisible : le repli dit déjà l'essentiel.
   }
@@ -107,6 +117,7 @@ async function erreurDe(reponse: Response, repli: string): Promise<Error> {
   return Object.assign(new Error(message), {
     status: reponse.status,
     ...(code ? { code } : {}),
+    ...(etapes.length ? { etapes } : {}),
     ...(Number.isFinite(apres) && apres > 0 ? { retryApresMs: apres * 1000 } : {}),
   });
 }
