@@ -31,7 +31,7 @@ import { segmentsSms } from '../../../src/lib/smsSegments';
 import { verifierPlafond, ajouterDepense, compterRefus } from './plafond-journalier';
 import { journaliserTrace, ajouterUsage, usageVide, ETAGE, type UsageAgrege } from './traces';
 import { contexteLumi, noterAppelImbrique } from './contexte-appel';
-import { avisSegments } from '../automations-etapes';
+import { avisSegments, resumeDeLaRegle, type RegleLue } from '../automations-etapes';
 import { sequenceEtapes } from '../validation';
 
 /**
@@ -70,7 +70,7 @@ const MODELE = 'claude-sonnet-5';
 const MAX_TOKENS = 8_000;
 
 /** Version de CE prompt (celui du clavardage général a la sienne, `version.ts`) : elle voyage dans la trace. */
-export const VERSION_PROMPT_PARCOURS = 'parcours-2026-10-02.1';
+export const VERSION_PROMPT_PARCOURS = 'parcours-2026-10-02.2';
 
 /**
  * Effort de réflexion de l'appel, écrit en toutes lettres (c'est aussi le défaut
@@ -380,6 +380,7 @@ FORME DE LA RÉPONSE — un objet JSON, rien autour :
   "modifie": true,
   "renomme": false,
   "intention": null,
+  "explication": false,
   "steps": [
     { "id": "e1", "type": "action", "action": { "type": "send_sms", "config": { "body": "..." } }, "suivant": "e2" },
     { "id": "e2", "type": "attendre", "delai_secondes": 259200, "suivant": "e3" },
@@ -533,6 +534,11 @@ RÈGLES ABSOLUES :
   déclencheur se dit par sa description (« quand une facture est en
   retard »), jamais par sa clé (invoice.overdue). Ne décris que ce qui est
   dans le parcours : une attente simple n'est pas une condition.
+- On te demande CE QUE FAIT l'automatisation (« explique-moi ce qu'elle
+  fait », « qu'est-ce que ça fait ? », "explain what it does") : en plus,
+  "explication": true, et "resume" tient en UNE phrase simple. Le serveur
+  écrit dessous le détail exact — le déclencheur sous son nom d'écran, chaque
+  étape, chaque message mot pour mot : ne le recopie pas, ne le paraphrase pas.
 - Un REFUS sur un parcours qui existe : "steps": null, "modifie": false, et
   explique le refus dans "resume".
 - [quote_valid_until] est VIDE quand la soumission n'a pas de date limite
@@ -1085,7 +1091,7 @@ async function genererParcoursUneFois(params: {
      * « JSON » une fois sur deux — du jargon pour un plombier. On dit ce
      * qui manque, avec des mots fixes.
      */
-    type Brut = Partial<ParcoursPropose> & { modifie?: unknown; renomme?: unknown; intention?: unknown };
+    type Brut = Partial<ParcoursPropose> & { modifie?: unknown; renomme?: unknown; intention?: unknown; explication?: unknown };
     let brut: Brut;
     try {
       brut = extraireJson(texte) as Brut;
@@ -1137,11 +1143,25 @@ async function genererParcoursUneFois(params: {
     if (sansEtapes && aUnParcoursActuel && (explication.length > 0 || intention || renomme)) {
       const declencheur = String(parcoursActuel?.trigger_event ?? brut.trigger_event ?? '');
       tracer('ok', renomme ? 'renomme' : intention ? `intention_${intention}` : 'sans_modification', etapesActuelles.length);
+      /*
+       * « Explique-moi ce qu'elle fait » : la phrase du modèle, PUIS le détail écrit par
+       * le code — le déclencheur sous son nom d'écran, chaque étape dans l'ordre, chaque
+       * message mot pour mot. Laissé au modèle, le détail était paraphrasé (« passes its
+       * due date » pour « Invoice overdue », un texto résumé au lieu d'être cité : C03 T5).
+       */
+      let reponse = explication.slice(0, 700);
+      if (brut?.explication === true && !intention && !renomme) {
+        const detail = resumeDeLaRegle({
+          id: '', name: nomRendu, trigger_event: declencheur, conditions: null, steps: etapesActuelles, actions: [],
+          delay_seconds: 0, settings: null, is_active: false, is_preset: false, deleted_at: null,
+        } as RegleLue, langue, { maxMessage: 600 });
+        reponse = [explication.slice(0, 300), `${fr ? 'Déclencheur' : 'Trigger'} : ${detail.declencheur}`, ...detail.etapes].filter(Boolean).join('\n');
+      }
       return {
         parcours: {
           nom: nomRendu,
           trigger_event: declencheur,
-          resume: explication.slice(0, 700),
+          resume: reponse,
           steps: etapesActuelles as Array<Record<string, unknown>>,
           autre: null,
           modifie: renomme,
