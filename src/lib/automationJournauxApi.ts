@@ -1,49 +1,67 @@
 /* ═══════════════════════════════════════════════════════════════
-   Ce qu'une automatisation a fait — historique et journaux.
+   Ce qu'une automatisation a fait — Historique, Journaux, modifications.
 
-   Les données existaient DÉJÀ : le moteur écrit chaque action dans
-   `automation_execution_logs` et chaque envoi prévu dans
-   `automation_scheduled_tasks`. Personne ne les lisait. C'était le trou
-   le plus coûteux du produit : quand un client ne recevait rien,
-   l'entrepreneur n'avait aucun moyen de savoir pourquoi.
+   Deux vues, deux rôles :
+   · l'HISTORIQUE, pour le propriétaire : une ligne par passage d'un client
+     (qui, quand, quelle étape, le résultat en clair) ;
+   · les JOURNAUX, le détail technique : l'événement déclencheur, la
+     décision (code d'issue), le résultat de chaque étape, l'erreur exacte,
+     la durée, la clé d'exécution — result_error, result_data, action_config,
+     duration_ms, trigger_event, execution_key.
 
-   Colonnes vérifiées en base le 2026-09-24 (pas devinées) :
-   · execution_logs  : action_type, action_config, result_success,
-                       result_error, result_data, action_config, duration_ms, entity_type,
-                       entity_id, trigger_event, created_at
-   · scheduled_tasks : entity_type, entity_id, action_config, execute_at,
-                       status, attempts, last_error, completed_at,
-                       step_id, sequence_context
-   · clients         : first_name + last_name (PAS `name`), et il n'existe
-                       aucune table de prospects — un `entity_type = 'lead'`
-                       reste donc sans nom affichable.
+   Les lectures passent par le SERVEUR (`/api/automations/rules/historique`,
+   `/journaux`, `/modifications`), qui filtre, cherche et pagine en base,
+   avec le jeton de l'utilisateur (la RLS s'applique). Avant, le navigateur
+   lisait PostgREST et s'arrêtait à 200 lignes sans le dire (D-15), sans
+   recherche ni filtre par client ou par date (D-13).
 
-   La RLS filtre déjà par organisation (`has_org_membership`), mais chaque
-   requête porte quand même son `org_id` : une policy peut changer, et une
-   fuite entre entreprises ne se rattrape pas.
+   Les libellés (raisons, statuts, actions) vivent dans `automationIssues.ts`
+   — réexportés ici pour les écrans et les tests qui les lisaient déjà.
    ═══════════════════════════════════════════════════════════════ */
 
-import { supabase } from './supabase';
-import { getCurrentOrgId } from './orgApi';
-import { ACTION_REGLE_ECARTEE } from './automationCatalogue';
+import { interfaceEnFrancais } from './champs/messages';
+import { lireRoute, type Periode } from './automationStatsApi';
+import type { FiltreStatut, PeriodeJours } from './automationIssues';
 
-/** Sur combien de jours on garde l'historique visible, comme GHL. */
-export const FENETRE_JOURS = 60;
+export { libelleAction, libelleStatut, raisonLisible, raisonEchecListe, motifSaut } from './automationIssues';
 
-// ── Journaux d'exécution ────────────────────────────────────
+/** Sur combien de jours les journaux sont gardés, donc lisibles (purge `run_retention_logs`). */
+export const FENETRE_JOURS = 90;
+
+// ── Ce que le serveur rend ──────────────────────────────────
+
+/** La fiche concernée (facture, devis, job, rendez-vous, opportunité). */
+export interface FicheLiee {
+  type: string;
+  id: string;
+  numero: string | null;
+  titre: string | null;
+  /** Chemin de la fiche dans l'application, ou `null` s'il n'y a pas d'écran pour elle. */
+  lien: string | null;
+}
 
 export interface LigneJournal {
+  /** Unique à l'écran : l'identifiant de la ligne du journal, ou « tâche:issue » pour un état de la file. */
   id: string;
-  action_type: string;
-  result_success: boolean;
-  result_error: string | null;
-  duration_ms: number | null;
+  source: 'journal' | 'tache';
+  /** Le code d'issue (voir `automationIssues.ts`) et la catégorie comptée. */
+  issue: string;
+  categorie: string;
+  quand: string;
+  rule_id: string;
+  rule_nom: string | null;
   entity_type: string;
   entity_id: string;
-  trigger_event: string;
-  created_at: string;
-  /** Nom du client, résolu après coup — la table ne le porte pas. */
-  client?: string | null;
+  client_id: string | null;
+  /** Nom du client, résolu par le serveur — la table ne le porte pas. */
+  client_nom: string | null;
+  task_id: string | null;
+  step_id: string | null;
+  etape_position: number | null;
+  etape_nom: string | null;
+  action_type: string;
+  trigger_event: string | null;
+  result_error: string | null;
   /**
    * Ce qui est RÉELLEMENT parti : destinataire, objet, corps du message.
    *
@@ -52,429 +70,131 @@ export interface LigneJournal {
    * avaient été remplacées — QA du 2026-09-25 (P1-4).
    */
   result_data?: Record<string, unknown> | null;
-  /** La configuration de l'action au moment de l'envoi. */
+  /** La configuration de l'action au moment de l'envoi (le message qui DEVAIT partir, pour un échec). */
   action_config?: Record<string, unknown> | null;
+  duration_ms: number | null;
+  execution_key: string | null;
+  /** L'état de la tâche de la file, quand la ligne en vient ou y est rattachée. */
+  tache: { status: string; execute_at: string; attempts: number; last_error: string | null; completed_at: string | null } | null;
+  fiche: FicheLiee | null;
 }
 
-export interface FiltresJournal {
-  ruleId: string;
-  /** ISO. Par défaut : les 60 derniers jours. */
-  depuis?: string;
-  jusqua?: string;
-  /** `all` = tous. */
-  action?: string;
-  statut?: 'all' | 'succes' | 'echec';
-  limite?: number;
+export interface PageJournal {
+  periode: Periode;
+  total: number;
+  page: number;
+  par_page: number;
+  /** Les types d'action présents sur la période (pour le filtre). */
+  actions: string[];
+  lignes: LigneJournal[];
 }
 
-export async function lireJournaux(f: FiltresJournal): Promise<LigneJournal[]> {
-  const orgId = await getCurrentOrgId();
-  if (!orgId) return [];
-
-  const depuis = f.depuis ?? new Date(Date.now() - FENETRE_JOURS * 86400_000).toISOString();
-
-  let q = supabase
-    .from('automation_execution_logs')
-    .select('id, action_type, result_success, result_error, result_data, duration_ms, entity_type, entity_id, trigger_event, created_at')
-    .eq('org_id', orgId)
-    .eq('automation_rule_id', f.ruleId)
-    .gte('created_at', depuis)
-    .order('created_at', { ascending: false })
-    .limit(f.limite ?? 200);
-
-  if (f.jusqua) q = q.lte('created_at', f.jusqua);
-  if (f.action && f.action !== 'all') q = q.eq('action_type', f.action);
-  if (f.statut === 'succes') q = q.eq('result_success', true);
-  if (f.statut === 'echec') q = q.eq('result_success', false);
-
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  return await nommerLesClients((data ?? []) as LigneJournal[], orgId);
-}
-
-// ── Historique des inscriptions ─────────────────────────────
-
-export interface LigneInscription {
+export interface EvenementPassage {
+  source: 'journal' | 'tache';
   id: string;
+  issue: string;
+  categorie: string;
+  quand: string;
+  action_type: string;
+  step_id: string | null;
+  etape_position: number | null;
+  etape_nom: string | null;
+  en_file: boolean;
+  trigger_event: string | null;
+  /** La phrase du moteur (motif d'un envoi ignoré, erreur, motif d'annulation). */
+  detail: string | null;
+  execute_at: string | null;
+  attempts: number | null;
+}
+
+export interface Passage {
+  cle: string;
+  rule_id: string;
+  rule_nom: string | null;
   entity_type: string;
   entity_id: string;
-  status: string;
-  execute_at: string;
-  completed_at: string | null;
-  attempts: number;
-  last_error: string | null;
-  step_id: string | null;
-  action_config: { type?: string } | null;
-  client?: string | null;
+  client_id: string | null;
+  client_nom: string | null;
+  debut: string;
+  fin: string;
+  /** Une étape est encore en file : un envoi est à venir. */
+  en_file: boolean;
+  /** Faux : l'événement a été écarté avant d'entrer (hors ciblage…). */
+  declenche: boolean;
+  resultat: string;
+  evenements: EvenementPassage[];
+  fiche: FicheLiee | null;
 }
 
-export async function lireInscriptions(params: {
-  ruleId: string;
-  depuis?: string;
-  jusqua?: string;
-  statut?: 'all' | 'pending' | 'completed' | 'failed' | 'cancelled';
-  limite?: number;
-}): Promise<LigneInscription[]> {
-  const orgId = await getCurrentOrgId();
-  if (!orgId) return [];
-
-  const depuis = params.depuis ?? new Date(Date.now() - FENETRE_JOURS * 86400_000).toISOString();
-
-  let q = supabase
-    .from('automation_scheduled_tasks')
-    .select('id, entity_type, entity_id, status, execute_at, completed_at, attempts, last_error, step_id, action_config')
-    .eq('org_id', orgId)
-    .eq('automation_rule_id', params.ruleId)
-    .gte('created_at', depuis)
-    .order('execute_at', { ascending: false })
-    .limit(params.limite ?? 200);
-
-  if (params.jusqua) q = q.lte('created_at', params.jusqua);
-  if (params.statut && params.statut !== 'all') q = q.eq('status', params.statut);
-
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  return await nommerLesClients((data ?? []) as LigneInscription[], orgId);
-}
-
-// ── Résoudre les noms ───────────────────────────────────────
-
-/**
- * Remplace les identifiants par des noms de clients.
- *
- * Ni les journaux ni la file ne portent le nom : ils portent `entity_type`
- * + `entity_id` (un devis, une facture, un job…). Afficher un UUID à un
- * entrepreneur ne lui dit rien — il veut savoir QUI n'a pas reçu son message.
- *
- * On remonte donc l'entité jusqu'à son client, par type, en une requête par
- * table plutôt qu'une par ligne. Une table illisible n'empêche pas d'afficher
- * le reste : la colonne reste vide, et c'est déjà mieux qu'un écran en erreur.
- */
-async function nommerLesClients<T extends { entity_type: string; entity_id: string; client?: string | null }>(
-  lignes: T[],
-  orgId: string,
-): Promise<T[]> {
-  if (!lignes.length) return lignes;
-
-  /**
-   * entity_type → table qui porte `client_id`.
-   *
-   * Vérifié en base ET dans le moteur le 2026-09-24, pas deviné :
-   * · `quotes`, `invoices`, `jobs` portent bien `client_id` ;
-   * · `schedule_events` N'EN A PAS — un rendez-vous passe par son `job_id` ;
-   * · le type émis est `schedule_event`, pas `appointment` (62 % des journaux
-   *   sont des `lead`, 22 % des `schedule_event` — mesuré) ;
-   * · un PROSPECT est un client : `entity_id` d'un `lead` est directement un
-   *   `clients.id` (server/lib/actions/index.ts:543). Il n'y a pas de table
-   *   de prospects séparée.
-   * Avec PostgREST, une seule colonne inexistante fait échouer TOUTE la
-   * requête, et supabase-js ne lève jamais : la colonne serait restée vide
-   * pour tout le monde, sans un mot.
-   */
-  const TABLES: Record<string, string> = {
-    quote: 'quotes',
-    invoice: 'invoices',
-    job: 'jobs',
-  };
-
-  /** Les types qui pointent DIRECTEMENT sur un client. */
-  const DIRECTS = new Set(['lead', 'client']);
-  /** Les types qui passent par un rendez-vous, donc par son job. */
-  const VIA_RDV = new Set(['schedule_event', 'appointment']);
-
-  const parType = new Map<string, Set<string>>();
-  for (const l of lignes) {
-    if (!TABLES[l.entity_type] && !DIRECTS.has(l.entity_type) && !VIA_RDV.has(l.entity_type)) continue;
-    if (!parType.has(l.entity_type)) parType.set(l.entity_type, new Set());
-    parType.get(l.entity_type)!.add(l.entity_id);
-  }
-
-  /** entity_id → nom affichable. */
-  const noms = new Map<string, string>();
-  /** client_id → nom, mis en commun entre les types. */
-  const nomsClients = new Map<string, string>();
-
-  /** Charge les noms manquants, en une requête. */
-  const chargerClients = async (ids: string[]) => {
-    const absents = ids.filter((i) => i && !nomsClients.has(i));
-    if (!absents.length) return;
-    const { data } = await supabase
-      .from('clients')
-      .select('id, first_name, last_name')
-      .eq('org_id', orgId)
-      .is('deleted_at', null)
-      .in('id', absents.slice(0, 300));
-    for (const c of data ?? []) {
-      const complet = `${(c as { first_name?: string }).first_name ?? ''} ${(c as { last_name?: string }).last_name ?? ''}`.trim();
-      if (complet) nomsClients.set((c as { id: string }).id, complet);
-    }
-  };
-
-  for (const [type, ids] of parType) {
-    const liste = [...ids].slice(0, 200);
-    try {
-      if (DIRECTS.has(type)) {
-        // Un prospect EST un client : son entity_id est un clients.id.
-        await chargerClients(liste);
-        for (const id of liste) {
-          if (nomsClients.has(id)) noms.set(id, nomsClients.get(id)!);
-        }
-        continue;
-      }
-
-      if (VIA_RDV.has(type)) {
-        // Un rendez-vous n'a pas de client : il tient à un job, qui en a un.
-        const { data: evts } = await supabase
-          .from('schedule_events')
-          .select('id, job_id')
-          .eq('org_id', orgId)
-          .in('id', liste);
-        const jobIds = [...new Set((evts ?? []).map((e) => (e as { job_id?: string }).job_id).filter(Boolean))] as string[];
-        if (!jobIds.length) continue;
-        const { data: jobs } = await supabase
-          .from('jobs')
-          .select('id, client_id')
-          .eq('org_id', orgId)
-          .in('id', jobIds);
-        const clientParJob = new Map((jobs ?? []).map((j) => [(j as { id: string }).id, (j as { client_id?: string }).client_id]));
-        await chargerClients([...clientParJob.values()].filter(Boolean) as string[]);
-        for (const e of evts ?? []) {
-          const cid = clientParJob.get((e as { job_id?: string }).job_id ?? '');
-          if (cid && nomsClients.has(cid)) noms.set((e as { id: string }).id, nomsClients.get(cid)!);
-        }
-        continue;
-      }
-
-      const { data } = await supabase
-        .from(TABLES[type])
-        .select('id, client_id')
-        .eq('org_id', orgId)
-        .in('id', liste);
-
-      await chargerClients((data ?? []).map((r) => (r as { client_id?: string }).client_id).filter(Boolean) as string[]);
-      for (const r of data ?? []) {
-        const cid = (r as { client_id?: string }).client_id;
-        if (cid && nomsClients.has(cid)) noms.set((r as { id: string }).id, nomsClients.get(cid)!);
-      }
-    } catch (e: unknown) {
-      // Une table illisible ne doit pas vider l'écran : la colonne reste vide
-      // et on le dit, plutôt que de tout faire échouer.
-      console.error('[journaux] noms de clients indisponibles pour', type,
-        e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  return lignes.map((l) => ({ ...l, client: noms.get(l.entity_id) ?? null }));
-}
-
-// ── Libellés ────────────────────────────────────────────────
-
-/** Le nom d'une action, en mots du métier. */
-export function libelleAction(type: string, fr: boolean): string {
-  const l: Record<string, [string, string]> = {
-    send_sms: ['Texto', 'Text'],
-    send_email: ['Courriel', 'Email'],
-    create_notification: ['Notification', 'Notification'],
-    send_notification: ['Notification', 'Notification'],
-    create_task: ['Tâche', 'Task'],
-    request_review: ['Demande d’avis', 'Review request'],
-    log_activity: ['Journal', 'Activity log'],
-    update_status: ['Changement de statut', 'Status change'],
-    move_deal_stage: ['Déplacement dans le pipeline', 'Pipeline move'],
-    // Pas une action : la règle a vu l'événement et ses conditions l'ont écartée.
-    [ACTION_REGLE_ECARTEE]: ['Conditions', 'Conditions'],
-  };
-  const p = l[type];
-  return p ? (fr ? p[0] : p[1]) : type.replace(/_/g, ' ');
-}
-
-/** Le statut d'une inscription, en mots du métier. */
-/** Le motif d'un envoi SAUTÉ (`result_data.saute`), ou `null` si l'envoi est parti. */
-export function motifSaut(ligne: { result_success: boolean; result_data?: Record<string, unknown> | null }): string | null {
-  const m = ligne.result_success ? ligne.result_data?.saute : null;
-  return typeof m === 'string' && m ? m : null;
-}
-
-export function libelleStatut(statut: string, fr: boolean): string {
-  const l: Record<string, [string, string]> = {
-    pending: ['En attente', 'Pending'],
-    running: ['En cours', 'Running'],
-    completed: ['Terminé', 'Completed'],
-    failed: ['Échoué', 'Failed'],
-    cancelled: ['Annulé', 'Cancelled'],
-    // Envoi volontairement non fait (client désabonné) : le parcours continue.
-    skipped: ['Sauté', 'Skipped'],
-  };
-  const p = l[statut];
-  return p ? (fr ? p[0] : p[1]) : statut;
-}
-
-/**
- * La raison d'un échec, traduite.
- *
- * « No recipient phone » ne dit rien à un entrepreneur ; « ce client n'a pas
- * de numéro » lui dit quoi faire. Une cause inconnue reste affichée telle
- * quelle — mieux vaut un message technique qu'un silence.
- */
-export function raisonLisible(erreur: string | null, fr: boolean): string | null {
-  if (!erreur) return null;
-  const e = erreur.toLowerCase();
-  const paires: Array<[string, string, string]> = [
-    // Causes de M1 (audit 2026-09-28) encore portées par les anciens journaux.
-    ['no sms number', 'aucun numéro texto n’est configuré pour ce bureau', 'no texting number is set up for this office'],
-    ['no active twilio sms number', 'aucun numéro texto n’est configuré pour ce bureau', 'no texting number is set up for this office'],
-    // Le plus précis d'abord : « ni courriel ni téléphone » contient « no email address ».
-    ['no email address or phone number', 'ce client n’a ni adresse courriel ni numéro de téléphone', 'this client has neither an email address nor a phone number'],
-    ['no phone number', 'ce client n’a pas de numéro de téléphone', 'this client has no phone number'],
-    ['no email address', 'ce client n’a pas d’adresse courriel', 'this client has no email address'],
-    // Demandes d'avis (relevé en prod le 2026-10-01 : ces deux causes sortaient en anglais brut).
-    ['review requests are disabled', 'les demandes d’avis sont désactivées dans Paramètres › Avis clients', 'review requests are turned off in Settings › Customer reviews'],
-    ['already sent to this client', 'une demande d’avis a déjà été envoyée à ce client dans les 7 derniers jours', 'this client already got a review request in the last 7 days'],
-    ['could not be sent', 'la demande d’avis n’a pas pu être envoyée', 'the review request did not go out'],
-    ['no org owner', 'aucun propriétaire trouvé pour ce bureau : la tâche n’a pas pu être créée', 'no owner was found for this office, so the task could not be created'],
-    ['row matched', 'l’élément visé n’existe plus dans ce bureau', 'the targeted item no longer exists in this office'],
-    ['table not allowed', 'cette étape ne s’applique pas à ce type d’élément', 'this step does not apply to this kind of item'],
-    ['unknown action type', 'cette étape n’est pas prise en charge par cette version', 'this step is not supported by this version'],
-    ['injoignable', 'l’adresse courriel de ce client est injoignable', 'this client’s email address bounces'],
-    ['review link', 'aucun lien d’avis Google ou Facebook n’est configuré', 'no Google or Facebook review link is set up'],
-    ['no recipient phone','ce client n’a pas de numéro de téléphone', 'this client has no phone number'],
-    ['no recipient email', 'ce client n’a pas d’adresse courriel', 'this client has no email address'],
-    ['opted out', 'ce client s’est désabonné', 'this client opted out'],
-    ['not configured', 'l’envoi n’est pas configuré dans les réglages', 'sending is not configured in settings'],
-    ['frequency cap', 'la limite de messages pour ce client est atteinte', 'message limit reached for this client'],
-    ['consentement', 'le consentement de ce client n’est pas enregistré', 'this client’s consent is not on file'],
-    ['consent', 'le consentement de ce client n’est pas enregistré', 'this client’s consent is not on file'],
-    ['supprimée', 'l’automatisation a été supprimée', 'the automation was deleted'],
-  ];
-  for (const [motif, fra, eng] of paires) {
-    if (e.includes(motif)) return fr ? fra : eng;
-  }
-  return erreur;
-}
-
-/**
- * La cause d'un échec, pour la LISTE des automatisations : une phrase entière.
- *
- * La page affichait « 2 échecs » et s'arrêtait là : l'entrepreneur voyait que
- * ça n'avait pas marché, sans jamais savoir POURQUOI ni quoi faire. Les
- * messages bruts (« SMTP not configured », « Frequency cap reached for
- * +1514… ») sont en anglais, techniques, et ne doivent jamais sortir tels
- * quels.
- *
- * Une cause non reconnue est rendue `null` : dans la liste, on préfère
- * n'afficher que le compteur plutôt qu'un jargon qui n'aide personne (l'onglet
- * Journaux, lui, montre le texte du moteur — `raisonLisible`).
- *
- * Elle vivait dans la page ; elle est ici, à côté de sa jumelle, pour qu'un
- * même test (`tests/automation/raisons-echec-traduites`) vérifie que les deux
- * connaissent TOUS les messages anglais du moteur.
- */
-export function raisonEchecListe(erreur: string | null, fr: boolean): string | null {
-  const e = (erreur || '').toLowerCase();
-  if (!e) return null;
-  // Les causes de M1 (audit 2026-09-28), telles que la base les porte encore
-  // pour les échecs d'avant le correctif du moteur.
-  if (e.includes('no sms number') || e.includes('no active twilio sms number')) return fr ? 'Aucun numéro texto n’est configuré pour ce bureau.' : 'No texting number is set up for this office.';
-  if (e.includes('no email address or phone number')) return fr ? 'Ce client n’a ni adresse courriel ni numéro de téléphone.' : 'This client has neither an email address nor a phone number.';
-  if (e.includes('no recipient phone') || e.includes('no phone number')) return fr ? 'Ce client n’a pas de numéro de téléphone.' : 'This client has no phone number.';
-  if (e.includes('no recipient email') || e.includes('no email address')) return fr ? 'Ce client n’a pas d’adresse courriel.' : 'This client has no email address.';
-  if (e.includes('injoignable') || e.includes('bounce')) return fr ? 'L’adresse courriel de ce client est injoignable.' : 'This client’s email address bounces.';
-  if (e.includes('review requests are disabled')) return fr ? 'Les demandes d’avis sont désactivées dans Paramètres › Avis clients.' : 'Review requests are turned off in Settings › Customer reviews.';
-  if (e.includes('already sent to this client')) return fr ? 'Une demande d’avis a déjà été envoyée à ce client dans les 7 derniers jours.' : 'This client already got a review request in the last 7 days.';
-  if (e.includes('review link')) return fr ? 'Aucun lien d’avis Google ou Facebook n’est configuré.' : 'No Google or Facebook review link is set up.';
-  if (e.includes('opted out') || e.includes('unsubscribed')) return fr ? 'Ce client s’est désabonné.' : 'This client unsubscribed.';
-  if (e.includes('frequency cap')) return fr ? 'Plafond atteint : ce client a déjà reçu plusieurs messages aujourd’hui.' : 'Cap reached: this client already got several messages today.';
-  if (e.includes('consentement') || e.includes('consent')) return fr ? 'Le consentement de ce client n’est pas enregistré.' : 'This client’s consent is not recorded.';
-  if (e.includes('smtp') && e.includes('not configured')) return fr ? 'Courriel non configuré : impossible d’envoyer.' : 'Email not configured: cannot send.';
-  if (e.includes('twilio') && e.includes('not configured')) return fr ? 'Envoi de textos non configuré : impossible d’envoyer.' : 'SMS sending not configured: cannot send.';
-  if (e.includes('not configured')) return fr ? 'Envoi non configuré dans les réglages.' : 'Sending is not configured in settings.';
-  if (e.includes('plan does not include')) return fr ? 'Votre forfait n’inclut pas cet envoi.' : 'Your plan does not include this send.';
-  if (e.includes('are disabled')) return fr ? 'Cette fonctionnalité est désactivée dans les réglages.' : 'This feature is disabled in settings.';
-  if (e.includes('could not be sent')) return fr ? 'La demande d’avis n’a pas pu être envoyée.' : 'The review request did not go out.';
-  if (e.includes('no org owner')) return fr ? 'Aucun propriétaire trouvé pour ce bureau : la tâche n’a pas pu être créée.' : 'No owner was found for this office, so the task could not be created.';
-  if (e.includes('row matched')) return fr ? 'L’élément visé n’existe plus dans ce bureau.' : 'The targeted item no longer exists in this office.';
-  if (e.includes('table not allowed')) return fr ? 'Cette étape ne s’applique pas à ce type d’élément.' : 'This step does not apply to this kind of item.';
-  if (e.includes('unknown action type')) return fr ? 'Cette étape n’est pas prise en charge par cette version.' : 'This step is not supported by this version.';
-  return null;
-}
-
-// ── La vue d'ensemble ───────────────────────────────────────
-
-export interface ActiviteSemaine {
-  /** Le lundi de la semaine. */
-  debut: Date;
-  fin: Date;
-  /** Déclenchements de la semaine. */
-  n: number;
-}
-
-/**
- * Combien de fois les automatisations sont parties, semaine par semaine.
- *
- * La vue d'ensemble affichait une courbe plate à zéro « en attendant le
- * comptage » — alors que `automation_execution_logs` porte déjà chaque
- * exécution. La donnée était là, personne ne la lisait : la courbe
- * annonçait « rien ne se passe » à une entreprise dont les automatisations
- * tournaient.
- *
- * On compte les DÉCLENCHEMENTS, pas les actions : une règle qui envoie un
- * courriel ET crée une tâche s'est déclenchée UNE fois. La paire
- * (entité, événement) identifie un déclenchement.
- */
-export async function activiteParSemaine(semaines = 7): Promise<{
+export interface PagePassages {
+  periode: Periode;
   total: number;
-  parSemaine: ActiviteSemaine[];
-}> {
-  const orgId = await getCurrentOrgId();
+  page: number;
+  par_page: number;
+  passages: Passage[];
+}
 
-  // Les bornes : `semaines` tranches de 7 jours, la dernière finissant
-  // aujourd'hui.
-  const maintenant = new Date();
-  const tranches: ActiviteSemaine[] = [];
-  for (let i = semaines - 1; i >= 0; i--) {
-    const fin = new Date(maintenant);
-    fin.setDate(maintenant.getDate() - i * 7);
-    fin.setHours(23, 59, 59, 999);
-    const debut = new Date(fin);
-    debut.setDate(fin.getDate() - 6);
-    debut.setHours(0, 0, 0, 0);
-    tranches.push({ debut, fin, n: 0 });
-  }
+export interface LigneModification {
+  id: string;
+  rule_id: string;
+  auteur_id: string | null;
+  auteur_nom: string | null;
+  origine: 'utilisateur' | 'lumi' | 'systeme';
+  action: string;
+  champs: string[];
+  resume_fr: string;
+  resume_en: string;
+  avant: Record<string, unknown> | null;
+  apres: Record<string, unknown> | null;
+  created_at: string;
+}
 
-  if (!orgId) return { total: 0, parSemaine: tranches };
+export interface PageModifications {
+  total: number;
+  page: number;
+  par_page: number;
+  lignes: LigneModification[];
+}
 
-  const depuis = tranches[0].debut.toISOString();
-  const { data, error } = await supabase
-    .from('automation_execution_logs')
-    .select('created_at, entity_id, trigger_event')
-    .eq('org_id', orgId)
-    // Une règle écartée par ses conditions ne s'est pas déclenchée.
-    .neq('action_type', ACTION_REGLE_ECARTEE)
-    .gte('created_at', depuis)
-    .order('created_at', { ascending: true })
-    .limit(5000);
+export interface FiltresLecture {
+  /** Absent : tout le bureau. */
+  ruleId?: string | null;
+  jours: PeriodeJours;
+  /** Dates civiles (AAAA-MM-JJ), dans le fuseau de l'entreprise. */
+  du?: string | null;
+  au?: string | null;
+  statut?: FiltreStatut | null;
+  action?: string | null;
+  clientId?: string | null;
+  /** Recherche par nom de client. */
+  recherche?: string | null;
+  page?: number;
+  parPage?: number;
+}
 
-  if (error || !data) {
-    console.error('[apercu] activité par semaine', error?.message ?? 'aucune donnée');
-    return { total: 0, parSemaine: tranches };
-  }
+// ── Lectures ────────────────────────────────────────────────
 
-  // Dédoublonnage : une règle qui fait trois actions n'est qu'UN
-  // déclenchement. La clé porte aussi la semaine, pour qu'un même client
-  // repassé la semaine suivante compte deux fois — c'est bien deux
-  // déclenchements.
-  const vus = new Set<string>();
-  let total = 0;
-  for (const ligne of data) {
-    const quand = new Date(ligne.created_at as string);
-    const tranche = tranches.find((t) => quand >= t.debut && quand <= t.fin);
-    if (!tranche) continue;
-    const cle = `${tranche.debut.toISOString().slice(0, 10)}:${ligne.entity_id}:${ligne.trigger_event}`;
-    if (vus.has(cle)) continue;
-    vus.add(cle);
-    tranche.n += 1;
-    total += 1;
-  }
+const parametresDe = (f: FiltresLecture) => ({
+  rule_id: f.ruleId, jours: f.jours, du: f.du, au: f.au, statut: f.statut, action: f.action,
+  client_id: f.clientId, q: f.recherche?.trim(), page: f.page, par_page: f.parPage,
+});
 
-  return { total, parSemaine: tranches };
+/** Les Journaux : le détail technique, filtré et paginé par le serveur, avec le total. */
+export async function lireJournaux(f: FiltresLecture): Promise<PageJournal> {
+  const page = await lireRoute<PageJournal>('/api/automations/rules/journaux', parametresDe(f),
+    interfaceEnFrancais() ? 'Les journaux n’ont pas pu être lus.' : 'Logs could not be read.');
+  // Une même tâche peut donner deux lignes (reportée, puis annulée) : la clé d'écran les distingue.
+  return { ...page, lignes: page.lignes.map((l) => (l.source === 'tache' ? { ...l, id: `${l.id}:${l.issue}` } : l)) };
+}
+
+/** L'Historique : une ligne par passage d'un client, filtré et paginé par le serveur, avec le total. */
+export function lireHistorique(f: FiltresLecture): Promise<PagePassages> {
+  return lireRoute<PagePassages>('/api/automations/rules/historique', parametresDe({ ...f, action: null }),
+    interfaceEnFrancais() ? 'L’historique n’a pas pu être lu.' : 'History could not be read.');
+}
+
+/** Qui a modifié quoi dans une automatisation, la modification la plus récente d'abord. */
+export function lireModifications(ruleId: string, page = 1): Promise<PageModifications> {
+  return lireRoute<PageModifications>('/api/automations/rules/modifications', { rule_id: ruleId, page },
+    interfaceEnFrancais() ? 'Les modifications n’ont pas pu être lues.' : 'Changes could not be read.');
 }
