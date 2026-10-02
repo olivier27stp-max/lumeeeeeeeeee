@@ -392,6 +392,7 @@ export const SECTIONS_CSS = `
 .hs-logos li { display:flex; align-items:center; gap:12px; padding:8px 0; font-size:22px; font-weight:700; letter-spacing:-.015em; color:#111; white-space:nowrap; }
 .hs-logos svg { width:34px; height:34px; flex:none; }
 @keyframes hs-marquee { to { transform:translateX(-50%); } }
+.hs-feat > .ha-kicker, .hs-feat > h2 { text-align:center; } .hs-feat > h2 { margin-left:auto; margin-right:auto; }
 .hs-frow { display:grid; grid-template-columns:.85fr 1.15fr; gap:56px; align-items:center; margin-top:56px; }
 .hs-frow:nth-of-type(even) { grid-template-columns:1.15fr .85fr; } .hs-frow:nth-of-type(even) .hs-ftxt { order:2; }
 .hs-ftxt em { font-style:normal; font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:800; color:var(--forest); }
