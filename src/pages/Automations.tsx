@@ -630,6 +630,8 @@ export default function Automations() {
   const [filtresOuverts, setFiltresOuverts] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatut, setFilterStatut] = useState<'all' | 'publiee' | 'brouillon'>('all');
+  /** Combien de filtres avancés sont posés (le tri n'en est pas un : il ne retire aucune ligne). */
+  const nbFiltres = (filterCategory !== 'all' ? 1 : 0) + (filterStatut !== 'all' ? 1 : 0);
   /** Tri par date de création (Rafba, 2026-09-30) ; « defaut » = l'ordre d'avant. */
   const [triDate, setTriDate] = useState<'defaut' | 'recent' | 'ancien'>('defaut');
   /** Pagination, comme GHL : 10 par page par défaut. */
@@ -1882,6 +1884,14 @@ export default function Automations() {
           >
             <Filter size={13} aria-hidden="true" />
             {fr ? 'Filtres avancés' : 'Advanced filters'}
+            {/* Panneau fermé, un filtre actif vidait la liste sans que rien ne le rappelle
+                (triage `04-filtres-recherche-tri:160`) : le bouton dit combien de filtres sont posés. */}
+            {nbFiltres > 0 && (
+              <span className="rounded-full bg-text-primary px-1.5 text-[11px] font-semibold tabular-nums text-white">
+                <span aria-hidden="true">(</span>{nbFiltres}<span aria-hidden="true">)</span>
+                <span className="sr-only">{fr ? ` filtre${nbFiltres > 1 ? 's' : ''} actif${nbFiltres > 1 ? 's' : ''}` : ` active filter${nbFiltres > 1 ? 's' : ''}`}</span>
+              </span>
+            )}
           </button>
 
           {/* La période de TOUS les chiffres de la liste (colonnes, pastilles, « À vérifier », détail ›). */}

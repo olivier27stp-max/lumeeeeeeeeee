@@ -622,6 +622,46 @@ describe('03-onglets-etats:277 — une recherche sans résultat le DIT, au lieu 
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('04-filtres-recherche-tri:160 — panneau fermé, le bouton « Filtres avancés » signale les filtres actifs', () => {
+  const choisir = async (id: string, valeur: string) => {
+    await act(async () => {
+      const liste = conteneur.querySelector(id) as HTMLSelectElement;
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(liste, valeur);
+      liste.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await laisser();
+  };
+  const libelle = () => (bouton(/^Filtres avancés/)?.textContent || '').replace(/\s+/g, ' ').trim();
+
+  it('aucun filtre : « Filtres avancés » ; un filtre : « (1) » ; deux : « (2) » — et il reste visible panneau fermé', async () => {
+    await rendre();
+    expect(libelle()).toBe('Filtres avancés');
+    await cliquer(bouton(/^Filtres avancés/));
+    await choisir('#f-statut', 'brouillon');
+    expect(libelle()).toBe('Filtres avancés(1) filtre actif');
+    await choisir('#f-categorie', 'Quotes');
+    expect(libelle()).toBe('Filtres avancés(2) filtres actifs');
+    await cliquer(bouton(/^Filtres avancés/));
+    expect(conteneur.querySelector('#f-statut')).toBeNull();
+    expect(libelle()).toBe('Filtres avancés(2) filtres actifs');
+  });
+
+  it('le tri n’est pas un filtre : il ne compte pas', async () => {
+    await rendre();
+    await cliquer(bouton(/^Filtres avancés/));
+    await choisir('#f-tri-date', 'recent');
+    expect(libelle()).toBe('Filtres avancés');
+  });
+
+  it('en anglais : « Advanced filters(1) active filter »', async () => {
+    await rendre('en');
+    await cliquer(bouton(/^Advanced filters/));
+    await choisir('#f-statut', 'publiee');
+    expect((bouton(/^Advanced filters/)?.textContent || '').trim()).toBe('Advanced filters(1) active filter');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
