@@ -827,8 +827,20 @@ router.post('/emails/apercu', async (req, res) => {
        de facture ([client_first_name], [company_name]…) : sans la table des
        automatisations, l'aperçu « réel » laissait « Bonjour [client_first_name] »
        entre crochets alors que l'aperçu compact de la liste affichait « Marie ». */
-    const avecExemples = (t: string) => {
-      const rendu = remplacerParExemples(t, type, langueEntreprise(company) === 'fr');
+    /* `[company_name]` n'est pas un exemple : c'est le nom du BUREAU qui
+       regarde l'aperçu, et on le connaît. L'aperçu « réel » (et l'essai qu'on
+       s'envoie) finissait par « Merci, <exemple> » sous un en-tête qui, lui,
+       portait le vrai nom (triage « modèles » du 2026-10-01, 04-courriel:725).
+       Dans le corps, le nom est échappé comme tout texte posé dans du HTML ;
+       dans l'objet de l'essai, il reste tel quel. */
+    const nomDuBureau = String(company.company_name ?? '').trim();
+    const avecNomDuBureau = (t: string, html: boolean) => (nomDuBureau
+      ? t.replace(/\{\{\s*company_name\s*\}\}|\{company_name\}|\[company_name\]/g, () => (html
+        ? nomDuBureau.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        : nomDuBureau))
+      : t);
+    const avecExemples = (t: string, html = true) => {
+      const rendu = remplacerParExemples(avecNomDuBureau(t, html), type, langueEntreprise(company) === 'fr');
       return type ? rendu : remplacerVariables(rendu);
     };
 
@@ -876,7 +888,7 @@ router.post('/emails/apercu', async (req, res) => {
       const envoi = await sendEmail({
         ...(await senderForOrg(auth.orgId, company)),
         to: destinataire,
-        subject: `[Essai] ${avecExemples(String(req.body?.objet || '')).slice(0, 200) || (fr ? 'Aperçu de votre courriel' : 'Your email preview')}`,
+        subject: `[Essai] ${avecExemples(String(req.body?.objet || ''), false).slice(0, 200) ||(fr ? 'Aperçu de votre courriel' : 'Your email preview')}`,
         html,
         // Pas de `suivi` : un essai qu'on s'envoie à soi n'a pas à compter
         // dans les statistiques d'ouverture d'un vrai client.

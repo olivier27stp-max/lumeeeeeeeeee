@@ -99,6 +99,27 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       await supprimerRegle(r.id);
     }
   },
+
+  /** 04-courriel:725 — dans l'aperçu réel, [company_name] est le nom du bureau courant. */
+  async courriel725() {
+    const r = await regle('nom-bureau', [{ type: 'send_email', config: { subject: OBJET, body: CORPS } }]);
+    const page = await ouvrirPage();
+    try {
+      await ouvrirListe(page);
+      await deplierMessages(page, r.nom);
+      await page.getByRole('button', { name: 'Modifier', exact: true }).first().click();
+      await editeurCourriel(page).getByRole('button', { name: 'Aperçu réel' }).click();
+      const cadre = page.frameLocator('iframe[title="Aperçu du courriel"]');
+      await cadre.getByRole('heading', { name: 'Votre rendez-vous approche', exact: true }).waitFor();
+      verifier(await cadre.getByText('Merci, Nettoyage Test A', { exact: true }).count() === 1, 'l’aperçu finit par « Merci, Nettoyage Test A » — le nom de MON bureau');
+      verifier(await cadre.getByText(/Coquin lavage|Votre entreprise/).count() === 0, 'ni le nom d’un autre bureau, ni l’exemple neutre');
+      await editeurCourriel(page).locator('iframe').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${CAPTURES}/courriel725.png` });
+    } finally {
+      await page.context().close();
+      await supprimerRegle(r.id);
+    }
+  },
 };
 
 const demandes = process.argv.slice(2);
