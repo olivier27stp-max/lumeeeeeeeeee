@@ -379,8 +379,7 @@ export async function revaliderTache(supabase: SupabaseClient, tache: TacheAReva
     if (r.arret) return r;
 
     // 2. Le client de l'entité (une fiche client ou prospect vient d'être lue).
-    // (Avant : seul le client d'une FACTURE était vérifié.)
-    if (r.clientId && tache.entityType === 'invoice') {
+    if (r.clientId && tache.entityType !== 'client' && tache.entityType !== 'lead') {
       const { ligne: cl, illisible } = await lire(c, 'clients', 'deleted_at', r.clientId);
       if (!illisible && cl?.deleted_at) {
         return { arret: { code: 'entite_supprimee', changement: 'le client a été supprimé', motif: MOTIF_CLIENT_SUPPRIME }, clientId: r.clientId };
