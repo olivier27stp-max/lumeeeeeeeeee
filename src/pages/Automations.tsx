@@ -682,12 +682,24 @@ export default function Automations() {
    * Tri par colonne (audit V2, A-17) : les en-têtes n'étaient pas
    * cliquables. `null` = l'ordre des noms affichés, ou celui choisi dans
    * « Trier » des filtres avancés ; un clic sur un en-tête l'emporte.
-   * Recliquer inverse.
+   *
+   * UN SEUL TRI AFFICHÉ À LA FOIS (triage `04-filtres-recherche-tri:264` et `:413`). Un clic sur un
+   * en-tête l'emportait, mais « Trier » continuait d'afficher « Créées le plus récemment » ; et le
+   * tri par colonne ne se levait plus (croissant ⇄ décroissant, sans retour à l'ordre par défaut).
+   * Trier par une colonne remet « Trier » sur « Ordre par défaut » ; choisir dans « Trier » lève le
+   * tri par colonne ; le troisième clic sur un en-tête lève le tri (aucun → croissant → décroissant → aucun).
    */
   const [tri, setTri] = useState<{ cle: CleTri; sens: 'asc' | 'desc' } | null>(null);
-  const trierPar = (cle: CleTri) => setTri((t) => (t && t.cle === cle
-    ? { cle, sens: t.sens === 'asc' ? 'desc' : 'asc' }
-    : { cle, sens: 'asc' }));
+  const trierPar = (cle: CleTri) => {
+    setTriDate('defaut');
+    setTri((t) => (t && t.cle === cle
+      ? (t.sens === 'asc' ? { cle, sens: 'desc' } : null)
+      : { cle, sens: 'asc' }));
+  };
+  const choisirTriDate = (valeur: 'defaut' | 'recent' | 'ancien') => {
+    setTri(null);
+    setTriDate(valeur);
+  };
 
   useEffect(() => {
     getAutomationLanguage()
@@ -2024,7 +2036,7 @@ export default function Automations() {
             <select
               id="f-tri-date"
               value={triDate}
-              onChange={(e) => setTriDate(e.target.value as typeof triDate)}
+              onChange={(e) => choisirTriDate(e.target.value as typeof triDate)}
               className="glass-input"
             >
               <option value="defaut">{fr ? 'Ordre par défaut' : 'Default order'}</option>

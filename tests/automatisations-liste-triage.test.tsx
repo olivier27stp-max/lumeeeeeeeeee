@@ -836,6 +836,66 @@ describe('04-filtres-recherche-tri:205 — une automatisation personnelle est ra
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('04-filtres-recherche-tri:264 et :413 — un seul tri affiché à la fois ; le 3e clic lève le tri', () => {
+  const noms = () => Array.from(conteneur.querySelectorAll('tbody tr td:nth-child(2) span.font-medium')).map((n) => n.textContent);
+  const entete = (libelle: string) => Array.from(conteneur.querySelectorAll('th')).find((t) => (t.textContent || '').trim() === libelle) as HTMLElement;
+  const menuTrier = () => conteneur.querySelector('#f-tri-date') as HTMLSelectElement;
+  const choisirTri = async (valeur: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(menuTrier(), valeur);
+      menuTrier().dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await laisser();
+  };
+  beforeEach(() => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([
+      regle({ name: 'A', created_at: '2025-01-01T15:00:00Z', is_active: true }),
+      regle({ name: 'B', created_at: '2026-01-01T15:00:00Z' }),
+    ]);
+  });
+
+  it('après un clic sur l’en-tête « Nom », « Trier » n’affiche plus « Créées le plus récemment »', async () => {
+    await rendre();
+    await cliquer(bouton(/^Filtres avancés/));
+    await choisirTri('recent');
+    expect(noms()).toEqual(['B', 'A']);
+    await cliquer(entete('Nom').querySelector('button'));
+    expect(noms()).toEqual(['A', 'B']);
+    expect(menuTrier().value).toBe('defaut');
+    expect(entete('Nom').getAttribute('aria-sort')).toBe('ascending');
+  });
+
+  it('choisir dans « Trier » lève le tri par colonne : un seul en-tête trié, ou aucun', async () => {
+    await rendre();
+    await cliquer(bouton(/^Filtres avancés/));
+    await cliquer(entete('Nom').querySelector('button'));
+    await cliquer(entete('Nom').querySelector('button'));
+    expect(noms()).toEqual(['B', 'A']);
+    await choisirTri('ancien');
+    expect(noms()).toEqual(['A', 'B']);
+    expect(conteneur.querySelectorAll('th[aria-sort="ascending"], th[aria-sort="descending"]').length).toBe(0);
+  });
+
+  it('aucun tri → croissant → décroissant → aucun tri (retour à l’ordre par défaut)', async () => {
+    await rendre();
+    const statut = () => entete('Statut');
+    expect(statut().getAttribute('aria-sort')).toBe('none');
+    await cliquer(statut().querySelector('button'));
+    expect(statut().getAttribute('aria-sort')).toBe('ascending');
+    expect(noms()).toEqual(['B', 'A']);
+    await cliquer(statut().querySelector('button'));
+    expect(statut().getAttribute('aria-sort')).toBe('descending');
+    expect(noms()).toEqual(['A', 'B']);
+    await cliquer(statut().querySelector('button'));
+    expect(statut().getAttribute('aria-sort')).toBe('none');
+    expect(noms()).toEqual(['A', 'B']);
+    // Et le cycle repart.
+    await cliquer(statut().querySelector('button'));
+    expect(statut().getAttribute('aria-sort')).toBe('ascending');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
