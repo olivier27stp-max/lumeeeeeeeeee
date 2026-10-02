@@ -556,7 +556,7 @@ async function fetchScheduleEvents(
 
   const { data: events, error: evErr } = await ctx.client
     .from('schedule_events')
-    .select('id, job_id, start_at, end_at, status')
+    .select('id, job_id, team_id, start_at, end_at, status')
     .eq('org_id', ctx.orgId)
     .is('deleted_at', null)
     .gte('start_at', startIso)
@@ -580,22 +580,42 @@ async function fetchScheduleEvents(
   if (jobErr) return toolError('db', jobErr);
 
   const jobMap = new Map((jobs || []).map((j) => [j.id, j]));
-  const result = (events || [])
-    .filter((e) => jobMap.has(e.job_id))
-    .map((e) => {
-      const j = jobMap.get(e.job_id)!;
-      return {
-        start_at: e.start_at,
-        end_at: e.end_at,
-        statut: ETIQUETTES_DERIVED[e.status] || e.status,
-        job_id: j.id,
-        job_title: j.title,
-        client_name: j.client_name,
-        address: j.property_address,
-        total_cents: j.total_cents,
-      };
-    });
-  return { count: result.length, events: result };
+  const retenus = (events || []).filter((e) => jobMap.has(e.job_id));
+
+  // « Qui travaille lundi prochain ? » arrive aussi ici (passe en prod du 2026-10-02) : la réponse
+  // donnait la visite sans dire qui la fait. Chaque visite porte le nom de son équipe ; les membres
+  // de chaque équipe sont donnés une seule fois, à côté. Un plus : illisibles, les visites répondent quand même.
+  const idsEquipes = [...new Set(retenus.map((e) => e.team_id).filter(Boolean))] as string[];
+  const equipes = new Map<string, { team: string; members: string[] }>();
+  if (idsEquipes.length) {
+    const [t, m] = await Promise.all([
+      ctx.client.from('teams').select('id, name').eq('org_id', ctx.orgId).in('id', idsEquipes),
+      ctx.client.from('memberships').select('full_name, team_id, status').eq('org_id', ctx.orgId).in('team_id', idsEquipes),
+    ]);
+    if (t.error || m.error) console.error('[agent-tool:schedule:equipes]', (t.error || m.error)?.message);
+    for (const e of (t.data || []) as Array<{ id: string; name: string }>) equipes.set(e.id, { team: e.name, members: [] });
+    for (const x of (m.data || []) as Array<{ full_name: string | null; team_id: string; status: string | null }>) {
+      const nom = (x.full_name || '').trim();
+      if (nom && (!x.status || x.status === 'active')) equipes.get(x.team_id)?.members.push(nom);
+    }
+  }
+
+  const result = retenus.map((e) => {
+    const j = jobMap.get(e.job_id)!;
+    const equipe = e.team_id ? equipes.get(e.team_id) : undefined;
+    return {
+      start_at: e.start_at,
+      end_at: e.end_at,
+      statut: ETIQUETTES_DERIVED[e.status] || e.status,
+      job_id: j.id,
+      job_title: j.title,
+      client_name: j.client_name,
+      address: j.property_address,
+      total_cents: j.total_cents,
+      ...(equipe ? { team: equipe.team } : {}),
+    };
+  });
+  return { count: result.length, events: result, ...(equipes.size ? { teams: [...equipes.values()] } : {}) };
 }
 
 const findDatesInLocation: AgentTool = {
@@ -622,7 +642,7 @@ const querySchedule: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'query_schedule',
-    description: 'Scheduled visits between two dates: job, client, address, status.',
+    description: 'Scheduled visits between two dates: job, client, address, status, assigned team (members under teams). Who is working or off on a day → get_team_schedule.',
     parameters: {
       type: 'object',
       properties: {

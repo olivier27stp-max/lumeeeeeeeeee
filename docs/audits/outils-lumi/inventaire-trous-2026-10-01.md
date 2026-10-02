@@ -214,6 +214,8 @@ Rejouées après déploiement : les trois passent. Trois faiblesses vues à cett
 - La grille Horaire n'est presque jamais remplie (2 lignes dans toute la prod, aucune récurrence) : « qui travaille demain » aurait répondu « personne » à une entreprise dont les équipes ont des visites. L'outil rend maintenant les visites de jobs du jour par équipe, avec ses membres (`job_visits`). En prod, l'assignation d'une visite est une ÉQUIPE (`schedule_events.team_id`, 63 visites sur 1 074) ; `assigned_user` n'est jamais rempli.
 - Le 2 du mois, une statistique sans période répond « rien ce mois-ci ». Sans date demandée et mois vide, `get_payment_methods_breakdown`, `get_quote_win_rate` et `get_team_performance` se replient sur les 12 derniers mois et le disent (`periode_elargie`). Jamais quand une date est demandée.
 
+Rejouées en prod après #904 (6 demandes) : « ki travail aujourd'hui » → « pas de grille remplie, mais 2 visites : l'équipe Vitres (Mathieu Lavoie et Karine Bélanger) à 9 h, l'équipe Pression (Olivier Gauthier) à 13 h » ; la semaine en un appel ; la répartition des paiements et le taux de gain sur 12 mois, période dite ; « en septembre » reste sur septembre. Une ratée : « qui travaille lundi prochain » passait par l'horaire des visites, qui ne disait pas l'équipe → `query_schedule` rend maintenant l'équipe de chaque visite et ses membres.
+
 Vu, non corrigé : sur une réponse, le modèle a écrit « 45,5 % » pour une part rendue à 46,5 % par l'outil (montants exacts). Une occurrence ; les pourcentages restent ceux de la page Statistiques.
 
 ## Ce qui n'a pas pu être déterminé

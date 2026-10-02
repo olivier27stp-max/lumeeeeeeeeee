@@ -43,5 +43,11 @@
  { "id": "v902-perf-equipe", "section": "equipe", "outil": "get_team_performance", "langue": "fr", "type": "lecture", "q": "Quelle équipe a rapporté le plus ce mois-ci ?", "voisins": ["get_team", "list_teams"] },
  { "id": "v902-perf-joual", "section": "equipe", "outil": "get_team_performance", "langue": "fr", "type": "lecture", "q": "quelle team fait le plus de cash ste mois ci", "voisins": ["get_team", "list_teams"] },
  { "id": "v902-rentabilite-job", "section": "rapports", "outil": "analyze_profitability", "langue": "fr", "type": "lecture", "q": "Quel job m'a rapporté le plus ce mois-ci ?", "voisins": ["get_revenue_summary", "list_jobs"] },
- { "id": "v903-modes-paiement", "section": "rapports", "outil": "get_payment_methods_breakdown", "langue": "fr", "type": "lecture", "q": "Mes clients me paient surtout comment ?", "voisins": ["list_payments"] }
+ { "id": "v903-modes-paiement", "section": "rapports", "outil": "get_payment_methods_breakdown", "langue": "fr", "type": "lecture", "q": "Mes clients me paient surtout comment ?", "voisins": ["list_payments"] },
+ { "id": "v904-qui-aujourdhui", "section": "equipe", "outil": "get_team_schedule", "langue": "fr", "type": "lecture", "q": "ki travail aujourd'hui", "voisins": ["get_team"] },
+ { "id": "v904-qui-lundi", "section": "equipe", "outil": "get_team_schedule", "langue": "fr", "type": "lecture", "q": "qui travaille lundi prochain", "voisins": ["get_team", "query_schedule"] },
+ { "id": "v904-semaine", "section": "equipe", "outil": "get_team_schedule", "langue": "fr", "type": "lecture", "q": "c koi l'horaire de la gang cette semaine", "voisins": ["get_team", "query_schedule"] },
+ { "id": "v904-modes-paiement", "section": "rapports", "outil": "get_payment_methods_breakdown", "langue": "fr", "type": "lecture", "q": "Mes clients me paient surtout comment ?", "voisins": ["list_payments"] },
+ { "id": "v904-taux-gain", "section": "devis", "outil": "get_quote_win_rate", "langue": "fr", "type": "lecture", "q": "c quoi mon taux de closing sur mes soumissions", "voisins": ["list_quotes"] },
+ { "id": "v904-modes-septembre", "section": "rapports", "outil": "get_payment_methods_breakdown", "langue": "fr", "type": "lecture", "q": "En septembre, mes clients ont payé comment ?", "voisins": ["list_payments"] }
 ]
