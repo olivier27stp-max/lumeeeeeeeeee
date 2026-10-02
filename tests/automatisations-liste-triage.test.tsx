@@ -304,6 +304,41 @@ describe('03-onglets-etats:229 et 10-volume:210 — « À vérifier » ne dit «
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('03-onglets-etats:143 — la liste s’affiche dès qu’elle est lue, sans attendre les chiffres', () => {
+  const cellules = () => Array.from(conteneur.querySelectorAll('tbody tr:first-child td')).map((c) => (c.textContent || '').trim());
+
+  it('statistiques lentes : le tableau et ses lignes sont là, les colonnes chiffrées disent « … »', async () => {
+    let liberer: (v: unknown) => void = () => undefined;
+    statsMock.mockReturnValue(new Promise((ok) => { liberer = ok; }));
+    const r = regle({ name: 'Déjà lue' });
+    vi.mocked(api.getAutomationRules).mockResolvedValue([r]);
+    await rendre();
+    // Avant : une roue à la place du tableau tant que les chiffres n'avaient pas répondu.
+    expect(conteneur.querySelector('table')).not.toBeNull();
+    expect(conteneur.querySelector('.animate-spin')).toBeNull();
+    expect(texte()).toContain('Déjà lue');
+    expect([cellules()[3], cellules()[4]]).toEqual(['…', '…']);
+    expect(onglet(/^À vérifier/)?.textContent).toBe('À vérifier');
+    expect(texte()).not.toContain('n’ont pas pu être lus');
+
+    // Les chiffres arrivent : ils se posent dans leurs colonnes, sans recharger la liste.
+    await act(async () => { liberer({ par_regle: { [r.id]: { declenches: 12, en_cours: 3 } }, texto_configure: true }); });
+    await laisser();
+    expect([cellules()[3], cellules()[4]]).toEqual(['12', '3']);
+    expect(onglet(/^À vérifier/)?.textContent).toBe('À vérifier (0)');
+    expect(api.getAutomationRules).toHaveBeenCalledTimes(1);
+  });
+
+  it('le panneau › ouvert avant l’arrivée des chiffres dit « Lecture des chiffres… », pas une panne', async () => {
+    statsMock.mockReturnValue(new Promise(() => undefined));
+    await rendre();
+    await cliquer(bouton(/^Statistiques de Relance 1$/));
+    expect(texte()).toContain('Lecture des chiffres…');
+    expect(texte()).not.toContain('n’ont pas pu être lus');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 

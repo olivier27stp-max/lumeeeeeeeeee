@@ -719,7 +719,9 @@ export default function Automations() {
       // Une bascule encore en vol garde l'état du dernier clic.
       }).map((r) => ({ ...r, is_active: fileBascule.etatAffiche(r.id, r.is_active) })));
       // « Déclenchées », « En cours », les échecs et le détail › : UNE route, comptée en base.
-      await lireChiffres.current();
+      // On ne l'ATTEND pas (triage `03-onglets-etats:143`) : la liste s'affiche dès qu'elle est lue,
+      // les chiffres arrivent ensuite dans leurs colonnes (« … » d'ici là).
+      void lireChiffres.current();
     } catch (e: any) {
       if (perime()) return;
       console.error('Failed to load rules:', e.message);
@@ -2140,10 +2142,10 @@ export default function Automations() {
                             </span>
                           </td>
 
-                          {/* Déclenchées (sur la période) / En cours (maintenant) : les vrais chiffres,
-                              « — » seulement si la lecture a échoué. */}
-                          <td className="hidden px-3 py-3 tabular-nums text-primary lg:table-cell">{stats ? (stats[rule.id]?.declenchees ?? 0) : '—'}</td>
-                          <td className="hidden px-3 py-3 tabular-nums text-primary lg:table-cell">{stats ? (stats[rule.id]?.en_cours ?? 0) : '—'}</td>
+                          {/* Déclenchées (sur la période) / En cours (maintenant) : les vrais chiffres ;
+                              « … » tant qu'ils ne sont pas arrivés, « — » seulement si la lecture a échoué. */}
+                          <td className="hidden px-3 py-3 tabular-nums text-primary lg:table-cell">{stats ? (stats[rule.id]?.declenchees ?? 0) : statsIllisibles ? '—' : '…'}</td>
+                          <td className="hidden px-3 py-3 tabular-nums text-primary lg:table-cell">{stats ? (stats[rule.id]?.en_cours ?? 0) : statsIllisibles ? '—' : '…'}</td>
 
                           <td className="hidden px-3 py-3 text-text-secondary xl:table-cell">{dateCourte(rule.updated_at)}</td>
                           <td className="hidden px-3 py-3 text-text-secondary xl:table-cell">{dateCourte(rule.created_at)}</td>
@@ -2371,7 +2373,9 @@ export default function Automations() {
                                 if (!stats) {
                                   return (
                                     <p className="text-[12px] text-text-secondary">
-                                      {fr ? 'Les chiffres n’ont pas pu être lus.' : 'The numbers could not be read.'}
+                                      {statsIllisibles
+                                        ? (fr ? 'Les chiffres n’ont pas pu être lus.' : 'The numbers could not be read.')
+                                        : (fr ? 'Lecture des chiffres…' : 'Reading the numbers…')}
                                     </p>
                                   );
                                 }
