@@ -13,8 +13,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { attendre, marque } from '../../automations-suite/harnais/moteur';
 import { sessionDe, COMPTES } from '../../automations-suite/harnais/bureau-test';
-import { preparerBureau, ok, creerClient, creerJob, type Bureau } from '../../automations-suite/integration/10-b-outils';
-import { regle, texto, emettre, attendreTaches, avancer, tachesDe, envoisAvec } from './outils-b';
+import { preparerBureau, apiEnMemoire, ok, creerClient, creerJob, type Bureau } from '../../automations-suite/integration/10-b-outils';
+import { regle, texto, emettre, attendreTaches, avancer, tachesDe, journauxDe, envoisAvec } from './outils-b';
 
 let b: Bureau & { fuseau: string };
 let client: SupabaseClient;
@@ -88,6 +88,62 @@ describe('point 2 — « Tâche terminée » : la tâche terminée ailleurs que 
     const ev = await evenements('task.completed', c.id, depuis);
     expect(ev.length, 'aucun événement task.completed : une automatisation « Tâche terminée » ne part pas').toBeGreaterThan(0);
   });
+
+  it('[B2-02b] terminée À L’ÉCRAN (écriture en base + appel du navigateur) : l’automatisation part UNE fois, pas deux', async () => {
+    /*
+     * Depuis M-02, « Tâche terminée » a DEUX sources pour une tâche terminée à l'écran : le trigger de la base
+     * (toute écriture) et l'appel du navigateur à la route, juste après. Il ne doit y avoir qu'un départ.
+     * Demandé par le coordinateur à la revue de M-02 : vraie route, vrai trigger, vrai moteur.
+     */
+    const m = marque('B2-02b');
+    const routes = await import('../../../server/routes/automation-events');
+    const api = await apiEnMemoire(b, [{ routeur: routes.default }]);
+    try {
+      const c = await creerClient(b, m);
+      // Une action qui n'attend pas la fenêtre d'envoi : le compte ne dépend pas de l'heure où le test tourne.
+      const id = await regle(b, m, { trigger_event: 'task.completed', actions: [{ type: 'create_notification', config: { title: `Suivi ${m}`, body: 'Tâche faite' } }] });
+      const t = await ok<{ id: string }>(b.admin.from('tasks').insert({
+        org_id: b.orgA, title: `Rappeler ${m}`, status: 'open', created_by: b.users.proprioA,
+        linked_entity_type: 'client', linked_entity_id: c.id,
+      }).select('id').single(), 'tâche');
+      const depuis = new Date(Date.now() - 5_000).toISOString();
+
+      // 1. L'écran écrit la tâche (le trigger de la base consigne son événement)…
+      await ok(b.admin.from('tasks').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', t.id), 'tâche terminée');
+      const enFile = await ok<Array<{ id: number; traite_at: string | null }>>(b.admin.from('automation_evenements_base')
+        .select('id, traite_at').eq('org_id', b.orgA).eq('type', 'task.completed').eq('entity_id', t.id), 'file de la base');
+      expect(enFile, 'le trigger de la base (M-02) a consigné la tâche terminée').toHaveLength(1);
+
+      // 2. … puis le navigateur appelle la route, comme `emitTaskCompleted`.
+      const r = await api.appeler('POST', '/api/automations/events/task-completed', { taskId: t.id });
+      expect(r.status, JSON.stringify(r.json)).toBe(200);
+      expect(r.json).toMatchObject({ ok: true, emis: true });
+
+      // 3. La boucle du serveur passe, avant PUIS après le délai de grâce : elle ne réémet pas.
+      const { DELAI_GRACE_TACHE_MS } = await import('../../../server/lib/evenementsBase');
+      await boucleDeLaBase();
+      await boucleDeLaBase(DELAI_GRACE_TACHE_MS + 1_000);
+      await boucleDeLaBase();
+
+      const ev = await evenements('task.completed', c.id, depuis);
+      expect(ev, 'un seul événement « Tâche terminée » pour ce client').toHaveLength(1);
+      const [ligne] = await ok<Array<{ traite_at: string | null; last_error: string | null }>>(b.admin.from('automation_evenements_base')
+        .select('traite_at, last_error').eq('id', enFile[0].id), 'ligne de la base');
+      expect(ligne.traite_at, 'la ligne de la base est close (pas réessayée)').not.toBeNull();
+      expect(ligne.last_error).toBe('Déjà émis par l’écran des tâches');
+
+      // L'automatisation a tourné UNE fois : une seule ligne d'action au journal, une seule notification.
+      await new Promise((res) => setTimeout(res, 3_000));
+      const actions = (await journauxDe(b, id)).filter((j) => j.action_type === 'create_notification');
+      expect(actions.map((j) => j.result_success), JSON.stringify(actions)).toEqual([true]);
+      const { count } = await b.admin.from('notifications').select('id', { count: 'exact', head: true }).eq('org_id', b.orgA).eq('title', `Suivi ${m}`);
+      expect(count).toBeGreaterThanOrEqual(1);
+      const parDestinataire = await ok<Array<{ user_id: string | null }>>(b.admin.from('notifications').select('user_id').eq('org_id', b.orgA).eq('title', `Suivi ${m}`), 'notifications');
+      expect(new Set(parDestinataire.map((n) => n.user_id)).size, 'aucun destinataire notifié deux fois').toBe(parDestinataire.length);
+    } finally {
+      await api.fermer();
+    }
+  }, 120_000);
 });
 
 describe('point 13 — rendez-vous DÉPLACÉ sans l’appel du navigateur (écriture en base seule)', () => {
