@@ -559,6 +559,45 @@ describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s�
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('11-clavier:50 — les onglets se parcourent aux flèches', () => {
+  const onglets = () => Array.from(conteneur.querySelectorAll('[role="tab"]')) as HTMLElement[];
+  const actif = () => (document.activeElement?.textContent || '').trim();
+
+  it('un seul arrêt de tabulation : l’onglet ouvert', async () => {
+    await rendre();
+    expect(onglets().map((o) => o.tabIndex)).toEqual([0, -1, -1, -1]);
+    await cliquer(onglet(/^Corbeille/));
+    expect(onglets().map((o) => o.tabIndex)).toEqual([-1, -1, -1, 0]);
+  });
+
+  it('flèche droite : l’onglet suivant prend le focus ET s’ouvre ; en boucle ; flèche gauche revient', async () => {
+    await rendre();
+    onglet(/^Toutes/)!.focus();
+    expect(await touche(document.activeElement, 'ArrowRight')).toBe(true);
+    expect(actif()).toBe('À vérifier (0)');
+    expect(document.activeElement?.getAttribute('aria-selected')).toBe('true');
+    expect(adresse).toBe('/automations?onglet=verifier');
+    await touche(document.activeElement, 'ArrowLeft');
+    expect(actif()).toBe('Toutes');
+    await touche(document.activeElement, 'ArrowLeft');
+    expect(actif()).toBe('Corbeille (0)');
+    await touche(document.activeElement, 'ArrowRight');
+    expect(actif()).toBe('Toutes');
+  });
+
+  it('Début et Fin vont au premier et au dernier onglet ; les autres touches ne sont pas retenues', async () => {
+    await rendre();
+    onglet(/^Toutes/)!.focus();
+    await touche(document.activeElement, 'End');
+    expect(actif()).toBe('Corbeille (0)');
+    await touche(document.activeElement, 'Home');
+    expect(actif()).toBe('Toutes');
+    expect(await touche(document.activeElement, 'a')).toBe(false);
+    expect(await touche(document.activeElement, 'Tab')).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('11-clavier:178, :209, :161 — les menus « ⋮ » et « Créer » au clavier', () => {
   const menu = () => document.body.querySelector('[role="menu"]') as HTMLElement | null;
   const actif = () => (document.activeElement?.textContent || '').replace(/\s+/g, ' ').trim();

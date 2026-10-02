@@ -1732,6 +1732,24 @@ export default function Automations() {
                 id={`${idOnglets}-${o.cle}`}
                 aria-controls={`${idOnglets}-panneau`}
                 aria-selected={onglet === o.cle}
+                /*
+                 * Des onglets (`role="tab"`) se parcourent aux FLÈCHES (triage `11-clavier:50`) : un
+                 * seul arrêt de tabulation — l'onglet ouvert —, flèches gauche / droite (en boucle),
+                 * Début / Fin ; l'onglet atteint s'ouvre. C'étaient quatre arrêts de tabulation.
+                 */
+                tabIndex={onglet === o.cle ? 0 : -1}
+                onKeyDown={(e) => {
+                  const i = ONGLETS.findIndex((x) => x.cle === o.cle);
+                  const vers = e.key === 'ArrowRight' ? (i + 1) % ONGLETS.length
+                    : e.key === 'ArrowLeft' ? (i - 1 + ONGLETS.length) % ONGLETS.length
+                    : e.key === 'Home' ? 0
+                    : e.key === 'End' ? ONGLETS.length - 1
+                    : -1;
+                  if (vers < 0) return;
+                  e.preventDefault();
+                  setOnglet(ONGLETS[vers].cle);
+                  document.getElementById(`${idOnglets}-${ONGLETS[vers].cle}`)?.focus();
+                }}
                 onClick={() => setOnglet(o.cle)}
                 className={cn(
                   'border-b-2 px-3 pb-2.5 pt-1 text-[13px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
