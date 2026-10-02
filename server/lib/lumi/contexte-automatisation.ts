@@ -169,16 +169,18 @@ async function trouverParNom(message: string, o: Options): Promise<Ligne[]> {
   return trouvees;
 }
 
-/** Le dernier message écrit par l'utilisateur dans l'historique (texte seulement). */
-function dernierMessageUtilisateur(historique: Anthropic.Messages.MessageParam[]): string | null {
-  for (let i = historique.length - 1; i >= 0; i--) {
+/** Les derniers messages écrits par l'utilisateur dans l'historique (texte seulement), du plus récent au plus ancien. */
+function derniersMessagesUtilisateur(historique: Anthropic.Messages.MessageParam[], combien: number): string[] {
+  const textes: string[] = [];
+  for (let i = historique.length - 1; i >= 0 && textes.length < combien; i--) {
     const m = historique[i];
     if (m.role !== 'user') continue;
-    if (typeof m.content === 'string') return m.content;
-    const texte = m.content.filter((b): b is Anthropic.Messages.TextBlockParam => b.type === 'text').map((b) => b.text).join(' ').trim();
-    if (texte) return texte;
+    const texte = typeof m.content === 'string'
+      ? m.content
+      : m.content.filter((b): b is Anthropic.Messages.TextBlockParam => b.type === 'text').map((b) => b.text).join(' ').trim();
+    if (texte) textes.push(texte);
   }
-  return null;
+  return textes;
 }
 
 export interface AutomatisationsCitees {
@@ -200,11 +202,17 @@ export interface AutomatisationsCitees {
  * Lumi n'a plus à payer un appel pour la retrouver, puis un autre pour la lire
  * (F-12), et il a le texte actuel sous les yeux pour le réécrire.
  *
- * `historique` : quand le message ne cite rien mais RÉPOND à une question
- * « laquelle ? » (« celle des factures »), on reprend les homonymes du message
- * précédent et on garde celle que la réponse désigne, par son déclencheur ou son
- * nom. Sans ça, Lumi relisait la liste, relisait la règle, puis redemandait une
- * confirmation au lieu de proposer (C08).
+ * `historique` : quand le message ne cite rien mais SUIT ce qui précède
+ * (« active-la », « non, plus court », « ok écris-moi un vrai texto, pis
+ * active-la ») :
+ *  · le message précédent citait des homonymes et celui-ci RÉPOND à « laquelle ? »
+ *    (« celle des factures ») → on garde celle que la réponse désigne, par son
+ *    déclencheur. Sans ça, Lumi relisait la liste, relisait la règle, puis
+ *    redemandait une confirmation au lieu de proposer (C08) ;
+ *  · un des derniers messages citait UNE automatisation → c'est toujours d'elle
+ *    qu'on parle. Sans ça, quand le tour précédent s'était passé d'outil (Lumi
+ *    avait déjà le contenu), la suite partait sans les outils d'automatisation
+ *    et Lumi cherchait « l'outil exact », puis la liste, sans aboutir (C12).
  *
  * Ne lève jamais.
  */
@@ -214,15 +222,22 @@ export async function automatisationsCitees(message: string, o: Options, histori
     const fr = o.langue === 'fr';
     let trouvees = await trouverParNom(message, o);
     let designee = false;
+    let reprise = false;
     if (!trouvees.length && historique.length > 0 && estUneSuite(message)) {
-      const precedent = dernierMessageUtilisateur(historique);
-      const candidates = precedent ? await trouverParNom(precedent, o) : [];
-      if (candidates.length > 1) {
-        const dit = new Set(mots(message));
-        const gardees = candidates.filter((r) => [declencheurEnClair(r.trigger_event, true), declencheurEnClair(r.trigger_event, false)]
-          .some((libelle) => mots(libelle).some((m) => dit.has(m))));
-        // Les mots communs à TOUTES les candidates (leur nom) ne départagent rien : seul le déclencheur le fait.
-        if (gardees.length === 1) { trouvees = gardees; designee = true; }
+      const precedents = derniersMessagesUtilisateur(historique, 4);
+      for (let rang = 0; rang < precedents.length; rang++) {
+        const candidates = await trouverParNom(precedents[rang], o);
+        if (candidates.length === 0) continue;
+        if (candidates.length === 1) { trouvees = candidates; reprise = true; break; }
+        // Des homonymes : seule la réponse IMMÉDIATE à « laquelle ? » peut désigner.
+        if (rang === 0) {
+          const dit = new Set(mots(message));
+          const gardees = candidates.filter((r) => [declencheurEnClair(r.trigger_event, true), declencheurEnClair(r.trigger_event, false)]
+            .some((libelle) => mots(libelle).some((m) => dit.has(m))));
+          // Les mots communs à TOUTES les candidates (leur nom) ne départagent rien : seul le déclencheur le fait.
+          if (gardees.length === 1) { trouvees = gardees; designee = true; }
+        }
+        break;
       }
     }
     if (!trouvees.length) return rien;
@@ -242,9 +257,13 @@ export async function automatisationsCitees(message: string, o: Options, histori
       ? (fr
         ? 'Automatisation que l’utilisateur vient de DÉSIGNER en répondant à ta question (c’est celle-ci : ne redemande pas, ne relis pas la liste — fais maintenant ce qu’il avait demandé au départ) :'
         : 'Automation the user just POINTED AT by answering your question (this is the one: do not ask again, do not read the list — now do what they first asked for):')
-      : (fr
-        ? 'Automatisation dont le nom est cité dans la demande (déjà trouvée : pas besoin de lire la liste) :'
-        : 'Automation named in the request (already found: no need to read the list):');
+      : reprise
+        ? (fr
+          ? 'Automatisation dont on parle dans cette conversation (« la », « elle », « le texto » la désignent : ne la cherche pas dans la liste) :'
+          : 'Automation this conversation is about (“it”, “the text” mean this one: do not look it up in the list):')
+        : (fr
+          ? 'Automatisation dont le nom est cité dans la demande (déjà trouvée : pas besoin de lire la liste) :'
+          : 'Automation named in the request (already found: no need to read the list):');
     const suite = contenu
       ? `${fr ? 'Ce qui est ENREGISTRÉ (un courriel long est abrégé : get_automation rend le texte complet)' : 'What is SAVED (a long email is shortened: get_automation returns the full text)'} :\n${contenu}`
       : (fr ? 'Son contenu → get_automation.' : 'Its content → get_automation.');

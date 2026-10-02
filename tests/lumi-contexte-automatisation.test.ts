@@ -176,10 +176,48 @@ describe('homonymes : UNE question, puis la réponse désigne la bonne (C08)', (
     expect((await automatisationsCitees('oui vas-y', o, historique)).nombre).toBe(0);
   });
 
-  it('sans question en suspens (le message précédent ne citait qu’UNE automatisation), rien n’est déduit', async () => {
-    base.regles = [regle('f1', 'Relance facture en retard', 'invoice.overdue', TEXTE_FACTURE), regle('d1', 'Relance de devis 3 jours', 'quote.sent', 'x')];
-    const historique = [{ role: 'user' as const, content: 'explique-moi l’automatisation « Relance facture en retard »' }];
-    expect((await automatisationsCitees('celle des devis', o, historique)).nombre).toBe(0);
+  it('après des homonymes, un message plus ancien ne désigne plus personne (seule la réponse immédiate le peut)', async () => {
+    const historique = [{ role: 'user' as const, content: demande }, { role: 'user' as const, content: 'attends, c’est quoi la différence ?' }];
+    expect((await automatisationsCitees('celle des factures', o, historique)).nombre).toBe(0);
+  });
+});
+
+describe('la suite d’une conversation garde SON automatisation (C12)', () => {
+  const historique = [
+    { role: 'user' as const, content: 'active l’automatisation « Relance facture en retard »' },
+    { role: 'assistant' as const, content: [{ type: 'text' as const, text: 'Je ne peux pas l’activer : elle porte encore le texte d’exemple. Veux-tu que je rédige le vrai message ?' }] },
+  ];
+
+  it('« ok écris-moi un vrai texto…, pis active-la » : c’est toujours d’elle qu’on parle, avec son contenu — même si le tour précédent n’a appelé aucun outil', async () => {
+    const r = await automatisationsCitees('ok écris-moi un vrai texto de relance poli avec le lien de paiement, pis active-la', o, historique);
+    expect(r.nombre).toBe(1);
+    expect(r.contexte).toContain('ref_f1');
+    expect(r.contexte).toMatch(/dont on parle dans cette conversation/);
+    expect(r.contexte).toContain(TEXTE_FACTURE);
+  });
+
+  it('« non, plus court », « active-la » : pareil', async () => {
+    for (const m of ['non, plus court', 'active-la']) expect((await automatisationsCitees(m, o, historique)).contexte, m).toContain('ref_f1');
+  });
+
+  it('une NOUVELLE demande complète (pas une suite) ne reprend pas l’automatisation d’avant', async () => {
+    const r = await automatisationsCitees('crée une facture de 250 $ pour Marie Tremblay pour le lavage de vitres de mardi dernier', o, historique);
+    expect(r.nombre).toBe(0);
+  });
+
+  it('le message qui cite lui-même une automatisation l’emporte sur l’historique', async () => {
+    const r = await automatisationsCitees('et mets en pause « Relance de devis 3 jours »', o, historique);
+    expect(r.contexte).toContain('ref_d1');
+    expect(r.contexte).not.toContain('ref_f1');
+  });
+
+  it('on remonte de quelques messages au plus : au-delà, Lumi lit la liste', async () => {
+    const long = [
+      { role: 'user' as const, content: 'explique-moi l’automatisation « Relance facture en retard »' },
+      ...['merci', 'ok', 'parfait', 'super'].map((content) => ({ role: 'user' as const, content })),
+    ];
+    expect((await automatisationsCitees('active-la', o, long)).nombre).toBe(0);
+    expect((await automatisationsCitees('active-la', o, long.slice(0, 4))).nombre).toBe(1);
   });
 });
 
