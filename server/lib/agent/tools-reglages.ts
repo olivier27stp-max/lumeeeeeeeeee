@@ -928,6 +928,114 @@ const setAutomationLanguage: AgentTool = {
     }),
 };
 
+/**
+ * LIRE une automatisation (A-10, F-15). `list_automations` ne rend que le nom,
+ * le déclencheur et l'état : « explique-moi ce qu'elle fait » recevait « elle
+ * envoie le texto qu'on vient de peaufiner », « plus court » recevait « je
+ * n'ai pas accès au texte actuel ». Ici : le résumé écrit par du code
+ * (`resumeDeLaRegle`) — déclencheur dans les mots de l'écran, filtres, chaque
+ * étape dans l'ordre, chaque message tel qu'ENREGISTRÉ.
+ *
+ * Par identifiant, ou par NOM (partiel, sans accents) : une demande qui nomme
+ * l'automatisation n'a plus besoin de lire toute la liste d'abord (F-12).
+ * Introuvable : l'outil le dit ET rend les noms qui existent — Lumi ne dit plus
+ * « je n'ai pas trouvé » sans avoir cherché.
+ */
+const getAutomation: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'get_automation',
+    description:
+      'Read ONE automation in full: published or draft, its trigger in plain words, its filters, every step in order (waits, conditions, actions) and the EXACT text of each message as saved, plus `portee` (who is reached when it is enabled). '
+      + 'Find it by rule_id, or by name - a partial name is fine ("relance facture"). ALWAYS call it before explaining an automation, rewording one of its messages, changing it or enabling it: never answer from memory, and never say an automation does not exist without having called this.',
+    parameters: {
+      type: 'object',
+      properties: {
+        rule_id: { type: 'string', description: 'Automation rule id, when known.' },
+        name: { type: 'string', description: 'Its name, or part of it, as the user said it.' },
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const langue = langueDuTour();
+    const fr = langue === 'fr';
+    const plat = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’'«»"“”]/g, ' ').toLowerCase().replace(/\s+/g, ' ').trim();
+    try {
+      let id = typeof args.rule_id === 'string' && UUID.test(args.rule_id) ? args.rule_id : null;
+      if (!id) {
+        const cherche = plat(String(args.name ?? ''));
+        const { data, error } = await ctx.client
+          .from('automation_rules')
+          .select('id, name, trigger_event, is_active, preset_key')
+          .eq('org_id', ctx.orgId).is('deleted_at', null)
+          .order('name', { ascending: true }).limit(200);
+        if (error) return erreurLecture('get_automation', error);
+        const toutes = ((data ?? []) as Array<{ id: string; name: string; trigger_event: string; is_active: boolean; preset_key: string | null }>)
+          .filter((r) => !estPrereglageRetire(r));
+        const ligne = (r: typeof toutes[number]) => ({
+          rule_id: r.id, nom: localizeAutomationName(r.name, langue),
+          declencheur: declencheurEnClair(r.trigger_event, fr),
+          etat: r.is_active ? (fr ? 'publiée' : 'published') : (fr ? 'brouillon' : 'draft'),
+        });
+        if (!cherche) {
+          return { introuvable: true, automatisations: toutes.slice(0, 40).map(ligne), note: 'Précise laquelle : voici celles qui existent.' };
+        }
+        // Le nom tel qu'affiché (un préréglage est rangé sous son nom anglais) ET tel que rangé ; le déclencheur aide (« celle des factures en retard »).
+        const texteDe = (r: typeof toutes[number]) => plat(`${r.name} ${localizeAutomationName(r.name, 'fr')} ${localizeAutomationName(r.name, 'en')}`);
+        const exactes = toutes.filter((r) => plat(r.name) === cherche || plat(localizeAutomationName(r.name, langue)) === cherche);
+        let trouvees = exactes.length ? exactes : toutes.filter((r) => texteDe(r).includes(cherche));
+        if (!trouvees.length) {
+          // Mot à mot (« relance factures retard » trouve « Relance facture en retard ») : chaque mot utile, au pluriel près.
+          const mots = cherche.split(' ').filter((m) => m.length > 2 && !['les', 'des', 'mes', 'une', 'the', 'pour', 'automatisation', 'automation', 'celle'].includes(m)).map((m) => m.replace(/(s|x)$/, ''));
+          if (mots.length) {
+            trouvees = toutes.filter((r) => {
+              const t = `${texteDe(r)} ${plat(declencheurEnClair(r.trigger_event, true))} ${plat(declencheurEnClair(r.trigger_event, false))}`;
+              return mots.every((m) => t.includes(m));
+            });
+          }
+        }
+        if (!trouvees.length) {
+          return {
+            introuvable: true,
+            cherche: String(args.name ?? ''),
+            automatisations: toutes.slice(0, 40).map(ligne),
+            note: 'Aucune automatisation de ce nom dans cette entreprise. Dis-le simplement et propose celles qui existent (ci-dessus) — n’invente rien.',
+          };
+        }
+        if (trouvees.length > 1) {
+          return {
+            plusieurs: true,
+            automatisations: trouvees.slice(0, 12).map(ligne),
+            note: 'Plusieurs automatisations correspondent : demande LAQUELLE en UNE question, en les distinguant par leur déclencheur — sans rien modifier.',
+          };
+        }
+        id = trouvees[0].id;
+      }
+      const regle = await lireAutomatisation(ctx as ToolContext, id);
+      const r = resumeDeLaRegle(regle, langue, { maxMessage: 1_500 });
+      return {
+        rule_id: regle.id,
+        nom: r.nom,
+        etat: r.etat,
+        fournie_par_lume: regle.is_preset === true,
+        declencheur: r.declencheur,
+        ...(r.quand ? { quand: r.quand } : {}),
+        ...(r.filtres.length ? { filtres: r.filtres } : {}),
+        etapes: r.etapes.length ? r.etapes : [fr ? '(aucune étape pour l’instant)' : '(no step yet)'],
+        ...(r.reglages.length ? { reglages: r.reglages } : {}),
+        ...(regleAtteintLeClient(regle) ? { portee: await porteeALActivation(getServiceClient(), ctx.orgId, regle, langue) } : {}),
+        variables_valides: variablesPourDeclencheur(regle.trigger_event).map((v) => `[${v}]`).join(' '),
+        note: 'Cite les messages mot pour mot, entre guillemets. Les étapes sont dans l’ordre d’exécution.',
+      };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (/introuvable/i.test(message)) return { introuvable: true, note: message };
+      return erreurLecture('get_automation', e);
+    }
+  },
+};
+
 /* ════════════════════════════════════════════════════════════════
    TAXES — sensible : touche toutes les prochaines factures
    ════════════════════════════════════════════════════════════════ */
@@ -1771,6 +1879,8 @@ export const OUTILS_REGLAGES: AgentTool[] = [
   listEmailTemplates, createEmailTemplate, updateEmailTemplate, setDefaultEmailTemplate, deleteEmailTemplate, duplicateEmailTemplate,
   // Automatisations
   createAutomationFromText, toggleAutomationRule, updateAutomationMessage, updateAutomationSmsBody, setAutomationLanguage,
+  // Automatisations — mission finale (2026-10-02) : lire le contenu, modifier la structure d'une règle existante.
+  getAutomation,
   // Taxes
   getTaxConfig, setupTaxes, createTaxConfig, updateTaxConfig, deleteTaxConfig, setDefaultTaxGroup,
   // Catalogue
@@ -1838,6 +1948,7 @@ export const PERMISSIONS_REGLAGES: Record<string, { cle: PermissionKey; capacite
   update_automation_message:   { cle: 'automations.update',     capacite: 'la modification des automatisations' },
   update_automation_sms_body:  { cle: 'automations.update',     capacite: 'la modification des automatisations' },
   set_automation_language:     { cle: 'automations.update',     capacite: 'la langue des automatisations' },
+  get_automation:              { cle: 'automations.read',       capacite: 'la consultation des automatisations' },
   get_tax_config:              { cle: 'settings.read',          capacite: 'la consultation des taxes' },
   setup_taxes:                 { cle: 'settings.update',        capacite: 'la configuration des taxes' },
   create_tax_config:           { cle: 'settings.update',        capacite: 'la configuration des taxes' },
@@ -1873,6 +1984,7 @@ export const TOPICS_REGLAGES: Partial<Record<IdTopic, string[]>> = {
   ],
   rapports: [
     'create_automation_from_text', 'toggle_automation_rule', 'update_automation_message', 'update_automation_sms_body', 'set_automation_language',
+    'get_automation',
     'list_goals', 'set_goal', 'delete_goal',
     'list_scheduled_reports', 'create_scheduled_report', 'update_scheduled_report', 'delete_scheduled_report', 'send_scheduled_report_now',
     'list_notifications', 'mark_notifications_read', 'delete_notification',
