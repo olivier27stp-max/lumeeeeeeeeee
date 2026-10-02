@@ -79,6 +79,21 @@ function periodeDemandee(args: Record<string, any>): Periode | { error: string }
   return du <= au ? { du, au } : { du: au, au: du };
 }
 
+/** Personne n'a choisi de dates : la période est « le mois en cours » par défaut, pas par demande. */
+const periodeImplicite = (args: Record<string, any>): boolean => !String(args.from ?? '').trim() && !String(args.to ?? '').trim();
+
+/**
+ * Les 12 mois qui finissent le même jour — le repli des statistiques quand le mois en cours est
+ * encore vide. Passe en prod du 2026-10-02 : « mes clients me paient surtout comment ? », posée
+ * le 2 du mois, recevait « aucun paiement depuis le début d'octobre » ; la question porte sur une
+ * habitude, pas sur deux jours. Le repli ne joue JAMAIS quand une date a été demandée.
+ */
+function douzeDerniersMois(p: Periode): Periode {
+  const [annee, mois, jour] = p.au.split('-').map(Number);
+  return { du: new Date(Date.UTC(annee - 1, mois - 1, jour + 1)).toISOString().slice(0, 10), au: p.au };
+}
+const NOTE_PERIODE_ELARGIE = 'Rien depuis le début du mois : ces chiffres portent sur les 12 derniers mois — dis la période dans ta réponse.';
+
 const PARAMETRES_PERIODE = {
   from: { type: 'string', description: 'Start date YYYY-MM-DD (default: 1st of the month).' },
   to: { type: 'string', description: 'End date YYYY-MM-DD (default: today).' },
@@ -736,14 +751,23 @@ const getQuoteWinRate: AgentTool = {
     parameters: { type: 'object', properties: { ...PARAMETRES_PERIODE } },
   },
   handler: async (args, ctx) => {
-    const p = periodeDemandee(args);
-    if ('error' in p) return p;
-    const [devis, deals] = await Promise.all([
-      ctx.client.rpc('rpc_insights_soumissions', argsStatistique(ctx, p)),
-      ctx.client.rpc('rpc_insights_pipeline_velocity', argsStatistique(ctx, p)),
+    const demandee = periodeDemandee(args);
+    if ('error' in demandee) return demandee;
+    let p: Periode = demandee;
+    const lire = (periode: Periode) => Promise.all([
+      ctx.client.rpc('rpc_insights_soumissions', argsStatistique(ctx, periode)),
+      ctx.client.rpc('rpc_insights_pipeline_velocity', argsStatistique(ctx, periode)),
     ]);
+    const ligne = (data: unknown) => (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null | undefined;
+    let [devis, deals] = await lire(p);
     if (devis.error) return erreurStatistique('quote_win_rate', devis.error);
-    const s = (Array.isArray(devis.data) ? devis.data[0] : devis.data) as Record<string, unknown> | null | undefined;
+    let elargie = false;
+    if (periodeImplicite(args) && entier(ligne(devis.data)?.nombre) === 0) {
+      const large = douzeDerniersMois(p);
+      const [devisLarge, dealsLarge] = await lire(large);
+      if (!devisLarge.error && entier(ligne(devisLarge.data)?.nombre) > 0) { p = large; devis = devisLarge; deals = dealsLarge; elargie = true; }
+    }
+    const s = ligne(devis.data);
     const creees = entier(s?.nombre);
     const gagnees = entier(s?.approuvees);
     const enAttente = entier(s?.en_attente);
@@ -755,7 +779,7 @@ const getQuoteWinRate: AgentTool = {
     if (deals.error) {
       console.error('[agent-tool:quote_win_rate:deals]', deals.error.message);
     } else {
-      const d = (Array.isArray(deals.data) ? deals.data[0] : deals.data) as Record<string, unknown> | null | undefined;
+      const d = ligne(deals.data);
       const gagnes = entier(d?.won_deals);
       const perdus = entier(d?.lost_deals);
       pipeline = { deals_gagnes: gagnes, deals_perdus: perdus, taux_de_gain_pct: pourcentage(gagnes, gagnes + perdus) };
@@ -763,6 +787,7 @@ const getQuoteWinRate: AgentTool = {
 
     return {
       periode: p,
+      ...(elargie ? { periode_elargie: true } : {}),
       definition: 'soumissions CRÉÉES dans la période ; gagnée = approuvée ou convertie ; en attente = brouillon, envoyée sans réponse ou modifications demandées',
       soumissions_creees: creees,
       gagnees,
@@ -777,7 +802,7 @@ const getQuoteWinRate: AgentTool = {
       pipeline,
       note: creees === 0
         ? 'Aucune soumission créée sur cette période : pas de taux à calculer.'
-        : `Montants taxes incluses.${pipeline ? ' « pipeline » = deals créés dans la période, gagnés / (gagnés + perdus).' : ' Les deals du pipeline n’ont pas pu être lus.'}`,
+        : `${elargie ? `${NOTE_PERIODE_ELARGIE} ` : ''}Montants taxes incluses.${pipeline ? ' « pipeline » = deals créés dans la période, gagnés / (gagnés + perdus).' : ' Les deals du pipeline n’ont pas pu être lus.'}`,
     };
   },
 };
@@ -799,15 +824,27 @@ const getPaymentMethodsBreakdown: AgentTool = {
     parameters: { type: 'object', properties: { ...PARAMETRES_PERIODE } },
   },
   handler: async (args, ctx) => {
-    const p = periodeDemandee(args);
-    if ('error' in p) return p;
-    const { data, error } = await ctx.client.rpc('rpc_insights_payment_mix', argsStatistique(ctx, p));
-    if (error) return erreurStatistique('payment_mix', error);
-    const lignes = ((Array.isArray(data) ? data : []) as Array<{ method: string | null; cents: number | null }>)
+    const demandee = periodeDemandee(args);
+    if ('error' in demandee) return demandee;
+    let p: Periode = demandee;
+    const lire = (periode: Periode) => ctx.client.rpc('rpc_insights_payment_mix', argsStatistique(ctx, periode));
+    const repartition = (data: unknown) => ((Array.isArray(data) ? data : []) as Array<{ method: string | null; cents: number | null }>)
       .map((r) => ({ method: String(r.method || 'other'), amount_cents: entier(r.cents) }));
-    const total = lignes.reduce((s, l) => s + l.amount_cents, 0);
+    const somme = (l: Array<{ amount_cents: number }>) => l.reduce((s, x) => s + x.amount_cents, 0);
+    const { data, error } = await lire(p);
+    if (error) return erreurStatistique('payment_mix', error);
+    let lignes = repartition(data);
+    let elargie = false;
+    if (periodeImplicite(args) && somme(lignes) === 0) {
+      const large = douzeDerniersMois(p);
+      const second = await lire(large);
+      const lignesLarges = second.error ? [] : repartition(second.data);
+      if (somme(lignesLarges) > 0) { p = large; lignes = lignesLarges; elargie = true; }
+    }
+    const total = somme(lignes);
     return {
       periode: p,
+      ...(elargie ? { periode_elargie: true } : {}),
       definition: 'encaissé par mode de paiement, remboursements déduits ; paiements enregistrés seulement (une facture importée déjà payée n’a pas de mode)',
       total_cents: total,
       modes: lignes.map((l) => ({
@@ -816,7 +853,7 @@ const getPaymentMethodsBreakdown: AgentTool = {
         amount_cents: l.amount_cents,
         part_pct: pourcentage(l.amount_cents, total),
       })),
-      note: lignes.length ? 'Répartition de ce qui a été encaissé sur la période.' : 'Aucun paiement enregistré sur cette période.',
+      note: elargie ? NOTE_PERIODE_ELARGIE : lignes.length ? 'Répartition de ce qui a été encaissé sur la période.' : 'Aucun paiement enregistré sur cette période.',
     };
   },
 };
@@ -830,11 +867,11 @@ const getTeamPerformance: AgentTool = {
     parameters: { type: 'object', properties: { ...PARAMETRES_PERIODE } },
   },
   handler: async (args, ctx) => {
-    const p = periodeDemandee(args);
-    if ('error' in p) return p;
-    const { data, error } = await ctx.client.rpc('rpc_insights_team_performance', argsStatistique(ctx, p));
-    if (error) return erreurStatistique('team_performance', error);
-    const equipes = ((Array.isArray(data) ? data : []) as Array<Record<string, unknown>>).map((r) => ({
+    const demandee = periodeDemandee(args);
+    if ('error' in demandee) return demandee;
+    let p: Periode = demandee;
+    const lire = (periode: Periode) => ctx.client.rpc('rpc_insights_team_performance', argsStatistique(ctx, periode));
+    const lignes = (data: unknown) => ((Array.isArray(data) ? data : []) as Array<Record<string, unknown>>).map((r) => ({
       team_id: r.team_id ?? null,
       team: String(r.team_name || '—'),
       jobs: entier(r.jobs_count),
@@ -843,13 +880,25 @@ const getTeamPerformance: AgentTool = {
       revenue_cents: entier(r.revenue_cents),
       avg_job_value_cents: entier(r.avg_job_value_cents),
     }));
+    const { data, error } = await lire(p);
+    if (error) return erreurStatistique('team_performance', error);
+    let equipes = lignes(data);
+    let elargie = false;
+    // Des équipes, mais aucun job créé depuis le début du mois : même repli que les autres statistiques.
+    if (periodeImplicite(args) && equipes.length && equipes.every((e) => e.jobs === 0)) {
+      const large = douzeDerniersMois(p);
+      const second = await lire(large);
+      const equipesLarges = second.error ? [] : lignes(second.data);
+      if (equipesLarges.some((e) => e.jobs > 0)) { p = large; equipes = equipesLarges; elargie = true; }
+    }
     return {
       periode: p,
+      ...(elargie ? { periode_elargie: true } : {}),
       definition: 'équipes actives ; jobs CRÉÉS dans la période ; revenu et valeur moyenne = total des jobs complétés',
       count: equipes.length,
       equipes,
       note: equipes.length
-        ? 'Classées par revenu. Un job sans équipe assignée n’apparaît dans aucune ligne.'
+        ? `${elargie ? `${NOTE_PERIODE_ELARGIE} ` : ''}Classées par revenu. Un job sans équipe assignée n’apparaît dans aucune ligne.`
         : 'Aucune équipe active dans cette entreprise : les équipes se créent dans Lume › Équipes.',
     };
   },

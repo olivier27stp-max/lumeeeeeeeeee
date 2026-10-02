@@ -198,6 +198,24 @@ Planification, communications, terrain, mémoire et le jeu de base ne changent p
 - Une automatisation créée depuis un modèle ou dupliquée naît éteinte ; l'outil l'éteint lui-même si la route la rendait active.
 - Non construits : annuler un versement de commission, reverser une commission, supprimer un ajustement de paie, restaurer une automatisation de la corbeille.
 
+**Passe en prod du 2026-10-02 (bureau de test, mode « demander », rien n'est exécuté)**
+
+37 demandes sur les 30 outils : 31 exactes, 3 questions de clarification justifiées (deal inexistant, « ma première automatisation » parmi 43, job archivé), 3 ratées, aucun faux « c'est fait ». Les trois ratées et ce qu'elles ont changé :
+
+| Demande | Ce que Lumi répondait | Correction |
+|---|---|---|
+| « ki travail demain » | « aucune visite planifiée demain » (l'outil des employés n'était pas chargé avec les jobs) | #902 : `get_team_schedule` voisin du sous-agent planification |
+| « Quelle équipe a rapporté le plus ce mois-ci ? » | un classement par employé | #902 : `get_team_performance` voisin du sous-agent facturation |
+| « Mes clients me paient surtout comment ? » | la page d'aide Facturation (étage sans modèle) | #903 (session fiabilité) |
+
+Rejouées après déploiement : les trois passent. Trois faiblesses vues à cette occasion, corrigées dans les outils eux-mêmes :
+
+- « c koi l'horaire de la gang cette semaine » = sept appels, un par jour (6 ¢, 12 s) → `get_team_schedule` accepte `date_to` (14 jours au plus, un seul appel).
+- La grille Horaire n'est presque jamais remplie (2 lignes dans toute la prod, aucune récurrence) : « qui travaille demain » aurait répondu « personne » à une entreprise dont les équipes ont des visites. L'outil rend maintenant les visites de jobs du jour par équipe, avec ses membres (`job_visits`). En prod, l'assignation d'une visite est une ÉQUIPE (`schedule_events.team_id`, 63 visites sur 1 074) ; `assigned_user` n'est jamais rempli.
+- Le 2 du mois, une statistique sans période répond « rien ce mois-ci ». Sans date demandée et mois vide, `get_payment_methods_breakdown`, `get_quote_win_rate` et `get_team_performance` se replient sur les 12 derniers mois et le disent (`periode_elargie`). Jamais quand une date est demandée.
+
+Vu, non corrigé : sur une réponse, le modèle a écrit « 45,5 % » pour une part rendue à 46,5 % par l'outil (montants exacts). Une occurrence ; les pourcentages restent ceux de la page Statistiques.
+
 ## Ce qui n'a pas pu être déterminé
 
 - Si l'ancienne table `pipeline_deals` reste synchronisée avec `deals`.

@@ -694,6 +694,80 @@ describe('statistiques (rpc_insights_*)', () => {
     expect(vide.note).toMatch(/Aucune équipe active/);
   });
 
+  // Passe en prod du 2026-10-02 : « mes clients me paient surtout comment ? », posée le 2 du mois,
+  // recevait « aucun paiement depuis le début d'octobre ».
+  describe('sans période, mois encore vide : repli sur les 12 derniers mois', () => {
+    /** Les n premiers appels rpc répondent `data` ; les suivants, ce que la base a préparé. */
+    const dAbord = (b: ReturnType<typeof base>, ...reponses: unknown[]) => {
+      for (const data of reponses) {
+        b.ctx.client.rpc.mockImplementationOnce(async (nom: string, args: Record<string, unknown>) => { b.rpcAppels.push({ nom, args }); return { data, error: null }; });
+      }
+    };
+    const unAnAvant = (jour: string) => {
+      const [a, m, j] = jour.split('-').map(Number);
+      return new Date(Date.UTC(a - 1, m - 1, j + 1)).toISOString().slice(0, 10);
+    };
+
+    it('get_payment_methods_breakdown : second appel sur 12 mois, et la réponse le dit', async () => {
+      const b = base({}, { rpc: { rpc_insights_payment_mix: { data: [{ method: 'card', cents: 7500 }, { method: 'cash', cents: 2500 }] } } });
+      dAbord(b, []);
+      const r = await lancer('get_payment_methods_breakdown', {}, b);
+      expect(b.rpcAppels).toHaveLength(2);
+      const [mois, annee] = b.rpcAppels.map((a) => a.args as { p_from: string; p_to: string });
+      expect(mois.p_from).toBe(`${mois.p_to.slice(0, 7)}-01`);
+      expect(annee).toMatchObject({ p_to: mois.p_to, p_from: unAnAvant(mois.p_to) });
+      expect(r).toMatchObject({ periode_elargie: true, periode: { du: annee.p_from, au: annee.p_to }, total_cents: 10000 });
+      expect(r.modes.map((m: any) => m.part_pct)).toEqual([75, 25]);
+      expect(r.note).toMatch(/12 derniers mois — dis la période/);
+    });
+
+    it('rien non plus sur 12 mois : on reste sur le mois, sans prétendre avoir élargi', async () => {
+      const b = base({}, { rpc: { rpc_insights_payment_mix: { data: [] } } });
+      const r = await lancer('get_payment_methods_breakdown', {}, b);
+      expect(b.rpcAppels).toHaveLength(2);
+      expect(r.periode_elargie).toBeUndefined();
+      expect(r.periode.du).toBe(`${r.periode.au.slice(0, 7)}-01`);
+      expect(r.note).toMatch(/Aucun paiement/);
+    });
+
+    it('une date demandée, même une seule : jamais de repli', async () => {
+      for (const args of [periode, { from: '2026-09-01' }, { to: '2026-09-30' }]) {
+        const b = base({}, { rpc: { rpc_insights_payment_mix: { data: [] } } });
+        const r = await lancer('get_payment_methods_breakdown', args, b);
+        expect(b.rpcAppels, JSON.stringify(args)).toHaveLength(1);
+        expect(r.periode_elargie).toBeUndefined();
+      }
+    });
+
+    it('get_quote_win_rate : les deux lectures refaites sur 12 mois', async () => {
+      const b = base({}, { rpc: {
+        rpc_insights_soumissions: { data: [{ nombre: 8, valeur_cents: 800000, approuvees: 4, valeur_approuvee_cents: 400000, en_attente: 0, valeur_en_attente_cents: 0 }] },
+        rpc_insights_pipeline_velocity: { data: [{ won_deals: 1, lost_deals: 1 }] },
+      } });
+      dAbord(b, [{ nombre: 0 }], [{ won_deals: 0, lost_deals: 0 }]);
+      const r = await lancer('get_quote_win_rate', {}, b);
+      expect(b.rpcAppels.map((a) => a.nom)).toEqual(['rpc_insights_soumissions', 'rpc_insights_pipeline_velocity', 'rpc_insights_soumissions', 'rpc_insights_pipeline_velocity']);
+      expect(b.rpcAppels[2].args.p_from).toBe(unAnAvant(String(b.rpcAppels[0].args.p_to)));
+      expect(r).toMatchObject({ periode_elargie: true, soumissions_creees: 8, taux_de_gain_pct: 50, pipeline: { deals_gagnes: 1, deals_perdus: 1 } });
+      expect(r.note).toMatch(/12 derniers mois/);
+    });
+
+    it('get_team_performance : des équipes sans aucun job ce mois-ci → 12 mois ; aucune équipe → pas de second appel', async () => {
+      const equipe = (jobs: number) => ({ team_id: id(70), team_name: 'Équipe Nord', jobs_count: jobs, jobs_completed: jobs, completion_rate: jobs ? 100 : 0, revenue_cents: jobs * 10000, avg_job_value_cents: jobs ? 10000 : 0 });
+      const b = base({}, { rpc: { rpc_insights_team_performance: { data: [equipe(12)] } } });
+      dAbord(b, [equipe(0)]);
+      const r = await lancer('get_team_performance', {}, b);
+      expect(b.rpcAppels).toHaveLength(2);
+      expect(r).toMatchObject({ periode_elargie: true, equipes: [{ team: 'Équipe Nord', jobs: 12, revenue_cents: 120000 }] });
+      expect(r.note).toMatch(/12 derniers mois/);
+
+      const sansEquipe = base({}, { rpc: { rpc_insights_team_performance: { data: [] } } });
+      const vide = await lancer('get_team_performance', {}, sansEquipe);
+      expect(sansEquipe.rpcAppels).toHaveLength(1);
+      expect(vide.note).toMatch(/Aucune équipe active/);
+    });
+  });
+
   it('refus de la base (42501), panne ou date invalide : une phrase en français, jamais de chiffres', async () => {
     const outils: Array<[string, string]> = [['get_quote_win_rate', 'rpc_insights_soumissions'], ['get_payment_methods_breakdown', 'rpc_insights_payment_mix'], ['get_team_performance', 'rpc_insights_team_performance']];
     for (const [nom, fonction] of outils) {

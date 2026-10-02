@@ -31,7 +31,7 @@
 import type { PermissionKey } from '../../../src/lib/permissions';
 import { computeEntryHours } from '../payroll';
 import { totauxCommissions, enCents } from '../field-sales/commission-periode';
-import { toLocalDate, toLocalDateTime, addDays } from '../reports/dates';
+import { toLocalDate, toLocalDateTime, addDays, daysBetween } from '../reports/dates';
 import { dateHeureLocaleVersUtc } from '../lumi/temps';
 import type { IdTopic } from '../lumi/topics';
 import type { AgentTool, ToolContext } from './tools';
@@ -1093,18 +1093,33 @@ function resoudreJour(assignations: Assignation[], recurrences: Recurrence[], co
   return presences.sort((a, b) => a.start_time.localeCompare(b.start_time) || a.user_id.localeCompare(b.user_id));
 }
 
+/** Un seul appel couvre au plus deux semaines : au-delà, la réponse ne se lit plus. */
+const JOURS_HORAIRE_MAX = 14;
+
+interface VisiteDeJob { team_id: string | null; assigned_user: string | null; start_at: string; status: string | null }
+
+/**
+ * Deux faits mesurés en prod le 2026-10-02 ont refait cet outil :
+ * - « c koi l'horaire de la gang cette semaine » coûtait SEPT appels (un par jour, 6 ¢, 12 s) :
+ *   `date_to` rend la semaine en un seul ;
+ * - la grille Horaire n'est presque jamais remplie (2 lignes dans toute la prod) : « ki travail
+ *   demain » répondait « personne » à une entreprise dont trois équipes avaient des visites. Les
+ *   visites de jobs du jour sont donc rendues avec l'équipe et ses membres — c'est là que se lit
+ *   « qui travaille » quand la grille est vide.
+ */
 const getTeamScheduleTool: AgentTool = {
   kind: 'read',
   needsIdentity: true,
   declaration: {
     name: 'get_team_schedule',
     description:
-      'Who is scheduled to work on a given day (team, hours) and who is off (approved time off, leave, pending requests). '
-      + 'Staff roster, not job visits (→ query_schedule).',
+      'Who works on a day, or on each day up to date_to (a week = ONE call): staff roster (team, hours), who is off '
+      + '(time off, pending requests) and which teams have job visits that day. For the visits themselves use query_schedule.',
     parameters: {
       type: 'object',
       properties: {
         date: { type: 'string', description: 'Day YYYY-MM-DD (default: today).' },
+        date_to: { type: 'string', description: 'Last day YYYY-MM-DD of a range (max 14 days). Omit for one day.' },
         team_id: { type: 'string', description: 'Only this team (from list_teams).' },
       },
     },
@@ -1112,35 +1127,39 @@ const getTeamScheduleTool: AgentTool = {
   handler: async (args, ctx) => {
     try {
       const dateDonnee = dateYmdOptionnelle(args.date, 'date');
+      const finDonnee = dateYmdOptionnelle(args.date_to, 'date_to');
       const teamId = identifiantOptionnel(args.team_id, 'team_id', 'list_teams');
-      const [date, role] = await Promise.all([
-        dateDonnee ? Promise.resolve(dateDonnee) : fuseauEntreprise(ctx).then((tz) => toLocalDate(new Date(), tz)),
-        roleDuDemandeur(ctx),
-      ]);
-      const jourSemaine = new Date(`${date}T00:00:00Z`).getUTCDay();
+      const [fuseau, role] = await Promise.all([fuseauEntreprise(ctx), roleDuDemandeur(ctx)]);
+      const du = dateDonnee ?? toLocalDate(new Date(), fuseau);
+      const au = finDonnee ?? du;
+      if (au < du) throw new Refus('date_to doit être le même jour que date, ou un jour après.');
+      if (daysBetween(du, au) >= JOURS_HORAIRE_MAX) throw new Refus(`Au plus ${JOURS_HORAIRE_MAX} jours à la fois — resserre la période.`);
+      const jours = Array.from({ length: daysBetween(du, au) + 1 }, (_, i) => addDays(du, i));
+      const jourSemaine = (jour: string) => new Date(`${jour}T00:00:00Z`).getUTCDay();
 
-      const [a, r, c, t] = await Promise.all([
+      const [a, r, c, t, v, m] = await Promise.all([
         ctx.client
           .from('team_schedule_assignments')
-          .select('id, team_id, user_id, start_time, end_time, availability_status, note, recurring_schedule_id')
+          .select('id, team_id, user_id, work_date, start_time, end_time, availability_status, note, recurring_schedule_id')
           .eq('org_id', ctx.orgId)
-          .eq('work_date', date)
-          .limit(1000),
+          .gte('work_date', du)
+          .lte('work_date', au)
+          .limit(2000),
         ctx.client
           .from('recurring_team_schedules')
           .select('id, team_id, user_id, day_of_week, start_time, end_time, effective_start_date, effective_end_date')
           .eq('org_id', ctx.orgId)
           .eq('is_active', true)
-          .eq('day_of_week', jourSemaine)
-          .lte('effective_start_date', date)
+          .in('day_of_week', [...new Set(jours.map(jourSemaine))])
+          .lte('effective_start_date', au)
           .limit(1000),
         ctx.client
           .from('time_off_requests')
           .select('id, user_id, start_date, end_date, all_day, start_time, end_time, kind, status, reason')
           .eq('org_id', ctx.orgId)
           .in('status', ['pending', 'approved'])
-          .lte('start_date', date)
-          .gte('end_date', date)
+          .lte('start_date', au)
+          .gte('end_date', du)
           .limit(500),
         ctx.client
           .from('teams')
@@ -1148,76 +1167,162 @@ const getTeamScheduleTool: AgentTool = {
           .eq('org_id', ctx.orgId)
           .is('deleted_at', null)
           .limit(200),
+        // Les visites de jobs de la période, aux bornes des jours de l'ENTREPRISE.
+        ctx.client
+          .from('schedule_events')
+          .select('team_id, assigned_user, start_at, status')
+          .eq('org_id', ctx.orgId)
+          .is('deleted_at', null)
+          .gte('start_at', dateHeureLocaleVersUtc(`${du}T00:00`, fuseau))
+          .lte('start_at', dateHeureLocaleVersUtc(`${au}T23:59:59`, fuseau))
+          .limit(2000),
+        // Qui est dans quelle équipe — même source que list_teams.
+        ctx.client
+          .from('memberships')
+          .select('user_id, full_name, team_id, status')
+          .eq('org_id', ctx.orgId)
+          .not('team_id', 'is', null)
+          .limit(500),
       ]);
-      for (const res of [a, r, c, t]) if (res.error) throw res.error;
+      for (const res of [a, r, c, t, v, m]) if (res.error) throw res.error;
 
       const equipes = new Map(((t.data || []) as Array<{ id: string; name: string }>).map((e) => [e.id, e.name]));
       if (teamId && !equipes.has(teamId)) throw new Refus('Équipe introuvable dans cette entreprise — vérifie avec list_teams.');
-      const recurrences = ((r.data || []) as Recurrence[]).filter((x) => !x.effective_end_date || x.effective_end_date >= date);
+      const membresParEquipe = new Map<string, string[]>();
+      for (const x of (m.data || []) as Array<{ full_name: string | null; team_id: string; status: string | null }>) {
+        const nomDuMembre = (x.full_name || '').trim();
+        if (!nomDuMembre || (x.status && x.status !== 'active')) continue;
+        membresParEquipe.set(x.team_id, [...(membresParEquipe.get(x.team_id) || []), nomDuMembre]);
+      }
+      const assignations = (a.data || []) as Array<Assignation & { work_date: string }>;
+      const recurrences = (r.data || []) as Recurrence[];
       const conges = (c.data || []) as Conge[];
-      const toutes = resoudreJour((a.data || []) as Assignation[], recurrences, conges);
-      const presences = teamId ? toutes.filter((p) => p.team_id === teamId) : toutes;
-      const concernes = new Set(presences.map((p) => p.user_id));
-      // Avec une équipe : seuls les congés de ses membres prévus ce jour-là. Sans : tous.
-      const congesVus = teamId ? conges.filter((x) => concernes.has(x.user_id)) : conges;
+      const visites = ((v.data || []) as VisiteDeJob[])
+        .filter((x) => x.start_at && x.status !== 'cancelled' && (!teamId || x.team_id === teamId))
+        .sort((x, y) => x.start_at.localeCompare(y.start_at));
 
-      const noms = await nomsDesMembres(ctx, [...concernes, ...congesVus.map((x) => x.user_id)]);
+      const parJour = jours.map((date) => {
+        const congesDuJour = conges.filter((x) => x.start_date <= date && x.end_date >= date);
+        const toutes = resoudreJour(
+          assignations.filter((x) => x.work_date === date),
+          recurrences.filter((x) => x.day_of_week === jourSemaine(date) && x.effective_start_date <= date && (!x.effective_end_date || x.effective_end_date >= date)),
+          congesDuJour,
+        );
+        const presences = teamId ? toutes.filter((p) => p.team_id === teamId) : toutes;
+        const concernes = new Set(presences.map((p) => p.user_id));
+        return {
+          date,
+          presences,
+          // Avec une équipe : seuls les congés de ses membres prévus ce jour-là. Sans : tous.
+          congesVus: teamId ? congesDuJour.filter((x) => concernes.has(x.user_id)) : congesDuJour,
+          visites: visites.filter((x) => toLocalDate(x.start_at, fuseau) === date),
+        };
+      });
+
+      // Les noms : une seule lecture pour toute la période.
+      const noms = await nomsDesMembres(ctx, parJour.flatMap((j) => [
+        ...j.presences.map((p) => p.user_id), ...j.congesVus.map((x) => x.user_id), ...j.visites.map((x) => x.assigned_user || ''),
+      ]));
       const nom = (id: string) => noms.get(id) || 'membre sans nom';
       // Le motif d'une absence (maladie…) ne regarde que les gestionnaires.
       const voitMotifs = estGestionnaire(role);
       const plage = (x: Conge) => (x.all_day || !x.start_time || !x.end_time ? {} : { start_time: hhmm(x.start_time), end_time: hhmm(x.end_time) });
 
-      const auTravail = presences.filter((p) => p.status === 'available' || p.status === 'partial').map((p) => ({
-        user_id: p.user_id,
-        name: nom(p.user_id),
-        team_id: p.team_id,
-        team: equipes.get(p.team_id) || null,
-        start_time: p.start_time,
-        end_time: p.end_time,
-        ...(p.status === 'partial' ? { partial_time_off: true } : {}),
-        ...(p.demande ? { pending_time_off: true } : {}),
-        ...(p.note ? { note: p.note } : {}),
-      }));
-      const approuves = congesVus.filter((x) => x.status === 'approved');
-      const enConge = new Set(approuves.map((x) => x.user_id));
-      const absents = [
-        ...approuves.map((x) => ({
-          user_id: x.user_id,
-          name: nom(x.user_id),
-          type: TYPE_CONGE[x.kind] || x.kind,
-          all_day: x.all_day,
-          ...plage(x),
-          from: x.start_date,
-          to: x.end_date,
-          ...(voitMotifs && x.reason ? { reason: x.reason } : {}),
-        })),
-        // Marqué « indisponible » à la main dans la grille, sans congé approuvé.
-        ...presences.filter((p) => p.status === 'unavailable' && !enConge.has(p.user_id)).map((p) => ({
+      const detail = parJour.map(({ date, presences, congesVus, visites: visitesDuJour }) => {
+        const auTravail = presences.filter((p) => p.status === 'available' || p.status === 'partial').map((p) => ({
           user_id: p.user_id,
           name: nom(p.user_id),
-          type: 'indisponible',
-          all_day: true,
-          from: date,
-          to: date,
+          team_id: p.team_id,
+          team: equipes.get(p.team_id) || null,
+          start_time: p.start_time,
+          end_time: p.end_time,
+          ...(p.status === 'partial' ? { partial_time_off: true } : {}),
+          ...(p.demande ? { pending_time_off: true } : {}),
           ...(p.note ? { note: p.note } : {}),
-        })),
-      ];
-      const demandes = congesVus.filter((x) => x.status === 'pending').map((x) => ({
-        user_id: x.user_id, name: nom(x.user_id), type: TYPE_CONGE[x.kind] || x.kind, all_day: x.all_day, ...plage(x), from: x.start_date, to: x.end_date,
-      }));
+        }));
+        const approuves = congesVus.filter((x) => x.status === 'approved');
+        const enConge = new Set(approuves.map((x) => x.user_id));
+        const absents = [
+          ...approuves.map((x) => ({
+            user_id: x.user_id,
+            name: nom(x.user_id),
+            type: TYPE_CONGE[x.kind] || x.kind,
+            all_day: x.all_day,
+            ...plage(x),
+            from: x.start_date,
+            to: x.end_date,
+            ...(voitMotifs && x.reason ? { reason: x.reason } : {}),
+          })),
+          // Marqué « indisponible » à la main dans la grille, sans congé approuvé.
+          ...presences.filter((p) => p.status === 'unavailable' && !enConge.has(p.user_id)).map((p) => ({
+            user_id: p.user_id,
+            name: nom(p.user_id),
+            type: 'indisponible',
+            all_day: true,
+            from: date,
+            to: date,
+            ...(p.note ? { note: p.note } : {}),
+          })),
+        ];
+        const demandes = congesVus.filter((x) => x.status === 'pending').map((x) => ({
+          user_id: x.user_id, name: nom(x.user_id), type: TYPE_CONGE[x.kind] || x.kind, all_day: x.all_day, ...plage(x), from: x.start_date, to: x.end_date,
+        }));
 
-      const jour = `${JOURS_FR[jourSemaine]} ${date}`;
+        // Les visites du jour, par équipe (ou par personne quand la visite est assignée à quelqu'un sans équipe).
+        const groupes = new Map<string, { visits: number; first_at: string }>();
+        let sansEquipe = 0;
+        for (const x of visitesDuJour) {
+          const cle = x.team_id || (x.assigned_user ? `personne:${x.assigned_user}` : '');
+          if (!cle) { sansEquipe += 1; continue; }
+          const g = groupes.get(cle) ?? { visits: 0, first_at: toLocalDateTime(x.start_at, fuseau).slice(11) };
+          g.visits += 1;
+          groupes.set(cle, g);
+        }
+        const jobVisits = visitesDuJour.length ? {
+          count: visitesDuJour.length,
+          teams: [...groupes].map(([cle, g]) => (cle.startsWith('personne:')
+            ? { person: nom(cle.slice('personne:'.length)), ...g }
+            : { team_id: cle, team: equipes.get(cle) || 'équipe supprimée', members: membresParEquipe.get(cle) || [], ...g })),
+          without_team: sansEquipe,
+        } : null;
+
+        const jour = `${JOURS_FR[jourSemaine(date)]} ${date}`;
+        const aLHoraire = new Set(auTravail.map((p) => p.user_id)).size;
+        const grilleVide = !auTravail.length && !absents.length && !demandes.length;
+        return {
+          date,
+          jour: JOURS_FR[jourSemaine(date)],
+          working_count: aLHoraire,
+          working: auTravail,
+          off: absents,
+          pending_requests: demandes,
+          ...(jobVisits ? { job_visits: jobVisits } : {}),
+          note: grilleVide
+            ? (jobVisits
+              ? `Aucun horaire d’équipe ni congé posé pour le ${jour} (la grille Horaire n’est pas remplie), mais ${jobVisits.count} visite(s) de job ce jour-là : `
+                + `ceux qui travaillent sont les équipes de job_visits${sansEquipe ? ` ; ${sansEquipe} visite(s) sans équipe assignée` : ''}.`
+              : `Aucun horaire d’équipe ni congé posé pour le ${jour}, et aucune visite de job ce jour-là.`)
+            : `Le ${jour} : ${aLHoraire} personne(s) à l’horaire, ${new Set(absents.map((x) => x.user_id)).size} absente(s)${demandes.length ? `, ${demandes.length} demande(s) de congé en attente` : ''}${jobVisits ? `, ${jobVisits.count} visite(s) de job` : ''}.`,
+        };
+      });
+
+      const equipeDemandee = teamId ? { team: equipes.get(teamId) } : {};
+      if (detail.length === 1) return { ...equipeDemandee, ...detail[0] };
+
+      const avecHoraire = detail.filter((d) => d.working_count > 0).length;
+      const avecVisites = detail.filter((d) => d.job_visits).length;
       return {
-        date,
-        jour: JOURS_FR[jourSemaine],
-        ...(teamId ? { team: equipes.get(teamId) } : {}),
-        working_count: new Set(auTravail.map((p) => p.user_id)).size,
-        working: auTravail,
-        off: absents,
-        pending_requests: demandes,
-        note: !auTravail.length && !absents.length && !demandes.length
-          ? `Aucun horaire d’équipe ni congé posé pour le ${jour} (Lume › Feuilles de temps › Horaire).`
-          : `Le ${jour} : ${new Set(auTravail.map((p) => p.user_id)).size} personne(s) à l’horaire, ${new Set(absents.map((x) => x.user_id)).size} absente(s)${demandes.length ? `, ${demandes.length} demande(s) de congé en attente` : ''}.`,
+        from: du,
+        to: au,
+        ...equipeDemandee,
+        // Une seule note, pour la période ; un jour sans rien tient en une ligne.
+        days: detail.map(({ note: _note, ...jour }) => (
+          jour.working.length || jour.off.length || jour.pending_requests.length || jour.job_visits
+            ? jour
+            : { date: jour.date, jour: jour.jour, nothing_scheduled: true })),
+        note: `Du ${du} au ${au} : ${avecHoraire} jour(s) avec un horaire d’équipe posé, ${avecVisites} jour(s) avec des visites de job.`
+          + (!avecHoraire && avecVisites ? ' La grille Horaire n’est pas remplie : ceux qui travaillent sont les équipes de job_visits de chaque jour.' : '')
+          + (!avecHoraire && !avecVisites ? ' Rien de posé sur la période.' : ''),
       };
     } catch (e) {
       return erreurLecture('get_team_schedule', e);
