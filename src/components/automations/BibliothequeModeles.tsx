@@ -18,7 +18,7 @@ import {
 import Modal from '../ui/Modal';
 import { cn } from '../../lib/utils';
 import { fetchModelesAutomatisation, utiliserModele } from '../../lib/automationBuilderApi';
-import type { AutomationRule } from '../../lib/automationRulesApi';
+import { getAutomationLanguage, type AutomationRule } from '../../lib/automationRulesApi';
 import { trouverAction, trouverDeclencheur } from '../../lib/automationCatalogue';
 import { ACTION_JOURNAL } from '../../lib/sequenceTypes';
 import {
@@ -329,6 +329,25 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
   const [filtresMobile, setFiltresMobile] = useState(false);
   const [apercu, setApercu] = useState<ModeleAutomatisation | null>(null);
   const [envoi, setEnvoi] = useState(false);
+  /*
+   * La langue dans laquelle le bureau écrit à ses clients (02-chaque-modele:263).
+   * L'aperçu montre les textes dans la langue de l'INTERFACE ; les clients, eux,
+   * recevront ceux de la langue du BUREAU. Quand les deux diffèrent, on le dit —
+   * sinon on valide un texte anglais pour des clients qui liront le français.
+   * `null` = pas (encore) lue : on n'affirme rien.
+   */
+  const [langueBureau, setLangueBureau] = useState<'fr' | 'en' | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let vivant = true;
+    getAutomationLanguage()
+      .then((l) => { if (vivant) setLangueBureau(l); })
+      .catch((e: unknown) => {
+        console.error('[bibliotheque-modeles] langue des messages illisible', e);
+        if (vivant) setLangueBureau(null);
+      });
+    return () => { vivant = false; };
+  }, [open]);
   const cleIdempotence = useRef('');
   /** Verrou SYNCHRONE : deux clics dans le même instant voient encore `envoi` à faux. */
   const enCours = useRef(false);
@@ -561,6 +580,13 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
           {fr ? m.nom.fr : m.nom.en}
         </h3>
         <p className="mt-1 text-[13px] text-text-secondary">{fr ? m.description.fr : m.description.en}</p>
+        {langueBureau && langueBureau !== (fr ? 'fr' : 'en') && etapes.some((e) => e.genre === 'action' && CANAL_ACTION[e.type] !== undefined) && (
+          <p className="mt-2 rounded-lg bg-surface-secondary px-2.5 py-2 text-[12px] leading-relaxed text-text-secondary">
+            {fr
+              ? 'Les textes ci-dessous sont montrés en français. Vos clients recevront la version anglaise : la langue des messages du bureau est l’anglais.'
+              : 'The texts below are shown in English. Your clients will receive the French version: the office message language is French.'}
+          </p>
+        )}
 
         <div className="mt-4 rounded-xl border border-outline p-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">{fr ? 'Déclencheur' : 'Trigger'}</p>
