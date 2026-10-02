@@ -17,12 +17,22 @@
        quelle ». Rien n'est retiré sans être écrit à l'écran ; rien de périmé
        ne reste sans que l'utilisateur l'ait choisi.
 
+   RIEN N'EST RETIRÉ SANS ÊTRE ÉCRIT DANS LA ZONE VISIBLE (remarque de la
+   session des specs, 2026-10-02). Le bloc est en bas de l'écran : sur une
+   fenêtre basse ou un texte long il passait sous le pli, « Enregistrer »
+   restait cliquable, « La retirer » était coché d'office — la version
+   disparaissait sans avoir été vue. Deux garanties :
+     · le bloc DÉFILE dans la vue quand il se déplie (ici, pour tous les
+       écrans qui l'emploient) ;
+     · `AvisRetraitAutreVersion`, à poser à côté du bouton « Enregistrer » :
+       « La version anglaise sera retirée. » et un lien « Voir » qui y mène.
+
    Ce composant ne porte que le cadre : l'intitulé, le pli, l'avis et les
    deux choix. Les champs de l'autre version (un champ de texto, ou l'objet
    et les lignes d'un courriel) sont ses enfants.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useId } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -80,7 +90,39 @@ export function phraseLangueDesMessages(
     : 'Your messages are sent in French: this is the text your clients receive.';
 }
 
+/** Amène un élément dans la vue (sans rien faire là où le navigateur ne sait pas défiler : tests, anciens moteurs). */
+function amenerDansLaVue(el: Element | null | undefined, bloc: ScrollLogicalPosition = 'nearest'): void {
+  if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: bloc, behavior: 'smooth' });
+}
+
+/**
+ * À côté du bouton « Enregistrer », tant que le retrait est coché : ce qui va
+ * être retiré est écrit LÀ OÙ L'ON CLIQUE, même si le bloc est sous le pli.
+ * « Voir » y mène. `idBloc` : l'`id` donné au `AutreVersionMessage` visé.
+ */
+export function AvisRetraitAutreVersion({ fr, langue, idBloc, className }: {
+  fr: boolean; langue: LangueMessage; idBloc: string; className?: string;
+}) {
+  return (
+    <span role="status" data-testid="avis-retrait-autre-version" className={cn('text-[11px] leading-tight text-amber-800 dark:text-amber-300', className)}>
+      {langue === 'en'
+        ? (fr ? 'La version anglaise sera retirée.' : 'The English version will be removed.')
+        : (fr ? 'La version française sera retirée.' : 'The French version will be removed.')}
+      {' '}
+      <button
+        type="button"
+        onClick={() => amenerDansLaVue(document.getElementById(idBloc), 'center')}
+        className="rounded font-medium underline underline-offset-2 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+      >
+        {fr ? 'Voir' : 'View'}
+      </button>
+    </span>
+  );
+}
+
 interface Props {
+  /** `id` du bloc, pour y mener depuis `AvisRetraitAutreVersion`. */
+  id?: string;
   /** Langue de l'INTERFACE. */
   fr: boolean;
   /** La langue de cette version secondaire. */
@@ -97,15 +139,24 @@ interface Props {
   children: React.ReactNode;
 }
 
-export default function AutreVersionMessage({ fr, langue, perimee, choix, onChoix, deplie, onDeplie, className, children }: Props) {
+export default function AutreVersionMessage({ id, fr, langue, perimee, choix, onChoix, deplie, onDeplie, className, children }: Props) {
   const idContenu = useId();
   const idRetirer = useId();
   const idGarder = useId();
   const nomChoix = useId();
   const ouvert = deplie || perimee;
+  // Le bloc qui se DÉPLIE vient dans la vue (jamais au premier rendu : ouvrir un écran ne le fait pas défiler).
+  const racine = useRef<HTMLDivElement>(null);
+  const dejaRendu = useRef(false);
+  useEffect(() => {
+    if (dejaRendu.current && ouvert) amenerDansLaVue(racine.current);
+    dejaRendu.current = true;
+  }, [ouvert]);
 
   return (
     <div
+      ref={racine}
+      id={id}
       data-testid="autre-version"
       className={cn(
         'rounded-md border text-[11px] leading-relaxed',

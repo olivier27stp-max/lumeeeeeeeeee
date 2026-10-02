@@ -933,3 +933,87 @@ describe('P2-12 — « Enregistrer » grisé dit toujours pourquoi, à côté du
     expect(raison()).toBe('');
   });
 });
+
+// ─── Remarque d'usage (a) de la session des specs : rien n'est retiré sans être écrit dans la zone visible ───
+
+describe('l’autre langue retirée « sous le pli » : ce qu’« Enregistrer » va retirer est écrit à côté du bouton, et le bloc vient dans la vue', () => {
+  const FR = 'Rabais de 10 % jusqu’au 1er mai.';
+  const EN = '10% off until May 1st.';
+  /** Le défilement que le navigateur ferait : jsdom n'en a pas, on note qui est amené dans la vue. */
+  let amenes: Element[] = [];
+  beforeEach(() => {
+    amenes = [];
+    (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView = function scrollIntoView(this: Element) { amenes.push(this); };
+  });
+  afterEach(() => { delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView; });
+  const bloc = () => conteneur.querySelector('[data-testid="autre-version"]');
+  /** L'avis, dans le PIED du panneau — la zone toujours visible, à côté des boutons. */
+  const avis = () => enregistrer().parentElement?.querySelector('[data-testid="avis-retrait-autre-version"]') ?? null;
+  const radio = (libelle: string) => Array.from(conteneur.querySelectorAll<HTMLInputElement>('input[type="radio"]'))
+    .find((r) => conteneur.querySelector(`label[for="${r.id}"]`)?.textContent?.trim() === libelle);
+
+  it('rien à retirer : aucun avis à côté d’« Enregistrer », et ouvrir le panneau ne fait rien défiler', async () => {
+    await monter('send_sms', { body: FR, body_en: EN });
+    expect(avis()).toBeNull();
+    expect(amenes).toEqual([]);
+  });
+
+  it('texte principal corrigé (« La retirer » coché d’office) : « La version anglaise sera retirée. » est écrit à côté d’« Enregistrer »', async () => {
+    await monter('send_sms', { body: FR, body_en: EN });
+    saisir(champ('Texte du message *'), 'Rabais de 20 % jusqu’au 1er juin.');
+    expect(avis()?.textContent).toBe('La version anglaise sera retirée. Voir');
+    expect(enregistrer().disabled).toBe(false);
+  });
+
+  it('… et le bloc qui vient de se déplier est amené dans la vue', async () => {
+    await monter('send_sms', { body: FR, body_en: EN });
+    saisir(champ('Texte du message *'), 'Rabais de 20 % jusqu’au 1er juin.');
+    await act(async () => { await Promise.resolve(); });
+    expect(amenes).toEqual([bloc()]);
+  });
+
+  it('« Voir » mène au bloc', async () => {
+    await monter('send_sms', { body: FR, body_en: EN });
+    saisir(champ('Texte du message *'), 'Rabais de 20 % jusqu’au 1er juin.');
+    await act(async () => { await Promise.resolve(); });
+    amenes = [];
+    cliquer(Array.from(avis()?.querySelectorAll('button') ?? []).find((b) => b.textContent === 'Voir'));
+    expect(amenes).toEqual([bloc()]);
+    expect(bloc()?.id).toBeTruthy();
+  });
+
+  it('« La garder telle quelle » : plus rien ne sera retiré, l’avis disparaît ; « La retirer » le remet', async () => {
+    await monter('send_sms', { body: FR, body_en: EN });
+    saisir(champ('Texte du message *'), 'Rabais de 20 % jusqu’au 1er juin.');
+    cliquer(radio('La garder telle quelle'));
+    expect(avis()).toBeNull();
+    cliquer(radio('La retirer (vos clients recevront le texte ci-dessus)'));
+    expect(avis()).not.toBeNull();
+  });
+
+  it('l’autre langue mise à jour à la main : rien ne sera retiré, pas d’avis', async () => {
+    await monter('send_sms', { body: FR, body_en: EN });
+    saisir(champ('Texte du message *'), 'Rabais de 20 % jusqu’au 1er juin.');
+    saisir(champ('Texte du message — version anglaise'), '20% off until June 1st.');
+    expect(avis()).toBeNull();
+  });
+
+  it('bureau qui envoie en anglais : « La version française sera retirée. »', async () => {
+    await monter('send_sms', { body: FR, body_en: EN }, { langueEnvoi: 'en' });
+    saisir(champ('Texte du message *'), '20% off until June 1st.');
+    expect(avis()?.textContent).toBe('La version française sera retirée. Voir');
+  });
+
+  it('un problème bloque l’enregistrement : c’est LUI qui est dit à côté du bouton (rien ne sera retiré tant qu’on ne peut pas enregistrer)', async () => {
+    await monter('send_sms', { body: FR, body_en: EN });
+    saisir(champ('Texte du message *'), '');
+    expect(enregistrer().disabled).toBe(true);
+    expect(avis()).toBeNull();
+  });
+
+  it('en anglais', async () => {
+    await monter('send_sms', { body: FR, body_en: EN }, { fr: false });
+    saisir(champ('Message text *'), '20 %');
+    expect(avis()?.textContent).toBe('The English version will be removed. View');
+  });
+});

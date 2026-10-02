@@ -871,6 +871,60 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     verifier(apres.endsWith(regle.id) && new URL(page.url()).pathname === '/automations', `depuis la liste, « Précédent » rouvre l’éditeur UNE fois, puis revient à la liste (${apres} → ${new URL(page.url()).pathname})`);
     await page.context().close();
   },
+
+  /** Remarque (a) — fenêtre basse (1024 × 768) : ce qu'« Enregistrer » va retirer est écrit dans la zone visible, et le bloc vient dans la vue. */
+  async pli() {
+    const b = await leBureau();
+    await admin.from('company_settings').update({ default_language: 'fr' }).eq('org_id', b.orgA);
+    const long = Array.from({ length: 14 }, (_, i) => `Ligne ${i + 1} du message, assez longue pour occuper la largeur du champ.`).join('\n');
+    const regle = await creerRegle({ trigger_event: 'quote.sent', steps: [action('send_email', {
+      subject: 'Votre devis', subject_en: 'Your quote', body: long, body_en: 'Hello,\nYour quote is ready.',
+    })] });
+    const page = await ouvrirPage();
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await ouvrirEditeur(page, regle.id);
+    await carte(page, 'Envoyer un courriel').click();
+    const p = panneau(page);
+    await p.waitFor();
+    /** L'élément est-il, au moins en partie, dans la fenêtre ET dans la zone défilante du panneau ? */
+    const dansLaVue = (selecteur: string) => page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      let visible = r.bottom > 0 && r.top < window.innerHeight && r.height > 0;
+      for (let parent = el.parentElement; visible && parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        if (!/(auto|scroll|hidden)/.test(style.overflowY)) continue;
+        const cadre = parent.getBoundingClientRect();
+        visible = r.bottom > cadre.top + 4 && r.top < cadre.bottom - 4;
+      }
+      return visible;
+    }, selecteur);
+    const BLOC = '[data-testid="autre-version"]';
+    const AVIS = '[data-testid="avis-retrait-autre-version"]';
+    verifier(!(await dansLaVue(BLOC)), 'à l’ouverture (1024 × 768, message long) : le bloc de la version anglaise est SOUS le pli');
+    await p.getByLabel('Objet *', { exact: true }).fill('Votre soumission');
+    await pause(900);
+    verifier(await dansLaVue(AVIS), '« La version anglaise sera retirée. » est écrit dans la zone visible, à côté d’« Enregistrer »');
+    verifier(((await page.locator(AVIS).textContent()) ?? '').startsWith('La version anglaise sera retirée.'), 'le texte de l’avis');
+    verifier(await dansLaVue(BLOC), 'le bloc qui vient de se déplier est venu dans la vue');
+    // On remonte au début du panneau : le bloc repasse sous le pli, l'avis reste à côté du bouton, « Voir » y ramène.
+    await p.getByLabel('Objet *', { exact: true }).scrollIntoViewIfNeeded();
+    await page.evaluate(() => { document.querySelectorAll('aside').forEach((a) => a.querySelectorAll('*').forEach((el) => { if (el.scrollTop > 0) el.scrollTop = 0; })); });
+    await pause(400);
+    verifier(!(await dansLaVue(BLOC)) && await dansLaVue(AVIS), 'remonté en haut : le bloc est de nouveau sous le pli, l’avis toujours visible');
+    await page.locator(AVIS).getByRole('button', { name: 'Voir' }).click();
+    await pause(900);
+    verifier(await dansLaVue(BLOC), '« Voir » ramène le bloc dans la vue');
+    await p.getByLabel('La garder telle quelle').check();
+    verifier(await page.locator(AVIS).count() === 0, '« La garder telle quelle » : l’avis disparaît');
+    await p.getByLabel('La retirer (vos clients recevront le texte ci-dessus)').check();
+    await enregistrer(page).click();
+    await pause(6000);
+    const config = ((await etapes(regle.id))[0]?.action?.config ?? {}) as Record<string, string>;
+    verifier(config.subject === 'Votre soumission' && !('subject_en' in config) && !('body_en' in config), `enregistré : la version anglaise entière est retirée (${Object.keys(config).join(', ')})`);
+    await page.context().close();
+  },
 };
 
 const demandes = process.argv.slice(2);

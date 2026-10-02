@@ -50,7 +50,7 @@ import type { ChampPerso, ObjetChamp } from '../../lib/champs/types';
 import { estCorpsHtml, htmlVersTexte, texteVersHtml, variablesInconnues, variableLisible } from '../../lib/emailBodyText';
 import { confirmer } from '../ui/ConfirmDialog';
 import { analyserConditions, conditionsConservees, texteDesConditions } from '../../lib/conditionsEtapeSi';
-import AutreVersionMessage, { type ChoixAutreVersion } from './AutreVersionMessage';
+import AutreVersionMessage, { AvisRetraitAutreVersion, type ChoixAutreVersion } from './AutreVersionMessage';
 
 /** Les conditions d'une étape « si », en texte modifiable (règles : src/lib/conditionsEtapeSi.ts). */
 const texteSi = (etape: Etape, fr: boolean): string => (etape.type === 'si' ? texteDesConditions(etape.conditions, fr) : '');
@@ -893,6 +893,7 @@ export default function PanneauEtape({
                     les mêmes mots, que la liste et l'éditeur de courriel. */}
                 {modele && modele.cle !== 'update_custom_field' && versionsLangue.length > 0 && (
                   <AutreVersionMessage
+                    id={`${ids}-autre-version`}
                     fr={fr}
                     langue={versionsLangue[0].autreEstAnglais ? 'en' : 'fr'}
                     perimee={autrePerimee}
@@ -1208,6 +1209,16 @@ export default function PanneauEtape({
               ? (fr ? 'Choisissez d’abord quelle version garder.' : 'First choose which version to keep.')
               : problemes[0]}
           </span>
+        )}
+        {/* Ce qu'« Enregistrer » va retirer est écrit ICI, à côté du bouton : le bloc
+            de l'autre langue peut être sous le pli (fenêtre basse, texte long). */}
+        {!conflit && problemes.length === 0 && autrePerimee && choixAutre === 'retirer' && versionsLangue.length > 0 && (
+          <AvisRetraitAutreVersion
+            fr={fr}
+            langue={versionsLangue[0].autreEstAnglais ? 'en' : 'fr'}
+            idBloc={`${ids}-autre-version`}
+            className="max-w-[55%] text-right"
+          />
         )}
         <button
           type="button"
