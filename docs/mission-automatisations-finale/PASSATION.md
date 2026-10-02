@@ -128,7 +128,8 @@ depuis `origin/main`.
 
 ## 4. Où est le travail — l'atelier `D:/lume-final/`
 
-Tout l'état de la mission est sur le disque `D:` du PC de Rafba, hors du dépôt principal :
+Sur le PC de Rafba, l'atelier est dans `D:/lume-final/`, hors du dépôt. **Une copie est poussée** dans la branche
+`mission/automatisations-finale-passation`, dossier `docs/mission-automatisations-finale/` (sauf `sorties/` et `env.reel`) :
 
 | Chemin | Contenu |
 |---|---|
@@ -171,9 +172,9 @@ langue = toujours une carte ; commit suivant : Lumi n'appelle plus les routes d'
 
 | Branche (arbre) | Tête | Contenu | Note |
 |---|---|---|---|
-| `mission/auto-finale-b` (`wt-b`) — agent M, moteur | abcb4c05 | 40 commits : B-01 à B-24 (revalidation avant envoi, fiches à la corbeille, rendez-vous déplacé, activation non rétroactive, heures d'envoi, étalement des envois en masse, modification d'une automatisation active, fusion de fiches, rattrapage « Date atteinte », surveillance du tick…), E-11 (STOP), A-21 (courriel en texte brut), plafond = « ignoré », **B-20 retrait de l'ancien système `automations` du planificateur**, preuve des deux langues sur le vrai moteur | `notes/M-corrections.md` ; 5 migrations PROPOSÉES `notes/M-migrations-proposees/` |
-| `mission/auto-finale-d` (`wt-d`) — agent S, statistiques/historique/journaux + lot « liste » | 80a9f758 | 54 commits : statistiques calculées en base, historique des modifications, journaux paginés, défauts de la liste | `notes/S-corrections.md` ; 3 migrations PROPOSÉES `notes/S-migrations-proposees/`. **Les deux patchs de T pour `Automations.tsx` / `AutomationsApercu.tsx` sont-ils posés ? [À V]** (les 4 tests `tests/automations-finale/t/a-reporter-vue-ensemble` étaient rouges à 13:00) |
-| `mission/auto-finale-p` (`wt-p`) — agent P, phase 1 | e096f5ba | 12 commits, **fichiers neufs seulement** : cœur du ciblage + schéma, `ciblageOk` + compteur « Touche X clients », garde anti-doublon, avertissement de doublon, catalogue unique de variables, phrase-résumé, contrôles de publication, section « Qui est ciblé », palette « Insérer un champ », routes ciblage / conflits / « Tester avec un client » (non montées) | `notes/P-branchements.md` = la phase 2 : où brancher tout ça dans le moteur, l'éditeur, la liste, la validation, Lumi |
+| `mission/auto-finale-b` (`wt-b`) — agent M, moteur | 0e67399f (dont 1 `wip`) | 40 commits : B-01 à B-24 (revalidation avant envoi, fiches à la corbeille, rendez-vous déplacé, activation non rétroactive, heures d'envoi, étalement des envois en masse, modification d'une automatisation active, fusion de fiches, rattrapage « Date atteinte », surveillance du tick…), E-11 (STOP), A-21 (courriel en texte brut), plafond = « ignoré », **B-20 retrait de l'ancien système `automations` du planificateur**, preuve des deux langues sur le vrai moteur | `notes/M-corrections.md` ; 5 migrations PROPOSÉES `notes/M-migrations-proposees/` |
+| `mission/auto-finale-d` (`wt-d`) — agent S, statistiques/historique/journaux + lot « liste » | 86b64f89 (dont 1 `wip`) | 54 commits : statistiques calculées en base, historique des modifications, journaux paginés, défauts de la liste | `notes/S-corrections.md` ; 3 migrations PROPOSÉES `notes/S-migrations-proposees/`. **Les deux patchs de T pour `Automations.tsx` / `AutomationsApercu.tsx` sont-ils posés ? [À V]** (les 4 tests `tests/automations-finale/t/a-reporter-vue-ensemble` étaient rouges à 13:00) |
+| `mission/auto-finale-p` (`wt-p`) — agent P, phase 1 | 0a4e658b (dont 1 `wip`) | 12 commits, **fichiers neufs seulement** : cœur du ciblage + schéma, `ciblageOk` + compteur « Touche X clients », garde anti-doublon, avertissement de doublon, catalogue unique de variables, phrase-résumé, contrôles de publication, section « Qui est ciblé », palette « Insérer un champ », routes ciblage / conflits / « Tester avec un client » (non montées) | `notes/P-branchements.md` = la phase 2 : où brancher tout ça dans le moteur, l'éditeur, la liste, la validation, Lumi |
 
 ### 5.3 Ce qui n'est PAS fait
 - Phase 2 de P (branchements) ; plusieurs déclencheurs par automatisation (B-17) ; validation à 30 étapes vs moteur à
@@ -196,8 +197,8 @@ préréglage retiré « Estimate Follow-Up (3 days) » sur `estimate.sent` (jama
 Coquin lavage : 40 à plat, 40/40 convertibles, **110 envois en attente** sur ces règles. Vision Lavage : 39 à plat,
 38/39. Détail : `D:/lume-final/sorties/unification-prod/unification-essai.md` (contient des messages
 d'entreprises : ne pas commiter). Avant toute conversion, une preuve était demandée à M : règle à plat avec envoi en
-attente, convertie → l'envoi part à la même heure, même texte, une fois. **Ce test existe, non commité, jamais
-lancé** (§ 7).
+attente, convertie → l'envoi part à la même heure, même texte, une fois. **Ce test est écrit et poussé (commit `wip`
+de `mission/auto-finale-b`), mais n'a jamais été lancé** (§ 7).
 
 ### 5.5 Résultats de tests connus
 | Quand / où | Résultat | Statut |
@@ -221,9 +222,9 @@ lancé** (§ 7).
 | Arbre | Travail laissé en cours — commité depuis en `wip(…)` et poussé, NON vérifié [V] | Ce que l'agent faisait [R, dernière phrase de l'agent] |
 |---|---|---|
 | `wt-u` | `src/components/automations/PanneauEtape.tsx`, `tests/automations-finale/u/panneau-etape.test.tsx` (+73 lignes) | un mineur de l'éditeur ; « je mets à jour le fichier de notes » |
-| `wt-b` | `tests/automations-finale/b/m-30-conversion-a-plat.test.ts` (non suivi) | **la preuve de conversion** : « premier passage, pour voir ce que fait le moteur aujourd'hui » — jamais lancée |
-| `wt-d` | `tests/automations-finale/d/ui/20-ecrans-contre-base.preuve.ts`, `30-volume-plafonds.preuve.ts` (modifiés), `97-mesure-appels.preuve.ts` (non suivi) | preuves au navigateur des écrans de statistiques |
-| `wt-p` | `scripts/qa/finale/p/`, `tsconfig.p.json` (non suivis) | « un script de mesure qui fait tourner le compteur sous une vraie session de propriétaire » |
+| `wt-b` | `tests/automations-finale/b/m-30-conversion-a-plat.test.ts` | **la preuve de conversion** : « premier passage, pour voir ce que fait le moteur aujourd'hui » — jamais lancée |
+| `wt-d` | `tests/automations-finale/d/ui/20-ecrans-contre-base.preuve.ts`, `30-volume-plafonds.preuve.ts` (modifiés), `97-mesure-appels.preuve.ts` | preuves au navigateur des écrans de statistiques |
+| `wt-p` | `scripts/qa/finale/p/` (le `tsconfig.p.json` de travail de l'agent n'est pas commité, volontairement) | « un script de mesure qui fait tourner le compteur sous une vraie session de propriétaire » |
 
 - **Processus** : piles Docker `lumefinal-*` (la mienne) et `lumeautoe2e-*` (la session des specs) actives [V] ; le
   proxy local 44921 s'est arrêté (limite de temps) — à relancer : `node D:/lume-final/outils/proxy.mjs` en arrière-plan.
@@ -295,7 +296,7 @@ messages d'entreprises) ; `env.reel` n'est PAS poussé (secret).
 
 | Session | Rôle | À savoir |
 |---|---|---|
-| lumeeeeeeeeee-9a (ex-« fd ») | tenait les specs Playwright `e2e/automations/**` et la pile `lumeautoe2e` | **arrêtée à 13:20 UTC**, a écrit sa propre passation : `C:/Users/Rafba/lumeeeeeeeeee/PASSATION_AUDIT_AUTOMATISATIONS.md` (à lire avec celle-ci). Elle n'a PAS revérifié 76afbb79 ni le lot « modèles ». Sa pile `lumeautoe2e-*` tourne encore (`bash scripts/qa/automations-e2e/pile.sh arreter` pour l'arrêter, rien n'est supprimé). `e2e/automations/**` reste réservé à la session de tests qui reprendra |
+| lumeeeeeeeeee-9a (ex-« fd ») | tenait les specs Playwright `e2e/automations/**` et la pile `lumeautoe2e` | **arrêtée à 13:20 UTC**, a écrit sa propre passation, copiée dans la branche de passation sous `PASSATION_AUDIT_AUTOMATISATIONS_session-tests.md` (à lire avec celle-ci). Elle n'a PAS revérifié 76afbb79 ni le lot « modèles ». Sa pile `lumeautoe2e-*` tourne encore (`bash scripts/qa/automations-e2e/pile.sh arreter` pour l'arrêter, rien n'est supprimé). `e2e/automations/**` reste réservé à la session de tests qui reprendra |
 | lumeeeeeeeeee-86 (ex-« a1 ») | outils et cartes de Lumi | fusionne sur `main` (#904, #905) ; prévient avant chaque fusion |
 | lumeeeeeeeeee-90 (ex-« f1 ») | mission fiabilité de Lumi | passes en prod dans « ZZ QA Champs » |
 
@@ -306,12 +307,14 @@ prod à la fois**, et une seule session qui touche le schéma.
 
 ## 10. Comment reprendre, dans l'ordre
 
-1. Lire `CLAUDE.md`, `D:/lume-final/MISSION.md`, la fin de `D:/lume-final/JOURNAL.md`, puis cette passation.
+1. Lire `CLAUDE.md`, puis dans la branche de passation : cette passation, `MISSION.md`, la fin de `JOURNAL.md`, et
+   `PASSATION_AUDIT_AUTOMATISATIONS_session-tests.md` (passation de la session des tests e2e).
 2. Récupérer les branches (§ 7) ; relire les quatre commits `wip`.
 3. Monter une pile locale (`bash scripts/qa/automations-e2e/pile.sh`, sans copie de la prod depuis #900) ; lancer la suite complète sur l'intégration (`npx vitest run
    --maxWorkers=2`) et `npm run lint` pour avoir un point de départ vérifié.
 4. Intégrer M (`wt-b`) puis S (`wt-d`) dans `mission/automatisations-finale`, un à la fois, suite verte après chacun.
-   S : vérifier les patchs de T (tests `t/a-reporter-vue-ensemble`). Prévenir la session 9a avec la nouvelle tête.
+   S : vérifier les patchs de T (tests `t/a-reporter-vue-ensemble`). Puis rejouer les specs e2e de
+   `e2e/automations/` sur la nouvelle tête (la session qui les tenait s'est arrêtée).
 5. Lancer la preuve de conversion `m-30-conversion-a-plat` ; si verte, montrer l'essai à blanc à Rafba et demander
    l'accord pour les vraies entreprises.
 6. Migrations M-01..M-05, S-01..S-03 : appliquer les retouches de `notes/REVUE-migrations.md`, les copier dans
