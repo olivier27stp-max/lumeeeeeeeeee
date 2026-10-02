@@ -162,3 +162,51 @@ describe('E-64 — le texto qu’on écrit dans les Réglages annonce son nombre
     expect(page).toContain('{ruleDraft.length}/320');
   });
 });
+
+describe('03-texto:345 (même racine) — bureau dont les messages partent en ANGLAIS : Réglages › Messagerie montre et modifie le texte qui part', () => {
+  const FR = 'Bonjour, votre rendez-vous est confirmé.';
+  const EN = 'Hi, your appointment is confirmed.';
+  const deplier = () => cliquer(boutons().find((b) => (b.textContent ?? '').includes('Confirmation')));
+
+  it('bureau en anglais : la ligne et le champ montrent l’anglais, « Enregistrer » écrit `body_en`, le français ne bouge pas', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'en');
+    await ouvrir();
+    await jusqua(() => texteEcran().includes(EN));
+    expect(texteEcran()).not.toContain(FR);
+    await deplier();
+    expect(champ('Texte du SMS — Confirmation').value).toBe(EN);
+    expect(texteEcran()).toContain('Version anglaise — celle qui part : la langue des messages du bureau est l’anglais.');
+    await saisir(champ('Texte du SMS — Confirmation'), 'Hi, see you tomorrow.');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => base.ecritures.length === 1);
+    expect(enBase('r1').actions).toEqual([sms(FR, { body_en: 'Hi, see you tomorrow.' })]);
+    await jusqua(() => texteEcran().includes('Hi, see you tomorrow.'));
+  });
+
+  it('bureau en français, texto qui porte une version anglaise : on modifie le français, et l’écran dit que l’anglais reste à mettre à jour', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR, { body_en: EN })] })], 'fr');
+    await ouvrir();
+    await deplier();
+    expect(champ('Texte du SMS — Confirmation').value).toBe(FR);
+    expect(texteEcran()).toContain('Ce texto a aussi une version anglaise, que cet écran ne modifie pas : mettez-la à jour dans Automatisations.');
+    await saisir(champ('Texte du SMS — Confirmation'), 'Bonjour, à demain.');
+    await cliquer(bouton('Enregistrer'));
+    await jusqua(() => base.ecritures.length === 1);
+    expect(enBase('r1').actions).toEqual([sms('Bonjour, à demain.', { body_en: EN })]);
+  });
+
+  it('bureau en anglais, texto sans version anglaise : le français, et l’écran dit que c’est lui qui part', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR)] })], 'en');
+    await ouvrir();
+    await deplier();
+    expect(champ('Texte du SMS — Confirmation').value).toBe(FR);
+    expect(texteEcran()).toContain('ce texto n’a pas de version anglaise : c’est ce texte français qui part.');
+  });
+
+  it('bureau en français, texto sans version anglaise : rien de plus à l’écran', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms(FR)] })], 'fr');
+    await ouvrir();
+    await deplier();
+    expect(texteEcran()).not.toContain('version anglaise');
+  });
+});

@@ -33,7 +33,8 @@ import { getCurrentOrgId } from '../lib/orgApi';
 import {
   getAutomationRules,
   toggleAutomationRule,
-  updateRuleSmsBody,
+  updateRuleMessage,
+  getAutomationLanguage,
   texteDuMessage,
   avecTexteDuMessage,
   messagesDeRegle,
@@ -484,18 +485,36 @@ export function AutomationSmsSection({ isFr }: { isFr: boolean }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [draftBody, setDraftBody] = useState('');
   const [savingBody, setSavingBody] = useState(false);
+  /**
+   * La langue dans laquelle le bureau écrit à ses clients. Un texto peut porter
+   * une version anglaise (`body_en`), qui part À LA PLACE du français quand
+   * cette langue est l'anglais : l'écran montrait et modifiait le français, que
+   * les clients d'un bureau anglophone ne reçoivent pas (même racine que
+   * 03-texto:345). `null` = pas lue : on montre le français, sans rien affirmer.
+   */
+  const [langueBureau, setLangueBureau] = useState<'fr' | 'en' | null>(null);
 
   useEffect(() => {
     getAutomationRules()
       .then((all) => setRules(all.filter((r) => !r.deleted_at && messagesDeRegle(r, 'send_sms').length > 0)))
       .catch(() => setRules([]))
       .finally(() => setRulesLoading(false));
+    getAutomationLanguage()
+      .then(setLangueBureau)
+      .catch((e: unknown) => { console.error('[SettingsMessaging] langue des messages illisible', e); });
   }, []);
 
   /** Les textos de la règle, dans l'ordre : ceux du parcours quand elle en a un (le moteur ne lit alors plus `actions`). */
   const textos = (r: AutomationRule) => messagesDeRegle(r, 'send_sms');
-  // Le texte qui PART : le premier texto de la règle.
-  const smsBody = (r: AutomationRule) => texteDuMessage(r, 'send_sms');
+  /** Ce texto porte-t-il une version anglaise ? */
+  const aVersionAnglaise = (r: AutomationRule) => {
+    const en = textos(r)[0]?.config.body_en;
+    return typeof en === 'string' && en.trim() !== '';
+  };
+  /** La version qu'on montre et qu'on écrit : celle qui PART. */
+  const versionQuiPart = (r: AutomationRule): 'fr' | 'en' => (langueBureau === 'en' && aVersionAnglaise(r) ? 'en' : 'fr');
+  // Le texte qui PART : le premier texto de la règle, dans la langue du bureau.
+  const smsBody = (r: AutomationRule) => texteDuMessage(r, 'send_sms', versionQuiPart(r));
 
   async function handleToggle(rule: AutomationRule) {
     const next = !rule.is_active;
@@ -510,8 +529,9 @@ export function AutomationSmsSection({ isFr }: { isFr: boolean }) {
   async function handleSaveBody(rule: AutomationRule) {
     setSavingBody(true);
     try {
-      await updateRuleSmsBody(rule.id, draftBody.trim());
-      setRules((prev) => prev.map((r) => (r.id === rule.id ? avecTexteDuMessage(r, 'send_sms', draftBody.trim()) : r)));
+      const version = versionQuiPart(rule);
+      await updateRuleMessage(rule.id, 'send_sms', draftBody.trim(), undefined, { langue: version });
+      setRules((prev) => prev.map((r) => (r.id === rule.id ? avecTexteDuMessage(r, 'send_sms', draftBody.trim(), version === 'en' ? 'body_en' : 'body') : r)));
       setOpenId(null);
     } catch (e: unknown) {
       // L'échec était muet (aucun catch) : le texte semblait enregistré.
@@ -634,6 +654,22 @@ export function AutomationSmsSection({ isFr }: { isFr: boolean }) {
                           maxLength={320}
                           className="glass-input w-full resize-none text-[13px]"
                         />
+                        {/* Quelle version on modifie, et ce que devient l'autre : jamais périmée en silence. */}
+                        {(aVersionAnglaise(rule) || langueBureau === 'en') && (
+                          <p className="text-[11px] text-text-secondary leading-relaxed">
+                            {!aVersionAnglaise(rule)
+                              ? (isFr
+                                ? 'La langue des messages du bureau est l’anglais, mais ce texto n’a pas de version anglaise : c’est ce texte français qui part.'
+                                : 'The office message language is English, but this text has no English version: this French text is the one sent.')
+                              : versionQuiPart(rule) === 'en'
+                                ? (isFr
+                                  ? 'Version anglaise — celle qui part : la langue des messages du bureau est l’anglais. La version française se modifie dans Automatisations.'
+                                  : 'English version — the one sent: the office message language is English. The French version is edited in Automations.')
+                                : (isFr
+                                  ? 'Version française — celle qui part. Ce texto a aussi une version anglaise, que cet écran ne modifie pas : mettez-la à jour dans Automatisations.'
+                                  : 'French version — the one sent. This text also has an English version, which this screen does not change: update it in Automations.')}
+                          </p>
+                        )}
                         <p className="text-[10.5px] text-text-tertiary leading-relaxed">
                           {isFr ? 'Variables disponibles : ' : 'Available variables: '}
                           <span className="font-mono">{SMS_VARIABLES}</span>
