@@ -26,7 +26,7 @@ function routes(fichier: string): string[] {
 }
 
 describe('S10 — toute route d’automatisation déclare son droit', () => {
-  const fichiers = ['automation-rules.ts', 'automation-events.ts', 'automation-publication.ts', 'automation-stats.ts', 'automation-test.ts', 'reservation.ts'];
+  const fichiers = ['automation-rules.ts', 'automation-messages.ts', 'automation-events.ts', 'automation-publication.ts', 'automation-stats.ts', 'automation-test.ts', 'reservation.ts'];
   const toutes = fichiers.flatMap(routes);
 
   it('les routeurs déclarent bien des routes (sinon le test ne prouverait rien)', () => {
