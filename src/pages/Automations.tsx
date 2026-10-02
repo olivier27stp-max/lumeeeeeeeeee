@@ -2672,6 +2672,18 @@ export default function Automations() {
                                         {fr ? 'Voir l’historique, client par client' : 'See the history, client by client'}
                                       </Link>
                                     </p>
+                                    {/* La phrase renvoyait à un onglet sans y mener (triage `05-lignes:409`) :
+                                        « Journaux » est un lien, vers les journaux de CETTE automatisation. */}
+                                    <p>
+                                      {fr ? 'Le détail est dans l’onglet « ' : 'The detail is in the “'}
+                                      <Link
+                                        to={`/automations/activite?regle=${rule.id}&vue=journaux`}
+                                        className="font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        {fr ? 'Journaux' : 'Logs'}
+                                      </Link>
+                                      {fr ? ' » de l’automatisation.' : '” tab of the automation.'}
+                                    </p>
                                   </div>
                                 );
                               })()}

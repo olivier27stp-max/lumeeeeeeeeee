@@ -940,6 +940,31 @@ describe('05-lignes:148 — l’avertissement d’avis mène aux réglages d’a
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('05-lignes:409 — le panneau « Stats » mène aux Journaux par un lien', () => {
+  it('« Le détail est dans l’onglet « Journaux » de l’automatisation. » : « Journaux » est un lien vers ses journaux', async () => {
+    const r = regle();
+    vi.mocked(api.getAutomationRules).mockResolvedValue([r]);
+    await rendre();
+    await cliquer(bouton(new RegExp(`^Statistiques de ${r.name}$`)));
+    const phrase = Array.from(conteneur.querySelectorAll('tbody p')).find((p) => /Le détail est dans/.test(p.textContent || ''));
+    expect(phrase?.textContent).toBe('Le détail est dans l’onglet « Journaux » de l’automatisation.');
+    const lien = phrase?.querySelector('a');
+    expect(lien?.textContent).toBe('Journaux');
+    expect(lien?.getAttribute('href')).toBe(`/automations/activite?regle=${r.id}&vue=journaux`);
+    await cliquer(lien);
+    expect(adresse).toBe(`/automations/activite?regle=${r.id}&vue=journaux`);
+  });
+
+  it('en anglais : « Logs »', async () => {
+    await rendre('en');
+    await cliquer(bouton(/^Stats for Relance 1$/));
+    const phrase = Array.from(conteneur.querySelectorAll('tbody p')).find((p) => /The detail is in/.test(p.textContent || ''));
+    expect(phrase?.textContent).toBe('The detail is in the “Logs” tab of the automation.');
+    expect(phrase?.querySelector('a')?.textContent).toBe('Logs');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
