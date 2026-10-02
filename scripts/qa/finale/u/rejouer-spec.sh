@@ -21,7 +21,7 @@ case "$URL" in
 esac
 SORTIE="D:/lume-final/sorties/e2e-u/derniere-relance.txt"
 mkdir -p "$(dirname "$SORTIE")"
-cd D:/lume-uiaudit/wt-lumi || exit 2
+cd "${U_SPECS:-D:/lume-uiaudit/wt-verif}" || exit 2
 VITE_SUPABASE_URL="${URL/localhost/127.0.0.1}" \
 VITE_SUPABASE_ANON_KEY="$(lire VITE_SUPABASE_ANON_KEY)" \
 SUPABASE_SERVICE_ROLE_KEY="$(lire SUPABASE_SERVICE_ROLE_KEY)" \

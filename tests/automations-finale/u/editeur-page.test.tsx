@@ -1963,3 +1963,127 @@ describe('Lumi ↔ éditeur — ce que la route de génération répond est appl
     });
   });
 });
+
+// ─── Régression de 6ce9a1cb (EDT-166), relevée par la session des specs — editeur/11:125 ───
+
+describe('EDT-166 (régression) — l’entrée d’historique de la garde s’en va avec elle : UN seul « Précédent » ramène à la liste', () => {
+  const marque = () => (window.history.state as Record<string, unknown> | null)?.lumeGardeEditeur === true;
+  const ici = () => (window.history.state as { page?: string } | null)?.page;
+  /** Le « Précédent » du navigateur. */
+  const precedent = async () => {
+    await act(async () => {
+      window.history.back();
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    await attendre();
+  };
+  /** Laisse aboutir un recul que la page a lancé elle-même. */
+  const laisserAboutir = async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+    await attendre();
+  };
+  async function saisirDansLePanneau(texte: string) {
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    saisir(panneauEtape()?.querySelector('textarea'), texte);
+    await attendre(2);
+  }
+  async function enregistrerLePanneau() {
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    await laisserAboutir();
+  }
+
+  // Un vrai chemin d'historique : la liste, puis l'éditeur ouvert depuis elle.
+  beforeEach(() => {
+    window.history.pushState({ page: 'liste' }, '');
+    window.history.pushState({ page: 'editeur' }, '');
+  });
+
+  it('saisie dans un panneau → « Enregistrer » du panneau → UN « Précédent » : on est revenu à la liste', async () => {
+    await ouvrir();
+    await saisirDansLePanneau('Texto réécrit');
+    // La garde est levée : une entrée en double, par-dessus celle de l'éditeur.
+    expect(marque()).toBe(true);
+    expect(ici()).toBe('editeur');
+    await enregistrerLePanneau();
+    // Plus rien à perdre : l'entrée en double est retirée — on est sur l'entrée de l'éditeur, sans marque.
+    expect(marque()).toBe(false);
+    expect(ici()).toBe('editeur');
+    expect(confirmerMock).not.toHaveBeenCalled();
+    await precedent();
+    expect(ici()).toBe('liste');
+    expect(confirmerMock).not.toHaveBeenCalled();
+  });
+
+  it('une étape ajoutée par le tiroir puis enregistrée : même chose', async () => {
+    await ouvrir();
+    await ajouterParLeTiroir('Envoyer un texto');
+    expect(marque()).toBe(true);
+    saisir(panneauEtape()?.querySelector('textarea'), 'Bonjour [client_first_name]');
+    await attendre(2);
+    await enregistrerLePanneau();
+    expect(marque()).toBe(false);
+    await precedent();
+    expect(ici()).toBe('liste');
+  });
+
+  it('une étape incomplète, puis complétée : même chose', async () => {
+    etat.regles = [regle({
+      steps: [
+        { id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Bonjour' } }, suivant: 'e2' },
+        { id: 'e2', type: 'action', nom: null, action: { type: 'create_task', config: { title: '' } }, suivant: null },
+      ],
+    })];
+    await ouvrir();
+    cliquer(container.querySelector('header button .truncate')?.closest('button'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v2');
+    await attendre();
+    expect(marque()).toBe(true);
+    cliquer(carteEtape('Créer une tâche'));
+    await attendre(2);
+    saisir(panneauEtape()?.querySelector('input[type="text"]:not([id$="-nom"])'), 'Rappeler [client_name]');
+    await attendre(2);
+    await enregistrerLePanneau();
+    expect(marque()).toBe(false);
+    await precedent();
+    expect(ici()).toBe('liste');
+    expect(confirmerMock).not.toHaveBeenCalled();
+  });
+
+  it('la garde retient toujours tant qu’il reste quelque chose à perdre : « Précédent » pose la question, « Annuler » garde l’éditeur', async () => {
+    await ouvrir();
+    await saisirDansLePanneau('En cours de frappe');
+    confirmerMock.mockImplementationOnce(async () => false);
+    await precedent();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect((confirmerMock.mock.calls[0][0] as { title: string }).title).toBe('Quitter sans enregistrer ?');
+    // Refusé : on est toujours dans l'éditeur, sur l'entrée de la garde, la saisie intacte.
+    expect(marque()).toBe(true);
+    expect(ici()).toBe('editeur');
+    expect(panneauEtape()?.querySelector('textarea')?.value).toBe('En cours de frappe');
+  });
+
+  it('… et « Quitter » ramène à la liste', async () => {
+    await ouvrir();
+    await saisirDansLePanneau('En cours de frappe');
+    await precedent();
+    await laisserAboutir();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(ici()).toBe('liste');
+  });
+
+  it('enregistrer, puis retaper aussitôt (avant que le retrait ait abouti) : la garde est de nouveau là, et retient', async () => {
+    await ouvrir();
+    await saisirDansLePanneau('Texto réécrit');
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    // Sans attendre : une nouvelle saisie dans la foulée.
+    await saisirDansLePanneau('Deuxième saisie');
+    await laisserAboutir();
+    expect(marque()).toBe(true);
+    confirmerMock.mockImplementationOnce(async () => false);
+    await precedent();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(ici()).toBe('editeur');
+  });
+});

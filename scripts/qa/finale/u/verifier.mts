@@ -807,6 +807,70 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     verifier((await p.getByLabel('Conditions').inputValue()).split('\n').length === 3, 'relu après rechargement : trois lignes');
     await page.context().close();
   },
+
+  /** Régression de 6ce9a1cb (editeur/11:125) — saisie, « Enregistrer » du panneau, puis UN seul « Précédent » : retour à la liste. */
+  async e166b() {
+    const regle = await creerRegle({ trigger_event: 'quote.sent', steps: [action('send_sms', { body: 'Texte d’origine' })] });
+    const page = await ouvrirPage();
+    // Un vrai chemin : la liste, puis l'éditeur ouvert depuis elle.
+    await page.goto(`${BASE}/automations`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Mes automatisations' }).waitFor({ timeout: 120_000 });
+    // Ouvrir DEPUIS la liste, sans recharger la page (comme un clic sur une ligne) : c'est ce chemin-là
+    // que « Précédent » remonte. `page.goto` chargerait un autre document, et le retour quitterait l'application.
+    const ouvrirDepuisLaListe = async () => {
+      await page.evaluate((chemin) => {
+        window.history.pushState({}, '', chemin);
+        window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+      }, `/automations/${regle.id}`);
+      await page.getByRole('button', { name: /^(Quand|When)/ }).first().waitFor({ timeout: 120_000 });
+    };
+    await ouvrirDepuisLaListe();
+    const longueurAvant = await page.evaluate(() => window.history.length);
+    await carte(page, 'Envoyer un texto').click();
+    const p = panneau(page);
+    await p.getByLabel('Texte du message *', { exact: true }).fill('Texte réécrit avant de partir');
+    await pause(300);
+    const pendant = await page.evaluate(() => ({ n: window.history.length, garde: (window.history.state as Record<string, unknown> | null)?.lumeGardeEditeur === true }));
+    verifier(pendant.garde && pendant.n === longueurAvant + 1, `saisie en cours : la garde pose UNE entrée d’historique (${longueurAvant} → ${pendant.n}, sur l’entrée de la garde : ${pendant.garde})`);
+    await enregistrer(page).click();
+    await p.waitFor({ state: 'hidden' });
+    await pause(500);
+    verifier(await page.evaluate(() => (window.history.state as Record<string, unknown> | null)?.lumeGardeEditeur !== true), 'panneau enregistré : on n’est plus sur l’entrée de la garde');
+    await page.goBack();
+    await page.waitForURL((url) => url.pathname === '/automations', { timeout: 15_000 }).catch(() => undefined);
+    verifier(new URL(page.url()).pathname === '/automations', `UN seul « Précédent » ramène à la liste (${new URL(page.url()).pathname})`);
+    await pause(4000);
+    const enBase = (await etapes(regle.id))[0]?.action?.config?.body;
+    verifier(enBase === 'Texte réécrit avant de partir', `la modification est enregistrée en partant (en base : ${JSON.stringify(enBase)})`);
+
+    // La garde retient toujours quand il reste quelque chose à perdre.
+    await ouvrirDepuisLaListe();
+    await carte(page, 'Envoyer un texto').click();
+    await p.getByLabel('Texte du message *', { exact: true }).fill('Saisie jamais enregistrée');
+    await pause(300);
+    verifier(await page.evaluate(() => (window.history.state as Record<string, unknown> | null)?.lumeGardeEditeur === true), 'nouvelle saisie : la garde est de nouveau posée');
+    await page.goBack();
+    await pause(500);
+    console.log('  (après « Précédent » :', new URL(page.url()).pathname, '— dialogues :', await page.getByRole('dialog').count(), await page.getByRole('alertdialog').count(), ')');
+    const question = page.getByRole('dialog').filter({ hasText: 'Quitter sans enregistrer ?' });
+    await question.waitFor({ timeout: 10_000 });
+    verifier(new URL(page.url()).pathname.endsWith(regle.id), 'saisie non enregistrée : « Précédent » pose la question, on est toujours dans l’éditeur');
+    await question.getByRole('button', { name: 'Annuler', exact: true }).click();
+    verifier(await p.getByLabel('Texte du message *', { exact: true }).inputValue() === 'Saisie jamais enregistrée', '« Annuler » : la saisie est intacte');
+    // … et quitter par « Mes automatisations » depuis l'entrée de la garde ne la laisse pas sous la liste.
+    await page.getByRole('button', { name: 'Mes automatisations' }).first().click();
+    const quitter = page.getByRole('dialog').getByRole('button', { name: /^(Quitter|Fermer|Abandonner)/ });
+    if (await quitter.first().isVisible().catch(() => false)) await quitter.first().click();
+    await page.waitForURL((url) => url.pathname === '/automations', { timeout: 15_000 }).catch(() => undefined);
+    verifier(new URL(page.url()).pathname === '/automations', 'sortie par « Mes automatisations » : la liste');
+    await page.goBack();
+    await pause(1500);
+    const apres = new URL(page.url()).pathname;
+    await page.goBack();
+    await pause(1500);
+    verifier(apres.endsWith(regle.id) && new URL(page.url()).pathname === '/automations', `depuis la liste, « Précédent » rouvre l’éditeur UNE fois, puis revient à la liste (${apres} → ${new URL(page.url()).pathname})`);
+    await page.context().close();
+  },
 };
 
 const demandes = process.argv.slice(2);

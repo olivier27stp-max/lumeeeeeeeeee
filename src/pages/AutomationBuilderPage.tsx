@@ -187,6 +187,10 @@ const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.6;
 const ZOOM_PAS = 0.1;
 
+/** L'entrée d'historique en double que pose la garde de l'éditeur (« Précédent » du navigateur, EDT-166). */
+const MARQUE_GARDE_EDITEUR = 'lumeGardeEditeur';
+const surEntreeDeGarde = (): boolean => (window.history.state as Record<string, unknown> | null)?.[MARQUE_GARDE_EDITEUR] === true;
+
 export default function AutomationBuilderPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -2141,23 +2145,36 @@ export default function AutomationBuilderPage() {
    * chose à perdre, on pose donc une entrée d'historique en double (même
    * adresse) : « Précédent » la consomme sans quitter la page, et c'est là
    * qu'on demande. Oui : on recule pour de bon. Non : on la repose.
+   *
+   * L'ENTRÉE EN DOUBLE S'EN VA AVEC LA GARDE (régression de 6ce9a1cb, relevée
+   * par la session des specs — editeur/11:125). Dès qu'il n'y avait plus rien
+   * à perdre (la saisie enregistrée dans son panneau), l'écouteur était retiré
+   * mais l'entrée restait : le premier « Précédent » la consommait sans rien
+   * faire — adresse inchangée, aucune question, « Enregistré » — et il en
+   * fallait un deuxième pour revenir à la liste. Quand la garde tombe alors
+   * qu'on est sur son entrée, on la retire donc (un recul, sans question).
+   * Si la garde se relève avant que ce recul ait abouti, elle attend qu'il
+   * soit fait pour reposer son entrée.
    */
+  const retraitDeGarde = useRef(false);
   const aPerdreEnPartant = !!regle && !disparue && !modifieeAilleurs
     && (etatSauvegarde === 'incomplet' || etatSauvegarde === 'refuse' || !!etapeEnAttente || saisieEnCours);
   const raisonDePerte = useRef<'incomplet' | 'refuse' | 'saisie'>('saisie');
   raisonDePerte.current = etatSauvegarde === 'incomplet' ? 'incomplet' : etatSauvegarde === 'refuse' ? 'refuse' : 'saisie';
   useEffect(() => {
     if (!aPerdreEnPartant) return;
-    const MARQUE = 'lumeGardeEditeur';
-    const poser = () => window.history.pushState({ ...(window.history.state ?? {}), [MARQUE]: true }, '');
-    if (!(window.history.state as Record<string, unknown> | null)?.[MARQUE]) poser();
+    const poser = () => window.history.pushState({ ...(window.history.state ?? {}), [MARQUE_GARDE_EDITEUR]: true }, '');
+    const armer = () => { if (!surEntreeDeGarde()) poser(); };
+    // Un retrait de l'entrée précédente est encore en route : on repose la nôtre une fois qu'il a abouti.
+    if (retraitDeGarde.current) window.addEventListener('popstate', armer, { once: true });
+    else armer();
     let enSortie = false;
     let questionOuverte = false;
     const surRetour = () => {
-      // Notre propre recul, ou une question déjà à l'écran : rien à refaire.
-      if (enSortie || questionOuverte) return;
+      // Notre propre recul (sortie confirmée, ou retrait de l'entrée en double), ou une question déjà à l'écran : rien à refaire.
+      if (enSortie || questionOuverte || retraitDeGarde.current) return;
       // Encore sur l'entrée en double (un « Suivant ») : rien n'est quitté.
-      if ((window.history.state as Record<string, unknown> | null)?.[MARQUE]) return;
+      if (surEntreeDeGarde()) return;
       questionOuverte = true;
       const enFrancais = frBascule.current;
       const raison = raisonDePerte.current;
@@ -2189,7 +2206,17 @@ export default function AutomationBuilderPage() {
       });
     };
     window.addEventListener('popstate', surRetour);
-    return () => window.removeEventListener('popstate', surRetour);
+    return () => {
+      window.removeEventListener('popstate', surRetour);
+      window.removeEventListener('popstate', armer);
+      // La garde tombe et on est encore sur SON entrée : elle s'en va avec elle.
+      // (Une sortie confirmée a déjà reculé ; une navigation de l'app a déjà changé d'entrée.)
+      if (!enSortie && surEntreeDeGarde()) {
+        retraitDeGarde.current = true;
+        window.addEventListener('popstate', () => { retraitDeGarde.current = false; }, { once: true });
+        window.history.back();
+      }
+    };
   }, [aPerdreEnPartant]);
 
   // Une règle disparue (404) n'a plus rien à enregistrer au départ.
@@ -2257,7 +2284,8 @@ export default function AutomationBuilderPage() {
     }
     // Déjà enregistré (ou abandon confirmé) : le départ n'a rien à refaire.
     sortieGeree.current = true;
-    navigate('/automations');
+    // Sur l'entrée en double de la garde : la liste la REMPLACE (sinon « Précédent », depuis la liste, la retrouverait).
+    navigate('/automations', surEntreeDeGarde() ? { replace: true } : undefined);
   }, [regle, etapesIncompletes, etatSauvegarde, nom, steps, fr, navigate, ecrire]);
 
   const declencheurLabel = useMemo(() => {
