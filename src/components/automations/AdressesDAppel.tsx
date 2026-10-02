@@ -72,9 +72,10 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
       // On la dévoile tout de suite : elle vient d'être créée pour être
       // copiée, la masquer obligerait à un clic de plus sans rien protéger.
       setDevoilees((d) => new Set(d).add(nouvelle.id));
-      toast.success(fr ? 'Adresse créée.' : 'Endpoint created.');
-    } catch {
-      toast.error(fr ? 'Impossible de créer l’adresse.' : 'Could not create the endpoint.');
+      toast.success(fr ? 'Adresse créée.' : 'Address created.');
+    } catch (e: unknown) {
+      // La raison du serveur (« Votre rôle ne permet pas… ») : le `catch` la jetait (06-reglages-globaux:183).
+      toast.error(e instanceof Error && e.message ? e.message : (fr ? 'Impossible de créer l’adresse.' : 'Could not create the address.'));
     } finally {
       setCreation(false);
     }
