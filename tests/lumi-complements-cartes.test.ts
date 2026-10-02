@@ -304,3 +304,33 @@ describe('cartes des outils ajoutés le 2026-10-01', () => {
     expect(lignes.find((l) => l.startsWith('Montant du dépôt') || l.includes('150,00'))).toMatch(/150,00 \$/);
   });
 });
+
+describe('rembourser un paiement reçu par chèque : pas de fausse promesse, pas de facture annulée à la place', () => {
+  it('la carte dit que le remboursement est impossible ici, et ne promet aucune somme', async () => {
+    const ctx = base({ payments: [{ id: id(120), amount_cents: 22995, refunded_cents: 0, provider: 'manual', method: 'check' }] });
+    const t = await texte('refund_payment', { payment_id: id(120) }, ctx);
+    expect(t).toMatch(/^Remboursement impossible ici : ce paiement a été reçu par chèque/);
+    expect(t).toMatch(/Confirmer sera refusé/);
+    expect(t).not.toMatch(/Somme remboursée|COMPLET/);
+  });
+
+  it('un paiement par carte (Stripe) garde sa carte de remboursement', async () => {
+    const ctx = base({ payments: [{ id: id(121), amount_cents: 22995, refunded_cents: 0, provider: 'stripe', method: 'card' }] });
+    expect(await texte('refund_payment', { payment_id: id(121) }, ctx)).toMatch(/Somme remboursée : 229,95 \$ — remboursement COMPLET/);
+  });
+
+  it('l’outil refuse en français avant d’appeler la route, et sa description interdit d’annuler la facture à la place', async () => {
+    const { refusRemboursementManuel } = await import('../server/lib/agent/tools-argent');
+    expect(refusRemboursementManuel('check')).toMatch(/reçu par chèque : Lume ne peut rembourser que les paiements par carte/);
+    expect(refusRemboursementManuel('cash')).toMatch(/reçu comptant/);
+    expect(refusRemboursementManuel(null)).toMatch(/hors Stripe/);
+    expect(refusRemboursementManuel('check')).toMatch(/N’annule pas et ne modifie pas la facture à la place/);
+    const outil = AGENT_TOOLS.find((t) => t.declaration.name === 'refund_payment')!;
+    expect(outil.declaration.description).toMatch(/CARD \(Stripe\) payments ONLY/);
+    expect(outil.declaration.description).toMatch(/NEVER void, edit or re-open the invoice as a substitute/);
+    const source = (await import('node:fs')).readFileSync((await import('node:path')).resolve(__dirname, '../server/lib/agent/tools-argent.ts'), 'utf8');
+    // Le refus est posé AVANT l'appel à la route de remboursement.
+    expect(source.indexOf('refusRemboursementManuel(paiement.method)')).toBeGreaterThan(0);
+    expect(source.indexOf('refusRemboursementManuel(paiement.method)')).toBeLessThan(source.indexOf("'/payments/refund'"));
+  });
+});
