@@ -30,6 +30,7 @@ import { trouverAction, trouverDeclencheur } from '../../src/lib/automationCatal
 import { htmlVersTexte } from '../../src/lib/emailBodyText';
 import { segmentsSms } from '../../src/lib/smsSegments';
 import { localizeAutomationName } from '../../src/lib/automationNames';
+import { bloquantsPublication } from '../../src/lib/publicationAutomatisation';
 
 /** Ce qu'on lit d'une ligne `automation_rules` — tout est facultatif : chaque appelant sélectionne ce qu'il a. */
 export interface RegleLue {
@@ -391,6 +392,26 @@ export function resumeDeLaRegle(regle: RegleLue, langue: Langue, options: { maxM
       };
     }),
   };
+}
+
+/**
+ * Ce qui EMPÊCHE de publier l'automatisation telle quelle (une étape qui porte
+ * encore le texte d'exemple de l'éditeur, une étape incomplète) — les mêmes
+ * contrôles que le bouton « Publier ». Vide pour une automatisation déjà
+ * publiée ou à la corbeille. Donné à Lumi avec le contenu : sans ça, à « active-
+ * la », il proposait « tu veux l'activer tel quel ? » pour un texte d'exemple
+ * que le serveur allait refuser (C12).
+ */
+export function obstaclesAPublication(regle: RegleLue, fr: boolean): string[] {
+  if (regle.is_active === true || regle.deleted_at) return [];
+  try {
+    return bloquantsPublication({
+      trigger_event: regle.trigger_event, steps: regle.steps, actions: regle.actions,
+      conditions: (regle.conditions ?? null) as Record<string, unknown> | null, is_preset: regle.is_preset, fr,
+    }).map((p) => p.message);
+  } catch {
+    return [];
+  }
 }
 
 /** Le résumé en quelques lignes de texte — la forme COMPACTE donnée au modèle comme contexte de page. */

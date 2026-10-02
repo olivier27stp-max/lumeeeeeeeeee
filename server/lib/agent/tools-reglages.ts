@@ -33,7 +33,7 @@ import type { AgentTool, ToolContext } from './tools';
 import { executerIdempotent, champRequis, appelInterne, traduireStatut, AppelInterneIncertain } from './tools-etendus';
 import { etatCredits } from '../lumi/budget';
 import {
-  COLONNES_REGLE_LUE, etapesDeLaRegle, aUnParcours, messagesDeLaRegle, actionsDepuisEtapes, resumeDeLaRegle,
+  COLONNES_REGLE_LUE, etapesDeLaRegle, aUnParcours, messagesDeLaRegle, actionsDepuisEtapes, resumeDeLaRegle, obstaclesAPublication,
   declencheurEnClair, avisSegments, regleAtteintLeClient, type RegleLue,
 } from '../automations-etapes';
 import { messageCorbeille } from '../automations-corbeille';
@@ -1134,6 +1134,8 @@ const getAutomation: AgentTool = {
         etapes: r.etapes.length ? r.etapes : [fr ? '(aucune étape pour l’instant)' : '(no step yet)'],
         ...(r.reglages.length ? { reglages: r.reglages } : {}),
         ...(regleAtteintLeClient(regle) ? { portee: await porteeALActivation(getServiceClient(), ctx.orgId, regle, langue) } : {}),
+        // Ce que le bouton « Publier » refuserait : à dire AVANT de proposer l'activation (C12).
+        ...(obstaclesAPublication(regle, fr).length ? { ne_peut_pas_etre_activee_telle_quelle: obstaclesAPublication(regle, fr) } : {}),
         variables_valides: variablesPourDeclencheur(regle.trigger_event).map((v) => `[${v}]`).join(' '),
         note: 'Cite les messages mot pour mot, entre guillemets. Les étapes sont dans l’ordre d’exécution.',
       };
