@@ -1,0 +1,321 @@
+{
+ "date": "2026-10-01T19:06:10.180Z",
+ "api": "https://lumecrm.net",
+ "bilan": {
+  "global": {
+   "cas": 4,
+   "exactitude_outil_pct": 100,
+   "partiels": 0,
+   "rates": 0,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 3.76,
+   "cout_par_1000_dollars": 9.41
+  },
+  "sensibles": {
+   "cas": 3,
+   "exactitude_outil_pct": 100,
+   "partiels": 0,
+   "rates": 0,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 2.07,
+   "cout_par_1000_dollars": 6.91
+  },
+  "par_type": {
+   "action": {
+    "cas": 4,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 3.76,
+    "cout_par_1000_dollars": 9.41
+   },
+   "lecture": {
+    "cas": 0,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 0,
+    "cout_par_1000_dollars": 0
+   },
+   "clarification": {
+    "cas": 0,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 0,
+    "cout_par_1000_dollars": 0
+   }
+  },
+  "par_section": {
+   "clients": {
+    "cas": 2,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 1.94,
+    "cout_par_1000_dollars": 9.7
+   },
+   "devis": {
+    "cas": 2,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 1.82,
+    "cout_par_1000_dollars": 9.12
+   }
+  }
+ },
+ "resultats": [
+  {
+   "id": "prod-add_note",
+   "section": "clients",
+   "outil": "add_note",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Ajoute une note au dossier de Sophie Tremblay : elle préfère qu’on l’appelle le matin.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "add_note",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "entity_type": "client",
+    "entity_id": "b3759523-58b1-4a3e-9da6-d5e3ab95b372",
+    "note": "Préfère qu'on l'appelle le matin."
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Élément visé",
+       "en": "Target"
+      },
+      "valeur": "entity"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Type de fiche",
+       "en": "Record type"
+      },
+      "valeur": "Client",
+      "valeur_en": "Client"
+     },
+     {
+      "libelle": {
+       "fr": "Note",
+       "en": "Note"
+      },
+      "valeur": "Préfère qu'on l'appelle le matin."
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "Je vais ajouter cette note au dossier de Sophie Tremblay.",
+   "cout_cents": 1.6891,
+   "conversation_id": "6bf07681-95e3-48c7-a05a-d7ae4f47a459",
+   "duree_ms": 7373
+  },
+  {
+   "id": "prod-delete_client",
+   "section": "clients",
+   "outil": "delete_client",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime le client E2E Run625, c’était un test.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "delete_client",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "client_id": "a1b55bf5-e915-4073-8bcf-d946d0ec76d6"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Prospect",
+       "en": "Lead"
+      },
+      "valeur": "E2E Run625"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Supprimés avec le client",
+       "en": "Deleted with the client"
+      },
+      "valeur": "rien d’autre : aucun job, devis ni facture à son nom",
+      "valeur_en": "nothing else: no job, quote or invoice under their name"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "Je vais supprimer ce client de test.",
+   "cout_cents": 0.2512,
+   "conversation_id": "576eb7e1-60e4-4e95-8569-716d2a2dcd55",
+   "duree_ms": 3867
+  },
+  {
+   "id": "prod-delete_quote",
+   "section": "devis",
+   "outil": "delete_quote",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime la soumission 3, c’est un doublon.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "delete_quote",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "23dfa179-9e8d-4540-8d2a-14a05f105e4e"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Devis",
+       "en": "Quote"
+      },
+      "valeur": "#3 · Devis pour Sophie Tremblay · Sophie Tremblay · 100,00 $ · brouillon",
+      "valeur_en": "#3 · Devis pour Sophie Tremblay · Sophie Tremblay · $100.00 · draft"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "Je vais supprimer le devis 3 pour toi.",
+   "cout_cents": 1.4136,
+   "conversation_id": "6933df4c-75f4-4390-826e-3d1228644259",
+   "duree_ms": 4628
+  },
+  {
+   "id": "prod-send_quote_sms",
+   "section": "devis",
+   "outil": "send_quote_sms",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Envoie la soumission 2 par texto à Sophie Tremblay.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "send_quote_sms",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "2d9842ec-50e1-486d-aeb4-6c9c5e751ca4"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Devis",
+       "en": "Quote"
+      },
+      "valeur": "#2 · Devis pour Sophie Tremblay · Sophie Tremblay · 100,00 $ · brouillon",
+      "valeur_en": "#2 · Devis pour Sophie Tremblay · Sophie Tremblay · $100.00 · draft"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Texto envoyé au",
+       "en": "Text sent to"
+      },
+      "valeur": "514-555-0103",
+      "valeur_en": "514-555-0103"
+     },
+     {
+      "libelle": {
+       "fr": "Contenu",
+       "en": "Content"
+      },
+      "valeur": "le lien de consultation du devis, avec le texte habituel de l’entreprise",
+      "valeur_en": "the link to view the quote, with the company’s usual wording"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": true,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "Je vais envoyer le devis n° 2 par texto à Sophie Tremblay.",
+   "cout_cents": 0.4094,
+   "conversation_id": "58ad890f-d2ad-4b33-bc20-f68ab31e8a50",
+   "duree_ms": 6609
+  }
+ ]
+}
