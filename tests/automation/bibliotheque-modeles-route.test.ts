@@ -63,9 +63,14 @@ const serveur = app.listen(0);
 const base = `http://127.0.0.1:${(serveur.address() as AddressInfo).port}/api/automations/templates`;
 afterAll(() => serveur.close());
 
-const utiliser = (corps: unknown, cle = '') => fetch(`${base}/utiliser`, {
+/** `interfaceEn` : la langue de l'INTERFACE de qui clique (`Accept-Language`, comme l'envoie l'application). */
+const utiliser = (corps: unknown, cle = '', interfaceEn?: boolean) => fetch(`${base}/utiliser`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', ...(cle ? { 'idempotency-key': cle } : {}) },
+  headers: {
+    'content-type': 'application/json',
+    ...(cle ? { 'idempotency-key': cle } : {}),
+    ...(interfaceEn === undefined ? {} : { 'accept-language': interfaceEn ? 'en' : 'fr' }),
+  },
   body: JSON.stringify(corps),
 });
 
@@ -124,10 +129,64 @@ describe('POST /automations/templates/utiliser', () => {
     expect(etat.ops[0].valeur.name).toBe('Dépôt — demande et rappel (2)');
   });
 
-  it('langue d’automatisation de l’entreprise : nom anglais si « en »', async () => {
-    etat.langue = 'en';
-    await utiliser({ templateId: 'pack_depot' }, 'k-4');
+  /*
+   * RÈGLE DÉCIDÉE (2026-10-02, triage « modèles » 02-chaque-modele:246) — elle
+   * remplace « nom anglais si le bureau envoie en anglais », que ce cas figeait.
+   * Le NOM et la description d'une copie sont des libellés d'interface, que
+   * seul l'utilisateur lit : ils suivent la langue de l'INTERFACE. Les MESSAGES
+   * de la copie, eux, ne dépendent pas de qui clique : les deux textes du
+   * modèle sont copiés, et le moteur envoie celui de la langue du bureau.
+   */
+  const modeleDepot = trouverModele('pack_depot')!;
+  /** Les textes qui partent aux clients, tels que la copie les porte (français et anglais). */
+  const messagesDe = (steps: Array<{ type: string; action?: { config?: Record<string, unknown> } }>) => steps
+    .filter((e) => e.type === 'action')
+    .map((e) => Object.fromEntries(Object.entries(e.action?.config ?? {}).filter(([cle]) => /^(body|subject)(_en)?$/.test(cle))));
+
+  it('interface ANGLAISE, bureau qui envoie en FRANÇAIS : nom et description en anglais', async () => {
+    etat.langue = 'fr';
+    await utiliser({ templateId: 'pack_depot' }, 'k-4', true);
     expect(etat.ops[0].valeur.name).toBe('Deposit — request and reminder');
+    expect(etat.ops[0].valeur.name).toBe(modeleDepot.nom.en);
+    expect(etat.ops[0].valeur.description).toBe(modeleDepot.description.en);
+  });
+
+  it('interface FRANÇAISE, bureau qui envoie en ANGLAIS : nom et description en français (l’ancienne règle donnait l’anglais)', async () => {
+    etat.langue = 'en';
+    await utiliser({ templateId: 'pack_depot' }, 'k-5', false);
+    expect(etat.ops[0].valeur.name).toBe('Dépôt — demande et rappel');
+    expect(etat.ops[0].valeur.name).toBe(modeleDepot.nom.fr);
+    expect(etat.ops[0].valeur.description).toBe(modeleDepot.description.fr);
+  });
+
+  it('sans langue d’interface annoncée : français, la langue par défaut de Lume — quel que soit le bureau', async () => {
+    etat.langue = 'en';
+    await utiliser({ templateId: 'pack_depot' }, 'k-6');
+    expect(etat.ops[0].valeur.name).toBe(modeleDepot.nom.fr);
+  });
+
+  it('un nom déjà pris est suffixé dans la langue de l’interface', async () => {
+    etat.noms = ['Deposit — request and reminder'];
+    await utiliser({ templateId: 'pack_depot' }, 'k-7', true);
+    expect(etat.ops[0].valeur.name).toBe('Deposit — request and reminder (2)');
+  });
+
+  it('les MESSAGES de la copie ne suivent pas l’interface : dans les quatre combinaisons, les mêmes textes — ceux du modèle, français ET anglais', async () => {
+    const copies: string[] = [];
+    let n = 0;
+    for (const bureau of ['fr', 'en']) {
+      for (const interfaceEn of [false, true]) {
+        etat.ops.length = 0;
+        etat.langue = bureau;
+        await utiliser({ templateId: 'pack_depot' }, `k-messages-${++n}`, interfaceEn);
+        copies.push(JSON.stringify(messagesDe(etat.ops[0].valeur.steps)));
+      }
+    }
+    expect(new Set(copies).size).toBe(1);
+    const attendus = messagesDe((modeleDepot.steps ?? []) as never);
+    expect(JSON.parse(copies[0])).toEqual(attendus);
+    // Le modèle porte bien les deux langues : c'est le moteur (`champLocalise`) qui choisit à l'envoi.
+    expect(attendus.some((m) => typeof m.body === 'string' && typeof m.body_en === 'string')).toBe(true);
   });
 
   it('double clic (même clé d’idempotence) = une seule création', async () => {

@@ -28,14 +28,30 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Etape } from '../../lib/sequenceTypes';
-import { trouverAction } from '../../lib/automationCatalogue';
+import { champVisible, trouverAction } from '../../lib/automationCatalogue';
 import { texteSansHtml } from '../../lib/automationTemplates';
+import { estCorpsHtml } from '../../lib/emailBodyText';
 
 interface Props {
   /** Le déclencheur, affiché en tête — il n'est pas une étape. */
   declencheurLabel: string;
   steps: Etape[];
   fr: boolean;
+  /**
+   * La langue dans laquelle le bureau ENVOIE ses messages (réglage « Messages
+   * en FR / EN »). La carte montre CE texte-là — `body_en` dans un bureau
+   * anglais quand l'étape en porte un — comme le champ principal du panneau.
+   * Non fournie : français, le défaut du moteur.
+   */
+  langueEnvoi?: 'fr' | 'en';
+  /**
+   * Les listes du bureau, pour dire sur la carte QUI et OÙ plutôt qu'un
+   * identifiant : le membre assigné, l'étape du pipeline visée,
+   * l'automatisation démarrée.
+   */
+  membres?: Array<{ user_id: string; nom: string }>;
+  etapesPipeline?: Array<{ id: string; label: string }>;
+  automatisations?: Array<{ id: string; nom: string }>;
   /** Étape sélectionnée, mise en évidence. */
   selectionId?: string | null;
   onSelection: (id: string) => void;
@@ -118,8 +134,88 @@ function titreEtape(etape: Etape, fr: boolean): string {
   }
 }
 
+/**
+ * Le texte d'un champ de message QUI PART, selon la langue d'envoi du bureau —
+ * la règle du moteur (`champLocalise`, server/lib/actions) : en anglais,
+ * `<champ>_en` s'il est rempli ; sinon le texte de base.
+ */
+function texteEnvoye(config: Record<string, unknown> | undefined, champ: string, langueEnvoi: 'fr' | 'en'): string {
+  const anglais = config?.[`${champ}_en`];
+  if (langueEnvoi === 'en' && typeof anglais === 'string' && anglais.trim()) return anglais;
+  const base = config?.[champ];
+  return typeof base === 'string' ? base : '';
+}
+
+interface Listes {
+  membres?: Array<{ user_id: string; nom: string }>;
+  etapesPipeline?: Array<{ id: string; label: string }>;
+  automatisations?: Array<{ id: string; nom: string }>;
+}
+
+/**
+ * CE QUE FERA UNE ACTION SANS MESSAGE, en une ligne (triage actions,
+ * 03-champs-types:727). « Ajouter une étiquette », « Assigner un
+ * responsable », « Appeler un webhook », « Déplacer l'opportunité » ne
+ * portaient que leur nom : il fallait ouvrir chaque carte pour savoir quelle
+ * étiquette, quel membre, quelle adresse, quelle étape.
+ *
+ * Les réglages REMPLIS et VISIBLES de l'action, dans l'ordre du catalogue,
+ * chacun dit comme le panneau le montre (le nom du membre, le libellé de
+ * l'option, l'hôte de l'adresse). Un identifiant qu'on ne sait pas nommer
+ * (liste pas encore chargée, membre parti) n'est pas affiché brut.
+ */
+function resumeDesReglages(type: string, config: Record<string, unknown>, fr: boolean, listes: Listes): string {
+  const modele = trouverAction(type);
+  if (!modele) return '';
+  const bouts: string[] = [];
+  for (const champ of modele.champs) {
+    if (champ.type === 'zone' || !champVisible(champ, config)) continue;
+    const brut = config[champ.cle];
+    const v = typeof brut === 'string' ? brut.trim() : typeof brut === 'number' || typeof brut === 'boolean' ? String(brut) : '';
+    if (!v) continue;
+    switch (champ.type) {
+      case 'membre': {
+        const nom = listes.membres?.find((m) => m.user_id === v)?.nom;
+        if (nom) bouts.push(nom);
+        break;
+      }
+      case 'etape_pipeline': {
+        const libelle = listes.etapesPipeline?.find((e) => e.id === v)?.label;
+        if (libelle) bouts.push(libelle);
+        break;
+      }
+      case 'automatisation': {
+        const nom = listes.automatisations?.find((a) => a.id === v)?.nom;
+        if (nom) bouts.push(nom);
+        break;
+      }
+      case 'choix': {
+        const option = champ.options?.find((o) => o.cle === v);
+        bouts.push(option ? (fr ? option.fr : option.en) : v);
+        break;
+      }
+      case 'bascule':
+        if (v === 'true') bouts.push(fr ? champ.fr : champ.en);
+        break;
+      case 'url':
+        try { bouts.push(new URL(v).host || v); } catch { bouts.push(v); }
+        break;
+      case 'nombre':
+        bouts.push(`${fr ? champ.fr : champ.en} : ${v}`);
+        break;
+      case 'champ_date':
+      case 'service':
+        break;
+      default:
+        // Un identifiant technique tapé dans un champ de texte n'apprend rien.
+        if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(v)) bouts.push(v);
+    }
+  }
+  return bouts.join(' · ');
+}
+
 /** Le détail d'une étape, en une ligne — ce qu'on veut lire sans ouvrir. */
-function detailEtape(etape: Etape, fr: boolean): string {
+function detailEtape(etape: Etape, fr: boolean, langueEnvoi: 'fr' | 'en' = 'fr', listes: Listes = {}): string {
   if (etape.type === 'attendre') {
     // « 7 jour(s) avant le rendez-vous » — sinon la carte afficherait
     // « tout de suite », le délai propre de cette attente étant 0.
@@ -137,7 +233,17 @@ function detailEtape(etape: Etape, fr: boolean): string {
   if (etape.type === 'action') {
     if (etape.action?.type === 'log_activity') return fr ? 'Étape technique, automatique' : 'Technical step, automatic';
     // Un courriel stocke du HTML : on résume son TEXTE, pas son balisage.
-    const texte = texteSansHtml(String(etape.action?.config?.body ?? etape.action?.config?.title ?? '')).replace(/\s+/g, ' ');
+    // … et le texte que le bureau ENVOIE : dans un bureau anglais, la carte
+    // montrait le français pendant que l'anglais partait.
+    const config = etape.action?.config as Record<string, unknown> | undefined;
+    const brut = texteEnvoye(config, 'body', langueEnvoi) || texteEnvoye(config, 'title', langueEnvoi);
+    // Seul un VRAI corps HTML est débalisé. Un texte tapé garde ses « < » et
+    // ses « > » : « Rabais si le total est < 500 $ ou > 1000 $ » s'affichait
+    // « Rabais si le total est 1000 $ » — tout ce qui était entre les deux
+    // signes passait pour une balise (triage actions, 03-champs-types:177).
+    const message = (estCorpsHtml(brut) ? texteSansHtml(brut) : brut).replace(/\s+/g, ' ').trim();
+    // Pas de message : ce que l'action fera (quelle étiquette, quel membre, quelle adresse, quelle étape).
+    const texte = message || resumeDesReglages(etape.action?.type ?? '', config ?? {}, fr, listes);
     return texte.length > 60 ? `${texte.slice(0, 60)}…` : texte;
   }
   if (etape.type === 'si') {
@@ -181,9 +287,9 @@ function Connecteur({
 
 /** Une carte d'étape. */
 function Carte({
-  etape, fr, selectionnee, enErreur, onClick, onMenu, lectureSeule,
+  etape, fr, langueEnvoi, listes, selectionnee, enErreur, onClick, onMenu, lectureSeule,
 }: {
-  etape: Etape; fr: boolean; selectionnee: boolean; enErreur?: boolean;
+  etape: Etape; fr: boolean; langueEnvoi: 'fr' | 'en'; listes: Listes; selectionnee: boolean; enErreur?: boolean;
   onClick: () => void;
   /** Le menu « … » de la carte — dupliquer, supprimer. */
   onMenu?: (id: string) => void;
@@ -195,7 +301,7 @@ function Carte({
     : etape.type === 'arreter' ? Square
     : ICONES[etape.action?.type] ?? Send;
 
-  const detail = detailEtape(etape, fr);
+  const detail = detailEtape(etape, fr, langueEnvoi, listes);
 
   /*
    * La bordure de la carte. Calculée ici, pas dans le JSX : le détecteur
@@ -265,10 +371,49 @@ function Carte({
 }
 
 export default function SequenceCanvas({
-  declencheurLabel, steps, fr, selectionId, onSelection, onAjouter, onMenu, onDeclencheur,
+  declencheurLabel, steps, fr, langueEnvoi = 'fr', membres, etapesPipeline, automatisations,
+  selectionId, onSelection, onAjouter, onMenu, onDeclencheur,
   declencheurDetail, lectureSeule, etapesEnErreur,
 }: Props) {
   const parId = new Map(steps.map((e) => [e.id, e]));
+  const listes: Listes = { membres, etapesPipeline, automatisations };
+
+  /*
+   * OÙ LES DEUX BRANCHES D'UN « SI » SE REJOIGNENT.
+   *
+   * Un parcours n'est pas un arbre : « si le devis est parti par texto → texto,
+   * sinon → courriel », puis la MÊME suite pour tout le monde. Dérouler chaque
+   * branche jusqu'au bout redessinait cette suite une fois par chemin — 180
+   * cartes pour les 23 étapes de « Relance de devis » (cinq « Si » de suite :
+   * chaque relance figurait 32 fois).
+   *
+   * La jonction d'un « Si » est la première étape de sa branche « oui » que sa
+   * branche « non » atteint aussi. Chaque branche est dessinée jusqu'à elle
+   * (exclue), puis la suite commune UNE fois, sous les deux branches.
+   */
+  const atteignables = (depart: string | null | undefined): string[] => {
+    const ordre: string[] = [];
+    const vus = new Set<string>();
+    const pile: string[] = depart ? [depart] : [];
+    while (pile.length) {
+      const id = pile.pop() as string;
+      const e = parId.get(id);
+      if (!e || vus.has(id)) continue;
+      vus.add(id);
+      ordre.push(id);
+      const suites = e.type === 'si' ? [e.alors, e.sinon] : e.type === 'arreter' ? [] : [e.suivant];
+      for (const s of [...suites].reverse()) if (s && !vus.has(s)) pile.push(s);
+    }
+    return ordre;
+  };
+  const jonctions = new Map<string, string | null>();
+  const jonction = (si: Extract<Etape, { type: 'si' }>): string | null => {
+    if (!jonctions.has(si.id)) {
+      const parNon = new Set(atteignables(si.sinon));
+      jonctions.set(si.id, atteignables(si.alors).find((id) => parNon.has(id)) ?? null);
+    }
+    return jonctions.get(si.id) ?? null;
+  };
 
   /**
    * Rend une chaîne d'étapes à partir d'un identifiant.
@@ -279,8 +424,10 @@ export default function SequenceCanvas({
    * enregistrement, peut passer par un état momentanément circulaire. Un
    * rendu récursif sans garde ferait planter l'onglet.
    */
-  const rendre = (id: string | null | undefined, vues: Set<string>): React.ReactNode => {
+  const rendre = (id: string | null | undefined, vues: Set<string>, arret: string | null = null): React.ReactNode => {
     if (!id) return null;
+    // La branche rejoint la suite commune, dessinée une fois plus bas : rien de plus ici.
+    if (id === arret) return <RejointLaSuite />;
     const etape = parId.get(id);
     if (!etape) return null;
     if (vues.has(id)) {
@@ -293,21 +440,37 @@ export default function SequenceCanvas({
     const suite = new Set(vues).add(id);
 
     if (etape.type === 'si') {
+      const commune = jonction(etape);
+      // Les branches s'arrêtent à leur jonction — ou à celle d'un « Si » qui les englobe.
+      const borne = commune ?? arret;
       return (
         <div className="flex flex-col items-center">
-          <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
+          <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} listes={listes} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
           {/* Deux branches, côte à côte : c'est le seul endroit où le
               parcours se divise, et ça doit se voir. */}
           <div className="flex items-start gap-6 pt-1">
             <div className="flex flex-col items-center">
               <Connecteur fr={fr} libelle={fr ? 'si oui' : 'if yes'} lectureSeule={lectureSeule} onAjouter={() => onAjouter(etape.id, 'alors')} />
-              {rendre(etape.alors, suite) ?? <FinDeBranche fr={fr} />}
+              {rendre(etape.alors, suite, borne) ?? <FinDeBranche fr={fr} />}
             </div>
             <div className="flex flex-col items-center">
               <Connecteur fr={fr} libelle={fr ? 'si non' : 'if no'} lectureSeule={lectureSeule} onAjouter={() => onAjouter(etape.id, 'sinon')} />
-              {rendre(etape.sinon, suite) ?? <FinDeBranche fr={fr} />}
+              {rendre(etape.sinon, suite, borne) ?? <FinDeBranche fr={fr} />}
             </div>
           </div>
+          {/* La suite commune aux deux branches : une fois. (Si la jonction
+              est aussi celle d'un « Si » englobant, c'est lui qui la dessine.) */}
+          {commune && commune !== arret && (
+            <>
+              <span className="mt-1 rounded-full bg-surface-tertiary px-2 py-0.5 text-[10px] font-medium text-text-secondary">
+                {fr ? 'ensuite, dans les deux cas' : 'then, in both cases'}
+              </span>
+              <svg width="2" height="14" className="text-border" aria-hidden="true">
+                <line x1="1" y1="0" x2="1" y2="14" stroke="currentColor" strokeWidth="2" />
+              </svg>
+              {rendre(commune, suite, arret)}
+            </>
+          )}
         </div>
       );
     }
@@ -315,11 +478,11 @@ export default function SequenceCanvas({
     const suivant = etape.type === 'arreter' ? null : etape.suivant;
     return (
       <div className="flex flex-col items-center">
-        <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
+        <Carte etape={etape} fr={fr} langueEnvoi={langueEnvoi} listes={listes} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
         {etape.type !== 'arreter' && (
           <>
             <Connecteur fr={fr} lectureSeule={lectureSeule} onAjouter={() => onAjouter(etape.id)} />
-            {rendre(suivant, suite) ?? <FinDeBranche fr={fr} />}
+            {rendre(suivant, suite, arret) ?? <FinDeBranche fr={fr} />}
           </>
         )}
       </div>
@@ -402,6 +565,15 @@ export default function SequenceCanvas({
         )}
       </div>
     </div>
+  );
+}
+
+/** La branche rejoint la suite commune : un trait, pas un « fin ». */
+function RejointLaSuite() {
+  return (
+    <svg width="2" height="10" className="text-border" aria-hidden="true">
+      <line x1="1" y1="0" x2="1" y2="10" stroke="currentColor" strokeWidth="2" />
+    </svg>
   );
 }
 

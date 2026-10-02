@@ -1656,6 +1656,9 @@ describe('ligne 2 (ajustement) — le panneau montre dans son champ principal le
     api.langue.mockImplementation(async () => 'en');
     etat.regles = [bilingue()];
     await ouvrir();
+    // La carte du canevas montre, elle aussi, le texte qui part.
+    expect(carteEtape('Envoyer un texto')?.textContent).toContain(EN);
+    expect(carteEtape('Envoyer un texto')?.textContent).not.toContain(FR);
     cliquer(carteEtape('Envoyer un texto'));
     await attendre(2);
     expect(principal()).toBe(EN);
@@ -1677,5 +1680,286 @@ describe('ligne 2 (ajustement) — le panneau montre dans son champ principal le
     cliquer(carteEtape('Envoyer un texto'));
     await attendre(2);
     expect(principal()).toBe(FR);
+  });
+});
+
+// ─── P2-13 (QA du 2026-09-25) — quitter l'éditeur ne perd rien ──
+// Les deux cas de tests/qa-2026-09-25-p2-fin.test.ts lisaient le SOURCE de
+// `quitterEditeur`. Les mêmes promesses, éprouvées sur la vraie page.
+
+describe('P2-13 — quitter l’éditeur ne perd rien (comportement de la vraie page)', () => {
+  const avancer = async (ms: number) => {
+    await act(async () => { vi.advanceTimersByTime(ms); });
+    await attendre();
+  };
+  async function reecrire(texte: string) {
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    saisir(panneauEtape()?.querySelector('textarea'), texte);
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+  }
+  const texteEcrit = (appel: number) => ((api.modifier.mock.calls[appel]?.[1] as { steps?: Array<{ action?: { config?: { body?: string } } }> })?.steps ?? [])[0]?.action?.config?.body;
+  /** Fermer l'onglet : le navigateur demande-t-il confirmation ? */
+  const fermetureRetenue = () => {
+    const e = new Event('beforeunload', { cancelable: true });
+    act(() => { window.dispatchEvent(e); });
+    return e.defaultPrevented;
+  };
+
+  it('des étapes complètes sont ENREGISTRÉES avant de partir — même dans les 3 s d’attente de l’enregistrement automatique, sans question', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    await reecrire('Texto réécrit juste avant de partir');
+    expect(api.modifier).not.toHaveBeenCalled();
+    cliquer(bouton('Mes automatisations'));
+    await attendre(12);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(texteEcrit(0)).toBe('Texto réécrit juste avant de partir');
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(lieu()).toBe('/automations');
+  });
+
+  it('« modifié, pas encore enregistré » retient la fermeture de l’onglet ; à jour, rien ne la retient', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    expect(fermetureRetenue()).toBe(false);
+    await reecrire('Texto réécrit');
+    expect(fermetureRetenue()).toBe(true);
+    await avancer(3000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(fermetureRetenue()).toBe(false);
+  });
+
+  it('« en cours d’enregistrement » compte aussi comme travail non enregistré : la fermeture de l’onglet est retenue tant que le serveur n’a pas répondu', async () => {
+    let repondre: (v: unknown) => void = () => {};
+    api.modifier.mockImplementationOnce(() => new Promise((ok) => { repondre = ok; }));
+    await ouvrir();
+    vi.useFakeTimers();
+    await reecrire('Texto en cours d’envoi');
+    await avancer(3000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Enregistrement');
+    expect(fermetureRetenue()).toBe(true);
+    await act(async () => { repondre({ ...regle(), updated_at: '2026-10-01T23:59:00Z' }); });
+    await attendre(12);
+    expect(fermetureRetenue()).toBe(false);
+  });
+
+  it('quitter PENDANT un enregistrement en cours : on ne part qu’une fois le travail écrit', async () => {
+    let repondre: (v: unknown) => void = () => {};
+    api.modifier.mockImplementationOnce(() => new Promise((ok) => { repondre = ok; }));
+    await ouvrir();
+    vi.useFakeTimers();
+    await reecrire('Texto en cours d’envoi');
+    await avancer(3000);
+    cliquer(bouton('Mes automatisations'));
+    await attendre(12);
+    // L'envoi n'a pas abouti : on est toujours dans l'éditeur.
+    expect(lieu()).toBe(`/automations/${ID}`);
+    await act(async () => { repondre({ ...regle(), updated_at: '2026-10-01T23:59:00Z' }); });
+    await attendre(20);
+    expect(lieu()).toBe('/automations');
+    expect(texteEcrit(api.modifier.mock.calls.length - 1)).toBe('Texto en cours d’envoi');
+    expect(confirmerMock).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Lumi ↔ éditeur (constats de l'agent Lumi, D:/lume-final/notes/L-corrections.md) ───
+
+describe('Lumi ↔ éditeur — ce que la route de génération répond est appliqué tel quel, ni plus ni moins', () => {
+  const TEXTO_DE_LUMI = [
+    { id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Texto de LUMI' } }, suivant: 'e2' },
+    { id: 'e2', type: 'action', nom: null, action: { type: 'create_task', config: { title: 'Rappeler [client_name]' } }, suivant: null },
+  ];
+  /** Le nom à l'écran : le bouton de l'en-tête (un clic l'ouvre en champ de saisie). */
+  const nomAffiche = () => container.querySelector('header button span.truncate')?.textContent
+    ?? container.querySelector<HTMLInputElement>('input[aria-label="Nom de l’automatisation"]')?.value;
+  async function renommer(nouveau: string) {
+    cliquer(container.querySelector('header button span.truncate')?.parentElement);
+    await attendre(2);
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), nouveau);
+    await attendre(2);
+  }
+  async function demander(demande = 'change le message du texto') {
+    saisir(container.querySelector('textarea[id$="-prompt"]'), demande);
+    cliquer(boutonExact('Construire') ?? boutonExact('Envoyer'));
+    await attendre(12);
+  }
+  const avancer = async (ms: number) => {
+    await act(async () => { vi.advanceTimersByTime(ms); });
+    await attendre();
+  };
+  const dernierPatch = () => api.modifier.mock.calls.at(-1)?.[1] as Record<string, unknown> | undefined;
+
+  describe('A-04 — « change le message » ne renomme pas l’automatisation', () => {
+    it('`renomme: false` : le nom à l’écran reste celui de l’utilisateur, même si la réponse porte un autre nom', async () => {
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance de soumission en un texto', trigger_event: 'quote.sent', resume: 'Texto réécrit.', steps: TEXTO_DE_LUMI, autre: null, modifie: true, renomme: false }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander();
+      expect(nomAffiche()).toBe('Relance devis');
+      await avancer(3000);
+      expect(dernierPatch()?.name).toBe('Relance devis');
+      expect(JSON.stringify(dernierPatch()?.steps)).toContain('Texto de LUMI');
+    });
+
+    it('un nom tapé juste avant, pas encore enregistré : il survit — le serveur rend le nom EN BASE, qui ne l’écrase plus', async () => {
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Texto réécrit.', steps: TEXTO_DE_LUMI, autre: null, modifie: true, renomme: false }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await renommer('Mon nom à moi');
+      await demander();
+      expect(nomAffiche()).toBe('Mon nom à moi');
+      await avancer(3000);
+      expect(dernierPatch()?.name).toBe('Mon nom à moi');
+    });
+
+    it('`renomme: true` (« appelle-la X ») : le nom suit', async () => {
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance VIP', trigger_event: 'quote.sent', resume: 'Renommée « Relance VIP ».', steps: regle().steps, autre: null, modifie: true, renomme: true }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('appelle-la Relance VIP');
+      expect(nomAffiche()).toBe('Relance VIP');
+      await avancer(3000);
+      expect(dernierPatch()?.name).toBe('Relance VIP');
+    });
+
+    it('une automatisation toute neuve, encore sans nom à elle : elle prend celui que Lumi lui donne', async () => {
+      etat.regles = [regle({ name: 'Nouvelle automatisation', steps: [] })];
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance de devis', trigger_event: 'quote.sent', resume: 'Parcours construit.', steps: TEXTO_DE_LUMI, autre: null, modifie: true, renomme: false }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('relance mes devis après deux jours');
+      expect(nomAffiche()).toBe('Relance de devis');
+    });
+  });
+
+  describe('`modifie: false` (une question, un refus, « active-la ») — l’éditeur n’enregistre RIEN', () => {
+    const question = (plus: Record<string, unknown> = {}) => api.lumi.mockImplementation(async () => ({
+      nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Le texto part dès que le devis est envoyé.', steps: regle().steps, autre: null,
+      modifie: false, renomme: false, ...plus,
+    }));
+
+    it('la réponse rejoint le fil ; aucune écriture, ni tout de suite ni après le délai de l’enregistrement automatique', async () => {
+      question();
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('quand part le texto ?');
+      expect(container.textContent).toContain('Le texto part dès que le devis est envoyé.');
+      await avancer(3000);
+      await avancer(60_000);
+      expect(api.modifier).not.toHaveBeenCalled();
+      expect(container.textContent).not.toContain('Modifié');
+    });
+
+    it('pas de « Lumi a construit le parcours » : rien n’a été construit', async () => {
+      question();
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('quand part le texto ?');
+      expect(toasts.succes).toEqual([]);
+      expect(toasts.erreur).toEqual([]);
+    });
+
+    it('le canevas n’est pas touché : « Annuler » reste grisé (aucune étape d’historique pour rien)', async () => {
+      question();
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('quand part le texto ?');
+      expect(container.querySelector<HTMLButtonElement>('button[aria-label="Annuler"]')?.disabled).toBe(true);
+    });
+
+    it('automatisation EN LIGNE : pas de « Appliquer les changements de Lumi ? » — il n’y a aucun changement', async () => {
+      etat.regles = [regle({ is_active: true })];
+      question();
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('quand part le texto ?');
+      expect(confirmerMock).not.toHaveBeenCalled();
+      expect(toasts.info).toEqual([]);
+    });
+
+    it('garder le fil a touché la règle : la version rendue est notée, et la prochaine écriture de l’éditeur la renvoie (pas de faux « modifiée ailleurs »)', async () => {
+      question({ updated_at: '2026-10-02T12:00:00.000001+00:00' });
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('quand part le texto ?');
+      cliquer(carteEtape('Envoyer un texto'));
+      await attendre(2);
+      saisir(panneauEtape()?.querySelector('textarea'), 'Texto corrigé à la main');
+      cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+      await attendre(2);
+      await avancer(3000);
+      expect(api.modifier).toHaveBeenCalledTimes(1);
+      expect(api.modifier.mock.calls[0][2]).toBe('2026-10-02T12:00:00.000001+00:00');
+    });
+
+    it('une réponse sans `modifie` (ancien serveur) reste une proposition : appliquée et enregistrée comme avant', async () => {
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Texto réécrit.', steps: TEXTO_DE_LUMI, autre: null }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander();
+      await avancer(3000);
+      expect(JSON.stringify(dernierPatch()?.steps)).toContain('Texto de LUMI');
+    });
+  });
+
+  describe('`publiee` — après « active-la » puis « oui » (ou « mets-la en pause »), l’état Publiée / Brouillon suit sans rechargement', () => {
+    const interrupteur = () => container.querySelector<HTMLButtonElement>('button[role="switch"]');
+    /** Lumi vient de demander « veux-tu que je la publie ? » : « oui » est une réponse, pas une première demande. */
+    const FIL = [{ role: 'user', content: 'active-la' }, { role: 'assistant', content: 'Voici ce qui partira. Veux-tu que je la publie ?' }];
+    const reponse = (publiee: boolean, resume: string) => api.lumi.mockImplementation(async () => ({
+      nom: 'Relance devis', trigger_event: 'quote.sent', resume, steps: regle().steps, autre: null,
+      modifie: false, renomme: false, publiee, updated_at: '2026-10-02T12:00:00.000001+00:00',
+    }));
+
+    it('brouillon → `publiee: true` : l’interrupteur passe à « publiée », sans que l’éditeur publie lui-même', async () => {
+      etat.regles = [regle({ lumi_conversation: FIL })];
+      reponse(true, 'C’est fait : « Relance devis » est publiée.');
+      await ouvrir();
+      vi.useFakeTimers();
+      expect(interrupteur()?.getAttribute('aria-checked')).toBe('false');
+      await demander('oui');
+      expect(interrupteur()?.getAttribute('aria-checked')).toBe('true');
+      expect(container.textContent).toContain('C’est fait : « Relance devis » est publiée.');
+      // C'est le serveur qui a publié : l'éditeur n'envoie ni publication ni enregistrement.
+      expect(api.publier).not.toHaveBeenCalled();
+      await avancer(3000);
+      expect(api.modifier).not.toHaveBeenCalled();
+    });
+
+    it('publiée → `publiee: false` (« mets-la en pause ») : l’interrupteur revient à « brouillon »', async () => {
+      etat.regles = [regle({ is_active: true })];
+      reponse(false, 'C’est fait : « Relance devis » est en brouillon, plus rien ne part.');
+      await ouvrir();
+      vi.useFakeTimers();
+      expect(interrupteur()?.getAttribute('aria-checked')).toBe('true');
+      await demander('mets-la en pause');
+      expect(interrupteur()?.getAttribute('aria-checked')).toBe('false');
+      expect(api.publier).not.toHaveBeenCalled();
+    });
+
+    it('une réponse sans `publiee` (une simple question) ne touche pas à l’état', async () => {
+      etat.regles = [regle({ is_active: true })];
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Elle est publiée.', steps: regle().steps, autre: null, modifie: false }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('est-elle publiée ?');
+      expect(interrupteur()?.getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('après la publication par Lumi, une proposition de Lumi demande l’accord (elle est EN LIGNE maintenant)', async () => {
+      etat.regles = [regle({ lumi_conversation: FIL })];
+      reponse(true, 'C’est fait : « Relance devis » est publiée.');
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('oui');
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Texto réécrit.', steps: TEXTO_DE_LUMI, autre: null, modifie: true }));
+      confirmerMock.mockImplementationOnce(async () => false);
+      await demander();
+      expect(confirmerMock).toHaveBeenCalledTimes(1);
+      expect((confirmerMock.mock.calls[0][0] as { title: string }).title).toBe('Appliquer les changements de Lumi ?');
+    });
   });
 });

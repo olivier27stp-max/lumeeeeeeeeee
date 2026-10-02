@@ -497,7 +497,11 @@ describe('T13.8 — éditeur de message dans la liste (règle au format d’orig
 
     const appelsAvant = vi.mocked(api.getAutomationRules).mock.calls.length;
     await cliquer(enregistrer());
-    expect(api.updateRuleMessage).toHaveBeenCalledWith(RULE_ID, 'send_sms', `${SMS_INITIAL}[company_name]`);
+    // L'appel dit maintenant QUEL message il écrit (son rang, et le texte lu à l'ouverture) :
+    // c'est ce qui empêche d'écraser tous les textos de la règle d'un coup (03-texto:172).
+    expect(api.updateRuleMessage).toHaveBeenCalledWith(
+      RULE_ID, 'send_sms', `${SMS_INITIAL}[company_name]`, undefined, expect.objectContaining({ corpsLu: SMS_INITIAL }),
+    );
     expect(toast.success).toHaveBeenCalledWith('Message enregistré');
     expect(vi.mocked(api.getAutomationRules).mock.calls.length, 'la liste est rechargée').toBeGreaterThan(appelsAvant);
   });

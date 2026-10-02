@@ -439,7 +439,18 @@ router.post('/automations/rules/generer', async (req, res) => {
     panneau, parcours: resultat.parcours, parcoursALEcran: corps?.parcours_actuel, demande, langue,
     client: auth.client, admin: getServiceClient(), orgId: auth.orgId, userId: auth.user.id,
   });
-  if (sansChangement) return res.json(sansChangement);
+  if (sansChangement) {
+    // Garder le fil — ou publier, mettre en pause — a touché la règle : l'éditeur,
+    // qui envoie la version qu'il a lue (garde A-09), doit connaître celle-ci.
+    // Sans elle, sa prochaine écriture serait refusée « modifiée ailleurs ».
+    let version: string | null = null;
+    if (panneau.id) {
+      const { data: relue } = await auth.client.from('automation_rules').select('updated_at')
+        .eq('id', panneau.id).eq('org_id', auth.orgId).maybeSingle();
+      version = relue?.updated_at ? String(relue.updated_at) : null;
+    }
+    return res.json({ ...sansChangement, ...(version ? { updated_at: version } : {}) });
+  }
 
   // Le garde-fou : ce que Lumi propose doit passer la validation humaine.
   const verdict = sequenceEtapes.safeParse(resultat.parcours.steps);
@@ -878,15 +889,21 @@ router.post('/automations/templates/utiliser', validate(automationModeleUtiliser
   }
 
   const travail = (async (): Promise<{ status: number; body: unknown }> => {
-    const [{ data: reglages }, { data: noms, error: nomsErr }] = await Promise.all([
-      auth.client.from('company_settings').select('default_language').eq('org_id', auth.orgId).maybeSingle(),
-      auth.client.from('automation_rules').select('name').eq('org_id', auth.orgId).is('deleted_at', null),
-    ]);
+    // (La langue des messages du bureau n'est plus lue ici : elle ne décide plus de rien
+    // dans la copie — voir plus bas.)
+    const { data: noms, error: nomsErr } = await auth.client
+      .from('automation_rules').select('name').eq('org_id', auth.orgId).is('deleted_at', null);
     if (nomsErr) {
       logger.error('[automation-templates] lecture des noms échouée', { message: nomsErr.message });
       return { status: 500, body: { error: 'Impossible de créer l’automatisation.' } };
     }
-    const en = reglages?.default_language === 'en';
+    /* Le NOM et la description de la copie sont des libellés d'INTERFACE (ils
+       ne partent à aucun client) : ils suivent la langue de l'interface
+       (`Accept-Language`), celle dans laquelle l'aperçu vient d'annoncer le
+       modèle — pas la langue des messages du bureau. Interface anglaise, bureau
+       qui écrit en français : l'aperçu disait « Contract signed », l'éditeur
+       ouvrait « Contrat signé » (triage « modèles », 02-chaque-modele:246). */
+    const en = langueDe(req) === 'en';
     const nom = nomDisponible(en ? modele.nom.en : modele.nom.fr, (noms ?? []).map((n) => String(n.name ?? '')));
     let compteur = 0;
     // Toujours un PARCOURS, modifiable étape par étape dans l'éditeur. Un

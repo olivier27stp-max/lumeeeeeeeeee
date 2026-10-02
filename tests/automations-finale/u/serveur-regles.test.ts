@@ -577,3 +577,42 @@ describe('06:109 — publier une automatisation dont le champ surveillé a été
     expect((enBase().conditions as { champ_id: string }).champ_id).toBe(DATE);
   });
 });
+
+// ─── Lumi ↔ éditeur : la réponse « rien n'a changé » porte la version de la règle ───
+
+/** Ce que le générateur (simulé : aucun modèle ici) rend à la route. */
+const lumi = vi.hoisted(() => ({ parcours: null as Record<string, unknown> | null }));
+vi.mock('../../../server/lib/lumi/generer-parcours', async (orig) => ({
+  ...(await orig<typeof import('../../../server/lib/lumi/generer-parcours')>()),
+  genererParcours: async () => ({ parcours: lumi.parcours }),
+}));
+
+describe('POST /automations/rules/generer — `modifie: false` : la réponse porte la version de la règle (garde A-09)', () => {
+  const demander = (demande: string) => appeler('POST', '/automations/rules/generer', {
+    demande, langue: 'fr', rule_id: REGLE,
+    echanges: [{ role: 'user', content: 'relance mes factures' }, { role: 'assistant', content: 'Parcours construit.' }],
+    parcours_actuel: { trigger_event: 'invoice.overdue', steps: [texto('Texte d’origine')] },
+  });
+
+  it('une question : `modifie: false`, le parcours de l’écran tel quel, le fil gardé avec la règle — et `updated_at`, pour que la prochaine écriture de l’éditeur ne soit pas refusée « modifiée ailleurs »', async () => {
+    lumi.parcours = { nom: 'Relance', trigger_event: 'invoice.overdue', resume: 'Le texto part dès que la facture est en retard.', steps: [texto('Texte d’origine')], modifie: false };
+    const r = await demander('quand part le texto ?');
+    expect(r.status).toBe(200);
+    expect(r.json.modifie).toBe(false);
+    expect(r.json.steps).toEqual([texto('Texte d’origine')]);
+    expect((enBase().lumi_conversation as Array<{ content: string }>).map((t) => t.content)).toEqual(['quand part le texto ?', 'Le texto part dès que la facture est en retard.']);
+    expect(typeof r.json.updated_at).toBe('string');
+    expect(r.json.updated_at).toBe(enBase().updated_at);
+    // … et cette version est bien celle que le PATCH attend.
+    const suite = await appeler('PATCH', `/automations/rules/${REGLE}`, { name: 'Relance 2', version_lue: r.json.updated_at });
+    expect(suite.status).toBe(200);
+  });
+
+  it('un parcours CHANGÉ porte aussi sa version (comportement de f01f2393, inchangé)', async () => {
+    lumi.parcours = { nom: 'Relance', trigger_event: 'invoice.overdue', resume: 'Texto réécrit.', steps: [texto('Texte de Lumi')], modifie: true };
+    const r = await demander('change le message du texto');
+    expect(r.status).toBe(200);
+    expect(r.json.modifie).toBe(true);
+    expect(r.json.updated_at).toBe(enBase().updated_at);
+  });
+});

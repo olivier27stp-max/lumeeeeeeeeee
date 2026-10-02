@@ -11,7 +11,7 @@ PATCH="$(mktemp -t u-correctif-XXXXXX.patch)"
 git diff --binary -- src server > "$PATCH"
 if [ ! -s "$PATCH" ]; then echo "aucune modification de src/ ou server/ à retirer"; exit 2; fi
 git apply -R --whitespace=nowarn "$PATCH" || { echo "retrait du correctif impossible"; exit 2; }
-npx vitest run --maxWorkers=2 "$@" 2>&1 | tail -25
+npx vitest run --maxWorkers=1 "$@" 2>&1 | tail -25
 git apply --whitespace=nowarn "$PATCH" || { echo "!!! REMISE DU CORRECTIF IMPOSSIBLE — patch gardé : $PATCH"; exit 3; }
 rm -f "$PATCH"
 echo "— correctif remis —"

@@ -911,6 +911,38 @@ export default function AutomationBuilderPage() {
       // Garder la conversation a touché la règle : sa version est celle-ci.
       noterVersion(idReel.current, propose.updated_at);
       /*
+       * RIEN N'A CHANGÉ (`modifie: false`) : une question, un refus,
+       * « active-la ». Le serveur rend le parcours de l'écran tel quel. On
+       * n'en fait RIEN : avant, il était remis dans le canevas comme une
+       * proposition — une étape d'historique pour rien, un enregistrement
+       * automatique du même parcours trois secondes plus tard (« Enregistré »
+       * alors que rien n'avait bougé), le toast « Lumi a construit le
+       * parcours », et sur une automatisation en ligne la question
+       * « Appliquer les changements de Lumi ? » pour aucun changement.
+       * Seule la réponse de Lumi rejoint le fil.
+       */
+      /*
+       * … ET L'ÉTAT « PUBLIÉE / BROUILLON » SUIT (`publiee`). Après « active-la »
+       * puis « oui », ou « mets-la en pause », c'est le SERVEUR qui vient de
+       * publier ou de dépublier. Sans ceci, l'interrupteur et le badge
+       * gardaient l'ancien état jusqu'au rechargement — et l'éditeur, se
+       * croyant sur un brouillon, appliquait ensuite une proposition de Lumi
+       * à une automatisation en ligne sans demander.
+       */
+      if (typeof propose.publiee === 'boolean') {
+        const publiee = propose.publiee;
+        setRegle((r) => (r ? { ...r, is_active: publiee } : r));
+      }
+      if (propose.modifie === false) {
+        setEchangesLumi((e) => [
+          ...e,
+          { role: 'user' as const, content: demande },
+          { role: 'assistant' as const, content: propose.resume || (fr ? 'Rien n’a changé.' : 'Nothing changed.') },
+        ]);
+        setPrompt('');
+        return;
+      }
+      /*
        * EN LIGNE : ON DEMANDE AVANT D'APPLIQUER (triage éditeur, S-03). Sur une
        * automatisation PUBLIÉE, la proposition entrait dans le parcours comme
        * sur un brouillon, et l'enregistrement automatique la mettait en ligne
@@ -957,9 +989,17 @@ export default function AutomationBuilderPage() {
       setModifieePar('lumi');
       memoriser(propose.steps as Etape[]);
       setResumeLumi(propose.resume || null);
-      // Le nom et le déclencheur suivent la proposition — c'est ce que
-      // l'utilisateur a décrit, il pourra les changer.
-      if (propose.nom) setNom(propose.nom);
+      /*
+       * LE NOM NE SUIT LA PROPOSITION QUE SI ON L'A DEMANDÉ (constat A-04).
+       * « Change le message » renommait l'automatisation : `propose.nom`
+       * était appliqué à chaque réponse — y compris le nom EN BASE, rendu
+       * tel quel par le serveur, qui écrasait un nom que l'utilisateur
+       * venait de taper. Le serveur dit maintenant si un renommage a été
+       * demandé (`renomme`). Une automatisation toute neuve, encore sans nom
+       * à elle, prend celui que Lumi lui donne.
+       */
+      const sansNomChoisi = ['', 'Nouvelle automatisation', 'New automation'].includes(nom.trim());
+      if (propose.nom && (propose.renomme === true || sansNomChoisi)) setNom(propose.nom);
       if (propose.trigger_event && regle) {
         // Mise à jour FONCTIONNELLE : `regle` ici date d'avant la création
         // du brouillon, et l'écraser remettrait un id vide.
@@ -1511,7 +1551,7 @@ export default function AutomationBuilderPage() {
    */
   const supprimerDepuis = useCallback(async (idEtape: string) => {
     // L'étape en cours d'ajout n'a rien après elle qui soit à elle : l'abandonner suffit.
-    if (ajoutEnAttente?.etape.id === idEtape) {
+    if (ajoutEnAttente?.etape?.id === idEtape) {
       setEtapeEnAttente(null);
       setMenuEtape(null);
       setEtapeChoisie(null);
@@ -1550,7 +1590,7 @@ export default function AutomationBuilderPage() {
 
   const supprimerEtape = useCallback(async (idEtape: string) => {
     // L'étape en cours d'ajout n'est pas dans le parcours : rien à recoudre.
-    if (ajoutEnAttente?.etape.id === idEtape) {
+    if (ajoutEnAttente?.etape?.id === idEtape) {
       setEtapeEnAttente(null);
       setEtapeChoisie(null);
       return;
@@ -3085,6 +3125,10 @@ export default function AutomationBuilderPage() {
                       declencheurLabel={declencheurLabel}
                       steps={etapesAffichees}
                       fr={fr}
+                      langueEnvoi={langueEnvoi}
+                      membres={membres}
+                      etapesPipeline={etapesPipeline}
+                      automatisations={autresAutomatisations}
                       lectureSeule={formatOrigine}
                       selectionId={etapeChoisie}
                       // Format d'origine : le clic convertit, puis ouvre l'étape.
@@ -3423,7 +3467,7 @@ export default function AutomationBuilderPage() {
           objetChamps={objetRegle}
           langueEnvoi={langueEnvoi}
           stats={statsEtapes?.[etapeOuverte.id] ?? null}
-          nouvelle={ajoutEnAttente?.etape.id === etapeOuverte.id}
+          nouvelle={ajoutEnAttente?.etape?.id === etapeOuverte.id}
           modifieePar={modifieePar}
           onEnregistrer={enregistrerEtape}
           onSupprimer={supprimerEtape}

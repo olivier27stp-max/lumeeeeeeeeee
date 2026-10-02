@@ -96,7 +96,8 @@ describe('éditeur — ce que l’utilisateur voit et fait', () => {
     // (160 puis 153 en GSM-7, 70 puis 67 dès un « ê » ou un émoji) : diviser
     // par 160 dans l'éditeur annonçait « 2 SMS » pour un texte facturé 3.
     expect(editeur).toContain('texte.length');
-    expect(editeur).toContain('libelleSegments(texte, fr)');
+    // Compté sur ce que le client LIRA (variables remplacées par leur exemple) : 03-texto:306.
+    expect(editeur).toContain('libelleSegments(remplacerVariables(texte, fr), fr)');
     expect(editeur).not.toContain('/ 160');
   });
 
@@ -110,7 +111,10 @@ describe('éditeur — ce que l’utilisateur voit et fait', () => {
   it('le bouton reste inerte tant que rien n’a changé', () => {
     expect(editeur).toContain('const modifie =');
     // … ni quand le texte est vide (A-06, vague 4) : un texto vide partirait vide.
-    expect(editeur).toContain('disabled={!modifie || vide || enregistrement}');
+    // (La condition porte un nom depuis le report de l'agent T : s'y ajoutent
+    // « trop long » — 1 600 caractères — et « à la corbeille ».)
+    expect(editeur).toContain('const enregistrable = modifie && !vide && !tropLong && !enregistrement && !lectureSeule;');
+    expect(editeur).toContain('disabled={!enregistrable}');
   });
 
   it('un échec d’enregistrement est signalé, pas avalé', () => {

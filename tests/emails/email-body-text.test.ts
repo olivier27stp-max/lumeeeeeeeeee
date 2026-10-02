@@ -229,7 +229,8 @@ describe('éditeur — plus de HTML à l’écran', () => {
 
   it('le SMS garde son compteur de caractères', () => {
     // Le compte des SMS facturés vient de lib/smsSegments (même calcul que le serveur).
-    expect(message).toContain('libelleSegments(texte, fr)');
+    // … sur ce que le client LIRA (variables remplacées par leur exemple) : 03-texto:306.
+    expect(message).toContain('libelleSegments(remplacerVariables(texte, fr), fr)');
   });
 });
 

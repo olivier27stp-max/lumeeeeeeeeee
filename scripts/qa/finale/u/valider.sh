@@ -10,11 +10,12 @@ cd "$(git rev-parse --show-toplevel)" || exit 2
 MESSAGE="${1:?fichier du message de commit}"
 JOURNAL="D:/lume-final/sorties/u/dernier.log"
 : > "$JOURNAL"
-npx tsc --noEmit --incremental --tsBuildInfoFile D:/lume-final/sorties/u/tsbuildinfo > D:/lume-final/sorties/u/tsc.log 2>&1 \
+NODE_OPTIONS=--max-old-space-size=8192 npx tsc --noEmit --incremental --tsBuildInfoFile D:/lume-final/sorties/u/tsbuildinfo > D:/lume-final/sorties/u/tsc.log 2>&1 \
   || { echo "tsc failed" >> "$JOURNAL"; head -20 D:/lume-final/sorties/u/tsc.log; }
-npx vitest run --maxWorkers=2 --silent=true tests/automations-finale/u/ tests/accessibilite-statique.test.ts \
+npx vitest run --maxWorkers=2 --testTimeout=90000 --silent=true tests/automations-finale/u/ tests/accessibilite-statique.test.ts \
   tests/frontiere-serveur-client.test.ts tests/dockerfile-imports-src.test.ts tests/catch-vides-chemins-ecriture.test.ts \
-  tests/dialogues-natifs-bannis.test.ts tests/automatisations- tests/automation/ 2>&1 \
+  tests/dialogues-natifs-bannis.test.ts tests/chaine-optionnelle-incomplete.test.ts tests/qa- tests/emails/ \
+  tests/lumi-panneau tests/automatisations- tests/automation/ 2>&1 \
   | grep -E "×|FAIL|failed|Failed|Tests  |Test Files  " >> "$JOURNAL"
 if [ "${2:-}" = "--unitaires" ]; then
   npx vitest run --maxWorkers=2 --silent=true --config vitest.automations.config.ts --project unitaires 2>&1 \

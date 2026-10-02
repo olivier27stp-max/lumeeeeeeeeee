@@ -686,6 +686,9 @@ describe('étape « Si… » — ce que la zone « Conditions » ne sait pas lir
     expect(enregistrer().disabled).toBe(true);
     expect(alerte()).toContain('Ligne illisible « montant 5000 » : il manque un signe (=, !=, >, >=, <, <=) ou « est l’un de » entre le champ et la valeur.');
     expect(alerte()).toContain('Ligne illisible « statut = » : il manque la valeur.');
+    // Dit sous la zone, et le premier refus à côté du bouton — pas une troisième fois dans une liste.
+    expect(texte().split('Ligne illisible « statut = »').length - 1).toBe(1);
+    expect(texte().split('Ligne illisible « montant 5000 »').length - 1).toBe(2);
     cliquer(enregistrer());
     expect(enregistrees).toEqual([]);
   });
@@ -822,5 +825,61 @@ describe('étape « Attendre » — une attente plus longue que ce que le serveu
     await monterEtape(attente(86400), { fr: false });
     saisir(champ('Wait'), '900');
     expect(texte()).toContain('A wait cannot exceed 366 days (one year).');
+  });
+});
+
+// ─── P2-12 (QA du 2026-09-25) — un bouton grisé doit dire POURQUOI ──
+// tests/qa-2026-09-25-p2.test.ts lisait le SOURCE du panneau. La même
+// promesse, éprouvée sur le vrai composant : quelle que soit la raison,
+// elle est écrite À CÔTÉ d'« Enregistrer » grisé.
+
+describe('P2-12 — « Enregistrer » grisé dit toujours pourquoi, à côté du bouton', () => {
+  /** Le texte écrit dans le pied du panneau, à côté des boutons. */
+  const raison = () => enregistrer().parentElement?.querySelector('span.text-danger')?.textContent ?? '';
+
+  it('un message de texto laissé vide (le cas du QA)', async () => {
+    await monter('send_sms', { body: 'Bonjour' });
+    expect(enregistrer().disabled).toBe(false);
+    expect(raison()).toBe('');
+    saisir(champ('Texte du message *'), '');
+    expect(enregistrer().disabled).toBe(true);
+    expect(raison()).toBe('« Texte du message » est vide.');
+  });
+
+  it('une valeur hors bornes, une attente trop longue, une ligne de condition illisible, une action qui ne va pas avec le déclencheur', async () => {
+    await monter('create_task', { title: 'Rappeler', echeance_jours: '999' }, { declencheur: 'lead.created' });
+    expect(enregistrer().disabled).toBe(true);
+    expect(raison()).toBe('« À faire dans (jours) » doit être au plus 365.');
+    await act(async () => racine!.unmount()); racine = null; conteneur.remove();
+
+    await monterEtape({ id: 'e1', type: 'attendre', delai_secondes: 900 * 86400, suivant: null } as Etape);
+    expect(enregistrer().disabled).toBe(true);
+    expect(raison()).toBe('Une attente ne peut pas dépasser 366 jours (un an).');
+    await act(async () => racine!.unmount()); racine = null; conteneur.remove();
+
+    await monterEtape({ id: 's1', type: 'si', conditions: {}, alors: null, sinon: null });
+    saisir(champ('Conditions'), 'montant 5000');
+    expect(enregistrer().disabled).toBe(true);
+    expect(raison()).toContain('Ligne illisible « montant 5000 »');
+    await act(async () => racine!.unmount()); racine = null; conteneur.remove();
+
+    await monter('envoyer_facture', {}, { declencheur: 'lead.created' });
+    expect(enregistrer().disabled).toBe(true);
+    expect(raison()).toBe('« Envoyer la facture » ne peut pas suivre ce déclencheur : choisissez-en une autre.');
+  });
+
+  it('l’étape a changé ailleurs pendant la saisie : « Choisissez d’abord quelle version garder. »', async () => {
+    const texto = (body: string): Etape => ({ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body } }, suivant: null });
+    await monterEtape(texto('Texte d’origine'));
+    saisir(champ('Texte du message *'), 'Mon texte');
+    await rendre(texto('Texte de Lumi'), { modifieePar: 'lumi' });
+    expect(enregistrer().disabled).toBe(true);
+    expect(raison()).toBe('Choisissez d’abord quelle version garder.');
+  });
+
+  it('jamais grisé sans raison : tant que le bouton est actif, rien n’est écrit à côté', async () => {
+    await monter('send_sms', { body: 'Bonjour [client_name]' });
+    expect(enregistrer().disabled).toBe(false);
+    expect(raison()).toBe('');
   });
 });
