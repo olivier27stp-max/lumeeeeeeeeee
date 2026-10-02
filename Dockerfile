@@ -66,6 +66,9 @@ COPY src/lib/smsSegments.ts ./src/lib/smsSegments.ts
 COPY src/lib/automationCatalogue.ts ./src/lib/automationCatalogue.ts
 # Les issues d'une exécution (codes, catégories, libellés) : écrites par le moteur, lues par les écrans.
 COPY src/lib/automationMotifs.ts ./src/lib/automationMotifs.ts
+# Ce que ces issues veulent dire pour les statistiques (catégories comptées, actions « envoi au
+# client ») : `server/lib/automations-stats.ts` l'importe — sans cette ligne, le serveur ne démarre pas.
+COPY src/lib/automationIssues.ts ./src/lib/automationIssues.ts
 # La garde de publication (audit M8) : la route serveur et l'éditeur
 # partagent la même vérification. Elle lit aussi `sequenceTypes.ts`.
 COPY src/lib/publicationAutomatisation.ts ./src/lib/publicationAutomatisation.ts

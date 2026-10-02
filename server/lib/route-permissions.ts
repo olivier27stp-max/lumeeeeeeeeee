@@ -139,6 +139,11 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/automations/rules': 'automations.read',
   // Total déclenché, en cours, passages par étape (une route agrégée).
   'GET /api/automations/rules/stats': 'automations.read',
+  // Historique (une ligne par passage d'un client), Journaux (détail technique) et
+  // historique des modifications : même droit que la liste, lus avec le jeton de l'utilisateur.
+  'GET /api/automations/rules/historique': 'automations.read',
+  'GET /api/automations/rules/journaux': 'automations.read',
+  'GET /api/automations/rules/modifications': 'automations.read',
   // L'éditeur d'une automatisation : sa règle + le catalogue (lecture).
   'GET /api/automations/editeur': 'automations.read',
   // « X clients correspondent aujourd'hui » (déclencheur Client inactif).
