@@ -1,0 +1,1626 @@
+{
+ "date": "2026-10-02T11:53:41.748Z",
+ "api": "https://lumecrm.net",
+ "bilan": {
+  "global": {
+   "cas": 37,
+   "exactitude_outil_pct": 82.9,
+   "partiels": 3,
+   "rates": 3,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": 100,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 45.7,
+   "cout_par_1000_dollars": 12.35
+  },
+  "sensibles": {
+   "cas": 11,
+   "exactitude_outil_pct": 90.9,
+   "partiels": 1,
+   "rates": 0,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 9.36,
+   "cout_par_1000_dollars": 8.51
+  },
+  "par_type": {
+   "action": {
+    "cas": 17,
+    "exactitude_outil_pct": 82.4,
+    "partiels": 3,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 18.04,
+    "cout_par_1000_dollars": 10.61
+   },
+   "lecture": {
+    "cas": 18,
+    "exactitude_outil_pct": 83.3,
+    "partiels": 0,
+    "rates": 3,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 26.31,
+    "cout_par_1000_dollars": 14.61
+   },
+   "clarification": {
+    "cas": 2,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": 100,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 1.36,
+    "cout_par_1000_dollars": 6.78
+   }
+  },
+  "par_section": {
+   "clients": {
+    "cas": 6,
+    "exactitude_outil_pct": 83.3,
+    "partiels": 1,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 5.92,
+    "cout_par_1000_dollars": 9.87
+   },
+   "devis": {
+    "cas": 5,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 4.28,
+    "cout_par_1000_dollars": 8.57
+   },
+   "equipe": {
+    "cas": 11,
+    "exactitude_outil_pct": 81.8,
+    "partiels": 0,
+    "rates": 2,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 14.85,
+    "cout_par_1000_dollars": 13.5
+   },
+   "facturation": {
+    "cas": 4,
+    "exactitude_outil_pct": 66.7,
+    "partiels": 0,
+    "rates": 1,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": 100,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 7.5,
+    "cout_par_1000_dollars": 18.75
+   },
+   "planification": {
+    "cas": 1,
+    "exactitude_outil_pct": 0,
+    "partiels": 1,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 1.29,
+    "cout_par_1000_dollars": 12.88
+   },
+   "rapports": {
+    "cas": 10,
+    "exactitude_outil_pct": 88.9,
+    "partiels": 1,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": 100,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 11.86,
+    "cout_par_1000_dollars": 11.86
+   }
+  }
+ },
+ "resultats": [
+  {
+   "id": "lot-create_deal",
+   "section": "clients",
+   "outil": "create_deal",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Crée un deal pour Chantal Lévesque : lavage de vitres du printemps, 1 200 $.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_deal",
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "client_id": "98614e4b-1528-5d84-9203-86c1fc31c288",
+    "title": "Lavage de vitres du printemps",
+    "amount_cents": 120000
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Client",
+       "en": "Client"
+      },
+      "valeur": "Chantal Lévesque · 14 rue Montcalm Nord, Candiac, QC J5R 3L5, Candiac · 514-555-0119 · chantal.levesque@lume-qa.test"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Titre",
+       "en": "Title"
+      },
+      "valeur": "Lavage de vitres du printemps"
+     },
+     {
+      "libelle": {
+       "fr": "Montant",
+       "en": "Amount"
+      },
+      "valeur": "1 200,00 $",
+      "valeur_en": "$1,200.00"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.6215,
+   "conversation_id": "854e78b0-cec4-4d4b-89e3-2faf6f2e81ba",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 4085
+  },
+  {
+   "id": "lot-update_deal",
+   "section": "clients",
+   "outil": "update_deal",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Renomme le deal de Sophie Tremblay en « Contrat annuel ».",
+   "verdict_outil": "partiel",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_deals"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Je ne trouve aucun deal actif au nom de Sophie Tremblay dans le pipeline — il n'y en a pas en cours. Veux-tu que je lui crée un nouveau deal nommé « Contrat annuel » ?",
+   "cout_cents": 1.2952,
+   "conversation_id": "4702002b-e278-416a-84fd-924720940c40",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 6363
+  },
+  {
+   "id": "lot-set_quote_status",
+   "section": "devis",
+   "outil": "set_quote_status",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Marque la soumission 2 comme approuvée, la cliente a dit oui au téléphone.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "set_quote_status",
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "2d9842ec-50e1-486d-aeb4-6c9c5e751ca4",
+    "status": "approved"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Devis",
+       "en": "Quote"
+      },
+      "valeur": "#2 · Devis pour Sophie Tremblay · Sophie Tremblay · 100,00 $ · brouillon",
+      "valeur_en": "#2 · Devis pour Sophie Tremblay · Sophie Tremblay · $100.00 · draft"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Statut",
+       "en": "Status"
+      },
+      "valeur": "Approuvé",
+      "valeur_en": "Approved"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7117,
+   "conversation_id": "df7fad52-3e6b-4b1f-9eb0-5936036c15bb",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 4648
+  },
+  {
+   "id": "lot-set_quote_discount",
+   "section": "devis",
+   "outil": "set_quote_discount_deposit",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Mets 10 % de rabais sur la soumission 3.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "set_quote_discount_deposit",
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "23dfa179-9e8d-4540-8d2a-14a05f105e4e",
+    "discount_type": "percentage",
+    "discount_value": 10
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Devis",
+       "en": "Quote"
+      },
+      "valeur": "#3 · Devis pour Sophie Tremblay · Sophie Tremblay · 100,00 $ · brouillon",
+      "valeur_en": "#3 · Devis pour Sophie Tremblay · Sophie Tremblay · $100.00 · draft"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Type de rabais",
+       "en": "Discount type"
+      },
+      "valeur": "Pourcentage",
+      "valeur_en": "Percentage"
+     },
+     {
+      "libelle": {
+       "fr": "Rabais",
+       "en": "Discount"
+      },
+      "valeur": "10 %",
+      "valeur_en": "10%"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.5858,
+   "conversation_id": "6f626fba-0605-49b0-a5c9-447e0e1e9121",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 4059
+  },
+  {
+   "id": "lot-set_quote_deposit-joual",
+   "section": "devis",
+   "outil": "set_quote_discount_deposit",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "met 50 piasses de depot sur la soumission 2",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "set_quote_discount_deposit",
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "2d9842ec-50e1-486d-aeb4-6c9c5e751ca4",
+    "deposit_required": true,
+    "deposit_type": "fixed",
+    "deposit_value": 50
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Devis",
+       "en": "Quote"
+      },
+      "valeur": "#2 · Devis pour Sophie Tremblay · Sophie Tremblay · 100,00 $ · brouillon",
+      "valeur_en": "#2 · Devis pour Sophie Tremblay · Sophie Tremblay · $100.00 · draft"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Dépôt exigé",
+       "en": "Deposit required"
+      },
+      "valeur": "Oui",
+      "valeur_en": "Yes"
+     },
+     {
+      "libelle": {
+       "fr": "Type de dépôt",
+       "en": "Deposit type"
+      },
+      "valeur": "Montant fixe",
+      "valeur_en": "Fixed amount"
+     },
+     {
+      "libelle": {
+       "fr": "Dépôt",
+       "en": "Deposit"
+      },
+      "valeur": "50,00 $",
+      "valeur_en": "$50.00"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.6251,
+   "conversation_id": "5f256c02-85fe-4aac-a195-ec7fe853772c",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 4926
+  },
+  {
+   "id": "lot-get_client_consent",
+   "section": "clients",
+   "outil": "get_client_consent",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Est-ce que j’ai le droit d’envoyer des promotions par texto à Sophie Tremblay ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_client_consent"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Oui, tu peux : Sophie a un consentement valide (tacite, par relation d'affaires) autant pour l'email que le texto, bon jusqu'au 27 septembre 2028, et elle n'est pas désabonnée. Vas-y pour une promo par texto.",
+   "cout_cents": 1.3266,
+   "conversation_id": "dbaf918b-4826-4317-9530-517902708801",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 7314
+  },
+  {
+   "id": "lot-set_client_consent",
+   "section": "clients",
+   "outil": "set_client_consent",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Sophie Tremblay m’a dit oui pour recevoir nos courriels de promotion. Enregistre son consentement.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "set_client_consent",
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "client_id": "b3759523-58b1-4a3e-9da6-d5e3ab95b372",
+    "channel": "email",
+    "granted": true
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Client",
+       "en": "Client"
+      },
+      "valeur": "Sophie Tremblay · 56 boul. Témoin, Longueuil · 514-555-0103 · qa3@lume.test"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Canal",
+       "en": "Channel"
+      },
+      "valeur": "Courriel",
+      "valeur_en": "Email"
+     },
+     {
+      "libelle": {
+       "fr": "Consentement accordé",
+       "en": "Consent granted"
+      },
+      "valeur": "Oui",
+      "valeur_en": "Yes"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.6226,
+   "conversation_id": "07a7f288-82a6-4fa7-9cdc-693fcf964c72",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 3900
+  },
+  {
+   "id": "lot-list_archived",
+   "section": "clients",
+   "outil": "list_archived",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Qu’est-ce qu’il y a dans les archives ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_archived"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Tes archives sont vides en ce moment — aucun client, prospect ou job archivé.",
+   "cout_cents": 1.0029,
+   "conversation_id": "04c5de69-c5a0-4810-8efb-c88690a341a7",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 6421
+  },
+  {
+   "id": "lot-get_payroll_amounts",
+   "section": "equipe",
+   "outil": "get_payroll_amounts",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Combien je dois en paie pour la période en cours, par employé ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_payroll_amounts"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Pour la période du 28 septembre au 11 octobre (versée le 16 octobre), seul Olivier Gauthier a des heures jusqu'à maintenant : 3 h à 26,00 $/h, donc 78,00 $. Les autres sont à 0 $ pour l'instant, rien n'a encore été marqué payé.",
+   "cout_cents": 1.2599,
+   "conversation_id": "33ca29a0-1061-4d3c-a337-2531f53eed7c",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 6554
+  },
+  {
+   "id": "lot-get_payroll_amounts-joual",
+   "section": "equipe",
+   "outil": "get_payroll_amounts",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "cmb jdois en paye la",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_payroll_amounts"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Pour la période du 28 septembre au 11 octobre (versement le 16 octobre), le seul montant qui a bougé c'est Olivier Gauthier : 78,00 $ (3 heures à 26,00 $/h). Tous les autres sont à 0 $ pour l'instant, rien n'est encore marqué payé.",
+   "cout_cents": 1.3196,
+   "conversation_id": "6080fcad-8a97-4210-8438-074fd590a19f",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 7919
+  },
+  {
+   "id": "lot-get_payroll_history",
+   "section": "equipe",
+   "outil": "get_payroll_history",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Montre-moi les paies déjà versées à Mathieu Lavoie.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_payroll_history"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Aucune paie n'a encore été marquée comme versée pour Mathieu Lavoie — rien n'apparaît dans son historique. Veux-tu que je regarde plutôt la période en cours ?",
+   "cout_cents": 1.1586,
+   "conversation_id": "b96727bc-0105-4e27-97bc-79fac341e5e2",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 6828
+  },
+  {
+   "id": "lot-list_time_entries",
+   "section": "equipe",
+   "outil": "list_time_entries",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Liste les pointages de la dernière semaine, entrée par entrée.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_time_entries"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Il n'y a qu'un seul pointage sur la dernière semaine (26 sept. au 2 oct.) : Olivier Gauthier, mardi 29 septembre, de 8 h à 11 h, soit 3 heures. Il n'est pas encore approuvé.",
+   "cout_cents": 1.1656,
+   "conversation_id": "a39d8844-fe56-42af-91b1-c2c78df2321f",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 6103
+  },
+  {
+   "id": "lot-update_time_entry",
+   "section": "equipe",
+   "outil": "update_time_entry",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Corrige le pointage de Mathieu Lavoie du 24 septembre : il a fini à 16 h, pas à 15 h.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "update_time_entry",
+   "groupe": [],
+   "lectures": [
+    "list_time_entries"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "entry_id": "645b7153-566f-51a1-adf9-dddfefe2a9a8",
+    "clock_out_at": "2026-09-24T16:00"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Entrée de temps (actuellement)",
+       "en": "Time entry (currently)"
+      },
+      "valeur": "Mathieu Lavoie · 2026-09-24 · 13:00 → 15:00",
+      "valeur_en": "Mathieu Lavoie · 2026-09-24 · 13:00 → 15:00"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Départ",
+       "en": "Clock-out"
+      },
+      "valeur": "jeu. 24 septembre 2026 à 16 h 00",
+      "valeur_en": "Thu, September 24, 2026 at 4:00 p.m."
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 1.2007,
+   "conversation_id": "69609596-f410-40c3-a239-19c895168f33",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 5457
+  },
+  {
+   "id": "lot-delete_time_entry",
+   "section": "equipe",
+   "outil": "delete_time_entry",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime le pointage de Karine Bélanger du 24 septembre, c’était une erreur.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "delete_time_entry",
+   "groupe": [],
+   "lectures": [
+    "list_time_entries"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "entry_id": "ed1fca72-5315-505a-8804-5787754dc9f8"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Entrée de temps (actuellement)",
+       "en": "Time entry (currently)"
+      },
+      "valeur": "Karine Bélanger · 2026-09-24 · 13:00 → 15:00",
+      "valeur_en": "Karine Bélanger · 2026-09-24 · 13:00 → 15:00"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "J'ai trouvé l'entrée : jeudi 24 septembre, 13 h à 15 h (2 heures). Je la supprime.",
+   "cout_cents": 1.1346,
+   "conversation_id": "e56c46cf-298c-4379-880e-a737a70d2954",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 6887
+  },
+  {
+   "id": "lot-list_commissions",
+   "section": "equipe",
+   "outil": "list_commissions",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "C’est quoi les commissions en attente d’approbation ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_commissions"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Il y a une seule commission en attente : 60,00 $ pour Stéphanie Morin, sur la facture n°3 du job 19 (client Jean-François Pelletier, plan à 10 %).",
+   "cout_cents": 1.1392,
+   "conversation_id": "e3937609-73ac-4112-b2e4-a0bb91ae0eaf",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 8235
+  },
+  {
+   "id": "lot-get_team_schedule",
+   "section": "equipe",
+   "outil": "get_team_schedule",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Qui travaille demain, et qui est en congé ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_team_schedule"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Demain (samedi 3 octobre), personne n'a d'horaire ni de congé enregistré dans Lume — rien n'est planifié pour la journée.",
+   "cout_cents": 1.0593,
+   "conversation_id": "22964c00-175c-423b-b886-3ccd120bbb49",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 9741
+  },
+  {
+   "id": "lot-get_team_schedule-joual",
+   "section": "equipe",
+   "outil": "get_team_schedule",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "ki travail demain",
+   "verdict_outil": "rate",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "query_schedule"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Pas de visite planifiée demain (3 octobre) dans l'horaire — l'agenda est vide ce jour-là.",
+   "cout_cents": 2.7011,
+   "conversation_id": "b95fee13-65fe-404a-9aed-c8fa7082bc8e",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 6219
+  },
+  {
+   "id": "lot-get_taxes_collected",
+   "section": "facturation",
+   "outil": "get_taxes_collected",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Combien de taxes j’ai perçues en septembre ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_taxes_collected"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "En septembre, tu as perçu 89,85 $ de taxes au total : 30,00 $ de TPS et 59,85 $ de TVQ (sur les factures entièrement payées dans le mois).",
+   "cout_cents": 5.5068,
+   "conversation_id": "8553658b-2547-4437-952e-19e9172fe070",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 8933
+  },
+  {
+   "id": "lot-update_company_settings",
+   "section": "rapports",
+   "outil": "update_company_settings",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Change le site web de l’entreprise pour www.exemple-test.ca.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "update_company_settings",
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "website": "www.exemple-test.ca"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Site web",
+       "en": "Website"
+      },
+      "valeur": "www.exemple-test.ca"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 3.1934,
+   "conversation_id": "1e33b7a7-feb5-449d-8f03-8957b9730495",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 4012
+  },
+  {
+   "id": "lot-list_automation_templates",
+   "section": "rapports",
+   "outil": "list_automation_templates",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Montre-moi les modèles d’automatisation de la bibliothèque pour les rappels de rendez-vous.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_automation_templates"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Voici ce que j'ai trouvé pour les rendez-vous :\n\n- **Confirmation de rendez-vous** — envoyée dès la prise du rendez-vous (texto + courriel)\n- **Rappel — 7 jours avant** (texto + courriel)\n- **Rappel — la veille** (texto + courriel)\n- **Rappel — 2 h avant** (texto seulement)\n- **Suivi après rendez-vous annulé/manqué** — propose de reprendre, avertit l'équipe\n- **Pack complet** : confirmation + les trois rappels combinés en une seule automatisation\n\nLequel veux-tu que je crée (en brouillon, à activer ensuite)?",
+   "cout_cents": 1.3185,
+   "conversation_id": "89f84f0b-a672-4460-836b-4d7dab728a6d",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 7479
+  },
+  {
+   "id": "lot-create_automation_from_template",
+   "section": "rapports",
+   "outil": "create_automation_from_template",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Ajoute à mes automatisations le modèle de rappel de rendez-vous la veille.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_automation_from_template",
+   "groupe": [],
+   "lectures": [
+    "list_automation_templates"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "template_key": "job_reminder_1d"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Modèle d’automatisation",
+       "en": "Automation template"
+      },
+      "valeur": "job_reminder_1d"
+     },
+     {
+      "libelle": {
+       "fr": "Modèle",
+       "en": "Template"
+      },
+      "valeur": "Rappel de rendez-vous — la veille — Texto et courriel la veille du rendez-vous.",
+      "valeur_en": "Appointment reminder — day before — Text and email the day before the appointment."
+     },
+     {
+      "libelle": {
+       "fr": "État à la création",
+       "en": "State when created"
+      },
+      "valeur": "brouillon, éteinte : rien ne part tant que tu ne l’actives pas",
+      "valeur_en": "draft, turned off: nothing is sent until you turn it on"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.9549,
+   "conversation_id": "0640af3e-df93-4b30-bd36-f87cb37bc61c",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 5270
+  },
+  {
+   "id": "lot-duplicate_automation_rule",
+   "section": "rapports",
+   "outil": "duplicate_automation_rule",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Fais une copie de ma première automatisation pour que je puisse la modifier.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "duplicate_automation_rule",
+   "groupe": [],
+   "lectures": [
+    "list_automations"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "rule_id": "5422ada1-def4-4590-afa5-9431fcc6f62c"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Automatisation",
+       "en": "Automation"
+      },
+      "valeur": "Appointment Confirmation · Rendez-vous planifié · active",
+      "valeur_en": "Appointment Confirmation · Appointment scheduled · active"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 1.126,
+   "conversation_id": "9f24045f-de6a-4b2c-ba58-bdb7fca61b9f",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 5647
+  },
+  {
+   "id": "lot-rename_automation_rule",
+   "section": "rapports",
+   "outil": "rename_automation_rule",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Renomme ma première automatisation en « Rappel de rendez-vous ».",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "rename_automation_rule",
+   "groupe": [],
+   "lectures": [
+    "list_automations"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "rule_id": "5422ada1-def4-4590-afa5-9431fcc6f62c",
+    "name": "Rappel de rendez-vous"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Automatisation",
+       "en": "Automation"
+      },
+      "valeur": "Appointment Confirmation · Rendez-vous planifié · active",
+      "valeur_en": "Appointment Confirmation · Appointment scheduled · active"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Nom",
+       "en": "Name"
+      },
+      "valeur": "Rappel de rendez-vous"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 1.1502,
+   "conversation_id": "006ce3db-c58c-45f5-a666-c6c0c0e88821",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 5171
+  },
+  {
+   "id": "lot-delete_automation_rule",
+   "section": "rapports",
+   "outil": "delete_automation_rule",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime ma première automatisation, je ne m’en sers plus.",
+   "verdict_outil": "partiel",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_automations"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "J'ai 43 automatisations dans ton espace, et je ne peux pas deviner laquelle est « la première » pour toi (la liste n'est pas forcément dans l'ordre où tu les as créées). Tu peux me donner son nom ?",
+   "cout_cents": 1.256,
+   "conversation_id": "777e3591-9fa0-499f-ac35-4d9556e3fa62",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 6666
+  },
+  {
+   "id": "lot-pause_all_automations",
+   "section": "rapports",
+   "outil": "pause_all_automations",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Arrête toutes les automatisations tout de suite.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "pause_all_automations",
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "paused": true
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Tout arrêter",
+       "en": "Stop everything"
+      },
+      "valeur": "Oui",
+      "valeur_en": "Yes"
+     },
+     {
+      "libelle": {
+       "fr": "Effet",
+       "en": "Effect"
+      },
+      "valeur": "plus aucun message automatique ne part (37 automatisations actives) jusqu’à la reprise",
+      "valeur_en": "no automatic message goes out (37 active automations) until you resume"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.5344,
+   "conversation_id": "54b1a928-67cb-4944-a9fd-758195635419",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 4421
+  },
+  {
+   "id": "lot-pause_all_automations-joual",
+   "section": "rapports",
+   "outil": "pause_all_automations",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "stop toute les automatisation",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "pause_all_automations",
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "paused": true
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Tout arrêter",
+       "en": "Stop everything"
+      },
+      "valeur": "Oui",
+      "valeur_en": "Yes"
+     },
+     {
+      "libelle": {
+       "fr": "Effet",
+       "en": "Effect"
+      },
+      "valeur": "plus aucun message automatique ne part (37 automatisations actives) jusqu’à la reprise",
+      "valeur_en": "no automatic message goes out (37 active automations) until you resume"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.4484,
+   "conversation_id": "43bd53f4-17df-4ef6-98a8-423722045119",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 3560
+  },
+  {
+   "id": "lot-get_quote_win_rate",
+   "section": "devis",
+   "outil": "get_quote_win_rate",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "C’est quoi mon taux de gain sur les soumissions depuis juillet ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_quote_win_rate"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Depuis juillet, tu as créé 7 soumissions : 1 gagnée, 5 encore en attente de réponse et 1 perdue/fermée. Ça donne un taux de gain de 14,3 % sur l'ensemble (mais 50 % si on ne compte que celles où le client a tranché). En valeur, c'est 322,93 $ gagnés sur 2 829,45 $ créés.",
+   "cout_cents": 1.2256,
+   "conversation_id": "be452d24-7306-4278-98c1-7ff929594728",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 7178
+  },
+  {
+   "id": "lot-get_payment_methods_breakdown",
+   "section": "facturation",
+   "outil": "get_payment_methods_breakdown",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Mes clients me paient surtout comment : par carte, par virement ou comptant ?",
+   "verdict_outil": "rate",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Facturation : « Nouvelle facture » (/invoices/new : choisir le client, « Ajouter » une ligne, « Aperçu », « Sauvegarder », « Envoyer » ; /invoices/:id/edit pour modifier), « CSV » (export), menu « … » par facture → « Voir », « Envoyer », « Marquer payée » (fenêtre « Marquer la facture payée » : « Montant payé », « Méthode de paiement » — comptant, chèque, virement Interac, carte —, « Date de trans\n\n→ Finances — Facturation (/finances)\n\nSi ça ne règle pas ton cas, dis-le-moi et je creuse.",
+   "cout_cents": 0,
+   "conversation_id": "7b0df83b-ee46-4f87-9823-c784e1addf34",
+   "modele": null,
+   "etage": 2,
+   "duree_ms": 1020
+  },
+  {
+   "id": "lot-get_team_performance",
+   "section": "equipe",
+   "outil": "get_team_performance",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Quelle équipe a rapporté le plus ce mois-ci ?",
+   "verdict_outil": "rate",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "analyze_profitability"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Ce mois-ci, c'est Olivier Gauthier qui a rapporté le plus : 440,00 $ de revenus et 349,00 $ de profit estimé (marge d'environ 79 %). Karine Bélanger et Mathieu Lavoie suivent à 180,00 $ de revenus chacun.",
+   "cout_cents": 1.5683,
+   "conversation_id": "f14128be-7d17-446d-b296-c4872261f674",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 8752
+  },
+  {
+   "id": "lot-list_stripe_payouts",
+   "section": "facturation",
+   "outil": "list_stripe_payouts",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "C’est quoi mes derniers versements Stripe ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_stripe_payouts"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Aucun compte Stripe n'est connecté à ton entreprise en ce moment, donc il n'y a pas de versements à te montrer. Ça se branche dans Réglages › Paiements si tu veux l'activer.",
+   "cout_cents": 1.2212,
+   "conversation_id": "d1861a7b-95f7-4939-ace4-58558225e2a2",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 8179
+  },
+  {
+   "id": "lot-en-win-rate",
+   "section": "devis",
+   "outil": "get_quote_win_rate",
+   "type": "lecture",
+   "langue": "en",
+   "sensible": false,
+   "q": "What's my quote win rate this quarter?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_quote_win_rate"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "This quarter you've created 7 quotes worth $2,829.45 total — 1 won ($321.93), 5 still pending, 1 lost or closed. That's a 14.3% win rate overall (50% if you only count the ones that got a decision), and $1,415.26 is still sitting in pending quotes waiting on a response.",
+   "cout_cents": 1.1346,
+   "conversation_id": "9a66e696-80cc-49f5-99b5-a85ed507c5ae",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 7931
+  },
+  {
+   "id": "lot-en-time-entry",
+   "section": "equipe",
+   "outil": "list_time_entries",
+   "type": "lecture",
+   "langue": "en",
+   "sensible": false,
+   "q": "Show me this week's clock-ins, entry by entry.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_time_entries"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Only one entry so far this week: Olivier Gauthier worked Tuesday, September 29, from 8:00 a.m. to 11:00 a.m. (3 hours), not yet approved.",
+   "cout_cents": 1.1472,
+   "conversation_id": "907b2218-151d-4a23-9da7-15f4a39893b8",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 7179
+  },
+  {
+   "id": "fix-punch-sur-job",
+   "section": "planification",
+   "outil": "punch_in",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Punch-moi in sur la job de Fournier Gouttières.",
+   "verdict_outil": "partiel",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_jobs"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Ce job (le nettoyage de gouttières chez Isabelle Fournier, numéro 21) est marqué archivé, déjà terminé le 24 septembre — tu veux vraiment pointer dessus quand même, ou c'est plutôt un autre job en cours que tu visais ?",
+   "cout_cents": 1.288,
+   "conversation_id": "c2b16ddb-efaa-494a-ab80-cfbcffd0b3e5",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 8554
+  },
+  {
+   "id": "fix-rappel-ambigu",
+   "section": "facturation",
+   "outil": null,
+   "type": "clarification",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Désactive le rappel.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "« Le rappel » peut vouloir dire deux choses : les relances automatiques de paiement, ou une automatisation de rappel de rendez-vous. Tu veux désactiver lequel des deux ?",
+   "cout_cents": 0.7714,
+   "conversation_id": "9dcf559d-8250-42fc-97fa-56a6dbcf0f8d",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 4943
+  },
+  {
+   "id": "fix-rappels-vagues",
+   "section": "rapports",
+   "outil": null,
+   "type": "clarification",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Automatise mes rappels.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Rappels de quoi, au juste — des rendez-vous à venir ou des factures impayées ?",
+   "cout_cents": 0.585,
+   "conversation_id": "cc86615b-12c9-4a6f-8076-add3f9a19a0b",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 6286
+  },
+  {
+   "id": "fix-texto-seul",
+   "section": "rapports",
+   "outil": "create_automation_from_text",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Crée un rappel automatique par texto la veille de chaque rendez-vous.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_automation_from_text",
+   "groupe": [],
+   "lectures": [
+    "list_automation_templates"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "description": "La veille de chaque rendez-vous planifié, envoyer un texto de rappel au client (pas de courriel)."
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Description",
+       "en": "Description"
+      },
+      "valeur": "La veille de chaque rendez-vous planifié, envoyer un texto de rappel au client (pas de courriel)."
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 1.2908,
+   "conversation_id": "1a2af9d1-ae40-4ec6-a726-1b395056fc3e",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 8395
+  },
+  {
+   "id": "fix-nom-approchant",
+   "section": "clients",
+   "outil": "search_clients",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Donne-moi le numéro de téléphone de Sophie Trembley.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "search_clients"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Sophie Tremblay, c'est le 514-555-0103.",
+   "cout_cents": 1.0506,
+   "conversation_id": "3fddd46a-a3e8-413e-a116-ad5a82f57895",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 6735
+  }
+ ]
+}

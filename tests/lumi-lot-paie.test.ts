@@ -70,6 +70,8 @@ function base(tables: Record<string, Ligne[]>, opts: { ecrituresMuettes?: boolea
     q.eq = (col: string, v: unknown) => { filtres.push((l) => l[col] === v); return note('eq', [col, v]); };
     q.is = (col: string, v: unknown) => { filtres.push((l) => (l[col] ?? null) === v); return note('is', [col, v]); };
     q.in = (col: string, vs: unknown[]) => { filtres.push((l) => vs.includes(l[col])); return note('in', [col, vs]); };
+    // Seul usage : not(colonne, 'is', null) — « la colonne est renseignée ».
+    q.not = (col: string, op: string, v: unknown) => { filtres.push((l) => (l[col] ?? null) !== v); return note('not', [col, op, v]); };
     q.gte = (col: string, v: string) => { filtres.push((l) => String(l[col]) >= v); return note('gte', [col, v]); };
     q.lte = (col: string, v: string) => { filtres.push((l) => String(l[col]) <= v); return note('lte', [col, v]); };
     q.order = (col: string, o?: { ascending?: boolean }) => { tris.push([col, o?.ascending !== false]); return note('order', [col, o]); };
@@ -727,9 +729,11 @@ describe('get_team_schedule — qui travaille, qui est absent', () => {
   it('même résolution que la grille : récurrence, assignation du jour, congé approuvé qui remplace ou rogne', async () => {
     const { resultat, appels } = await executer('get_team_schedule', { date: '2026-10-06' });
     for (const a of appels) expect(filtreOrg(a), `${a.table} sans org_id`).toBe(true);
-    expect(appels.map((a) => a.table).sort()).toEqual(['memberships', 'memberships', 'recurring_team_schedules', 'team_schedule_assignments', 'teams', 'time_off_requests']);
+    // memberships : le rôle du demandeur, la composition des équipes, les noms.
+    expect(appels.map((a) => a.table).sort()).toEqual(['company_settings', 'memberships', 'memberships', 'memberships', 'recurring_team_schedules', 'schedule_events', 'team_schedule_assignments', 'teams', 'time_off_requests']);
     const recurrences = appels.find((a) => a.table === 'recurring_team_schedules')!;
-    expect(recurrences.ops).toContainEqual(['eq', ['day_of_week', 2]]);
+    expect(recurrences.ops).toContainEqual(['in', ['day_of_week', [2]]]);
+    expect(resultat.job_visits).toBeUndefined(); // aucune visite ce jour-là : rien d'ajouté à la réponse
     expect(recurrences.ops).toContainEqual(['eq', ['is_active', true]]);
     expect(appels.find((a) => a.table === 'time_off_requests')!.ops).toContainEqual(['in', ['status', ['pending', 'approved']]]);
 
@@ -780,6 +784,81 @@ describe('get_team_schedule — qui travaille, qui est absent', () => {
     const vide = await executer('get_team_schedule', { date: '2026-10-04' }); // dimanche, rien de posé
     expect(vide.resultat).toMatchObject({ jour: 'dimanche', working: [], off: [], pending_requests: [] });
     expect(vide.resultat.note).toMatch(/Aucun horaire d’équipe ni congé posé/);
+  });
+
+  // Passe en prod du 2026-10-02 : « c koi l'horaire de la gang cette semaine » = sept appels, un par jour.
+  it('une semaine en UN appel : chaque table lue une seule fois, un jour par ligne', async () => {
+    const { resultat, appels } = await executer('get_team_schedule', { date: '2026-10-05', date_to: '2026-10-11' });
+    for (const table of ['team_schedule_assignments', 'recurring_team_schedules', 'time_off_requests', 'schedule_events', 'teams']) {
+      expect(appels.filter((a) => a.table === table), table).toHaveLength(1);
+    }
+    for (const a of appels) expect(filtreOrg(a), `${a.table} sans org_id`).toBe(true);
+    expect(resultat).toMatchObject({ from: '2026-10-05', to: '2026-10-11' });
+    expect(resultat.days.map((d: any) => d.jour)).toEqual(['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']);
+    // Le mardi de la semaine = le même contenu que l'appel d'un seul jour.
+    expect(resultat.days[1].working.map((p: any) => p.name)).toEqual(['Marc Roy', 'Moi Même']);
+    expect(resultat.days[1].pending_requests).toHaveLength(1);
+    // Zoé en vacances du 5 au 9 : absente du lundi au vendredi, pas la fin de semaine.
+    expect(resultat.days.map((d: any) => !!d.off?.some((x: any) => x.name === 'Zoé Lambert'))).toEqual([true, true, true, true, true, false, false]);
+    expect(resultat.days[0].note).toBeUndefined(); // une seule note, pour la période
+    // Un jour sans horaire, congé ni visite tient en une ligne.
+    expect(resultat.days[5]).toEqual({ date: '2026-10-10', jour: 'samedi', nothing_scheduled: true });
+    expect(resultat.note).toMatch(/Du 2026-10-05 au 2026-10-11 : 1 jour\(s\) avec un horaire d’équipe posé, 0 jour\(s\) avec des visites de job/);
+  });
+
+  it('date_to avant date, ou plus de 14 jours : refusé avant toute lecture de l horaire', async () => {
+    expect((await executer('get_team_schedule', { date: '2026-10-05', date_to: '2026-10-04' })).resultat.error).toMatch(/date_to doit être le même jour que date, ou un jour après/);
+    const trop = await executer('get_team_schedule', { date: '2026-10-05', date_to: '2026-10-19' });
+    expect(trop.resultat.error).toMatch(/Au plus 14 jours/);
+    expect(trop.appels.some((a) => a.table === 'team_schedule_assignments')).toBe(false);
+    expect((await executer('get_team_schedule', { date: '2026-10-05', date_to: '2026-10-18' })).resultat.days).toHaveLength(14);
+  });
+
+  // Prod, 2026-10-02 : la grille Horaire tient en 2 lignes pour tous les clients ; « ki travail demain »
+  // répondait « personne » alors que des équipes avaient des visites.
+  it('grille vide : « qui travaille » se lit sur les visites de jobs, par équipe avec ses membres', async () => {
+    const visite = (team_id: string | null, start_at: string, plus: Ligne = {}) => ({ org_id: ORG, team_id, assigned_user: null, start_at, status: 'scheduled', deleted_at: null, ...plus });
+    const { resultat } = await executer('get_team_schedule', { date: '2026-10-03' }, {
+      prepare: (t) => {
+        t.memberships[1].team_id = T1; // Marc et Zoé sont dans Alpha
+        t.memberships[2].team_id = T1;
+        t.memberships[3].team_id = id(90); // l'étranger, dans l'équipe d'ailleurs
+        t.schedule_events = [
+          visite(T1, '2026-10-03T13:00:00.000Z'), // 9 h à Toronto
+          visite(T1, '2026-10-03T17:30:00.000Z'),
+          visite(null, '2026-10-03T15:00:00.000Z'), // sans équipe
+          visite(T2, '2026-10-04T03:00:00.000Z'), // 23 h le 3 à Toronto : compte pour le 3
+          visite(T2, '2026-10-03T00:30:00.000Z'), // 20 h 30 le 2 à Toronto : PAS le 3
+          visite(T2, '2026-10-03T14:00:00.000Z', { status: 'cancelled' }),
+          visite(T1, '2026-10-03T16:00:00.000Z', { deleted_at: '2026-10-01T00:00:00Z' }),
+          visite(id(90), '2026-10-03T13:00:00.000Z', { org_id: AUTRE }),
+        ];
+      },
+    });
+    expect(resultat).toMatchObject({ date: '2026-10-03', jour: 'samedi', working_count: 0, working: [], off: [] });
+    expect(resultat.job_visits).toEqual({
+      count: 4,
+      teams: [
+        { team_id: T1, team: 'Alpha', members: ['Marc Roy', 'Zoé Lambert'], visits: 2, first_at: '09:00' },
+        { team_id: T2, team: 'Bravo', members: [], visits: 1, first_at: '23:00' },
+      ],
+      without_team: 1,
+    });
+    expect(resultat.note).toMatch(/la grille Horaire n’est pas remplie\), mais 4 visite\(s\) de job ce jour-là : ceux qui travaillent sont les équipes de job_visits ; 1 visite\(s\) sans équipe assignée/);
+    expect(JSON.stringify(resultat)).not.toMatch(/Étranger|Ailleurs/);
+  });
+
+  it('team_id ne garde que les visites de cette équipe', async () => {
+    const { resultat } = await executer('get_team_schedule', { date: '2026-10-03', team_id: T2 }, {
+      prepare: (t) => {
+        t.schedule_events = [
+          { org_id: ORG, team_id: T1, assigned_user: null, start_at: '2026-10-03T13:00:00.000Z', status: 'scheduled', deleted_at: null },
+          { org_id: ORG, team_id: T2, assigned_user: null, start_at: '2026-10-03T18:00:00.000Z', status: 'completed', deleted_at: null },
+        ];
+      },
+    });
+    expect(resultat.team).toBe('Bravo');
+    expect(resultat.job_visits).toMatchObject({ count: 1, teams: [{ team: 'Bravo', visits: 1, first_at: '14:00' }], without_team: 0 });
   });
 
   it('sans date : aujourd hui, au fuseau de l entreprise (lu avec org_id)', async () => {

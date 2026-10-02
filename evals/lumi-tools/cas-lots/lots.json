@@ -34,5 +34,14 @@
  { "id": "fix-punch-sur-job", "section": "planification", "outil": "punch_in", "langue": "fr", "type": "action", "q": "Punch-moi in sur la job de Fournier Gouttières.", "voisins": [  "list_jobs" ] },
  { "id": "fix-rappel-ambigu", "section": "facturation", "outil": null, "langue": "fr", "type": "clarification", "q": "Désactive le rappel." },
  { "id": "fix-rappels-vagues", "section": "rapports", "outil": null, "langue": "fr", "type": "clarification", "q": "Automatise mes rappels." },
- { "id": "fix-texto-seul", "section": "rapports", "outil": "create_automation_from_text", "langue": "fr", "type": "action", "sensible": true, "q": "Crée un rappel automatique par texto la veille de chaque rendez-vous.", "interdits": [  "create_automation_from_template" ] }
+ { "id": "fix-texto-seul", "section": "rapports", "outil": "create_automation_from_text", "langue": "fr", "type": "action", "sensible": true, "q": "Crée un rappel automatique par texto la veille de chaque rendez-vous.", "interdits": [  "create_automation_from_template" ] },
+ { "id": "fix-nom-approchant", "section": "clients", "outil": "search_clients", "langue": "fr", "type": "lecture", "q": "Donne-moi le numéro de téléphone de Sophie Trembley." },
+ { "id": "v902-horaire-joual", "section": "equipe", "outil": "get_team_schedule", "langue": "fr", "type": "lecture", "q": "ki travail demain", "voisins": ["get_team"] },
+ { "id": "v902-horaire-conge", "section": "equipe", "outil": "get_team_schedule", "langue": "fr", "type": "lecture", "q": "qui est off vendredi", "voisins": ["get_team", "list_availability"] },
+ { "id": "v902-horaire-gang", "section": "equipe", "outil": "get_team_schedule", "langue": "fr", "type": "lecture", "q": "c koi l'horaire de la gang cette semaine", "voisins": ["get_team", "query_schedule"] },
+ { "id": "v902-horaire-visites", "section": "jobs", "outil": "query_schedule", "langue": "fr", "type": "lecture", "q": "j'ai quoi comme jobs demain", "voisins": ["list_jobs", "get_day_route"] },
+ { "id": "v902-perf-equipe", "section": "equipe", "outil": "get_team_performance", "langue": "fr", "type": "lecture", "q": "Quelle équipe a rapporté le plus ce mois-ci ?", "voisins": ["get_team", "list_teams"] },
+ { "id": "v902-perf-joual", "section": "equipe", "outil": "get_team_performance", "langue": "fr", "type": "lecture", "q": "quelle team fait le plus de cash ste mois ci", "voisins": ["get_team", "list_teams"] },
+ { "id": "v902-rentabilite-job", "section": "rapports", "outil": "analyze_profitability", "langue": "fr", "type": "lecture", "q": "Quel job m'a rapporté le plus ce mois-ci ?", "voisins": ["get_revenue_summary", "list_jobs"] },
+ { "id": "v903-modes-paiement", "section": "rapports", "outil": "get_payment_methods_breakdown", "langue": "fr", "type": "lecture", "q": "Mes clients me paient surtout comment ?", "voisins": ["list_payments"] }
 ]
