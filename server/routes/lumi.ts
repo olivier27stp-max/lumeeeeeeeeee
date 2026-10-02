@@ -1057,7 +1057,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     // dernier message (une carte), identifiées par la première.
     const enAttente = propositionsEnAttente(historique);
     if (!enAttente.length || !enAttente.some((a) => a.tool_use_id === tool_use_id)) {
-      return res.status(409).json({ error: 'No such pending action.', code: 'aucune_proposition' });
+      return res.status(409).json({ error: ctx.language === 'fr' ? 'Cette action n’est plus en attente : elle a déjà été traitée.' : 'This action is no longer pending: it has already been handled.', code: 'aucune_proposition' });
     }
     // B9 : une proposition n'est valable que 15 min. Passé ce délai, Confirmer
     // refuse (le message suivant l'annule, comme d'habitude) : on n'exécute
