@@ -23,7 +23,7 @@
    régénère (l'ancienne adresse cesse de fonctionner).
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Copy, Check, Eye, EyeOff, Plus, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
@@ -113,14 +113,61 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
     }
   }
 
+  /*
+   * DEUX CLICS RAPPROCHÉS (triage « modèles », 06-reglages-globaux:299).
+   *
+   * Pause puis reprise, coup sur coup : si le premier appel traîne, le second
+   * passe devant lui, puis le premier arrive et l'écrase. L'écran finissait sur
+   * « Active » pendant que la base contenait `enabled = false` — une adresse en
+   * pause sans que personne le voie, donc un formulaire de site qui ne déclenche
+   * plus rien.
+   *
+   * Tant que des bascules sont en route, l'écran montre le dernier clic. Quand
+   * la dernière est revenue ET que des appels se sont chevauchés, on RELIT la
+   * base : l'écran affiche ce qu'elle contient, et le dit si ce n'est pas ce
+   * qu'on venait de demander.
+   */
+  const bascules = useRef(new Map<string, { enRoute: number; croisees: boolean; voulu: boolean }>());
+
   async function basculer(a: AdresseDAppel) {
     const vise = !a.enabled;
+    const suivi = bascules.current.get(a.id) ?? { enRoute: 0, croisees: false, voulu: vise };
+    if (suivi.enRoute > 0) suivi.croisees = true;
+    suivi.enRoute += 1;
+    suivi.voulu = vise; // le dernier clic : ce que la personne veut
+    bascules.current.set(a.id, suivi);
+
     setAdresses((l) => l.map((x) => (x.id === a.id ? { ...x, enabled: vise } : x)));
+    let echec = false;
     try {
       await basculerAdresseDAppel(a.id, vise);
     } catch {
-      setAdresses((l) => l.map((x) => (x.id === a.id ? { ...x, enabled: a.enabled } : x)));
+      echec = true;
       toast.error(fr ? 'Changement non enregistré.' : 'Change not saved.');
+    }
+
+    suivi.enRoute -= 1;
+    if (suivi.enRoute > 0) return; // un clic plus récent est encore en route : c'est lui qui conclura
+    bascules.current.delete(a.id);
+
+    if (!suivi.croisees) {
+      // Un seul appel : on sait ce que la base contient.
+      if (echec) setAdresses((l) => l.map((x) => (x.id === a.id ? { ...x, enabled: a.enabled } : x)));
+      return;
+    }
+    // Des appels se sont chevauchés : seul le serveur sait lequel est arrivé en dernier.
+    try {
+      const enBase = (await listerAdressesDAppel()).find((x) => x.id === a.id);
+      if (!enBase) return;
+      setAdresses((l) => l.map((x) => (x.id === a.id ? { ...x, enabled: enBase.enabled } : x)));
+      if (enBase.enabled !== suivi.voulu) {
+        toast.error(enBase.enabled
+          ? (fr ? 'Vos clics se sont croisés : l’adresse est restée active. Cliquez de nouveau pour la mettre en pause.' : 'Your clicks crossed: the address is still active. Click again to pause it.')
+          : (fr ? 'Vos clics se sont croisés : l’adresse est en pause. Cliquez de nouveau pour la remettre en service.' : 'Your clicks crossed: the address is paused. Click again to turn it back on.'));
+      }
+    } catch (e: unknown) {
+      console.error('[AdressesDAppel] relecture après bascule', e);
+      toast.error(fr ? 'Impossible de relire l’état de l’adresse : rechargez la page.' : 'Could not re-read the address state: reload the page.');
     }
   }
 
