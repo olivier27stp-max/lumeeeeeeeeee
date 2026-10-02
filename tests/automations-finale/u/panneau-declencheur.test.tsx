@@ -34,6 +34,7 @@ vi.mock('../../../src/lib/supabase', () => {
 
 import PanneauDeclencheur from '../../../src/components/automations/PanneauDeclencheur';
 import { trouverDeclencheur } from '../../../src/lib/automationCatalogue';
+import type { ChampPerso } from '../../../src/lib/champs/types';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -215,5 +216,81 @@ describe('« Combien de jours avant » : hors de -365..365 ou pas entier → ref
     }
     cliquer(enregistrer());
     expect(enregistrees).toEqual([{ champ_id: 'd1', jours_avant: -7 }]);
+  });
+});
+
+// ─── 04-filtres-conditions:418 ──────────────────────────────────
+
+describe('04:418 — « Filtres », valeur d’un champ nombre : ce qui est tapé reste à l’écran, et c’est ce qui est enregistré', () => {
+  const champPerso = (id: string, label: string, type: string): ChampPerso => ({
+    id, object_type: 'client', folder_id: null, key: label.toLowerCase().replace(/\W+/g, '_'), label, placeholder: null, help_text: null,
+    field_type: type as ChampPerso['field_type'], config: {}, is_required: false, is_searchable: false, is_unique: false, position: 1,
+    created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', archived_at: null, options: [],
+  });
+  const NOMBRE = champPerso('aaaaaaaa-0000-4000-8000-00000000c001', 'Nombre de fenêtres', 'number');
+  const MONTANT = champPerso('aaaaaaaa-0000-4000-8000-00000000c002', 'Budget', 'monetary');
+  const valeur = () => conteneur.querySelector<HTMLInputElement>('input[aria-label="Valeur"]')!;
+  /** Frappe réelle, touche par touche : le champ reçoit à chaque fois ce qu'il AFFICHE, plus la touche. */
+  const taper = (touches: string) => { for (const t of touches) saisir(valeur(), valeur().value + t); };
+  const ouvrirFiltre = async (champs: ChampPerso[], conditions: Record<string, unknown> = {}) => {
+    await monter('lead.created', conditions, { champsPerso: champs });
+    if (!conteneur.querySelector('input[aria-label="Valeur"]')) cliquer(bouton('Ajouter une condition'));
+  };
+
+  it('1, 2, point, 5 : le champ montre « 12.5 » (le point ne disparaît pas) et 12,5 est enregistré — pas 125', async () => {
+    await ouvrirFiltre([NOMBRE]);
+    taper('12.');
+    expect(valeur().value).toBe('12.');
+    taper('5');
+    expect(valeur().value).toBe('12.5');
+    cliquer(enregistrer());
+    expect(enregistrees).toEqual([{ champs_perso: [{ field_id: NOMBRE.id, op: 'eq', value: 12.5 }] }]);
+  });
+
+  it('la virgule française aussi : « 12,5 » reste à l’écran, 12,5 est enregistré', async () => {
+    await ouvrirFiltre([NOMBRE]);
+    taper('12,5');
+    expect(valeur().value).toBe('12,5');
+    cliquer(enregistrer());
+    expect((enregistrees[0].champs_perso as Array<{ value: number }>)[0].value).toBe(12.5);
+  });
+
+  it('des lettres : jamais « NaN » — la frappe est ignorée, le champ garde ce qu’il avait', async () => {
+    await ouvrirFiltre([NOMBRE]);
+    taper('abc');
+    expect(valeur().value).toBe('');
+    taper('7x');
+    expect(valeur().value).toBe('7');
+    cliquer(enregistrer());
+    expect((enregistrees[0].champs_perso as Array<{ value: number }>)[0].value).toBe(7);
+  });
+
+  it('un nombre négatif se tape (« - » seul n’est pas encore une valeur)', async () => {
+    await ouvrirFiltre([NOMBRE]);
+    taper('-');
+    expect(valeur().value).toBe('-');
+    taper('3.25');
+    expect(valeur().value).toBe('-3.25');
+    cliquer(enregistrer());
+    expect((enregistrees[0].champs_perso as Array<{ value: number }>)[0].value).toBe(-3.25);
+  });
+
+  it('un montant : « 99.95 » $ reste à l’écran, 9995 cents sont enregistrés ; relu, il se réaffiche en dollars', async () => {
+    await ouvrirFiltre([MONTANT]);
+    taper('99.95');
+    expect(valeur().value).toBe('99.95');
+    cliquer(enregistrer());
+    expect(enregistrees).toEqual([{ champs_perso: [{ field_id: MONTANT.id, op: 'eq', value: 9995 }] }]);
+  });
+
+  it('une valeur déjà en base se relit ; changer de champ vide la valeur à l’écran', async () => {
+    await ouvrirFiltre([NOMBRE, MONTANT], { champs_perso: [{ field_id: NOMBRE.id, op: 'eq', value: 12.5 }] });
+    expect(valeur().value).toBe('12.5');
+    const menu = conteneur.querySelector<HTMLSelectElement>('select')!;
+    const champSelect = Array.from(conteneur.querySelectorAll('select')).find((s) => Array.from(s.options).some((o) => o.textContent === 'Budget'))!;
+    expect(menu).toBeTruthy();
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(champSelect, MONTANT.id);
+    act(() => { champSelect.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(valeur().value).toBe('');
   });
 });

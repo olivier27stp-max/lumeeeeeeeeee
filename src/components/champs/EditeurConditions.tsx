@@ -9,7 +9,7 @@
  *
  * Montant : saisi en dollars, stocké en cents dans la condition.
  */
-import { useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import DatePickerInput from '../ui/DatePickerInput';
 import type { ChampPerso } from '../../lib/champs/types';
@@ -35,6 +35,46 @@ export function conditionComplete(c: Condition): boolean {
   if (c.op === 'any_of' || c.op === 'none_of') return Array.isArray(c.value) && c.value.length > 0;
   if (c.op === 'between') return c.value != null && c.value !== '' && c.value2 != null && c.value2 !== '';
   return c.value != null && c.value !== '';
+}
+
+/**
+ * Un nombre (ou un montant en dollars) saisi au clavier.
+ *
+ * Le champ garde SON TEXTE : avant, il réaffichait à chaque frappe le nombre
+ * converti. Taper 1, 2, point donnait `Number('12.')` = 12 — le point
+ * disparaissait de l'écran, et le 5 suivant faisait « 125 », enregistré tel
+ * quel ; une lettre donnait `Number('abc')` → « NaN » à l'écran (triage
+ * déclencheurs, 04-filtres-conditions:418). Ici la conversion ne touche plus à
+ * ce qui est affiché, et une frappe qui n'est pas un nombre en cours de
+ * saisie (« -12,5 ») est simplement ignorée.
+ */
+function SaisieNombre({ valeur, monetaire, onChange, libelle, className }: {
+  valeur: Condition['value'] | undefined; monetaire: boolean; onChange: (v: number | null) => void; libelle: string; className: string;
+}) {
+  const versTexte = (v: Condition['value'] | undefined) => (v == null || v === '' || !Number.isFinite(Number(v)) ? '' : String(monetaire ? Number(v) / 100 : v));
+  const versValeur = (t: string): number | null => {
+    const n = Number(t.replace(',', '.'));
+    if (t.trim() === '' || !Number.isFinite(n)) return null;
+    return monetaire ? Math.round(n * 100) : n;
+  };
+  const [texte, setTexte] = useState(() => versTexte(valeur));
+  // La valeur a changé AILLEURS (autre champ, autre opérateur, ligne retirée) : on la reprend.
+  const recue = valeur == null || valeur === '' || !Number.isFinite(Number(valeur)) ? null : Number(valeur);
+  useEffect(() => {
+    if (versValeur(texte) !== recue) setTexte(versTexte(valeur));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seule la valeur reçue compte : le texte en cours de frappe ne doit pas relancer la reprise.
+  }, [recue]);
+  return (
+    <input
+      aria-label={libelle} inputMode="decimal" className={className} value={texte}
+      onChange={(e) => {
+        const t = e.target.value;
+        if (!/^-?\d*[.,]?\d*$/.test(t.trim())) return;
+        setTexte(t);
+        onChange(versValeur(t));
+      }}
+    />
+  );
 }
 
 export default function EditeurConditions({ champs, conditions, onChange, fr, max = 10 }: Props) {
@@ -63,8 +103,6 @@ export default function EditeurConditions({ champs, conditions, onChange, fr, ma
         const ops = OPERATEURS_PAR_FAMILLE[famille];
         const monetaire = champ?.field_type === 'monetary';
         const id = `${ids}-${i}`;
-        const nombre = (v: Condition['value']) => (v == null || v === '' ? '' : String(monetaire ? Number(v) / 100 : v));
-        const versValeur = (t: string) => (t === '' ? null : monetaire ? Math.round(Number(t.replace(',', '.')) * 100) : Number(t.replace(',', '.')));
         return (
           <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-lg bg-surface-secondary/60 p-2">
             <label htmlFor={`${id}-champ`} className="sr-only">{fr ? 'Champ' : 'Field'}</label>
@@ -105,16 +143,16 @@ export default function EditeurConditions({ champs, conditions, onChange, fr, ma
             )}
             {famille === 'nombre' && !['is_empty', 'is_not_empty'].includes(c.op) && (
               <>
-                <input
-                  aria-label={fr ? 'Valeur' : 'Value'} inputMode="decimal" className={`${input} w-24`} value={nombre(c.value)}
-                  onChange={(e) => maj(i, { value: versValeur(e.target.value) })}
+                <SaisieNombre
+                  libelle={fr ? 'Valeur' : 'Value'} className={`${input} w-24`} monetaire={monetaire}
+                  valeur={c.value} onChange={(v) => maj(i, { value: v })}
                 />
                 {c.op === 'between' && (
                   <>
                     <span className="text-[12px] text-text-tertiary">{fr ? 'et' : 'and'}</span>
-                    <input
-                      aria-label={fr ? 'Deuxième valeur' : 'Second value'} inputMode="decimal" className={`${input} w-24`} value={nombre(c.value2 ?? null)}
-                      onChange={(e) => maj(i, { value2: versValeur(e.target.value) })}
+                    <SaisieNombre
+                      libelle={fr ? 'Deuxième valeur' : 'Second value'} className={`${input} w-24`} monetaire={monetaire}
+                      valeur={c.value2} onChange={(v) => maj(i, { value2: v })}
                     />
                   </>
                 )}

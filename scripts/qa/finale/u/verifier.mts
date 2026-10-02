@@ -679,6 +679,37 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     }
     await page.context().close();
   },
+
+  /** Déclencheurs 04:418 — « Filtres », valeur d'un champ nombre tapée touche par touche : « 12.5 » reste 12,5 ; pas de « NaN ». */
+  async d418() {
+    const b = await leBureau();
+    const { data: deja } = await admin.from('custom_fields').select('id').eq('org_id', b.orgA).eq('object_type', 'client').eq('key', 'u_fenetres').is('archived_at', null).maybeSingle();
+    const idChamp = deja?.id ? String(deja.id) : String((await admin.from('custom_fields')
+      .insert({ org_id: b.orgA, object_type: 'client', key: 'u_fenetres', label: 'Fenêtres U', field_type: 'number', config: {}, position: 901 }).select('id').single()).data?.id);
+    const regle = await creerRegle({ trigger_event: 'lead.created', conditions: {}, steps: [action('create_notification', { title: 'Nouveau prospect' })] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    const p = page.getByRole('complementary', { name: 'Réglages du déclencheur' });
+    await page.getByRole('button', { name: /^Quand/ }).first().click();
+    await p.waitFor();
+    await p.getByRole('button', { name: 'Ajouter une condition' }).click();
+    await p.getByLabel('Champ', { exact: true }).selectOption({ label: 'Fenêtres U' });
+    const v = p.getByLabel('Valeur', { exact: true });
+    await v.pressSequentially('12.5');
+    verifier(await v.inputValue() === '12.5', `après 1, 2, point, 5 : le champ montre « ${await v.inputValue()} »`);
+    await p.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+    await pause(5000);
+    const filtres = ((await lireRegle(regle.id)).conditions as { champs_perso?: Array<{ field_id: string; op: string; value: unknown }> }).champs_perso ?? [];
+    verifier(filtres.length === 1 && filtres[0].field_id === idChamp && filtres[0].value === 12.5, `12,5 est en base : ${JSON.stringify(filtres)}`);
+    await page.getByRole('button', { name: /^Quand/ }).first().click();
+    await p.waitFor();
+    const v2 = p.getByLabel('Valeur', { exact: true });
+    verifier(await v2.inputValue() === '12.5', 'rouvert, le panneau relit 12.5');
+    await v2.fill('');
+    await v2.pressSequentially('abc');
+    verifier(await v2.inputValue() === '', `des lettres : le champ montre « ${await v2.inputValue()} » (jamais « NaN »)`);
+    await page.context().close();
+  },
 };
 
 const demandes = process.argv.slice(2);
