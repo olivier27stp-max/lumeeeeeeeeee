@@ -306,6 +306,12 @@ gh pr create
 
 **C. Ménage** (sur le PC de Rafba seulement) : supprimer les worktrees `lume-lumi-evals-run`, `lume-lumi-evals`, `lume-lumi-mission` et `lume-passation` ; rien n'y est perdu.
 
+**Attention, `main` est rouge** (Rapporté par la session 86, 2026-10-02 22:18 UTC ; hors de cette mission) :
+- Depuis le commit `f6af753d` (« saisie manuelle d'une carte via Stripe Connect », poussé directement sur `main`), le test `tests/portefeuilles-moyens-paiement.test.ts` échoue.
+- Cause rapportée : `automatic_payment_methods` a été retiré et `payment_method_types: ['card']` remis. Apple Pay et Google Pay sont donc probablement de nouveau invisibles.
+- Toute PR échoue « Lint · Test · Build » tant que ce n'est pas réglé.
+- C'est un sujet Stripe : le régler demande l'accord de Rafba.
+
 **À vérifier à la reprise** :
 - `npm run test:lumi` vert sur le `main` à jour ;
 - le refus de `/lumi/execute` répond bien en français en prod (une confirmation sur une carte déjà traitée) ;
