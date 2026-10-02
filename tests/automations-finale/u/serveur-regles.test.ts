@@ -616,3 +616,83 @@ describe('POST /automations/rules/generer — `modifie: false` : la réponse por
     expect(r.json.updated_at).toBe(enBase().updated_at);
   });
 });
+
+// ─── `actions` = reflet du parcours, à CHAQUE écriture d'un parcours (carte des automatisations, 2026-10-02) ───
+
+import { actionsDuParcours } from '../../../src/lib/publicationAutomatisation';
+
+describe('`actions` est le reflet du parcours copié — « Utiliser ce modèle », « Dupliquer », création, copie vers d’autres bureaux', () => {
+  const message = (id: string, body: string, suivant: string | null) => ({ id, type: 'action', action: { type: 'send_sms', config: { body } }, suivant });
+  /** Un parcours de trois messages séparés par des attentes — et une copie `actions` PÉRIMÉE d'un seul message. */
+  const TROIS = [
+    message('e1', 'Premier message', 'e2'),
+    { id: 'e2', type: 'attendre', delai_secondes: 86400, suivant: 'e3' },
+    message('e3', 'Deuxième message', 'e4'),
+    { id: 'e4', type: 'attendre', delai_secondes: 172800, suivant: 'e5' },
+    message('e5', 'Troisième message', null),
+  ];
+  const PERIMEE = [{ type: 'send_sms', config: { body: 'Premier message' } }];
+  const derniere = () => (etat.tables.automation_rules ?? []).at(-1) as Ligne;
+  const corps = (ligne: Ligne) => (ligne.actions as Array<{ config: { body?: string } }>).map((a) => a.config.body);
+
+  it('« Utiliser ce modèle » : la copie porte dans `actions` TOUS les messages de son parcours, dans l’ordre de `actionsDuParcours` — jamais les `actions` du modèle recopiées telles quelles', async () => {
+    const { trouverModele } = await import('../../../server/lib/automationTemplates');
+    const modele = trouverModele('pack_relance_devis')!;
+    // Le défaut mesuré : un modèle dont la copie `actions` ne porte qu'UN message (c'était le cas de tout le pack de base).
+    const dOrigine = modele.actions;
+    modele.actions = [dOrigine[0]];
+    try {
+      const r = await appeler('POST', '/automations/templates/utiliser', { templateId: 'pack_relance_devis' });
+      expect(r.status).toBe(201);
+      const copie = derniere();
+      const etapesAction = (copie.steps as Array<{ type: string }>).filter((e) => e.type === 'action');
+      expect(etapesAction.length).toBeGreaterThan(1);
+      expect((copie.actions as unknown[]).length).toBe(etapesAction.length);
+      expect(copie.actions).toEqual(actionsDuParcours(copie.steps));
+    } finally {
+      modele.actions = dOrigine;
+    }
+  });
+
+  it('… un modèle d’une seule vague (sans parcours dans le catalogue) : `actions` redit aussi le parcours projeté', async () => {
+    const r = await appeler('POST', '/automations/templates/utiliser', { templateId: 'job_reminder_1d' });
+    expect(r.status).toBe(201);
+    expect(derniere().actions).toEqual(actionsDuParcours(derniere().steps));
+  });
+
+  it('« Dupliquer » un parcours dont la copie `actions` était périmée : la copie porte les trois messages, dans l’ordre', async () => {
+    etat.tables.automation_rules = [regle({ steps: TROIS, actions: PERIMEE })];
+    const r = await appeler('POST', `/automations/rules/${REGLE}/duplicate`);
+    expect(r.status).toBe(201);
+    expect(corps(derniere())).toEqual(['Premier message', 'Deuxième message', 'Troisième message']);
+    expect(derniere().actions).toEqual(actionsDuParcours(TROIS));
+  });
+
+  it('« Dupliquer » une règle SIMPLE (sans parcours) : ses `actions` sont ce qu’elle fait — recopiées telles quelles', async () => {
+    const simples = [{ type: 'send_sms', config: { body: 'Un' } }, { type: 'send_email', config: { subject: 'Deux', body: 'Deux' } }];
+    etat.tables.automation_rules = [regle({ steps: null, actions: simples })];
+    const r = await appeler('POST', `/automations/rules/${REGLE}/duplicate`);
+    expect(r.status).toBe(201);
+    expect(derniere().actions).toEqual(simples);
+    expect(derniere().steps).toBeNull();
+  });
+
+  it('créer avec un parcours (la 2e automatisation de l’éditeur n’envoyait que la première action) : le serveur écrit le reflet complet', async () => {
+    const r = await appeler('POST', '/automations/rules', {
+      name: 'Quand il répond', trigger_event: 'client.replied', delay_seconds: 0, steps: TROIS, actions: PERIMEE,
+    });
+    expect(r.status).toBe(201);
+    expect(corps(derniere())).toEqual(['Premier message', 'Deuxième message', 'Troisième message']);
+  });
+
+  it('copie vers un autre bureau (`contenuPour`) : le reflet du parcours copié ; règle simple : ses actions', async () => {
+    const { contenuPour } = await vi.importActual<typeof import('../../../server/lib/automatisations-bureaux')>('../../../server/lib/automatisations-bureaux');
+    const aucune = { pipelines: new Map(), etapes: new Map(), champs: new Map(), regles: new Map(), membres: new Set<string>(), options: new Map() } as never;
+    const base = { id: REGLE, name: 'Relance', description: '', trigger_event: 'quote.sent', conditions: {}, delay_seconds: 0, settings: null, is_active: false, is_preset: false, preset_key: null, pipeline_id: null, stage_id: null };
+    const copie = contenuPour({ ...base, steps: TROIS, actions: PERIMEE }, aucune, new Set());
+    expect(copie.actions).toEqual(actionsDuParcours(TROIS));
+    expect((copie.actions as unknown[]).length).toBe(3);
+    const simple = contenuPour({ ...base, steps: null, actions: PERIMEE }, aucune, new Set());
+    expect(simple.actions).toEqual(PERIMEE);
+  });
+});

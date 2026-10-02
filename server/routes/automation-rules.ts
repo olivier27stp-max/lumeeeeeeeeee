@@ -44,6 +44,7 @@ import {
 import { MODELES_AUTOMATISATION, trouverModele } from '../lib/automationTemplates';
 import { copierEtapes, nomDisponible } from '../../src/lib/automationTemplates';
 import { projeterFormatOrigine } from '../../src/lib/sequenceTypes';
+import { actionsDuParcours } from '../../src/lib/publicationAutomatisation';
 import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie } from '../lib/automatisations-bureaux';
 import { logger } from '../lib/logger';
 import { messageCorbeille, STATUT_CORBEILLE } from '../lib/automations-corbeille';
@@ -277,7 +278,10 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
       trigger_event: req.body.trigger_event,
       conditions: req.body.conditions ?? {},
       delay_seconds: req.body.delay_seconds,
-      actions: req.body.actions,
+      // Un parcours fourni : `actions` en est le reflet, quoi que l'appelant ait
+      // envoyé (la 2e automatisation créée par l'éditeur n'envoyait que la
+      // première action). Règle simple : ses `actions` sont ce qu'elle fait.
+      actions: aDesEtapes ? actionsDuParcours(req.body.steps, fr) : req.body.actions,
       // `steps` non fourni = règle simple : la colonne reste NULL et le moteur
       // garde exactement le comportement d'avant.
       steps: req.body.steps ?? null,
@@ -924,7 +928,15 @@ router.post('/automations/templates/utiliser', validate(automationModeleUtiliser
         conditions: JSON.parse(JSON.stringify(modele.conditions)),
         // Un parcours porte ses attentes dans ses étapes.
         delay_seconds: 0,
-        actions: JSON.parse(JSON.stringify(modele.actions)),
+        /*
+         * `actions` = le REFLET du parcours copié — jamais les `actions` du
+         * modèle. Les préréglages du pack portent 8 à 13 messages dans `steps`
+         * et UN seul dans `actions` : la copie héritait de ce message unique,
+         * et tout lecteur d'`actions` voyait 1 message sur 8 (carte des
+         * automatisations, 2026-10-02). Règle : `actions` se dérive du
+         * parcours à chaque écriture d'un parcours (`actionsDuParcours`).
+         */
+        actions: actionsDuParcours(steps, !en),
         steps,
         settings: modele.settings ? JSON.parse(JSON.stringify(modele.settings)) : null,
         // Brouillon, jamais activée d'office. Une automatisation À SOI : ni
@@ -994,7 +1006,12 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
       trigger_event: source.trigger_event,
       conditions: source.conditions ?? {},
       delay_seconds: source.delay_seconds,
-      actions: source.actions,
+      // Un parcours : `actions` en est le reflet (une source dont la copie
+      // `actions` était périmée ne transmet pas sa péremption). Une règle
+      // simple, sans parcours : ses `actions` SONT ce qu'elle fait.
+      actions: Array.isArray(source.steps) && source.steps.length > 0
+        ? actionsDuParcours(source.steps, langueDe(req) === 'fr')
+        : source.actions,
       steps: source.steps ?? null,
       settings: source.settings ?? null,
       // La copie d'un préréglage devient une automatisation À SOI : plus de

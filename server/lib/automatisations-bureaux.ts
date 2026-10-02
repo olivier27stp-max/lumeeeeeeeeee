@@ -21,6 +21,7 @@ import { getUserContext, hasPermission } from './rbac';
 import { bureauxMemeEntreprise } from './boite-unifiee';
 import { logger } from './logger';
 import { activerApresEcritureUtilisateur } from './automations-publication';
+import { actionsDuParcours } from '../../src/lib/publicationAutomatisation';
 
 export interface Correspondances {
   pipelines: Map<string, string>;
@@ -154,22 +155,30 @@ export interface ResultatCopie {
 
 const CHAMPS_REGLE = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, pipeline_id, stage_id';
 
-type Regle = {
+export type Regle = {
   id: string; name: string; description: string | null; trigger_event: string; conditions: unknown; delay_seconds: number;
   actions: unknown; steps: unknown; settings: unknown; is_active: boolean; is_preset: boolean; preset_key: string | null;
   pipeline_id: string | null; stage_id: string | null;
 };
 
-/** Contenu de la règle, références retrouvées dans le bureau cible (ce qui manque est noté). */
-function contenuPour(regle: Regle, c: Correspondances, manquants: Set<string>) {
+/**
+ * Contenu de la règle, références retrouvées dans le bureau cible (ce qui manque est noté).
+ *
+ * `actions` : le REFLET du parcours copié quand la règle en a un (`actionsDuParcours`,
+ * la fonction de référence) — jamais la colonne `actions` de la source recopiée telle
+ * quelle : périmée dans le bureau d'origine (un message sur huit pour les préréglages
+ * du pack), elle l'aurait été dans chaque bureau de destination.
+ */
+export function contenuPour(regle: Regle, c: Correspondances, manquants: Set<string>) {
+  const steps = regle.steps ? remapper(regle.steps, c, manquants) : null;
   return {
     name: regle.name,
     description: regle.description ?? '',
     trigger_event: regle.trigger_event,
     conditions: remapper(regle.conditions ?? {}, c, manquants),
     delay_seconds: regle.delay_seconds,
-    actions: remapper(regle.actions ?? [], c, manquants),
-    steps: regle.steps ? remapper(regle.steps, c, manquants) : null,
+    actions: Array.isArray(steps) && steps.length > 0 ? actionsDuParcours(steps) : remapper(regle.actions ?? [], c, manquants),
+    steps,
     settings: regle.settings ?? null,
     pipeline_id: remapper({ pipeline_id: regle.pipeline_id }, c, manquants).pipeline_id ?? null,
     stage_id: remapper({ stage_id: regle.stage_id }, c, manquants).stage_id ?? null,
