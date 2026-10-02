@@ -103,6 +103,9 @@ async function enrichir(supabase: SupabaseClient, ev: LigneBase): Promise<Record
   return meta;
 }
 
+/** Écrit par la base quand le début d'une visite change (trigger proposé M-04). Jamais émis sur le bus. */
+export const TYPE_RENDEZ_VOUS_DEPLACE = 'appointment.rescheduled';
+
 /**
  * Événements dont l'entité du DÉCLENCHEUR est le client, alors que la base
  * consigne la note ou la tâche elle-même (B-14) : « Note ajoutée » depuis
@@ -254,6 +257,19 @@ export async function traiterEvenementsBase(supabase: SupabaseClient, options: {
     if (errPrise || !pris?.length) continue;
 
     try {
+      // Rendez-vous DÉPLACÉ (B-02) : ce n'est pas un déclencheur — rien n'est
+      // émis, aucune confirmation ne repart. Les rappels en attente de cette
+      // visite sont recalés sur sa nouvelle date, ou annulés s'ils sont périmés.
+      if (ev.type === TYPE_RENDEZ_VOUS_DEPLACE) {
+        const { recalerRappelsDeVisite } = await import('./automationEngine');
+        const n = await recalerRappelsDeVisite(supabase, ev.org_id, ev.entity_id);
+        await marquer(supabase, ev.id, {
+          traite_at: new Date().toISOString(),
+          last_error: n > 0 ? `${n} rappel(s) recalé(s) sur la nouvelle date du rendez-vous` : null,
+        });
+        continue;
+      }
+
       // Ce qui sera émis : la ligne enrichie, ou — note, tâche — le client
       // rattaché (B-14). Rien à émettre (pas de client, déjà émis par
       // l'écran) : la ligne est close avec son motif, ce n'est pas un échec.

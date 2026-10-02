@@ -111,7 +111,8 @@ describe('point 13 — rendez-vous DÉPLACÉ sans l’appel du navigateur (écri
     // (app mobile, import, intégration, onglet fermé avant l'appel « appointment-rescheduled »).
     const nouveau = new Date(Date.now() + 2 * 86_400_000);
     await ok(b.admin.from('schedule_events').update({ start_at: nouveau.toISOString(), end_at: new Date(nouveau.getTime() + 3600_000).toISOString() }).eq('id', v.id), 'déplacement');
-    await new Promise((r) => setTimeout(r, 3_000));
+    // La base consigne le déplacement (trigger proposé M-04) ; la boucle de 15 s du serveur recale les rappels.
+    await boucleDeLaBase();
 
     const [apres] = await tachesDe(b, id);
     const rappelPrevu = Date.parse(apres.execute_at);

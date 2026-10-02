@@ -34,7 +34,7 @@ import { fuseauOrg, FUSEAU_DEFAUT, corrigerChangementDHeure } from './automation
 import { noterRegleTraitee } from './outbox';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
 import { typeEnvoi } from './desabonnement';
-import { revaliderTache, motifArret, phraseArret } from './sortie-parcours';
+import { revaliderTache, motifArret, phraseArret, sortDuRappelAvant } from './sortie-parcours';
 import { normaliserJoursAvant } from './rappels-dates';
 
 interface AutomationRule {
@@ -2099,6 +2099,140 @@ async function arreterTache(
 }
 
 /**
+ * REPORTE une tâche sans l'exécuter : elle redevient `pending` à `executeAt`,
+ * sans consommer de tentative, avec son motif (`last_error`,
+ * `action_config.motif_code`) et UNE ligne au journal — seulement au PREMIER
+ * report pour ce motif : un message qui attend la fenêtre d'envoi pendant un
+ * long week-end n'écrit pas une ligne à chaque passage.
+ *
+ * `champs` : autres colonnes à écrire (une `action_config` déjà recalée).
+ */
+async function reporterTache(
+  supabase: SupabaseClient,
+  task: TacheDeLaFile & { attempts?: number | null },
+  issue: IssueTache,
+  executeAt: Date,
+  champs: Record<string, unknown> = {},
+): Promise<boolean> {
+  const dejaDit = task.action_config?.motif_code === issue.code;
+  const { error } = await supabase
+    .from('automation_scheduled_tasks')
+    .update({
+      status: 'pending',
+      execute_at: executeAt.toISOString(),
+      // La prise a pu incrémenter `attempts` en base : on remet la valeur lue.
+      attempts: Number(task.attempts || 0),
+      last_error: issue.motif,
+      action_config: { ...(task.action_config ?? {}), motif_code: issue.code },
+      ...champs,
+    })
+    .eq('id', task.id);
+  if (error) {
+    console.error(`[automationEngine] report (${issue.code}) impossible pour la tâche ${task.id}:`, error.message);
+    return false;
+  }
+  if (!dejaDit) await journaliserIssueTache(supabase, task, issue);
+  return true;
+}
+
+/** L'issue « rendez-vous déplacé » d'un rappel reporté à sa nouvelle heure. */
+function issueRendezVousDeplace(executeAtMs: number, debutMs: number): IssueTache {
+  return {
+    code: 'rendez_vous_deplace',
+    motif: 'Rendez-vous déplacé : rappel replanifié.',
+    saute: 'Reporté : le rendez-vous a été déplacé, le rappel suit la nouvelle date',
+    detail: { prochain_envoi: new Date(executeAtMs).toISOString(), nouveau_debut: new Date(debutMs).toISOString() },
+  };
+}
+
+/** La tâche retient le NOUVEAU début du rendez-vous pour lequel elle est planifiée. */
+function actionConfigRecale(actionConfig: Record<string, any> | null | undefined, debutMs: number): Record<string, unknown> {
+  return {
+    ...(actionConfig ?? {}),
+    motif_code: 'rendez_vous_deplace',
+    event_metadata: { ...(actionConfig?.event_metadata ?? {}), start_time: new Date(debutMs).toISOString() },
+  };
+}
+
+/**
+ * Un rendez-vous vient d'être DÉPLACÉ : ses rappels en attente le suivent
+ * tout de suite (B-02), sans attendre leur ancienne échéance — pour une visite
+ * avancée, il serait alors trop tard pour rappeler.
+ *
+ * Appelé par la file des événements de la base (`appointment.rescheduled`,
+ * trigger proposé M-04) : la visite peut être déplacée par l'app mobile, par
+ * Lumi ou par un import, pas seulement par l'écran. Rien n'est émis sur le
+ * bus : aucune confirmation ne repart.
+ *   · rappel « X avant » d'une règle à plat : recalé, ou annulé s'il est
+ *     périmé (même jugement qu'à l'échéance, `sortDuRappelAvant`) ;
+ *   · attente « avant la date » d'un parcours : son échéance est avancée si
+ *     le nouveau moment vient plus tôt (plus tard, elle se replanifie seule à
+ *     l'échéance — `echeanceAvantDate`).
+ *
+ * @returns le nombre de tâches recalées ou annulées.
+ */
+export async function recalerRappelsDeVisite(
+  supabase: SupabaseClient,
+  orgId: string,
+  visiteId: string,
+  maintenant: number = Date.now(),
+): Promise<number> {
+  const { data: visite, error: errVisite } = await supabase
+    .from('schedule_events').select('start_at, start_time, status, deleted_at').eq('id', visiteId).eq('org_id', orgId).maybeSingle();
+  if (errVisite) throw new Error(`lecture du rendez-vous : ${errVisite.message}`);
+  const v = visite as { start_at?: string | null; start_time?: string | null; status?: string | null; deleted_at?: string | null } | null;
+  // Supprimé ou annulé : la revalidation arrêtera ses rappels à l'échéance.
+  if (!v || v.deleted_at || v.status === 'cancelled') return 0;
+  const debut = Date.parse(String(v.start_at || v.start_time || ''));
+  if (!Number.isFinite(debut)) return 0;
+
+  const { data: taches, error } = await supabase
+    .from('automation_scheduled_tasks')
+    .select('id, org_id, automation_rule_id, entity_type, entity_id, action_config, execute_at, attempts, step_id, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(trigger_event, delay_seconds, steps)')
+    .eq('org_id', orgId)
+    .eq('entity_id', visiteId)
+    .eq('status', 'pending')
+    .limit(200);
+  if (error) throw new Error(`lecture des rappels : ${error.message}`);
+
+  const fuseau = await fuseauOrg(supabase, orgId);
+  let touchees = 0;
+  for (const task of (taches ?? []) as any[]) {
+    const actionConfig = (task.action_config ?? {}) as Record<string, any>;
+
+    // Attente « avant la date » d'un parcours.
+    if (task.step_id && actionConfig.mode === 'avant_date') {
+      const cible = corrigerChangementDHeure(debut, debut - Math.max(0, Number(actionConfig.secondes_avant ?? 0)) * 1000, fuseau);
+      if (cible < Date.parse(task.execute_at)) {
+        const { error: errMaj } = await supabase.from('automation_scheduled_tasks')
+          .update({ execute_at: new Date(Math.max(cible, maintenant)).toISOString(), last_error: 'Rendez-vous déplacé : rappel replanifié.' })
+          .eq('id', task.id).eq('status', 'pending');
+        if (errMaj) throw new Error(`recalage impossible : ${errMaj.message}`);
+        touchees++;
+      }
+      continue;
+    }
+
+    // Rappel « X avant » d'une règle à plat.
+    const avant = Number(task.automation_rules?.delay_seconds ?? 0);
+    if (task.step_id || !(avant < 0)) continue;
+    const planifie = Date.parse(String(actionConfig.event_metadata?.start_time ?? actionConfig.event_metadata?.start_at ?? ''));
+    const sort = sortDuRappelAvant({ debut, debutPlanifie: Number.isFinite(planifie) ? planifie : null, avantSecondes: avant, maintenant, fuseau });
+    if (sort.sort === 'perime') {
+      const arret = { code: 'rappel_perime' as const, changement: sort.changement };
+      if (await arreterTache(supabase, task, { code: arret.code, motif: motifArret(arret), saute: phraseArret(arret), detail: { changement: arret.changement } }, { siPending: true })) touchees++;
+      continue;
+    }
+    // Début d'origine inconnu, ou visite restée à sa place : rien à recaler.
+    if (!Number.isFinite(planifie) || Math.abs(debut - planifie) <= 60_000) continue;
+    // Déplacée plus tard → reportée ; plus tôt, et le rappel est déjà dû → il part au prochain passage.
+    const executeAt = sort.sort === 'reporte' ? sort.executeAt : maintenant;
+    if (await reporterTache(supabase, task, issueRendezVousDeplace(executeAt, debut), new Date(executeAt), { action_config: actionConfigRecale(actionConfig, debut) })) touchees++;
+  }
+  return touchees;
+}
+
+/**
  * Les types d'actions que la règle exécute — celles de son parcours si c'en
  * est un (`estParcours`), sinon ses `actions`. La revalidation s'en sert pour
  * ne pas rejuger contre la règle ce qu'elle modifie elle-même.
@@ -2387,6 +2521,19 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
             detail: { changement: revalidation.arret.changement },
           }
           : { code: 'client_a_repondu', motif: 'Annulée : le client a répondu.', saute: 'Le client a répondu' });
+        continue;
+      }
+
+      // Le rendez-vous a été déplacé PLUS TARD : le rappel « X avant » le
+      // suit, à sa nouvelle heure, au lieu de partir trop tôt (B-02). La
+      // tâche retient le nouveau début : le prochain passage ne la reporte
+      // pas une seconde fois, et la route « rendez-vous déplacé » du
+      // navigateur la voit déjà calée.
+      if (revalidation.report) {
+        const { report } = revalidation;
+        await reporterTache(supabase, task, issueRendezVousDeplace(report.executeAt, report.debut), new Date(report.executeAt), {
+          action_config: actionConfigRecale(actionConfig, report.debut),
+        });
         continue;
       }
 

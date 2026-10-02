@@ -32,7 +32,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './logger';
-import { FUSEAU_DEFAUT } from './automations-fuseau-org';
+import { corrigerChangementDHeure, FUSEAU_DEFAUT } from './automations-fuseau-org';
 import { CLE_CONDITIONS_CHAMPS, objetDeLEntite } from './champs/automatisations';
 import { listerChamps, lireValeursLot } from './champs/service';
 import { evaluerCondition, type Condition } from '../../src/lib/champs/filtres';
@@ -267,8 +267,43 @@ async function revaliderDevis(c: Ctx): Promise<Revalidation> {
   return { clientId };
 }
 
+/** Tolérance d'un rappel « X avant » légèrement en retard (le tick passe toutes les 5 min). */
+export const RETARD_TOLERE_RAPPEL_MS = 30 * 60 * 1000;
+/** En deçà, on ne reporte pas : le rappel part maintenant. */
+const AVANCE_MIN_REPORT_MS = 2 * 60 * 1000;
+
+export type SortDuRappel =
+  | { sort: 'part' }
+  | { sort: 'reporte'; executeAt: number }
+  | { sort: 'perime'; changement: string };
+
+/**
+ * Le sort d'un rappel « X avant le rendez-vous » d'une règle à plat, dont
+ * l'heure a été calculée UNE fois, à la planification (B-02). Pur.
+ *   · visite déjà passée → périmé : il n'a plus rien à rappeler ;
+ *   · visite DÉPLACÉE (son début n'est plus celui noté dans la tâche) :
+ *     plus tard → reporté à sa nouvelle heure ; plus tôt, et le moment du
+ *     rappel est passé → périmé (on ne dit pas « c'est demain » à quelqu'un
+ *     qu'on voit dans deux heures) ;
+ *   · sinon il part.
+ * Sans le début d'origine (`debutPlanifie`), on ne sait pas si la visite a
+ * bougé : ni report ni annulation — un rappel seulement RETARDÉ (heures
+ * calmes, reprise) reste un rappel valable.
+ */
+export function sortDuRappelAvant(p: {
+  debut: number; debutPlanifie: number | null; avantSecondes: number; maintenant: number; fuseau?: string;
+}): SortDuRappel {
+  if (!(p.avantSecondes < 0) || !Number.isFinite(p.debut)) return { sort: 'part' };
+  if (p.maintenant > p.debut) return { sort: 'perime', changement: 'le rendez-vous est déjà passé' };
+  if (p.debutPlanifie === null || !Number.isFinite(p.debutPlanifie) || Math.abs(p.debut - p.debutPlanifie) <= 60_000) return { sort: 'part' };
+  const cible = corrigerChangementDHeure(p.debut, p.debut + p.avantSecondes * 1000, p.fuseau || FUSEAU_DEFAUT);
+  if (cible > p.maintenant + AVANCE_MIN_REPORT_MS) return { sort: 'reporte', executeAt: cible };
+  if (p.maintenant > cible + RETARD_TOLERE_RAPPEL_MS) return { sort: 'perime', changement: 'le rendez-vous a été déplacé, le moment du rappel est passé' };
+  return { sort: 'part' };
+}
+
 async function revaliderRendezVous(c: Ctx): Promise<Revalidation> {
-  const { ligne: v, illisible } = await lire(c, 'schedule_events', 'status, deleted_at, job_id', c.entityId);
+  const { ligne: v, illisible } = await lire(c, 'schedule_events', 'status, deleted_at, job_id, start_at, start_time', c.entityId);
   if (illisible) return {};
   if (!v || v.deleted_at) return supprimee('le rendez-vous a été supprimé');
   const annulationVoulue = c.etatsDuDeclencheur.includes('cancelled');
@@ -289,6 +324,18 @@ async function revaliderRendezVous(c: Ctx): Promise<Revalidation> {
     clientId = null;
   }
 
+  /*
+   * Rappel « X avant le rendez-vous » d'une règle à plat : la visite a pu
+   * bouger depuis sa planification (B-02) — voir `sortDuRappelAvant`.
+   */
+  const debut = Date.parse(texte(v.start_at) || texte(v.start_time));
+  const debutPlanifie = Date.parse(texte(c.metadonnees?.start_time) || texte(c.metadonnees?.start_at));
+  const rappel = sortDuRappelAvant({
+    debut, debutPlanifie: Number.isFinite(debutPlanifie) ? debutPlanifie : null,
+    avantSecondes: Number(c.rappelAvantSecondes ?? 0), maintenant: c.maintenant ?? Date.now(), fuseau: c.fuseau,
+  });
+  if (rappel.sort === 'perime') return { arret: { code: 'rappel_perime', changement: rappel.changement }, clientId };
+  if (rappel.sort === 'reporte') return { report: { executeAt: rappel.executeAt, debut, changement: 'le rendez-vous a été déplacé' }, clientId };
   return { clientId };
 }
 
