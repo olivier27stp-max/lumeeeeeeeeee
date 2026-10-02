@@ -593,7 +593,9 @@ export default function EmailPreviewEditor({
       const question = fr
         ? 'Vos modifications ne sont pas enregistrées. Fermer quand même ?'
         : 'Your changes are not saved. Close anyway?';
-      if (!(await confirmer({ message: question, danger: true }))) return;
+      // Des boutons qui disent ce qu'ils font : « Confirmer » ne disait pas QUOI (04-courriel:201).
+      const fermerSansEnregistrer = fr ? 'Fermer sans enregistrer' : 'Close without saving';
+      if (!(await confirmer({ message: question, danger: true, confirmLabel: fermerSansEnregistrer }))) return;
     }
     onClose();
   }, [modifie, fr, onClose]);

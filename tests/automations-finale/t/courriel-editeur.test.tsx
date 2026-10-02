@@ -365,6 +365,46 @@ describe('04-courriel:366 — un objet très long est signalé', () => {
   });
 });
 
+describe('04-courriel:201 — fermer avec une modification : le bouton dit ce qu’il fait', () => {
+  const C = { subject: OBJET, body: CORPS };
+
+  it('la confirmation propose « Fermer sans enregistrer », pas « Confirmer »', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    const fermetures: number[] = [];
+    await ouvrir(C, { onClose: () => { fermetures.push(1); } });
+    await saisir(objet(), 'Objet en cours');
+    await cliquer(bouton('Fermer', 0));
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(confirmerMock.mock.calls[0][0]).toMatchObject({
+      message: 'Vos modifications ne sont pas enregistrées. Fermer quand même ?',
+      confirmLabel: 'Fermer sans enregistrer',
+      danger: true,
+    });
+    await jusqua(() => fermetures.length === 1);
+  });
+
+  it('refuser garde la fenêtre et le texte ; en anglais : « Close without saving »', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    confirmerMock.mockResolvedValueOnce(false);
+    const fermetures: number[] = [];
+    await ouvrir(C, { fr: false, onClose: () => { fermetures.push(1); } });
+    await saisir(champ<HTMLInputElement>('Email subject'), 'Subject in progress');
+    await cliquer(bouton('Close', 0));
+    expect(confirmerMock.mock.calls[0][0]).toMatchObject({ confirmLabel: 'Close without saving' });
+    expect(fermetures).toEqual([]);
+    expect(champ<HTMLInputElement>('Email subject').value).toBe('Subject in progress');
+  });
+
+  it('sans modification : aucune question', async () => {
+    poser([{ type: 'send_email', config: C }]);
+    const fermetures: number[] = [];
+    await ouvrir(C, { onClose: () => { fermetures.push(1); } });
+    await cliquer(bouton('Fermer', 0));
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(fermetures).toEqual([1]);
+  });
+});
+
 describe('04-courriel:834 — bureau qui écrit en ANGLAIS à ses clients : l’éditeur montre et modifie le courriel qui part', () => {
   const FR = { subject: 'Votre rendez-vous', body: `${ENVELOPPE}${H2('Bonjour,')}${P('À demain.')}</div>` };
   const EN = { subject_en: 'Your appointment', body_en: `${ENVELOPPE}${H2('Hello,')}${P('See you tomorrow.')}</div>` };
