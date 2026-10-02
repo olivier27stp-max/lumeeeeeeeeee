@@ -134,3 +134,31 @@ describe('A-19 — « Textos automatiques » liste TOUTES les automatisations qu
     expect(texteEcran()).toContain('Merci beaucoup !');
   });
 });
+
+describe('E-64 — le texto qu’on écrit dans les Réglages annonce son nombre de SMS, comme la liste des automatisations', () => {
+  const compteur = () => Array.from(document.body.querySelectorAll('span')).find((s) => /^\d+ \/ 320/.test(s.textContent ?? ''))?.textContent ?? '';
+
+  it('Réglages › Messagerie : rien tant qu’un seul SMS part ; « 2 SMS » dès le deuxième ; la raison quand un accent fait grimper le compte', async () => {
+    poser([regle({ name: 'Confirmation', actions: [sms('Bonjour')] })]);
+    await ouvrir();
+    await cliquer(boutons().find((b) => (b.textContent ?? '').includes('Confirmation')));
+    const zone = champ('Texte du SMS — Confirmation');
+    expect(compteur()).toBe('7 / 320');
+    await saisir(zone, 'a'.repeat(161));
+    expect(compteur()).toBe('161 / 320 · 2 SMS');
+    await saisir(zone, `Prêt ${'a'.repeat(66)}`);
+    expect(compteur()).toBe('71 / 320 · 2 SMS (accent spécial ou émoji : 67 caractères par SMS)');
+    await saisir(zone, 'a'.repeat(160));
+    expect(compteur()).toBe('160 / 320');
+  });
+
+  it('Réglages › Avis clients : le texto d’avis ET le texto de rappel portent le même compteur (lecture du code de la page)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const page = readFileSync('src/pages/SettingsReviews.tsx', 'utf8');
+    expect(page).toContain("import { libelleSegments } from '../lib/smsSegments';");
+    expect(page).toContain('libelleSegments(form.review_sms_body, isFr)');
+    expect(page).toContain('libelleSegments(ruleDraft, isFr)');
+    // Le texto de rappel n'avait aucun compteur du tout : il a maintenant sa longueur.
+    expect(page).toContain('{ruleDraft.length}/320');
+  });
+});

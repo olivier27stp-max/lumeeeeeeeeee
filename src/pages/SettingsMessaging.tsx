@@ -40,6 +40,7 @@ import {
   type AutomationRule,
 } from '../lib/automationRulesApi';
 import { localizeAutomationName } from '../lib/automationNames';
+import { libelleSegments } from '../lib/smsSegments';
 import { ChevronDown, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { captureClientException } from '../lib/sentry';
@@ -638,7 +639,15 @@ export function AutomationSmsSection({ isFr }: { isFr: boolean }) {
                           <span className="font-mono">{SMS_VARIABLES}</span>
                         </p>
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-text-tertiary">{draftBody.length} / 320</span>
+                          {/* Le nombre de SMS FACTURÉS, comme dans la liste des
+                              automatisations : « 22 / 320 » ne disait pas qu'un
+                              texte rallongé coûte deux SMS (constat E-64). */}
+                          <span className="text-[11px] text-text-tertiary">
+                            {draftBody.length} / 320
+                            {libelleSegments(draftBody, isFr) && (
+                              <span className="text-amber-600 dark:text-amber-400"> · {libelleSegments(draftBody, isFr)}</span>
+                            )}
+                          </span>
                           <div className="flex gap-2">
                             <button
                               type="button"
