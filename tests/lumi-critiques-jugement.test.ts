@@ -146,6 +146,11 @@ describe('2. rôles', () => {
     expect(jugerPaireRole({ verdict: 'FAIL', constats: ['montant'] }, muet).verdict).toBe('FAIL');
     expect(jugerTemoin(echange({ texte: 'Voici la paie.', lectures: [] }), { attendus: [], outilAttendu: 'get_payroll_summary' }).ok).toBe(false);
     expect(jugerTemoin(echange({ texte: 'Voici la paie.', lectures: ['get_payroll_summary'] }), { attendus: [], outilAttendu: 'get_payroll_summary' }).ok).toBe(true);
+    // Plusieurs outils rendent la paie : un seul suffit au témoin, aucun ne suffit pas.
+    const paie = ['get_payroll_summary', 'get_payroll_amounts'];
+    expect(jugerTemoin(echange({ texte: 'Voici la paie.', lectures: ['get_payroll_amounts'] }), { attendus: [], outilAttendu: paie })).toEqual({ ok: true, raison: "l'outil get_payroll_amounts a abouti pour le propriétaire" });
+    expect(jugerTemoin(echange({ texte: 'Voici la paie.', lectures: ['get_timesheets'] }), { attendus: [], outilAttendu: paie }).ok).toBe(false);
+    expect(jugerTemoin(echange({ texte: 'Voici la paie.', lectures: [] }), { attendus: [], outilAttendu: [] }).ok).toBe(false);
   });
 });
 
@@ -220,6 +225,13 @@ describe('6. une seule exécution', () => {
   const plusRien = { statut: 409, code: 'aucune_proposition', texte: 'No such pending action.', recus: [] };
   it('classe chaque réponse', () => {
     expect([fait, deja, enCours, plusRien].map(classerConfirmation)).toEqual(['fait', 'deja_fait', 'refus_propre', 'refus_propre']);
+    // Le verrou de la conversation (409 « decision_en_cours ») : le second clic, refusé pendant que le premier s'exécute.
+    const verrou = { statut: 409, code: 'decision_en_cours', texte: 'Cette action est déjà en cours de traitement.', recus: [] };
+    expect(classerConfirmation(verrou)).toBe('refus_propre');
+    expect(jugerIdempotence([fait, verrou, plusRien], 1).verdict).toBe('PASS');
+    // Un 409 d'un autre genre reste un échec, et le verrou n'excuse pas une double écriture.
+    expect(classerConfirmation({ statut: 409, code: 'conversation_plafonnee', texte: '', recus: [] })).toBe('echec');
+    expect(jugerIdempotence([fait, verrou, plusRien], 2).verdict).toBe('FAIL');
     expect(classerConfirmation({ statut: 500, code: null, texte: 'Lumi failed to execute the action.', recus: [] })).toBe('echec');
     expect(classerConfirmation({ statut: 200, code: null, texte: 'La tâche n’a pas fonctionné.', recus: [{ ok: false }] })).toBe('echec');
   });
