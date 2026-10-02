@@ -679,6 +679,16 @@ export default function Automations() {
 
   /** Lignes cochées — GHL les utilise pour les actions en lot. */
   const [cochees, setCochees] = useState<Set<string>>(new Set());
+  /**
+   * La sélection a été ÉTENDUE à toutes les pages de la vue (« Sélectionner les 60 »).
+   *
+   * « Tout cocher » ne coche que la page affichée : dépublier 60 automatisations demandait six tours
+   * (triage `10-volume:164`). L'extension est un geste EXPLICITE, annoncé avec son nombre ; elle ne
+   * porte que sur la vue en cours (onglet, dossier, recherche, filtres) et tombe au moindre changement
+   * de vue ou de page, comme toute sélection (audit M9 : jamais d'action sur des lignes d'une AUTRE vue).
+   */
+  const [selectionEtendue, setSelectionEtendue] = useState(false);
+  const viderSelection = () => { setCochees(new Set<string>()); setSelectionEtendue(false); };
   /** Un lot en cours : on désarme la barre pour éviter le double clic. */
   const [lotEnCours, setLotEnCours] = useState(false);
   /** Ligne dont le panneau de statistiques est déroulé (le chevron « › »). */
@@ -1016,7 +1026,7 @@ export default function Automations() {
 
   // Une sélection ne survit à AUCUN changement de vue (M9) : onglet, dossier,
   // page, recherche, filtres, taille de page.
-  useEffect(() => { setCochees(new Set()); }, [onglet, dossierActif, page, parPage, search, filterCategory, filterStatut]);
+  useEffect(() => { viderSelection(); }, [onglet, dossierActif, page, parPage, search, filterCategory, filterStatut]);
 
   /**
    * Publier une étape restée sur le TEXTE D'EXEMPLE de l'éditeur : on demande.
@@ -1417,6 +1427,7 @@ export default function Automations() {
 
   const toutCoche = visibles.length > 0 && visibles.every((r) => cochees.has(r.id));
   const basculerTout = () => {
+    if (toutCoche) { viderSelection(); return; }
     setCochees((prev) => {
       const n = new Set(prev);
       if (toutCoche) visibles.forEach((r) => n.delete(r.id));
@@ -1441,7 +1452,7 @@ export default function Automations() {
    * invisibles. La sélection se vide à chaque changement de vue (voir
    * l'effet plus haut) et le lot ne porte que sur les lignes visibles.
    */
-  const reglesCochees = visibles.filter((r) => cochees.has(r.id));
+  const reglesCochees = (selectionEtendue ? triees : visibles).filter((r) => cochees.has(r.id));
   /** Ce que chaque bouton du lot touchera VRAIMENT — affiché sur le bouton. */
   const nbAPublier = reglesCochees.filter((r) => !r.deleted_at && !r.is_active).length;
   const nbADepublier = reglesCochees.filter((r) => !r.deleted_at && r.is_active).length;
@@ -1480,7 +1491,7 @@ export default function Automations() {
           ? `Échec sur : ${echoues.join(', ')}`
           : `Failed on: ${echoues.join(', ')}`);
       }
-      setCochees(new Set());
+      viderSelection();
       await load();
     } finally {
       setLotEnCours(false);
@@ -1497,7 +1508,7 @@ export default function Automations() {
    */
   const publierEnLot = async (actif: boolean) => {
     const cibles = reglesCochees.filter((r) => !r.deleted_at && r.is_active !== actif);
-    if (cibles.length === 0) { setCochees(new Set()); return; }
+    if (cibles.length === 0) { viderSelection(); return; }
     // Une confirmation déjà à l'écran : un second clic sur « Publier » n'en ouvre pas une autre.
     if (confirmationOuverte.current) return;
     if (actif) {
@@ -1512,7 +1523,12 @@ export default function Automations() {
     }
     setLotEnCours(true);
     try {
-      const resultats = await changerPublicationEnLot(cibles.map((r) => r.id), actif);
+      // Le serveur accepte 200 automatisations par appel : une sélection étendue part par tranches.
+      const ids = cibles.map((r) => r.id);
+      const resultats: Awaited<ReturnType<typeof changerPublicationEnLot>> = [];
+      for (let i = 0; i < ids.length; i += 200) {
+        resultats.push(...await changerPublicationEnLot(ids.slice(i, i + 200), actif));
+      }
       const reussis = resultats.filter((r) => r.ok).length;
       const echecs = resultats.filter((r) => !r.ok);
       if (reussis > 0) {
@@ -1532,7 +1548,7 @@ export default function Automations() {
           { duration: 15_000 },
         );
       }
-      setCochees(new Set());
+      viderSelection();
       await load();
     } catch (e: unknown) {
       console.error('[automations] publication en lot échouée', e);
@@ -2104,7 +2120,18 @@ export default function Automations() {
               {fr
                 ? `${reglesCochees.length} sélectionnée(s)`
                 : `${reglesCochees.length} selected`}
+              {selectionEtendue && (fr ? ', sur toutes les pages' : ', across all pages')}
             </span>
+            {toutCoche && !selectionEtendue && triees.length > visibles.length && (
+              <button
+                type="button"
+                onClick={() => { setCochees(new Set(triees.map((r) => r.id))); setSelectionEtendue(true); }}
+                disabled={lotEnCours}
+                className="rounded text-[12px] font-medium text-primary underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+              >
+                {fr ? `Sélectionner les ${triees.length}` : `Select all ${triees.length}`}
+              </button>
+            )}
             <div className="flex flex-wrap items-center gap-1.5">
               {onglet === 'corbeille' ? (
                 <>
@@ -2164,7 +2191,7 @@ export default function Automations() {
               )}
               <button
                 type="button"
-                onClick={() => setCochees(new Set())}
+                onClick={() => viderSelection()}
                 disabled={lotEnCours}
                 className="rounded-lg px-2 py-1 text-[12px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
               >

@@ -1125,6 +1125,75 @@ describe('07-lot:66 — « Tout cocher » partiellement cochée montre l’état
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('10-volume:164 — avec plus d’une page, on peut tout sélectionner d’un coup', () => {
+  const douze = () => Array.from({ length: 12 }, (_, i) => regle({ name: `Vol ${String(i + 1).padStart(2, '0')}` }));
+
+  it('« Tout cocher » coche la page (10), et propose « Sélectionner les 12 » ; le lot porte alors sur les 12', async () => {
+    const regles = douze();
+    vi.mocked(api.getAutomationRules).mockResolvedValue(regles);
+    await rendre();
+    expect(bouton(/^Sélectionner les/)).toBeUndefined();
+    await cliquer(caseDe(/^Tout cocher$/));
+    expect(texte()).toContain('10 sélectionnée(s)');
+    await cliquer(bouton(/^Sélectionner les 12$/));
+    expect(texte()).toContain('12 sélectionnée(s), sur toutes les pages');
+    expect(bouton(/^Sélectionner les/)).toBeUndefined();
+    await cliquer(bouton(/^Publier \(12\)$/));
+    await laisser();
+    expect(builder.changerPublicationEnLot).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(builder.changerPublicationEnLot).mock.calls[0][0].slice().sort()).toEqual(regles.map((r) => r.id).sort());
+  });
+
+  it('pas proposé quand tout tient sur une page, ni tant que la page n’est pas entièrement cochée', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue(douze().slice(0, 3));
+    await rendre();
+    await cliquer(caseDe(/^Tout cocher$/));
+    expect(texte()).toContain('3 sélectionnée(s)');
+    expect(bouton(/^Sélectionner les/)).toBeUndefined();
+    await act(async () => racine!.unmount());
+    conteneur.remove();
+    vi.mocked(api.getAutomationRules).mockResolvedValue(douze());
+    await rendre();
+    await cliquer(caseDe(/^Cocher Vol 01$/));
+    expect(bouton(/^Sélectionner les/)).toBeUndefined();
+  });
+
+  it('la sélection étendue tombe au changement de page, et « Tout cocher » décochée la vide entièrement', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue(douze());
+    await rendre();
+    await cliquer(caseDe(/^Tout cocher$/));
+    await cliquer(bouton(/^Sélectionner les 12$/));
+    await cliquer(bouton(/^Suivant$/));
+    expect(texte()).not.toContain('sélectionnée(s)');
+    await cliquer(bouton(/^Précédent$/));
+    await cliquer(caseDe(/^Tout cocher$/));
+    await cliquer(bouton(/^Sélectionner les 12$/));
+    await cliquer(caseDe(/^Tout cocher$/));
+    expect(texte()).not.toContain('sélectionnée(s)');
+  });
+
+  it('au-delà de 200, le lot part par tranches de 200 (limite de la route)', async () => {
+    const beaucoup = Array.from({ length: 205 }, (_, i) => regle({ name: `Masse ${String(i + 1).padStart(3, '0')}` }));
+    vi.mocked(api.getAutomationRules).mockResolvedValue(beaucoup);
+    await rendre();
+    await cliquer(caseDe(/^Tout cocher$/));
+    await cliquer(bouton(/^Sélectionner les 205$/));
+    await cliquer(bouton(/^Publier \(205\)$/));
+    await laisser();
+    expect(vi.mocked(builder.changerPublicationEnLot).mock.calls.map((c) => c[0].length)).toEqual([200, 5]);
+    expect(toast.success).toHaveBeenCalledWith('205 automatisation(s) publiée(s)');
+  });
+
+  it('en anglais : « Select all 12 »', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue(douze());
+    await rendre('en');
+    await cliquer(caseDe(/^Select all$/));
+    await cliquer(bouton(/^Select all 12$/));
+    expect(texte()).toContain('12 selected, across all pages');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
