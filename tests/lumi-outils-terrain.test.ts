@@ -288,7 +288,10 @@ describe('écritures : bornage org + note française (client factice, appelInter
       verifier: ({ result, rpcs }) => {
         expect(rpcs[0].fn).toBe('rpc_schedule_job');
         expect(rpcs[0].args).toMatchObject({ p_job_id: JOB, p_start_at: '2026-10-01T13:00:00.000Z', p_end_at: '2026-10-01T14:00:00.000Z', p_team_id: ID });
-        expect(appelInterneMock.mock.calls[0][1]).toBe('/automations/events/appointment-created');
+        // « Visite créée » naît d'un trigger en base : l'outil n'appelle plus la route (vide, et qui exige
+        // « Modifier les automatisations » — un technicien recevait un faux « automatisations non déclenchées »).
+        expect(appelInterneMock.mock.calls.filter((c) => String(c[1]).startsWith('/automations/events/'))).toEqual([]);
+        expect(result.warning).toBeUndefined();
         expect(result).toMatchObject({ scheduled: true, visit: { end_at: '2026-10-01T14:00:00.000Z' } });
       },
     },
@@ -296,7 +299,9 @@ describe('écritures : bornage org + note française (client factice, appelInter
       nom: 'unschedule_job', args: { job_id: JOB },
       verifier: ({ result, rpcs }) => {
         expect(rpcs[0]).toEqual({ fn: 'rpc_unschedule_job', args: { p_job_id: JOB, p_event_id: null } });
-        expect(appelInterneMock.mock.calls[0][1]).toBe('/automations/events/appointment-cancelled');
+        // « Visite annulée » naît d'un trigger en base : même règle que pour la création.
+        expect(appelInterneMock.mock.calls.filter((c) => String(c[1]).startsWith('/automations/events/'))).toEqual([]);
+        expect(result.warning).toBeUndefined();
         expect(result).toMatchObject({ unscheduled: true, visites_retirees: 1 });
       },
     },
