@@ -47,5 +47,5 @@
   //
   // `node_modules` est redéclaré parce qu'un `exclude` explicite REMPLACE les
   // exclusions par défaut de tsc, il ne s'y ajoute pas.
-  "exclude": ["node_modules", "dist", "mobile"]
+  "exclude": ["node_modules", "dist", "mobile", "docs/passation-2026-10-02"]
 }

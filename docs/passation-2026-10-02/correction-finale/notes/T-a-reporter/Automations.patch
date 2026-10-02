@@ -1,0 +1,56 @@
+diff --git a/src/pages/Automations.tsx b/src/pages/Automations.tsx
+index 0e60f235..fb10390f 100644
+--- a/src/pages/Automations.tsx
++++ b/src/pages/Automations.tsx
+@@ -551,10 +551,14 @@ export default function Automations() {
+    * plus ancienne arrivée après ramenait une liste périmée (launch 2026-09-28).
+    */
+   const dernierChargement = useRef(0);
+-  const load = useCallback(async () => {
++  const load = useCallback(async (options: { silencieux?: boolean } = {}) => {
+     const numero = ++dernierChargement.current;
+     const perime = () => numero !== dernierChargement.current;
+-    setLoading(true);
++    /* Un rechargement SILENCIEUX (après l'enregistrement d'un message) ne
++       remplace pas le tableau par la roue : la roue démontait la ligne dépliée,
++       donc l'éditeur de courriel resté ouvert — il « disparaissait tout seul »
++       (triage « modèles », 04-courriel:260). */
++    if (!options.silencieux) setLoading(true);
+     try {
+       const data = await getAutomationRules();
+       if (perime()) return;
+@@ -703,7 +707,7 @@ export default function Automations() {
+     }
+   };
+ 
+-  useEffect(() => { load(); }, [load]);
++  useEffect(() => { void load(); }, [load]);
+ 
+   /*
+    * PERF-1 (audit V2) : la liste relisait ICI toutes les règles une deuxième
+@@ -2247,7 +2251,7 @@ export default function Automations() {
+                               ) : (
+                                 rule.actions
+                                   .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
+-                                  .map((a, i) => (
++                                  .map((a, i, messages) => (
+                                     <MessageEditor
+                                       key={`${rule.id}-${a.type}-${i}`}
+                                       ruleId={rule.id}
+@@ -2256,8 +2260,15 @@ export default function Automations() {
+                                       body={String(a.config?.body ?? '')}
+                                       subject={a.config?.subject ? String(a.config.subject) : undefined}
+                                       fr={fr}
+-                                      onSaved={load}
++                                      onSaved={() => { void load({ silencieux: true }); }}
+                                       declencheur={rule.trigger_event}
++                                      // LE message de cette ligne : son rang parmi ceux du même type (deux textos ne s'écrasent plus).
++                                      rang={messages.slice(0, i).filter((m) => m.type === a.type).length}
++                                      // La version anglaise et la langue du bureau : le champ montre le texte qui PART.
++                                      bodyEn={typeof a.config?.body_en === 'string' ? a.config.body_en : undefined}
++                                      langueBureau={langueIllisible ? null : orgLang ?? undefined}
++                                      // À la corbeille : on lit, on ne modifie pas.
++                                      lectureSeule={!!rule.deleted_at}
+                                     />
+                                   ))
+                               )}

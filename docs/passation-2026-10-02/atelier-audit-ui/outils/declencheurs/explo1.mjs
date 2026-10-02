@@ -1,0 +1,21 @@
+import { ouvrirA, cap, inventaire } from './commun.mjs';
+const o = await ouvrirA();
+const { page, base, m } = o;
+await page.goto(base + '/automations/nouvelle');
+await page.getByRole('button', { name: /Choisir le déclencheur/ }).waitFor({ timeout: 90_000 });
+await cap(page, 'x1-nouvelle');
+await page.getByRole('button', { name: /Choisir le déclencheur/ }).click();
+await page.getByRole('complementary', { name: 'Déclencheurs' }).waitFor();
+await cap(page, 'x1-tiroir');
+const tiroir = page.getByRole('complementary', { name: 'Déclencheurs' });
+console.log(await tiroir.innerText());
+// Choisir « Date atteinte »
+await tiroir.getByRole('button', { name: /^Date atteinte/ }).click();
+await page.waitForURL(/automations\/[0-9a-f-]{36}/, { timeout: 20000 }).catch(() => console.log('pas de changement d’adresse'));
+console.log('url', page.url());
+await page.waitForTimeout(1500);
+await cap(page, 'x1-apres-date-atteinte');
+const inv = await inventaire(page, 'main');
+for (const e of inv.elements) console.log(e.tag, e.role, '|', e.nom, '|', e.desactive ? 'DÉSACTIVÉ' : '');
+console.log(JSON.stringify(m, null, 1).slice(0, 2000));
+await o.fermer();

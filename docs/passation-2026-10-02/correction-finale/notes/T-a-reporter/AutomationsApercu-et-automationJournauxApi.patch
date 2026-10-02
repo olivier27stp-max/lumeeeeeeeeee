@@ -1,0 +1,99 @@
+diff --git a/src/lib/automationJournauxApi.ts b/src/lib/automationJournauxApi.ts
+index 7c8e2259..f0b413cc 100644
+--- a/src/lib/automationJournauxApi.ts
++++ b/src/lib/automationJournauxApi.ts
+@@ -446,7 +446,7 @@ export async function activiteParSemaine(semaines = 7): Promise<{
+   const depuis = tranches[0].debut.toISOString();
+   const { data, error } = await supabase
+     .from('automation_execution_logs')
+-    .select('created_at, entity_id, trigger_event')
++    .select('created_at, entity_id, trigger_event, automation_rule_id')
+     .eq('org_id', orgId)
+     // Une règle écartée par ses conditions ne s'est pas déclenchée.
+     .neq('action_type', ACTION_REGLE_ECARTEE)
+@@ -456,7 +456,11 @@ export async function activiteParSemaine(semaines = 7): Promise<{
+ 
+   if (error || !data) {
+     console.error('[apercu] activité par semaine', error?.message ?? 'aucune donnée');
+-    return { total: 0, parSemaine: tranches };
++    /* Une lecture ÉCHOUÉE n'est pas « zéro déclenchement » : la vue d'ensemble
++       affichait « 0 » et une courbe à plat, comme s'il ne s'était rien passé
++       (triage « modèles », 05-vue-ensemble:209). On lève : la page dit qu'elle
++       n'a pas pu lire. */
++    throw new Error(error?.message ?? 'aucune donnée');
+   }
+ 
+   // Dédoublonnage : une règle qui fait trois actions n'est qu'UN
+@@ -469,7 +473,10 @@ export async function activiteParSemaine(semaines = 7): Promise<{
+     const quand = new Date(ligne.created_at as string);
+     const tranche = tranches.find((t) => quand >= t.debut && quand <= t.fin);
+     if (!tranche) continue;
+-    const cle = `${tranche.debut.toISOString().slice(0, 10)}:${ligne.entity_id}:${ligne.trigger_event}`;
++    /* La RÈGLE fait partie de la clé : deux automatisations déclenchées par le
++       même prospect le même jour sont DEUX déclenchements — la liste en compte
++       un par automatisation, la tuile disait 1 (05-vue-ensemble:155). */
++    const cle = `${tranche.debut.toISOString().slice(0, 10)}:${ligne.automation_rule_id}:${ligne.entity_id}:${ligne.trigger_event}`;
+     if (vus.has(cle)) continue;
+     vus.add(cle);
+     tranche.n += 1;
+diff --git a/src/pages/AutomationsApercu.tsx b/src/pages/AutomationsApercu.tsx
+index dbe6aa67..7aefcd51 100644
+--- a/src/pages/AutomationsApercu.tsx
++++ b/src/pages/AutomationsApercu.tsx
+@@ -44,6 +44,8 @@ export default function AutomationsApercu() {
+   const [activite, setActivite] = useState<{ total: number; parSemaine: ActiviteSemaine[] }>(
+     { total: 0, parSemaine: [] },
+   );
++  /** Les journaux d'activité n'ont pas pu être lus : « 0 » et une courbe à plat diraient qu'il ne s'est rien passé. */
++  const [activiteIllisible, setActiviteIllisible] = useState(false);
+ 
+   useEffect(() => {
+     let vivant = true;
+@@ -54,8 +56,9 @@ export default function AutomationsApercu() {
+         else { setReglesIllisibles(true); console.error('[apercu] règles illisibles', r.reason); }
+         if (e.status === 'fulfilled') setEchecs(e.value);
+         else { setEchecsIllisibles(true); console.error('[apercu] journaux illisibles', e.reason); }
++        // (La lecture journalise elle-même son échec : « [apercu] activité par semaine ».)
+         if (a.status === 'fulfilled') setActivite(a.value);
+-        else console.error('[apercu] activité illisible', a.reason);
++        else setActiviteIllisible(true);
+       })
+       .finally(() => { if (vivant) setChargement(false); });
+     return () => { vivant = false; };
+@@ -98,7 +101,7 @@ export default function AutomationsApercu() {
+               {[
+                 { l: fr ? 'Total des automatisations' : 'Total workflows', v: reglesIllisibles ? '—' : vivantes.length },
+                 { l: fr ? 'Automatisations publiées' : 'Published workflows', v: reglesIllisibles ? '—' : publiees },
+-                { l: fr ? 'Total des déclenchements' : 'Total enrollments', v: activite.total },
++                { l: fr ? 'Total des déclenchements' : 'Total enrollments', v: activiteIllisible ? '—' : activite.total },
+               ].map((t) => (
+                 <div key={t.l} className="section-card px-4 py-3.5">
+                   <p className="text-[12px] text-text-secondary">{t.l}</p>
+@@ -113,7 +116,13 @@ export default function AutomationsApercu() {
+                 <TrendingUp size={15} className="text-accent" aria-hidden="true" />
+                 {fr ? 'Déclenchements — 7 dernières semaines' : 'Enrollments — last 7 weeks'}
+               </h2>
+-              {semaines.length === 0 ? (
++              {activiteIllisible ? (
++                <p role="status" className="mt-4 text-[12px] text-warning">
++                  {fr
++                    ? 'Les déclenchements n’ont pas pu être lus pour le moment. Réessayez dans un instant.'
++                    : 'Enrollments could not be read right now. Try again in a moment.'}
++                </p>
++              ) : semaines.length === 0 ? (
+                 <p className="mt-4 text-[12px] text-text-tertiary">
+                   {fr ? 'Aucune donnée pour l’instant.' : 'No data yet.'}
+                 </p>
+@@ -193,9 +202,10 @@ export default function AutomationsApercu() {
+                 <div className="mt-3 space-y-2">
+                   <p className="flex items-center gap-2 text-[13px] text-danger">
+                     <AlertTriangle size={15} aria-hidden="true" />
++                    {/* Un singulier juste, et « action » : une tâche qui échoue n'est pas un « envoi ». */}
+                     {fr
+-                      ? `${echecs.length} envoi(s) ont échoué ces 7 derniers jours.`
+-                      : `${echecs.length} send(s) failed in the last 7 days.`}
++                      ? (echecs.length === 1 ? '1 action a échoué ces 7 derniers jours.' : `${echecs.length} actions ont échoué ces 7 derniers jours.`)
++                      : (echecs.length === 1 ? '1 action failed in the last 7 days.' : `${echecs.length} actions failed in the last 7 days.`)}
+                   </p>
+                   <button
+                     type="button"
