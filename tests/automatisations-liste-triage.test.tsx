@@ -486,6 +486,47 @@ describe('03-onglets-etats:143 — la liste s’affiche dès qu’elle est lue, 
     expect(api.getAutomationRules).toHaveBeenCalledTimes(1);
   });
 
+  it('la lecture des chiffres part EN MÊME TEMPS que celle de la liste, pas après', async () => {
+    vi.mocked(api.getAutomationRules).mockReturnValue(new Promise(() => undefined));
+    await rendre();
+    // La liste n'a pas encore répondu ; les chiffres sont déjà demandés.
+    expect(statsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('le bandeau « étapes texto sautées » est RETENU par bureau : il est là avant les chiffres, et ne pousse pas le tableau en arrivant', async () => {
+    const bandeau = () => Array.from(conteneur.querySelectorAll('[role="status"]')).some((s) => /étapes texto sont sautées/.test(s.textContent || ''));
+    localStorage.setItem('lume-active-org', 'org-a');
+    statsMock.mockResolvedValue({ par_regle: {}, texto_configure: false });
+    await rendre();
+    expect(bandeau()).toBe(true);
+    expect(localStorage.getItem('lume-automations-texto:org-a')).toBe('0');
+
+    // Visite suivante, chiffres lents : le bandeau est déjà là.
+    await act(async () => racine!.unmount());
+    conteneur.remove();
+    statsMock.mockReturnValue(new Promise(() => undefined));
+    await rendre();
+    expect(conteneur.querySelector('table')).not.toBeNull();
+    expect(bandeau()).toBe(true);
+
+    // Un AUTRE bureau n'hérite pas de la réponse du premier.
+    await act(async () => racine!.unmount());
+    conteneur.remove();
+    localStorage.setItem('lume-active-org', 'org-b');
+    await rendre();
+    expect(bandeau()).toBe(false);
+  });
+
+  it('le numéro configuré depuis : les chiffres corrigent ce qui était retenu', async () => {
+    const bandeau = () => Array.from(conteneur.querySelectorAll('[role="status"]')).some((s) => /étapes texto sont sautées/.test(s.textContent || ''));
+    localStorage.setItem('lume-active-org', 'org-a');
+    localStorage.setItem('lume-automations-texto:org-a', '0');
+    statsMock.mockResolvedValue({ par_regle: {}, texto_configure: true });
+    await rendre();
+    expect(bandeau()).toBe(false);
+    expect(localStorage.getItem('lume-automations-texto:org-a')).toBe('1');
+  });
+
   it('le panneau › ouvert avant l’arrivée des chiffres dit « Lecture des chiffres… », pas une panne', async () => {
     statsMock.mockReturnValue(new Promise(() => undefined));
     await rendre();

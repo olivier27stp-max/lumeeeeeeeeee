@@ -374,6 +374,30 @@ function pourRecherche(s: string): string {
 }
 
 /**
+ * « Ce bureau a-t-il un numéro texto ? », RETENU d'une visite à l'autre (par bureau).
+ *
+ * La réponse arrive avec les chiffres, que la liste n'attend plus pour s'afficher : le bandeau
+ * « Les étapes texto sont sautées… » naissait donc APRÈS le tableau et le poussait de 58 px sous la
+ * souris (mesuré au navigateur). Retenue, elle est là dès le premier affichage ; les chiffres la
+ * confirment ou la corrigent ensuite. Stockage indisponible : on retombe sur « inconnu », sans bandeau.
+ */
+const cleTexto = (): string => `lume-automations-texto:${localStorage.getItem('lume-active-org') ?? ''}`;
+function lireTextoRetenu(): boolean | null {
+  try {
+    const v = localStorage.getItem(cleTexto());
+    return v === '1' ? true : v === '0' ? false : null;
+  } catch {
+    return null;
+  }
+}
+function retenirTexto(configure: boolean | null): void {
+  try {
+    if (configure === null) localStorage.removeItem(cleTexto());
+    else localStorage.setItem(cleTexto(), configure ? '1' : '0');
+  } catch { /* préférence d'affichage perdue, sans conséquence : le bandeau arrivera avec les chiffres */ }
+}
+
+/**
  * LE MESSAGE D'UNE ERREUR, dans la langue de l'écran.
  *
  * Quand le serveur ne donne aucun message (passerelle en panne, corps illisible), le client de
@@ -587,7 +611,7 @@ export default function Automations() {
    */
   const [statsIllisibles, setStatsIllisibles] = useState(false);
   /** Le bureau a-t-il un numéro texto ? `false` = bandeau ; `null` = inconnu, rien. */
-  const [textoConfigure, setTextoConfigure] = useState<boolean | null>(null);
+  const [textoConfigure, setTextoConfigure] = useState<boolean | null>(() => lireTextoRetenu());
   const [occupeId, setOccupeId] = useState<string | null>(null);
   /** L'automatisation « Client inactif » dont le serveur compte les clients visés, avant la confirmation. */
   const [decompteId, setDecompteId] = useState<string | null>(null);
@@ -818,6 +842,7 @@ export default function Automations() {
       setStats(s.par_regle);
       setStatsIllisibles(false);
       setTextoConfigure(s.texto_configure ?? null);
+      retenirTexto(s.texto_configure ?? null);
     } catch (e: unknown) {
       if (numero !== derniersChiffres.current) return;
       console.error('[automations] statistiques illisibles', e instanceof Error ? e.message : String(e));
@@ -838,6 +863,11 @@ export default function Automations() {
     const numero = ++dernierChargement.current;
     const perime = () => numero !== dernierChargement.current;
     if (!dejaLue.current) setLoading(true);
+    // « Déclenchées », « En cours », les échecs et le détail › : UNE route, comptée en base. Elle part
+    // EN MÊME TEMPS que la lecture de la liste, et la liste ne l'ATTEND pas (triage
+    // `03-onglets-etats:143`) : le tableau s'affiche dès qu'il est lu, les chiffres se posent ensuite
+    // dans leurs colonnes (« … » d'ici là).
+    void lireChiffres.current();
     try {
       const data = await getAutomationRules();
       if (perime()) return;
@@ -862,10 +892,6 @@ export default function Automations() {
         return true;
       // Une bascule encore en vol garde l'état du dernier clic.
       }).map((r) => ({ ...r, is_active: fileBascule.etatAffiche(r.id, r.is_active) })));
-      // « Déclenchées », « En cours », les échecs et le détail › : UNE route, comptée en base.
-      // On ne l'ATTEND pas (triage `03-onglets-etats:143`) : la liste s'affiche dès qu'elle est lue,
-      // les chiffres arrivent ensuite dans leurs colonnes (« … » d'ici là).
-      void lireChiffres.current();
     } catch (e: any) {
       if (perime()) return;
       console.error('Failed to load rules:', e.message);
@@ -2138,12 +2164,14 @@ export default function Automations() {
           descendaient de 70 px sous la souris, et le clic suivant tombait sur une autre ligne
           (triage `07-lot:97`). Elle apparaît maintenant à droite du fil d'Ariane, dans une rangée
           qui a déjà sa hauteur : le tableau ne bouge pas.
+          À TOUTE LARGEUR : sur une tablette la barre ne tient pas sur une ligne ; plutôt que de passer
+          sur deux lignes (et de repousser le tableau), elle défile à l'horizontale dans sa rangée.
         */}
-        <div data-rangee-lot className="flex min-h-[48px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div data-rangee-lot className="flex min-h-[48px] items-center justify-between gap-x-4">
         {/* ══ 5. Fil d'Ariane ══
             C'était « Accueil », texte fixe : il ne disait pas où l'on est et ne ramenait nulle part
             (triage `02-dossiers:150`). Il nomme le dossier ouvert, et « Accueil » en fait sortir. */}
-        <nav aria-label={fr ? 'Fil d’Ariane' : 'Breadcrumb'} className="flex items-center gap-1.5 text-[13px] text-text-secondary">
+        <nav aria-label={fr ? 'Fil d’Ariane' : 'Breadcrumb'} className="flex shrink-0 items-center gap-1.5 text-[13px] text-text-secondary">
           {dossierActif === null ? (
             <span aria-current="page">{fr ? 'Accueil' : 'Home'}</span>
           ) : (
@@ -2171,7 +2199,7 @@ export default function Automations() {
           et « Supprimer définitivement ».
         */}
         {reglesCochees.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-1">
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap rounded-xl border border-border bg-surface-secondary px-3 py-1 [scrollbar-width:none]">
             <span className="text-[13px] font-medium text-text-primary">
               {fr
                 ? `${reglesCochees.length} sélectionnée(s)`
@@ -2188,7 +2216,7 @@ export default function Automations() {
                 {fr ? `Sélectionner les ${triees.length}` : `Select all ${triees.length}`}
               </button>
             )}
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               {onglet === 'corbeille' ? (
                 <>
                 <button
