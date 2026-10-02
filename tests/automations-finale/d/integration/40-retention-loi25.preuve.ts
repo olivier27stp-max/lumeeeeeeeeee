@@ -61,11 +61,20 @@ describe('D — rétention des journaux d’automatisation', () => {
     expect('envois_simules' in durees || Number(rows[0].n) > 0, `tables purgées aujourd'hui : ${JSON.stringify(durees)}`).toBe(true);
   });
 
-  it('[D-RET-02] la fenêtre affichée (60 jours) est plus courte que la conservation (90 jours) : 30 jours de journaux gardés sans être consultables', async () => {
+  it('[D-RET-02] la fenêtre affichée = la conservation (90 jours) : tout ce qui est gardé est consultable, et l’écran dit la durée (constat D-27)', async () => {
     const { FENETRE_JOURS } = await import('../../../../src/lib/automationJournauxApi');
+    const { PERIODES_JOURS } = await import('../../../../src/lib/automationIssues');
+    const { RETENTION_JOURS } = await import('../../../../server/lib/automations-stats');
     const conservation = Number.parseInt((await tablesPurgees()).automation_execution_logs, 10);
-    // État des lieux, pas un défaut en soi : à trancher (afficher 90 jours, ou purger à 60).
-    expect({ affiche: FENETRE_JOURS, conserve: conservation }).toEqual({ affiche: 60, conserve: 90 });
+    // Avant : 60 jours affichés pour 90 conservés — 30 jours de journaux gardés sans être consultables.
+    expect({ affiche: FENETRE_JOURS, conserve: conservation, serveur: RETENTION_JOURS, plus_longue_periode: Math.max(...PERIODES_JOURS) })
+      .toEqual({ affiche: 90, conserve: 90, serveur: 90, plus_longue_periode: 90 });
+  });
+
+  it('[S-RET-03] l’historique des modifications a une durée de conservation : 12 mois, dans la même purge', async () => {
+    expect((await tablesPurgees()).automation_rule_modifications).toBe('365 days');
+    // Les durées d'avant n'ont pas bougé.
+    expect(await tablesPurgees()).toMatchObject({ automation_execution_logs: '90 days', activity_log: '180 days', login_history: '180 days', security_events: '365 days', webhook_deliveries: '30 days', tracking_live_locations: '7 days' });
   });
 });
 

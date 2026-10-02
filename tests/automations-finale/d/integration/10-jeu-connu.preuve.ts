@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { demarrerMoteur } from '../../../automations-suite/harnais/moteur';
 import { sessionDe, COMPTES } from '../../../automations-suite/harnais/bureau-test';
-import { construireJeuConnu, veriteRegle, type Manifeste } from '../jeu-connu';
+import { construireJeuConnu, veriteRegle, attendu, attenduTotal, type Manifeste } from '../jeu-connu';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
 let jeu: Manifeste;
@@ -31,9 +31,10 @@ describe('D — état des lieux : ce que le moteur écrit pour chaque issue', ()
     expect(v).toMatchObject({ lignes: 6, reussis: 6, sautes: 0, echecs: 0, taches: 0 });
   });
 
-  it('[D-EL-02] fournisseur en panne : 3 échecs, et 3 reprises posées dans la file', async () => {
+  it('[D-EL-02] fournisseur en panne : chaque tentative écrit une ligne en échec ; 2 clients épuisent leurs 4 tentatives, 1 garde sa reprise en file', async () => {
     const v = await veriteRegle(b.admin, jeu.regles.E.id, 365);
-    expect(v).toMatchObject({ lignes: 3, echecs: 3, reussis: 0, taches_en_attente: 3 });
+    // 4 lignes pour chacun des deux clients menés au bout (tentative immédiate + 3 reprises), 1 pour le troisième.
+    expect(v).toMatchObject({ lignes: 9, echecs: 9, reussis: 0, taches_en_attente: 1 });
     expect(v.erreurs.every((e) => /panne/i.test(e)), v.erreurs.join(' | ')).toBe(true);
   });
 
@@ -64,18 +65,37 @@ describe('D — état des lieux : ce que le moteur écrit pour chaque issue', ()
   });
 });
 
-describe('D — la route de statistiques contre le jeu connu (fenêtre de 60 jours)', () => {
-  it('[D-ST-01] chaque règle : déclenchées, en cours, envois, sautées, échecs = le jeu', async () => {
-    const { calculerStatistiques } = await import('../../../../server/routes/automation-stats');
-    const { par_regle } = await calculerStatistiques(clientA, b.orgA, null);
+describe('D — les statistiques contre le jeu connu, sur chaque période (7, 30, 90 jours)', () => {
+  const CLES = ['declenchees', 'envoyees', 'actions', 'echouees', 'ignorees', 'reportees', 'en_cours'] as const;
+
+  it.each([7, 30, 90])('[D-ST-01] %i jours : chaque règle — déclenchées, envoyées, actions faites, échouées, ignorées, reportées, en cours = le jeu', async (jours) => {
+    const { calculerStatistiques } = await import('../../../../server/lib/automations-stats');
+    const { par_regle, periode } = await calculerStatistiques(clientA, b.orgA, null, { jours });
+    expect(periode.jours).toBe(jours);
     const ecarts: string[] = [];
     for (const r of Object.values(jeu.regles)) {
-      const lu = par_regle[r.id] ?? { declenches: 0, en_cours: 0, envoyes: 0, sautes: 0, echecs: 0 };
-      for (const k of ['declenches', 'en_cours', 'envoyes', 'sautes', 'echecs'] as const) {
-        if (lu[k] !== r.attendu.stats60[k]) ecarts.push(`${r.cle}.${k} : route ${lu[k]} ≠ jeu ${r.attendu.stats60[k]}`);
+      const veut = attendu(r, jours);
+      const lu = par_regle[r.id];
+      for (const k of CLES) {
+        if ((lu?.[k] ?? 0) !== veut[k]) ecarts.push(`${r.cle}.${k} : base ${lu?.[k] ?? 0} ≠ jeu ${veut[k]}`);
+      }
+      if (JSON.stringify(Object.entries(lu?.ignorees_par_code ?? {}).sort()) !== JSON.stringify(Object.entries(veut.ignorees_par_code).sort())) {
+        ecarts.push(`${r.cle}.ignorees_par_code : base ${JSON.stringify(lu?.ignorees_par_code ?? {})} ≠ jeu ${JSON.stringify(veut.ignorees_par_code)}`);
       }
     }
     expect(ecarts, ecarts.join('\n')).toEqual([]);
+  });
+
+  it.each([7, 30, 90])('[D-09] %i jours : UNE définition — le total du bureau = la somme des règles = la somme des jours de la courbe', async (jours) => {
+    const { calculerStatistiques } = await import('../../../../server/lib/automations-stats');
+    const { par_regle, total, par_jour } = await calculerStatistiques(clientA, b.orgA, null, { jours });
+    // Les règles du jeu sont les seules du bureau A à avoir tourné : le total du bureau est celui du jeu.
+    const veut = attenduTotal(jeu, jours);
+    expect({ declenchees: total.declenchees, envoyees: total.envoyees, actions: total.actions, echouees: total.echouees, ignorees: total.ignorees, reportees: total.reportees })
+      .toEqual({ declenchees: veut.declenchees, envoyees: veut.envoyees, actions: veut.actions, echouees: veut.echouees, ignorees: veut.ignorees, reportees: veut.reportees });
+    expect(Object.values(par_regle).reduce((s, r) => s + r.declenchees, 0), 'somme des « Déclenchées » de la liste').toBe(total.declenchees);
+    expect(par_jour).toHaveLength(jours);
+    expect(par_jour.reduce((s, j) => s + j.declenchees, 0), 'somme des jours de la courbe').toBe(total.declenchees);
   });
 
   it('[D-ST-02] par étape du parcours : e1 = 2 réussis, e3 = 2 en attente', async () => {
@@ -85,6 +105,44 @@ describe('D — la route de statistiques contre le jeu connu (fenêtre de 60 jou
       e1: { envoyes: 2, sautes: 0, echecs: 0, en_attente: 0 },
       e3: { envoyes: 0, sautes: 0, echecs: 0, en_attente: 2 },
     });
+  });
+
+  it('[D-ST-03] un échec repris quatre fois compte UNE fois ; un échec encore en reprise n’est pas (encore) un échec', async () => {
+    const { calculerStatistiques } = await import('../../../../server/lib/automations-stats');
+    const { par_regle } = await calculerStatistiques(clientA, b.orgA, null, { jours: 30 });
+    const e = par_regle[jeu.regles.E.id];
+    // La base porte 9 lignes en échec pour cette règle (voir D-EL-02) : 2 échecs définitifs, 1 fiche en reprise.
+    expect({ echouees: e.echouees, en_cours: e.en_cours, declenchees: e.declenchees }).toEqual({ echouees: 2, en_cours: 1, declenchees: 3 });
+    expect(e.dernier_echec?.erreur ?? '', 'la cause du dernier échec est rendue').toMatch(/panne/i);
+  });
+
+  it('[D-23] une notification interne est une « action faite », jamais un message envoyé', async () => {
+    const { calculerStatistiques } = await import('../../../../server/lib/automations-stats');
+    const { par_regle } = await calculerStatistiques(clientA, b.orgA, null, { jours: 30 });
+    expect({ envoyees: par_regle[jeu.regles.A.id].envoyees, actions: par_regle[jeu.regles.A.id].actions }).toEqual({ envoyees: 0, actions: 1 });
+  });
+
+  it('[D-03c] un envoi retenu par le plafond de fréquence est compté IGNORÉ, groupe « limite d’envois » — jamais un échec (ancienne ligne « Frequency cap reached… » comprise)', async () => {
+    const { calculerStatistiques } = await import('../../../../server/lib/automations-stats');
+    const { par_regle } = await calculerStatistiques(clientA, b.orgA, null, { jours: 7 });
+    const f4 = par_regle[jeu.regles.F4.id];
+    expect({ echouees: f4.echouees, ignorees: f4.ignorees, groupes: f4.ignorees_par_groupe, codes: f4.ignorees_par_code })
+      .toEqual({ echouees: 0, ignorees: 1, groupes: { plafond: 1 }, codes: { plafond_frequence: 1 } });
+  });
+
+  it('[D-05b] un envoi reporté hors des heures d’envoi est compté « reporté » (pas ignoré, pas en échec), et la fiche est en cours', async () => {
+    const { calculerStatistiques } = await import('../../../../server/lib/automations-stats');
+    const { par_regle } = await calculerStatistiques(clientA, b.orgA, null, { jours: 7 });
+    const h = par_regle[jeu.regles.H.id];
+    expect({ declenchees: h.declenchees, reportees: h.reportees_par_code, ignorees: h.ignorees, en_cours: h.en_cours })
+      .toEqual({ declenchees: 1, reportees: { hors_heures: 1 }, ignorees: 0, en_cours: 1 });
+  });
+
+  it('[D-ST-04] un événement écarté par les conditions est « ignoré : hors ciblage », et n’est pas un déclenchement', async () => {
+    const { calculerStatistiques } = await import('../../../../server/lib/automations-stats');
+    const { par_regle } = await calculerStatistiques(clientA, b.orgA, null, { jours: 30 });
+    const k = par_regle[jeu.regles.K.id];
+    expect({ declenchees: k.declenchees, ignorees: k.ignorees, groupes: k.ignorees_par_groupe }).toEqual({ declenchees: 0, ignorees: 3, groupes: { hors_ciblage: 3 } });
   });
 });
 
@@ -127,8 +185,9 @@ describe('D — preuves des constats (rouges tant que le constat n’est pas cor
     const { calculerStatistiques } = await import('../../../../server/routes/automation-stats');
     const { par_regle } = await calculerStatistiques(clientA, b.orgA, null);
     const t = par_regle[jeu.regles.T.id] as unknown as Record<string, unknown>;
-    // Aujourd'hui : { declenches, en_cours, envoyes, sautes, echecs, dernier_saut } — la raison n'est donnée que pour le DERNIER saut.
     expect(t.sautes_par_raison ?? null, `clés rendues par la route : ${Object.keys(t).join(', ')}`).toEqual({ sans_telephone: 2 });
+    // Et par GROUPE, celui que l'écran affiche (src/lib/automationMotifs.ts) : « Donnée manquante ».
+    expect(t.ignorees_par_groupe).toEqual({ donnee_manquante: 2 });
   });
 
   it('[D-06] « déclenchée » compte des DÉCLENCHEMENTS : le même client repassé deux fois compte deux fois', async () => {
@@ -143,9 +202,9 @@ describe('D — preuves des constats (rouges tant que le constat n’est pas cor
     try {
       const { calculerStatistiques } = await import('../../../../server/routes/automation-stats');
       const { par_regle } = await calculerStatistiques(clientA, b.orgA, s.id);
-      // 5 passages dans la fenêtre + ce 6e : la route en rend 5 (elle compte des fiches distinctes).
-      expect(par_regle[s.id].envoyes).toBe(s.attendu.stats60.envoyes + 1);
-      expect(par_regle[s.id].declenches, '« Total déclenché » après un 2e passage du même client').toBe(s.attendu.stats60.declenches + 1);
+      // Sans période donnée, la fonction compte sur 60 jours : 5 passages dans la fenêtre + ce 6e.
+      expect(par_regle[s.id].envoyees).toBe(attendu(s, 60).envoyees + 1);
+      expect(par_regle[s.id].declenchees, '« Déclenchées » après un 2e passage du même client').toBe(attendu(s, 60).declenchees + 1);
     } finally {
       await b.admin.from('automation_execution_logs').delete().eq('id', (ajout as { id: string }).id);
     }

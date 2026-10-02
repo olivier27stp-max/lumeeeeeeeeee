@@ -25,18 +25,35 @@ const JOUR_MS = 86_400_000;
 /** Les issues qu'on veut voir comptées, et lues, à l'écran. */
 export type Issue = 'reussi' | 'echec' | 'saute' | 'ecarte' | 'reporte' | 'doublon';
 
-export interface AttenduRegle {
-  /** Ce que la route de statistiques doit rendre pour la règle (fenêtre de 60 jours). */
-  stats60: { declenches: number; en_cours: number; envoyes: number; sautes: number; echecs: number };
-  /** Échecs des 7 derniers jours (pastille rouge de la liste, onglet « À vérifier »). */
-  echecs7j: number;
-  /** Lignes de l'onglet Journaux (60 jours), tous statuts. */
-  journaux60: number;
-  /** Lignes de l'onglet Historique (60 jours), tous statuts. */
-  historique60: number;
-  /** Déclenchements réels des 49 derniers jours (7 semaines de la Vue d'ensemble). */
-  declenchements49j: number;
+/**
+ * Ce qu'UN client du jeu a produit dans sa règle. Les attentes d'une période (7, 30, 90 jours)
+ * s'en déduisent : la somme des clients assez récents (`attendu()` plus bas).
+ *
+ * Définitions (les mêmes que `server/lib/automations-stats.ts`) :
+ *   declenchee  la fiche est entrée dans l'automatisation ;
+ *   envoyees    messages partis chez le client ; actions = actions internes faites ;
+ *   echouees    échecs DÉFINITIFS (une action reprise quatre fois compte une fois) ;
+ *   ignorees    par code (désabonné, sans téléphone, conditions, plafond…) ;
+ *   reportees   par code (hors heures d'envoi) ;
+ *   journal     lignes de l'onglet Journaux (lignes du journal + états de la file sans ligne) ;
+ *   en_cours    la fiche a encore une étape en file (maintenant, sans période).
+ */
+export interface Profil {
+  declenchee: 0 | 1;
+  envoyees: number;
+  actions: number;
+  echouees: number;
+  ignorees: Record<string, number>;
+  reportees: Record<string, number>;
+  journal: number;
+  en_cours: 0 | 1;
 }
+
+const profil = (p: Partial<Profil>): Profil => ({
+  declenchee: 1, envoyees: 0, actions: 0, echouees: 0, ignorees: {}, reportees: {}, journal: 1, en_cours: 0, ...p,
+});
+
+export interface ClientDuJeu { id: string; nom: string; age_jours: number; profil: Profil }
 
 export interface RegleDuJeu {
   cle: string;
@@ -47,8 +64,7 @@ export interface RegleDuJeu {
   code?: string;
   /** La raison telle qu'un propriétaire devrait la lire. */
   raison: string;
-  clients: Array<{ id: string; nom: string; age_jours: number }>;
-  attendu: AttenduRegle;
+  clients: ClientDuJeu[];
 }
 
 export interface Manifeste {
@@ -57,13 +73,69 @@ export interface Manifeste {
   orgB: string;
   fuseau: string;
   regles: Record<string, RegleDuJeu>;
-  /** Totaux du bureau A, calculés à partir du jeu (pas relus à l'écran). */
-  totaux: {
-    echecs7j: number;
-    regles_a_verifier: number;
-    declenchements49j: number;
-    somme_declenches60: number;
+}
+
+/** Ce qu'une règle doit afficher pour une période de N jours. */
+export interface Attendu {
+  declenchees: number;
+  envoyees: number;
+  actions: number;
+  echouees: number;
+  ignorees: number;
+  ignorees_par_code: Record<string, number>;
+  reportees: number;
+  reportees_par_code: Record<string, number>;
+  /** Fiches encore en file : maintenant, quelle que soit la période. */
+  en_cours: number;
+  /** Lignes des Journaux sur la période. */
+  journal: number;
+  /** Lignes de l'Historique : un passage par client (un événement écarté à l'entrée a aussi sa ligne). */
+  passages: number;
+}
+
+const somme = (o: Record<string, number>) => Object.values(o).reduce((s, n) => s + n, 0);
+const ajouter = (vers: Record<string, number>, de: Record<string, number>) => {
+  for (const [k, n] of Object.entries(de)) vers[k] = (vers[k] ?? 0) + n;
+};
+
+/** L'attendu d'une règle sur les `jours` derniers jours (les clients plus anciens sortent). */
+export function attendu(r: RegleDuJeu, jours: number): Attendu {
+  const a: Attendu = {
+    declenchees: 0, envoyees: 0, actions: 0, echouees: 0, ignorees: 0, ignorees_par_code: {},
+    reportees: 0, reportees_par_code: {}, en_cours: 0, journal: 0, passages: 0,
   };
+  for (const c of r.clients) {
+    a.en_cours += c.profil.en_cours;
+    if (c.age_jours >= jours) continue;
+    a.declenchees += c.profil.declenchee;
+    a.envoyees += c.profil.envoyees;
+    a.actions += c.profil.actions;
+    a.echouees += c.profil.echouees;
+    a.ignorees += somme(c.profil.ignorees);
+    ajouter(a.ignorees_par_code, c.profil.ignorees);
+    a.reportees += somme(c.profil.reportees);
+    ajouter(a.reportees_par_code, c.profil.reportees);
+    a.journal += c.profil.journal;
+    a.passages += 1;
+  }
+  return a;
+}
+
+/** L'attendu de tout le bureau A sur une période (somme des règles du jeu). */
+export function attenduTotal(m: Manifeste, jours: number): Attendu & { regles_en_echec: number } {
+  const t: Attendu = {
+    declenchees: 0, envoyees: 0, actions: 0, echouees: 0, ignorees: 0, ignorees_par_code: {},
+    reportees: 0, reportees_par_code: {}, en_cours: 0, journal: 0, passages: 0,
+  };
+  let regles_en_echec = 0;
+  for (const r of Object.values(m.regles)) {
+    const a = attendu(r, jours);
+    if (a.echouees > 0) regles_en_echec += 1;
+    for (const k of ['declenchees', 'envoyees', 'actions', 'echouees', 'ignorees', 'reportees', 'en_cours', 'journal', 'passages'] as const) t[k] += a[k];
+    ajouter(t.ignorees_par_code, a.ignorees_par_code);
+    ajouter(t.reportees_par_code, a.reportees_par_code);
+  }
+  return { ...t, regles_en_echec };
 }
 
 export function lireManifeste(): Manifeste {
@@ -177,20 +249,24 @@ export async function construireJeuConnu(): Promise<Manifeste> {
     const quand = new Date(Date.now() - jours * JOUR_MS - 3_600_000).toISOString();
     await ok(admin.from('automation_execution_logs').update({ created_at: quand }).eq('automation_rule_id', ruleId).eq('entity_id', clientId), 'antidater le journal');
     await ok(admin.from('automation_scheduled_tasks').update({ created_at: quand }).eq('automation_rule_id', ruleId).eq('entity_id', clientId), 'antidater la tâche');
+    // Une tâche close l'a été au même moment que sa dernière ligne de journal : sa date de fin suit.
+    await ok(admin.from('automation_scheduled_tasks').update({ completed_at: quand }).eq('automation_rule_id', ruleId).eq('entity_id', clientId).not('completed_at', 'is', null), 'antidater la fin de la tâche');
   };
 
   const regles: Record<string, RegleDuJeu> = {};
   const texto = (corps: string, type: 'transactionnel' | 'marketing' = 'transactionnel') =>
     [{ type: 'send_sms', config: { body: corps, type_envoi: type } }];
 
-  /** Un scénario simple : une règle, des clients d'âges donnés, une attente. */
+  /** Un scénario simple : une règle, des clients d'âges donnés, le profil de chaque client. */
   const scenario = async (p: {
     cle: string; titre: string; issue: Issue; code?: string; raison: string;
     champs: Record<string, unknown>; ages: number[]; client?: OptionsClient;
     metadata?: Record<string, unknown>; lignesParClient?: number;
     avant?: (clients: Array<{ id: string; telephone: string | null }>) => Promise<void>;
+    /** Juste après les événements, règle encore publiée (ex. : épuiser les reprises d'un échec). */
+    pendant?: (ruleId: string, clients: Array<{ id: string; age: number }>) => Promise<void>;
     apres?: () => Promise<void>;
-    attendu: (ages: number[]) => AttenduRegle;
+    profil: Profil | ((age: number, rang: number) => Profil);
   }): Promise<RegleDuJeu> => {
     const r = await creerRegle(p.cle, p.titre, p.champs);
     const clients: Array<{ id: string; nom: string; telephone: string | null; age: number }> = [];
@@ -201,6 +277,7 @@ export async function construireJeuConnu(): Promise<Manifeste> {
       await emettre(clients.map((c) => c.id), p.metadata);
       const n = p.lignesParClient ?? 1;
       if (n > 0) await journaux(r.id, clients.length * n);
+      if (p.pendant) await p.pendant(r.id, clients);
     } finally {
       await publier([r.id], false);
       if (p.apres) await p.apres();
@@ -208,93 +285,102 @@ export async function construireJeuConnu(): Promise<Manifeste> {
     for (const c of clients) await antidater(r.id, c.id, c.age);
     const regle: RegleDuJeu = {
       cle: p.cle, id: r.id, nom: r.nom, issue: p.issue, code: p.code, raison: p.raison,
-      clients: clients.map((c) => ({ id: c.id, nom: c.nom, age_jours: c.age })),
-      attendu: p.attendu(p.ages),
+      clients: clients.map((c, i) => ({
+        id: c.id, nom: c.nom, age_jours: c.age,
+        profil: typeof p.profil === 'function' ? p.profil(c.age, i) : p.profil,
+      })),
     };
     regles[p.cle] = regle;
     return regle;
   };
 
-  const dans = (ages: number[], jours: number) => ages.filter((a) => a < jours).length;
-
-  // ── S : réussies, à cinq âges ─────────────────────────────────────────────
+  // ── S : réussies, à six âges ──────────────────────────────────────────────
   await scenario({
     cle: 'S', titre: 'texto réussi', issue: 'reussi', raison: 'Texto envoyé.',
     champs: { actions: texto('Bonjour, merci de votre demande.') },
     ages: [0, 0, 3, 10, 40, 70],
-    attendu: (a) => ({
-      stats60: { declenches: dans(a, 60), en_cours: 0, envoyes: dans(a, 60), sautes: 0, echecs: 0 },
-      echecs7j: 0, journaux60: dans(a, 60), historique60: 0, declenchements49j: dans(a, 49),
-    }),
+    profil: profil({ envoyees: 1 }),
   });
 
   // ── E : échouées (fournisseur en panne) ───────────────────────────────────
+  // Un échec passager est REPRIS trois fois (5 min, 30 min, 2 h) avant d'être définitif.
+  // Pour les clients d'aujourd'hui et d'il y a 10 jours, on fait avancer la file jusqu'au bout
+  // (le vrai moteur ; seule l'heure prévue de la reprise est retouchée) : 4 tentatives, UN échec
+  // définitif. Le client d'il y a 3 jours garde sa reprise en file : il est « en cours ».
+  const ECHEC_DEFINITIF = (age: number) => age !== 3;
   await scenario({
     cle: 'E', titre: 'texto en panne', issue: 'echec', raison: 'Le fournisseur de textos était en panne.',
     champs: { actions: texto('Bonjour, votre demande est bien reçue.') },
     ages: [0, 3, 10],
     avant: () => mode('panne'),
+    pendant: async (ruleId, clients) => {
+      const garde = clients.filter((c) => !ECHEC_DEFINITIF(c.age)).map((c) => c.id);
+      const epuises = clients.filter((c) => ECHEC_DEFINITIF(c.age)).map((c) => c.id);
+      await attendre(
+        async () => (await admin.from('automation_scheduled_tasks').select('id').eq('automation_rule_id', ruleId)).data ?? [],
+        (l) => l.length >= clients.length, 30_000,
+      );
+      // La reprise à garder : repoussée d'un jour, pour qu'aucun passage de la file ne la prenne.
+      await ok(admin.from('automation_scheduled_tasks').update({ execute_at: new Date(Date.now() + JOUR_MS).toISOString() })
+        .eq('automation_rule_id', ruleId).in('entity_id', garde), 'reprise gardée en file');
+      for (let tour = 0; tour < 6; tour++) {
+        const enFile = (await ok(admin.from('automation_scheduled_tasks').select('id, status')
+          .eq('automation_rule_id', ruleId).in('entity_id', epuises).in('status', ['pending', 'running']), 'reprises en file')) as Array<{ id: string }>;
+        if (!enFile.length) break;
+        await ok(admin.from('automation_scheduled_tasks').update({ execute_at: new Date(Date.now() - 1000).toISOString() })
+          .in('id', enFile.map((t) => t.id)).eq('status', 'pending'), 'reprise avancée');
+        await traiterFile(admin, orgA);
+      }
+      const reste = (await ok(admin.from('automation_scheduled_tasks').select('status')
+        .eq('automation_rule_id', ruleId).in('entity_id', epuises), 'état des reprises')) as Array<{ status: string }>;
+      if (reste.some((t) => t.status !== 'failed')) throw new Error(`reprises non épuisées : ${reste.map((t) => t.status).join(', ')}`);
+    },
     apres: () => mode('succes'),
-    attendu: (a) => ({
-      // Chaque échec passager pose une reprise dans la file : la fiche est « en cours ».
-      stats60: { declenches: a.length, en_cours: a.length, envoyes: 0, sautes: 0, echecs: a.length },
-      echecs7j: dans(a, 7), journaux60: a.length, historique60: a.length, declenchements49j: a.length,
-    }),
+    profil: (age) => (ECHEC_DEFINITIF(age)
+      // 4 lignes au journal (la tentative immédiate + 3 reprises), UN échec définitif.
+      ? profil({ echouees: 1, journal: 4 })
+      // 1 ligne (échec passager) + sa reprise en file.
+      : profil({ journal: 2, en_cours: 1 })),
   });
 
-  // ── T : sautée, client sans téléphone ─────────────────────────────────────
+  // ── T : ignorée, client sans téléphone ────────────────────────────────────
   await scenario({
     cle: 'T', titre: 'client sans téléphone', issue: 'saute', code: 'sans_telephone', raison: 'Ce client n’a pas de numéro de téléphone.',
     champs: { actions: texto('Bonjour, un petit mot.') }, ages: [0, 10], client: { telephone: false },
-    attendu: (a) => ({
-      stats60: { declenches: a.length, en_cours: 0, envoyes: 0, sautes: a.length, echecs: 0 },
-      echecs7j: 0, journaux60: a.length, historique60: 0, declenchements49j: a.length,
-    }),
+    profil: profil({ ignorees: { sans_telephone: 1 } }),
   });
 
-  // ── D : sautée, client désabonné (STOP) ───────────────────────────────────
+  // ── D : ignorée, client désabonné (STOP) ──────────────────────────────────
   await scenario({
     cle: 'D', titre: 'client désabonné', issue: 'saute', code: 'desabonne', raison: 'Ce client s’est désabonné des textos.',
     champs: { actions: texto('Bonjour, des nouvelles ?') }, ages: [0, 40],
     avant: async (clients) => {
       await ok(admin.from('sms_opt_outs').insert(clients.map((c) => ({ org_id: orgA, phone: c.telephone, reason: 'STOP (jeu connu)' }))), 'désabonnements');
     },
-    attendu: (a) => ({
-      stats60: { declenches: a.length, en_cours: 0, envoyes: 0, sautes: a.length, echecs: 0 },
-      echecs7j: 0, journaux60: a.length, historique60: 0, declenchements49j: a.length,
-    }),
+    profil: profil({ ignorees: { desabonne: 1 } }),
   });
 
-  // ── C : sautée, pas de consentement pour un envoi commercial ──────────────
+  // ── C : ignorée, pas de consentement pour un envoi commercial ─────────────
   await scenario({
     cle: 'C', titre: 'sans consentement', issue: 'saute', code: 'sans_consentement', raison: 'Aucun consentement enregistré pour ce client.',
     champs: { actions: texto('Promo du mois : 15 % sur le grand ménage.', 'marketing') }, ages: [0, 3], client: { consentement: false },
-    attendu: (a) => ({
-      stats60: { declenches: a.length, en_cours: 0, envoyes: 0, sautes: a.length, echecs: 0 },
-      echecs7j: 0, journaux60: a.length, historique60: 0, declenchements49j: a.length,
-    }),
+    profil: profil({ ignorees: { sans_consentement: 1 } }),
   });
 
-  // ── N : sautée, client sans courriel ──────────────────────────────────────
+  // ── N : ignorée, client sans courriel ─────────────────────────────────────
   await scenario({
     cle: 'N', titre: 'client sans courriel', issue: 'saute', code: 'sans_courriel', raison: 'Ce client n’a pas d’adresse courriel.',
     champs: { actions: [{ type: 'send_email', config: { subject: 'Votre demande', body: 'Bonjour, nous avons bien reçu votre demande.', type_envoi: 'transactionnel' } }] },
     ages: [0], client: { courriel: false },
-    attendu: (a) => ({
-      stats60: { declenches: a.length, en_cours: 0, envoyes: 0, sautes: a.length, echecs: 0 },
-      echecs7j: 0, journaux60: a.length, historique60: 0, declenchements49j: a.length,
-    }),
+    profil: profil({ ignorees: { sans_courriel: 1 } }),
   });
 
-  // ── K : écartée par ses conditions ────────────────────────────────────────
+  // ── K : écartée par ses conditions (hors ciblage) : ignorée, PAS déclenchée ─
   await scenario({
     cle: 'K', titre: 'conditions non remplies', issue: 'ecarte', code: 'conditions', raison: 'Hors ciblage : la source du prospect n’est pas « site web ».',
     champs: { actions: texto('Bonjour, merci pour votre demande en ligne.'), conditions: { source: { eq: 'site_web' } } },
     ages: [0, 0, 10],
-    attendu: (a) => ({
-      stats60: { declenches: 0, en_cours: 0, envoyes: 0, sautes: 0, echecs: 0 },
-      echecs7j: 0, journaux60: a.length, historique60: 0, declenchements49j: 0,
-    }),
+    profil: profil({ declenchee: 0, ignorees: { conditions: 1 } }),
   });
 
   // ── A : action interne (notification), pas un envoi au client ─────────────
@@ -302,41 +388,41 @@ export async function construireJeuConnu(): Promise<Manifeste> {
     cle: 'A', titre: 'notification interne', issue: 'reussi', raison: 'Notification créée pour l’équipe.',
     champs: { actions: [{ type: 'create_notification', config: { title: 'Nouveau prospect (jeu connu)', body: 'À rappeler.' } }] },
     ages: [0],
-    attendu: (a) => ({
-      stats60: { declenches: a.length, en_cours: 0, envoyes: a.length, sautes: 0, echecs: 0 },
-      echecs7j: 0, journaux60: a.length, historique60: 0, declenchements49j: a.length,
-    }),
+    profil: profil({ actions: 1 }),
   });
 
   // ── H : hors heures d'envoi (reportée, rien n'est parti) ──────────────────
-  await scenario({
-    cle: 'H', titre: 'hors heures d’envoi', issue: 'reporte', raison: 'Hors des heures d’envoi : reporté à la prochaine fenêtre.',
-    champs: { actions: texto('Bonjour, rappel de votre soumission.'), settings: { fenetre: { debut: 0, fin: Math.max(1, heureLocale - 1) } } },
-    ages: [0], lignesParClient: 0,
-    attendu: (a) => ({
-      stats60: { declenches: a.length, en_cours: a.length, envoyes: 0, sautes: 0, echecs: 0 },
-      echecs7j: 0, journaux60: 0, historique60: a.length, declenchements49j: a.length,
-    }),
-  });
+  {
+    const h = await scenario({
+      cle: 'H', titre: 'hors heures d’envoi', issue: 'reporte', raison: 'Hors des heures d’envoi : reporté à la prochaine fenêtre.',
+      champs: { actions: texto('Bonjour, rappel de votre soumission.'), settings: { fenetre: { debut: 0, fin: Math.max(1, heureLocale - 1) } } },
+      ages: [0], lignesParClient: 0,
+      profil: profil({ reportees: { hors_heures: 1 }, journal: 1, en_cours: 1 }),
+    });
+    // Le moteur corrigé écrit une LIGNE au premier report (code `hors_heures`) : les Journaux
+    // montrent alors la ligne ET la tâche en attente. L'ancien n'écrit rien : la tâche seule.
+    const lignes = (await ok(admin.from('automation_execution_logs').select('id').eq('automation_rule_id', h.id), 'lignes du report')) as unknown[];
+    if (lignes.length) h.clients[0].profil.journal = 2;
+  }
 
   // ── X : doublon (le même événement, deux fois dans la minute) ─────────────
   {
     const r = await creerRegle('X', 'doublon', { actions: texto('Bonjour, confirmation de votre demande.') });
     const c = await creerClient('X', 1);
     await publier([r.id], true);
+    let lignes: Array<Record<string, unknown>> = [];
     try {
       await emettre([c.id], { source: 'manuel' }, 2);
-      await journaux(r.id, 1);
+      lignes = await journaux(r.id, 1);
     } finally {
       await publier([r.id], false);
     }
+    // Le moteur corrigé trace le second passage (code `doublon`) ; l'ancien ne l'écrit nulle part
+    // (constat D-04). Dans les deux cas : UN déclenchement, UN envoi.
+    const trace = lignes.filter((l) => (l.result_data as Record<string, unknown> | null)?.saute_code === 'doublon').length;
     regles.X = {
       cle: 'X', id: r.id, nom: r.nom, issue: 'doublon', raison: 'Doublon : le même événement est arrivé deux fois, un seul envoi.',
-      clients: [{ id: c.id, nom: c.nom, age_jours: 0 }],
-      attendu: {
-        stats60: { declenches: 1, en_cours: 0, envoyes: 1, sautes: 0, echecs: 0 },
-        echecs7j: 0, journaux60: 1, historique60: 0, declenchements49j: 1,
-      },
+      clients: [{ id: c.id, nom: c.nom, age_jours: 0, profil: profil({ envoyees: 1, ignorees: trace ? { doublon: trace } : {}, journal: 1 + trace }) }],
     };
   }
 
@@ -362,12 +448,9 @@ export async function construireJeuConnu(): Promise<Manifeste> {
         cle: `F${i + 1}`, id: r.id, nom: r.nom, issue: plafond ? 'saute' : 'reussi',
         code: plafond ? 'plafond_frequence' : undefined,
         raison: plafond ? 'Ce client a déjà reçu 3 messages commerciaux aujourd’hui.' : 'Texto envoyé.',
-        clients: [{ id: c.id, nom: c.nom, age_jours: 0 }],
-        attendu: {
-          // AUJOURD'HUI le moteur écrit le plafond comme un ÉCHEC : c'est ce que le jeu enregistre.
-          stats60: { declenches: 1, en_cours: 0, envoyes: plafond ? 0 : 1, sautes: 0, echecs: plafond ? 1 : 0 },
-          echecs7j: plafond ? 1 : 0, journaux60: 1, historique60: 0, declenchements49j: 1,
-        },
+        // L'ancien moteur écrit le plafond comme un ÉCHEC « Frequency cap reached… », le nouveau comme
+        // un envoi ignoré (`plafond_frequence`) : les statistiques rangent les deux sous « ignorées ».
+        clients: [{ id: c.id, nom: c.nom, age_jours: 0, profil: plafond ? profil({ ignorees: { plafond_frequence: 1 } }) : profil({ envoyees: 1 }) }],
       };
     });
   }
@@ -400,26 +483,15 @@ export async function construireJeuConnu(): Promise<Manifeste> {
     } finally {
       await publier([r.id], false);
     }
+    // Par client : le courriel de l'étape 1 est parti (1 ligne), le texto de l'étape 3 attend (1 tâche).
+    const p = profil({ envoyees: 1, journal: 2, en_cours: 1 });
     regles.P = {
       cle: 'P', id: r.id, nom: r.nom, issue: 'reussi', raison: 'Courriel envoyé ; le texto part dans 3 jours.',
-      clients: [{ id: c1.id, nom: c1.nom, age_jours: 0 }, { id: c2.id, nom: c2.nom, age_jours: 0 }],
-      attendu: {
-        stats60: { declenches: 2, en_cours: 2, envoyes: 2, sautes: 0, echecs: 0 },
-        echecs7j: 0, journaux60: 2, historique60: 4, declenchements49j: 2,
-      },
+      clients: [{ id: c1.id, nom: c1.nom, age_jours: 0, profil: p }, { id: c2.id, nom: c2.nom, age_jours: 0, profil: p }],
     };
   }
 
-  const liste = Object.values(regles);
-  const manifeste: Manifeste = {
-    construit_le: new Date().toISOString(), orgA, orgB, fuseau, regles,
-    totaux: {
-      echecs7j: liste.reduce((s, r) => s + r.attendu.echecs7j, 0),
-      regles_a_verifier: liste.filter((r) => r.attendu.echecs7j > 0).length,
-      declenchements49j: liste.reduce((s, r) => s + r.attendu.declenchements49j, 0),
-      somme_declenches60: liste.reduce((s, r) => s + r.attendu.stats60.declenches, 0),
-    },
-  };
+  const manifeste: Manifeste = { construit_le: new Date().toISOString(), orgA, orgB, fuseau, regles };
   mkdirSync(DOSSIER_SORTIES, { recursive: true });
   writeFileSync(FICHIER_MANIFESTE, JSON.stringify(manifeste, null, 1));
   return manifeste;
