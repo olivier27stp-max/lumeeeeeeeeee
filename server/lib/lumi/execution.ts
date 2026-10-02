@@ -13,6 +13,8 @@ import { executerOutilGarde } from '../agent/garde';
 import { ECRITURES_SENSIBLES, JAMAIS_D_OFFICE } from '../agent/registre';
 import { ficheCreee, type Fiche } from './fiches';
 import { logger } from '../logger';
+import { COLONNES_REGLE_LUE, regleAtteintLeClient, resumeDeLaRegle, type RegleLue } from '../automations-etapes';
+import { langueDuTour } from './contexte-appel';
 
 export interface ReçuExecution {
   tool_use_id: string;
@@ -20,6 +22,43 @@ export interface ReçuExecution {
   fiche: Fiche | null;
   /** Exécutée sans clic, parce que l'outil est dans lumi_autorisations. */
   auto?: boolean;
+}
+
+/**
+ * Créer une automatisation depuis un MODÈLE, ou par COPIE : ces outils passent par les routes de
+ * l'écran et leur reçu disait « créée en brouillon », sans dire ce qu'elle CONTIENT. Or un modèle
+ * apporte parfois plus que ce qui était demandé — « un rappel par texto la veille » créait un
+ * texto ET un courriel, sans un mot (40-iklm, I-002). Ce qui est ENREGISTRÉ est relu ici et joint
+ * au résultat (`recu`) : le reçu affiché sous la carte et le modèle le citent (A-05).
+ */
+const CREE_UNE_AUTOMATISATION: ReadonlySet<string> = new Set(['create_automation_from_template', 'duplicate_automation_rule']);
+
+async function avecContenuEnregistre(
+  tool: string, resultat: unknown, o: { client: SupabaseClient; orgId: string },
+): Promise<unknown> {
+  if (!CREE_UNE_AUTOMATISATION.has(tool) || !resultat || typeof resultat !== 'object') return resultat;
+  const r = resultat as Record<string, unknown>;
+  if (typeof r.rule_id !== 'string' || typeof r.recu === 'string' || r.incertain || r.error) return resultat;
+  try {
+    const { data } = await o.client
+      .from('automation_rules').select(COLONNES_REGLE_LUE)
+      .eq('id', r.rule_id).eq('org_id', o.orgId).maybeSingle();
+    if (!data) return resultat;
+    const langue = langueDuTour();
+    const fr = langue === 'fr';
+    const resume = resumeDeLaRegle(data as unknown as RegleLue, langue, { maxMessage: 400 });
+    const recu = [
+      fr
+        ? `Créée ${resume.publiee ? 'et PUBLIÉE' : 'en brouillon : rien ne part tant qu’elle n’est pas activée'}. Ce qu’elle fait :`
+        : `Created ${resume.publiee ? 'and PUBLISHED' : 'as a draft: nothing is sent until it is enabled'}. What it does:`,
+      `${fr ? 'Déclencheur' : 'Trigger'} : ${resume.declencheur}`,
+      ...resume.etapes,
+    ].join('\n');
+    return { ...r, recu };
+  } catch (e: unknown) {
+    logger.warn('[lumi/execute] contenu de l’automatisation créée illisible', { tool, message: e instanceof Error ? e.message : String(e) });
+    return resultat;
+  }
 }
 
 export async function executerEcriture(opts: {
@@ -49,6 +88,7 @@ export async function executerEcriture(opts: {
     if (echec) return { contenu: JSON.stringify({ error: echec }), recu };
     // La fiche créée (« Devis Q-0043 ») voyage avec le résultat : c'est ce
     // qui permet au reçu de réapparaître quand on rouvre la conversation.
+    r.result = await avecContenuEnregistre(opts.tool, r.result, { client: opts.client, orgId: opts.orgId }) as typeof r.result;
     const fiche = await ficheCreee(opts.tool, opts.args, r.result, { client: opts.client, orgId: opts.orgId, userId: opts.userId });
     recu.ok = true;
     recu.fiche = fiche;
@@ -102,9 +142,6 @@ export function compterEcritures(msgs: Array<{ role: string; content: unknown }>
   return n;
 }
 
-/** Types d'action d'automatisation qui atteignent le CLIENT (texto, courriel, sondage d'avis). */
-const ACTIONS_VERS_LE_CLIENT: ReadonlySet<string> = new Set(['send_sms', 'send_email', 'request_review']);
-
 /**
  * Écritures sensibles POUR CETTE ORG : la liste fixe, plus `update_job_status`
  * quand une automatisation active sur « job terminée » envoie quelque chose au
@@ -117,10 +154,12 @@ export async function ecrituresSensiblesPour(admin: SupabaseClient, orgId: strin
   try {
     const { data, error } = await admin
       .from('automation_rules')
-      .select('actions')
-      .eq('org_id', orgId).eq('trigger_event', 'job.completed').eq('is_active', true);
+      .select('steps, actions, delay_seconds')
+      .eq('org_id', orgId).eq('trigger_event', 'job.completed').eq('is_active', true).is('deleted_at', null);
     if (error) throw error;
-    const versLeClient = (data ?? []).some((r: any) => Array.isArray(r.actions) && r.actions.some((a: any) => ACTIONS_VERS_LE_CLIENT.has(String(a?.type))));
+    // Par l'accès unique aux étapes (A-11) : `actions` seul ne voyait pas un PARCOURS
+    // (`steps`) — bâti dans l'éditeur ou par Lumi, il textait le client sans carte.
+    const versLeClient = (data ?? []).some((r) => regleAtteintLeClient(r as RegleLue));
     if (versLeClient) out.add('update_job_status');
   } catch (err: any) {
     // En doute, on demande : la carte de trop coûte un clic, l'inverse coûte un texto.

@@ -183,6 +183,7 @@ export const VERBES_LUMI: Record<string, VerbeLumi> = {
   toggle_automation_rule: { fr: 'activer ou mettre en pause une automatisation', en: 'turn an automation on or off' },
   update_automation_message: { fr: 'réécrire le message d’une automatisation', en: 'rewrite an automation’s message' },
   update_automation_sms_body: { fr: 'réécrire le texto d’une automatisation', en: 'rewrite an automation’s text message' },
+  update_automation_from_text: { fr: 'modifier une automatisation', en: 'change an automation' },
   set_automation_language: { fr: 'changer la langue des messages automatiques', en: 'change the language of automatic messages' },
 
   // ── Taxes, catalogue, objectifs, rapports, notifications ────────────────

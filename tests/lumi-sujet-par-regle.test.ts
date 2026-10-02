@@ -24,8 +24,10 @@ describe('sujetParRegle', () => {
     expect(sujetParRegle('Texte à Sophie Tremblay : « on arrive vers 13 h ».')).toBe('communications');
     expect(sujetParRegle('Ajoute une tâche pour vendredi : commander du savon.')).toBe('equipe');
     expect(sujetParRegle('Désactive l’automatisation de bienvenue.')).toBe('rapports');
-    // Le nom de la règle parle de factures : deux sujets, la règle se tait.
-    expect(sujetParRegle('Mets en pause l’automatisation « Invoice Reminder — 3 Days ».')).toBeNull();
+    // Le nom de la règle parle de factures, mais c'est une AUTOMATISATION : le mot tranche (F-11).
+    // Avant, la règle se taisait et le routeur était payé à chaque message d'automatisation.
+    expect(sujetParRegle('Mets en pause l’automatisation « Invoice Reminder — 3 Days ».')).toBe('rapports');
+    expect(sujetParRegle('Change le texto de l’automatisation « Relance de soumission » pour : Bonjour, des questions ?')).toBe('rapports');
   });
 
   it('deux sujets ou aucun : la règle se tait, le routeur tranche', () => {

@@ -43,6 +43,7 @@ export interface ReponseLumi {
 
 type ApiLumi = { url: string; server: Server };
 let serveur: Promise<ApiLumi> | null = null;
+let portAvant: string | undefined;
 
 export function demarrerApiLumi(): Promise<ApiLumi> {
   if (serveur) return serveur;
@@ -52,15 +53,24 @@ export function demarrerApiLumi(): Promise<ApiLumi> {
     const { subscriptionGuard, resoudreUtilisateur } = await import('../../../server/lib/subscription-guard');
     const { featureGuard } = await import('../../../server/lib/feature-guard');
     const lumiRouter = (await import('../../../server/routes/lumi')).default;
+    // Les outils de Lumi qui passent par une ROUTE de l'app (créer depuis un modèle, dupliquer,
+    // renommer, supprimer, tout arrêter) s'appellent eux-mêmes en HTTP : sans ces routes dans le
+    // harnais, leur appel n'aboutissait nulle part et Lumi répondait « je n'ai pas eu la
+    // confirmation » (I-003, I-019 : la création par modèle n'écrivait rien).
+    const reglesRouter = (await import('../../../server/routes/automation-rules')).default;
     const app = express();
     app.use(express.json({ limit: '512kb' }));
     app.use(rbacMiddleware());
     app.use(subscriptionGuard());
     app.use(featureGuard({ resoudreOrg: (req) => resoudreUtilisateur(req) }));
     app.use('/api', lumiRouter);
+    app.use('/api', reglesRouter);
     return new Promise<ApiLumi>((resolve) => {
       const server = app.listen(0, '127.0.0.1', () => {
         const { port } = server.address() as AddressInfo;
+        // `appelInterne` (tools-etendus.ts) vise 127.0.0.1:PORT : c'est CETTE API, pas un serveur voisin.
+        portAvant = process.env.PORT;
+        process.env.PORT = String(port);
         resolve({ url: `http://127.0.0.1:${port}`, server });
       });
     });
@@ -72,6 +82,7 @@ export async function arreterApiLumi(): Promise<void> {
   if (!serveur) return;
   const { server } = await serveur;
   serveur = null;
+  if (portAvant === undefined) delete process.env.PORT; else process.env.PORT = portAvant;
   await new Promise<void>((r) => server.close(() => r()));
 }
 

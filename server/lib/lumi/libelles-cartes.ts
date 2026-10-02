@@ -98,6 +98,8 @@ export const LIBELLES_PARAMETRES: Record<string, [fr: string, en: string]> = {
   from: ['Du', 'From'],
   hourly_rate_cents: ['Taux horaire', 'Hourly rate'],
   icon: ['Icône', 'Icon'],
+  instruction: ['Modification demandée', 'Requested change'],
+  must_be_shorter: ['Plus court que l’actuel', 'Shorter than the current one'],
   internal_notes: ['Notes internes', 'Internal notes'],
   interval_days: ['Intervalle (jours)', 'Interval (days)'],
   intro_text: ['Texte d’introduction', 'Intro text'],

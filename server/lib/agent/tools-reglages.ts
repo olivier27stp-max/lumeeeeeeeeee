@@ -32,6 +32,18 @@ import type { IdTopic } from '../lumi/topics';
 import type { AgentTool, ToolContext } from './tools';
 import { executerIdempotent, champRequis, appelInterne, traduireStatut, AppelInterneIncertain } from './tools-etendus';
 import { etatCredits } from '../lumi/budget';
+import {
+  COLONNES_REGLE_LUE, etapesDeLaRegle, aUnParcours, messagesDeLaRegle, actionsDepuisEtapes, resumeDeLaRegle, obstaclesAPublication,
+  declencheurEnClair, avisSegments, regleAtteintLeClient, type RegleLue,
+} from '../automations-etapes';
+import { messageCorbeille } from '../automations-corbeille';
+import { ecrireRegle, type ChangementsRegle } from '../automations-ecriture';
+import { langueDuTour } from '../lumi/contexte-appel';
+import { porteeALActivation } from '../lumi/panneau-automatisation';
+import { trouverDeclencheur, estPrereglageRetire } from '../../../src/lib/automationCatalogue';
+import { localizeAutomationName } from '../../../src/lib/automationNames';
+import { textesDExemple } from '../../../src/lib/publicationAutomatisation';
+import { VARIABLES_CONNUES, variablesInconnues, variableLisible, texteVersHtml } from '../../../src/lib/emailBodyText';
 
 /* ── Petits utilitaires locaux ─────────────────────────────────── */
 
@@ -337,19 +349,116 @@ const duplicateEmailTemplate: AgentTool = {
 
 /* ════════════════════════════════════════════════════════════════
    AUTOMATISATIONS
+
+   Mission finale (2026-10-02), règle commune à tous les outils ci-dessous :
+   une écriture RELIT la ligne après avoir écrit et rend l'état relu (nom,
+   publiée ou non, déclencheur en clair, étapes, messages tels qu'enregistrés).
+   Lumi cite ce résultat — jamais ce qu'il avait l'intention d'écrire.
+   Lecture des étapes : un seul accès, `automations-etapes.ts`.
    ════════════════════════════════════════════════════════════════ */
+
+type RegleEnBase = RegleLue & { id: string; name: string; trigger_event: string; modele_id?: string | null };
+
+/** Une automatisation du bureau (jamais une règle supprimée définitivement). */
+async function lireAutomatisation(ctx: ToolContext, id: string): Promise<RegleEnBase> {
+  const { data, error } = await ctx.client
+    .from('automation_rules')
+    .select(`${COLONNES_REGLE_LUE}, modele_id`)
+    .eq('id', id).eq('org_id', ctx.orgId).is('purged_at', null)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Automatisation introuvable dans cette entreprise — elle a peut-être été supprimée.');
+  return data as unknown as RegleEnBase;
+}
+
+/** Aucune écriture sur une automatisation à la corbeille : on la restaure d'abord (comme l'éditeur, 409). */
+function refuserCorbeille(regle: RegleLue): void {
+  if (regle.deleted_at) throw new Error(`${messageCorbeille(langueDuTour() === 'fr')} Rien n’a été modifié.`);
+}
+
+/** Variables utiles à un déclencheur : le client et l'entreprise, toujours ; puis celles de la fiche qui déclenche. */
+const VARIABLES_TOUJOURS = ['client_first_name', 'client_name', 'company_name', 'company_phone'];
+const VARIABLES_PAR_FICHE: Record<string, string[]> = {
+  quote: ['quote_number', 'quote_total', 'quote_link', 'quote_valid_until'],
+  invoice: ['invoice_number', 'invoice_total', 'invoice_due_date', 'invoice_link'],
+  appointment: ['appointment_date', 'appointment_time', 'appointment_address', 'job_name'],
+  job: ['job_name', 'review_link'],
+  agreement: ['contract_link', 'signed_contract_link', 'deposit_amount'],
+  deal: ['deal_stage', 'deal_source'],
+  lead: [],
+};
+export function variablesPourDeclencheur(cle: string | null | undefined): string[] {
+  const fiche = (cle ? trouverDeclencheur(cle)?.entite : undefined) ?? '';
+  return [...VARIABLES_TOUJOURS, ...(VARIABLES_PAR_FICHE[fiche] ?? [])].filter((v) => VARIABLES_CONNUES.includes(v));
+}
+
+/**
+ * Refuse un message qui partirait TROUÉ (A-06). Le moteur remplace une
+ * variable inconnue par du vide : « Bonjour {{client_prenom}}, payez ici :
+ * {{lien_paiement}} » arrive « Bonjour , payez ici : . » — vu 3 fois sur 5
+ * réécritures libres du clavardage. Même contrôle que « Construire avec Lumi »
+ * (`variablesInconnues`), plus les crochets qui ne sont pas des variables
+ * (« [lien de paiement] » partirait tel quel).
+ */
+export function problemeDeVariables(textes: Array<string | undefined>, declencheur: string | null | undefined): string | null {
+  const texte = textes.filter((t): t is string => typeof t === 'string').join('\n');
+  const inconnues = variablesInconnues(texte).map(variableLisible);
+  const fauxCrochets = [...texte.matchAll(/\[([^\]\n]{1,60})\]|\{\{?([^{}\n]{1,60})\}?\}/g)]
+    .map((m) => ({ tout: m[0], dedans: String(m[1] ?? m[2] ?? '').trim() }))
+    // « [lien de paiement] », « [prénom] », « {{lien paiement}} » : des mots en minuscules — un essai de variable.
+    // (« [URGENT] » ou une référence « [A-12] » restent du texte : on ne refuse pas ce qui n'y ressemble pas.)
+    .filter((c) => !/^\w+$/.test(c.dedans) && !/^[a-z]+\.[a-z][a-z0-9_]*$/.test(c.dedans))
+    .filter((c) => c.tout.startsWith('{') || /^[a-zà-ÿ_ ’']+$/.test(c.dedans))
+    .map((c) => c.tout);
+  const fautives = [...new Set([...inconnues, ...fauxCrochets])];
+  if (!fautives.length) return null;
+  const valides = variablesPourDeclencheur(declencheur).map((v) => `[${v}]`).join(', ');
+  return `Message refusé, rien n’a été enregistré : ${fautives.join(', ')} ${fautives.length > 1 ? 'ne sont pas des variables' : 'n’est pas une variable'} de Lume — le client recevrait un trou à la place. `
+    + `Variables valides pour « ${declencheurEnClair(declencheur, true)} » : ${valides}.`;
+}
+function refuserVariablesInconnues(textes: Array<string | undefined>, declencheur: string | null | undefined): void {
+  const probleme = problemeDeVariables(textes, declencheur);
+  if (probleme) throw new Error(probleme);
+}
+
+/** Le corps d'un courriel au format ENREGISTRÉ par l'éditeur (HTML) : un texte brut y partait en un seul bloc (A-21). */
+function corpsCourriel(corps: string): string {
+  return /<[a-z][^>]*>/i.test(corps) ? corps : texteVersHtml(corps);
+}
+
+/** L'état RELU d'une automatisation, sous la forme compacte que Lumi cite. */
+function etatRelu(regle: RegleLue, langue: 'fr' | 'en'): Record<string, unknown> {
+  const r = resumeDeLaRegle(regle, langue, { maxMessage: 1_500 });
+  return {
+    nom: r.nom,
+    etat: r.etat,
+    declencheur: r.declencheur,
+    ...(r.filtres.length ? { filtres: r.filtres } : {}),
+    etapes: r.etapes,
+    ...(r.reglages.length ? { reglages: r.reglages } : {}),
+  };
+}
+
+/** Ce que fait l'automatisation, en une ou deux lignes — pour le reçu affiché après « Confirmer ». */
+function etapesPourRecu(regle: RegleLue, langue: 'fr' | 'en'): string {
+  const r = resumeDeLaRegle(regle, langue, { maxMessage: 600 });
+  return r.etapes.length ? r.etapes.join('\n') : (langue === 'fr' ? '(aucune étape)' : '(no step)');
+}
 
 const toggleAutomationRule: AgentTool = {
   kind: 'write',
   needsIdentity: true,
   declaration: {
     name: 'toggle_automation_rule',
-    description: 'Enable or pause an automation rule. Enabling means messages will go to clients automatically when the trigger fires: confirm with the user.',
+    description:
+      'Publish (enable) or pause an automation. Pausing is immediate and never refused. '
+      + 'To enable: call this tool right away, without writing a summary yourself. The app writes above the card exactly what will run (the trigger, each message word for word, who is reached at activation), and the card asks for the OK. '
+      + 'Refused when a step still carries the editor sample text or when the journey is incomplete: say why, never "done".',
     parameters: {
       type: 'object',
       properties: {
-        rule_id: { type: 'string', description: 'Automation rule id (from list_automations).' },
-        is_active: { type: 'boolean', description: 'true = enable, false = pause.' },
+        rule_id: { type: 'string', description: 'Automation rule id (from get_automation or list_automations).' },
+        is_active: { type: 'boolean', description: 'true = publish, false = pause.' },
       },
       required: ['rule_id', 'is_active'],
     },
@@ -359,18 +468,44 @@ const toggleAutomationRule: AgentTool = {
       const id = champRequis(args.rule_id, 'L’automatisation');
       if (typeof args.is_active !== 'boolean') throw new Error('Précise si l’automatisation doit être activée (true) ou mise en pause (false).');
       const actif = args.is_active;
+      const langue = langueDuTour();
+      const fr = langue === 'fr';
+      if (actif) {
+        // Un texte d'EXEMPLE de l'éditeur ne part jamais à un client. L'écran demande
+        // une confirmation avant de publier ; Lumi, lui, ne publie pas : il le dit.
+        const avant = await lireAutomatisation(ctx, id);
+        const exemples = textesDExemple({ ...avant, fr });
+        if (!avant.deleted_at && exemples.length) {
+          const cites = messagesDeLaRegle(avant).filter((m) => exemples.some((p) => p.etapeId === m.etape)).map((m) => `« ${m.texte.slice(0, 120)} »`);
+          throw new Error(fr
+            ? `Je ne l’ai PAS activée : ${exemples.length > 1 ? 'des étapes portent' : 'une étape porte'} encore le texte d’exemple de l’éditeur${cites.length ? ` (${cites.join(', ')})` : ''}, qui partirait tel quel aux clients. Écris d’abord le vrai message (dis-moi quoi écrire), puis demande l’activation.`
+            : `I did NOT enable it: ${exemples.length > 1 ? 'some steps still carry' : 'a step still carries'} the editor’s sample text${cites.length ? ` (${cites.join(', ')})` : ''}, which would go to clients as is. Write the real message first, then ask to enable it.`);
+        }
+      }
       // Le même chemin que l'interface (audit M8) : un parcours cassé n'est
       // pas publié, et Lumi reçoit la liste des problèmes à expliquer.
       const { changerPublication } = await import('../automations-publication');
-      const r = await changerPublication(ctx.client, ctx.orgId, id, actif);
-      if (!r.ok) throw new Error(r.erreur);
-      const row = { id: r.id, name: r.name };
+      const r = await changerPublication(ctx.client, ctx.orgId, id, actif, fr);
+      if (!r.ok) throw new Error(`${r.erreur} ${fr ? 'Rien n’a changé.' : 'Nothing changed.'}`);
+      // RELU en base (A-05) : la réponse dit l'état d'aujourd'hui, pas la valeur demandée.
+      const relue = await lireAutomatisation(ctx, id);
+      if ((relue.is_active === true) !== actif) {
+        throw new Error(fr ? 'La modification n’a pas été appliquée : l’automatisation n’a pas changé d’état. Réessaie.' : 'The change was not applied: the automation did not change state. Try again.');
+      }
+      const portee = actif ? await porteeALActivation(getServiceClient(), ctx.orgId, relue, langue) : null;
       return {
         updated: true,
-        rule_id: row.id,
-        name: row.name,
-        is_active: actif,
-        note: actif ? 'Automatisation activée : elle partira dès son prochain déclenchement.' : 'Automatisation mise en pause : plus rien ne partira jusqu’à sa réactivation.',
+        rule_id: relue.id,
+        name: relue.name,
+        is_active: relue.is_active === true,
+        automatisation: etatRelu(relue, langue),
+        ...(portee ? { portee } : {}),
+        recu: actif
+          ? (fr
+            ? `Elle est maintenant publiée. Déclencheur : ${declencheurEnClair(relue.trigger_event, true)}. Ce qui part :\n${etapesPourRecu(relue, 'fr')}\n${portee}`
+            : `It is now published. Trigger: ${declencheurEnClair(relue.trigger_event, false)}. What runs:\n${etapesPourRecu(relue, 'en')}\n${portee}`)
+          : (fr ? 'Elle est maintenant en brouillon : plus rien ne part tant qu’elle n’est pas republiée.' : 'It is now a draft: nothing is sent until it is published again.'),
+        note: actif ? 'Automatisation publiée : elle partira dès son prochain déclenchement.' : 'Automatisation mise en pause : plus rien ne partira jusqu’à sa réactivation.',
       };
     }),
 };
@@ -387,11 +522,13 @@ const toggleAutomationRule: AgentTool = {
  *
  * LE COÛT
  * On réutilise `genererParcours` tel quel plutôt que de faire raisonner
- * l'orchestrateur : un aller-retour Haiku, catalogue en cache, budget réservé
- * AVANT l'appel. Mesuré en production le 2026-09-25 : 0,32 ¢ pour un parcours
- * à deux étapes. Faire construire le JSON par l'orchestrateur (240 outils,
- * historique complet) coûterait plusieurs fois ce prix pour un résultat moins
- * fiable — le catalogue ne serait pas sous les yeux du modèle.
+ * l'orchestrateur : un aller-retour (Sonnet 5, catalogue en cache), budget
+ * réservé AVANT l'appel, 0,4 à 1 ¢ mesurés le 2026-10-02 (effort bas). Faire
+ * construire le JSON par l'orchestrateur (240 outils, historique complet)
+ * coûterait plusieurs fois ce prix pour un résultat moins fiable — le
+ * catalogue ne serait pas sous les yeux du modèle. La dépense est rattachée à
+ * la conversation en cours (`contexte-appel.ts`) : elle compte dans sa trace
+ * et dans son plafond.
  *
  * CE QU'IL N'EST PAS
  * Une écriture directe. L'outil PROPOSE ; l'automatisation naît **en pause**
@@ -399,6 +536,9 @@ const toggleAutomationRule: AgentTool = {
  * déclencher des envois aux clients en fermant un formulaire. L'utilisateur
  * l'active ensuite avec `toggle_automation_rule`, ce qui lui redemande
  * confirmation.
+ * NI un moyen de MODIFIER : « ajoute un délai », « seulement tel client » sur
+ * une automatisation existante créait un DOUBLON sans le filtre, que Lumi
+ * activait ensuite pour tous les clients (F-14). Modifier = `update_automation_from_text`.
  */
 const createAutomationFromText: AgentTool = {
   kind: 'write',
@@ -408,7 +548,8 @@ const createAutomationFromText: AgentTool = {
     description:
       'Create a NEW automation from a plain-language description (e.g. "after a quote is sent, wait 3 days then text a follow-up, then 2 more days and text again"). '
       + 'The rule is created PAUSED: tell the user it will not send anything until they enable it. '
-      + 'Use this only to create; to enable, rename or reword an existing one use toggle_automation_rule / update_automation_message.',
+      + 'ONLY to create one that does not exist yet. To change an existing automation (add or remove a step, a delay, a condition, a filter, the trigger, a message) use update_automation_from_text on THAT automation - '
+      + 'never create a second one to change the first. To enable, rename or reword: toggle_automation_rule / rename_automation_rule / update_automation_message.',
     parameters: {
       type: 'object',
       properties: {
@@ -429,7 +570,6 @@ const createAutomationFromText: AgentTool = {
 
       const { genererParcours } = await import('../lumi/generer-parcours');
       const { sequenceEtapes } = await import('../validation');
-      const { trouverDeclencheur } = await import('../../../src/lib/automationCatalogue');
       const { refAutomatisationInventee } = await import('../automations-publication');
       const admin = getServiceClient();
 
@@ -446,6 +586,7 @@ const createAutomationFromText: AgentTool = {
         userId: ctx.userId ?? null,
         demande: demande.trim(),
         langue,
+        canal: 'clavardage',
       });
       if (!resultat.parcours) {
         throw new Error(resultat.erreur ?? 'Je n\'ai pas réussi à construire ce parcours. Reformule-le.');
@@ -486,23 +627,20 @@ const createAutomationFromText: AgentTool = {
         ? { ...a, steps: verdictAutre.data }
         : null;
 
-      const { data, error } = await ctx.client
-        .from('automation_rules')
-        .insert({
-          org_id: ctx.orgId,
+      // UNE seule porte pour écrire une automatisation (`ecrireRegle`) : elle naît en brouillon,
+      // `actions` y redit le parcours (A-02, A-11 : vide, il le rendait invisible pour tout
+      // lecteur d'`actions`), et la ligne est relue.
+      const ecrite = await ecrireRegle({
+        client: ctx.client, orgId: ctx.orgId, ruleId: null, auteurId: ctx.userId ?? null, origine: 'lumi',
+        changements: {
           name: resultat.parcours.nom,
-          description: resultat.parcours.resume,
+          description: resultat.parcours.resume.slice(0, 500),
           trigger_event: resultat.parcours.trigger_event,
-          conditions: {},
-          delay_seconds: 0,
-          actions: [],
           steps: verdict.data,
-          // En pause à la naissance : voir l'en-tête de l'outil.
-          is_active: false,
-        })
-        .select('id, name, trigger_event, is_active');
-      if (error) throw error;
-      const row = ligneTouchee(data, 'L\'automatisation');
+        },
+      });
+      if (!ecrite.ok) throw new Error(ecrite.erreur);
+      const row = ecrite.regle;
 
       // La DEUXIÈME automatisation (autre déclencheur, ex. « quand le client
       // répond »), en pause elle aussi, avec sa limite « une fois par client
@@ -517,43 +655,43 @@ const createAutomationFromText: AgentTool = {
         } else if (!autre) {
           seconde = { creee: false, name: a.nom, manque: 'un parcours valide (à construire dans Automatisations)' };
         } else {
-          const { data: d2, error: e2 } = await ctx.client
-            .from('automation_rules')
-            .insert({
-              org_id: ctx.orgId,
+          const e2 = await ecrireRegle({
+            client: ctx.client, orgId: ctx.orgId, ruleId: null, auteurId: ctx.userId ?? null, origine: 'lumi',
+            changements: {
               name: autre.nom,
-              description: autre.resume,
+              description: autre.resume.slice(0, 500),
               trigger_event: autre.trigger_event,
-              conditions: {},
-              delay_seconds: 0,
-              actions: [],
               steps: autre.steps,
-              settings: autre.une_fois_par_client_jours ? { delai_entre_passages_jours: autre.une_fois_par_client_jours } : null,
-              is_active: false,
-            })
-            .select('id, name, trigger_event');
+              ...(autre.une_fois_par_client_jours ? { settings: { delai_entre_passages_jours: autre.une_fois_par_client_jours } } : {}),
+            },
+          });
           // La 1re est déjà en base : on le dit plutôt que de lever (l'empreinte
           // d'idempotence resterait libérée et une retentative la doublerait).
-          if (e2 || !d2?.length) {
-            console.error('[create_automation_from_text] 2e automatisation non créée', ctx.orgId, e2?.message ?? 'aucune ligne');
+          if (!e2.ok) {
+            console.error('[create_automation_from_text] 2e automatisation non créée', ctx.orgId, e2.erreur);
             seconde = { creee: false, name: autre.nom, manque: 'l’enregistrement a échoué — à créer dans Automatisations' };
           } else {
-            seconde = { creee: true, rule_id: d2[0].id, name: d2[0].name, trigger_event: d2[0].trigger_event };
+            seconde = { creee: true, rule_id: e2.regle.id, name: e2.regle.name, declencheur: declencheurEnClair(e2.regle.trigger_event, langueDuTour() === 'fr') };
           }
         }
       }
 
+      // RELUE en base (A-05) : Lumi cite les messages enregistrés, pas son intention.
+      const langueTour = langueDuTour();
+      const relue = row;
       return {
         created: true,
-        rule_id: row.id,
-        name: row.name,
-        trigger_event: row.trigger_event,
-        etapes: verdict.data.length,
-        resume: resultat.parcours.resume,
-        is_active: false,
+        rule_id: relue.id,
+        name: relue.name,
+        etapes: etapesDeLaRegle(relue).length,
+        is_active: relue.is_active === true,
+        automatisation: etatRelu(relue, langueTour),
         ...(seconde ? { deuxieme_automatisation: seconde } : {}),
         ...(seconde && !seconde.creee ? { warning: `La deuxième automatisation (« ${String(seconde.name)} ») n’a PAS été créée : il manque ${String(seconde.manque)}.` } : {}),
-        note: 'Créée EN PAUSE : rien ne partira tant qu\'elle n\'est pas activée. Elle est visible dans Automatisations, où le parcours peut être ajusté. Un filtre sur le déclencheur (montant, type de job…) ne se crée pas d\'ici : il s\'ajoute dans l\'éditeur.',
+        recu: langueTour === 'fr'
+          ? `Créée en brouillon : rien ne part tant qu’elle n’est pas activée. Déclencheur : ${declencheurEnClair(relue.trigger_event, true)}. Ce qu’elle fera :\n${etapesPourRecu(relue, 'fr')}`
+          : `Created as a draft: nothing is sent until it is enabled. Trigger: ${declencheurEnClair(relue.trigger_event, false)}. What it will do:\n${etapesPourRecu(relue, 'en')}`,
+        note: 'Créée EN PAUSE : rien ne partira tant qu\'elle n\'est pas activée. Elle est visible dans Automatisations. Pour l’ajuster (délai, étape, filtre par étiquette ou par montant) : update_automation_from_text.',
       };
     }, {
       // « Déjà fait » ne vaut que si l'automatisation créée existe encore :
@@ -576,6 +714,115 @@ const createAutomationFromText: AgentTool = {
 };
 
 /**
+ * Modifier la STRUCTURE d'une automatisation existante, à partir d'une phrase
+ * (F-14, A-14) : un délai, une étape, une condition, un filtre, le déclencheur.
+ *
+ * Avant, le clavardage ne savait que créer : « ajoute un délai de 3 jours » sur
+ * une automatisation existante finissait par un DOUBLON sans le filtre, que
+ * « active-la » publiait pour tous les clients. Ici la MÊME règle est modifiée :
+ *  · on part de son parcours en base (`etapesDeLaRegle`), nom compris ;
+ *  · la génération est celle du panneau de l'éditeur (`genererParcours` avec
+ *    `parcoursActuel`) : une demande qu'elle ne sait pas faire (cibler un type
+ *    de client, une action qui n'existe pas) ne change RIEN et le dit ;
+ *  · l'écriture passe par la route de l'éditeur (PATCH) : mêmes validations,
+ *    même refus d'une automatisation à la corbeille, et une automatisation
+ *    PUBLIÉE que la modification casserait reste comme elle était (422) ;
+ *  · rien n'est activé ; la ligne est relue et son état rendu.
+ */
+const updateAutomationFromText: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'update_automation_from_text',
+    description:
+      'Change the STRUCTURE of an EXISTING automation from a plain-language instruction, in place: add, remove or change a wait ("add a 3-day delay before the text"), '
+      + 'add or remove a step ("add an email 2 days after the text"), add or remove a condition ("only if the invoice is over $500", "only clients tagged VIP"), change the trigger. '
+      + 'Same rule, nothing is enabled. Pass the user\'s own words; one change per call unless they asked for several. '
+      + 'NOT possible yet: targeting by client TYPE (commercial, residential): do not call - ask ONE question instead ("Do these clients carry a tag such as Commercial? I can filter on a tag."). '
+      + 'Actions that exist: text message, email, internal notification, task, tag, review request, wait, condition. An automatic phone call, WhatsApp or voicemail does NOT exist: say so, do not call. '
+      + 'A new WORDING only: update_automation_message. A new name: rename_automation_rule. Never use it when the user asks to CREATE an automation, even if a similar one exists: create the new one (create_automation_from_text or a template) and mention the existing one.',
+    parameters: {
+      type: 'object',
+      properties: {
+        rule_id: { type: 'string', description: 'Automation rule id (from get_automation or list_automations).' },
+        instruction: { type: 'string', description: 'What to change, in the user\'s own words, with every number they gave ("ajoute un delai de 3 jours avant le texto").' },
+      },
+      required: ['rule_id', 'instruction'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'update_automation_from_text', args, async () => {
+      const id = champRequis(args.rule_id, 'L’automatisation');
+      const demande = champRequis(args.instruction, 'La modification demandée').trim();
+      if (demande.length < 6) throw new Error('Dis ce qu’il faut changer dans l’automatisation (ex. : « ajoute un délai de 3 jours avant le texto »).');
+      const langueTour = langueDuTour();
+      const fr = langueTour === 'fr';
+
+      // AVANT de payer la génération : la règle existe, et n'est pas à la corbeille.
+      const avant = await lireAutomatisation(ctx, id);
+      refuserCorbeille(avant);
+      const etapesAvant = etapesDeLaRegle(avant);
+      if (!etapesAvant.length) {
+        throw new Error('Cette automatisation n’a encore aucune étape : décris ce qu’elle doit faire au complet, je la bâtis.');
+      }
+
+      const { genererParcours } = await import('../lumi/generer-parcours');
+      const { data: reglages } = await ctx.client
+        .from('company_settings').select('default_language').eq('org_id', ctx.orgId).maybeSingle();
+      const langueMessages: 'fr' | 'en' = reglages?.default_language === 'en' ? 'en' : 'fr';
+      const resultat = await genererParcours({
+        admin: getServiceClient(),
+        orgId: ctx.orgId,
+        userId: ctx.userId ?? null,
+        demande,
+        langue: langueMessages,
+        parcoursActuel: { nom: avant.name, trigger_event: avant.trigger_event, steps: etapesAvant as unknown[] },
+        canal: 'clavardage',
+        ruleId: avant.id,
+      });
+      if (!resultat.parcours) {
+        throw new Error(`${fr ? 'Rien n’a été modifié.' : 'Nothing was changed.'} ${resultat.erreur ?? ''}`.trim());
+      }
+      const p = resultat.parcours;
+      // Une question, un refus, une demande que Lume ne sait pas faire : RIEN n'est écrit, et Lumi le dit.
+      const declencheurChange = p.trigger_event !== avant.trigger_event;
+      const etapesChangees = JSON.stringify(etapesAvant) !== JSON.stringify(p.steps);
+      if (!etapesChangees && !declencheurChange && !p.renomme) {
+        throw new Error(`${fr ? 'Rien n’a été modifié dans l’automatisation.' : 'Nothing was changed in the automation.'} ${p.resume}`.trim());
+      }
+
+      // UNE seule porte pour écrire (`ecrireRegle`) : les contrôles de la route de l'éditeur, le refus
+      // d'une automatisation à la corbeille, `actions` remis en accord, une automatisation PUBLIÉE que
+      // la modification casserait laissée intacte — puis la ligne RELUE (A-05).
+      const ecrite = await ecrireRegle({
+        client: ctx.client, orgId: ctx.orgId, ruleId: avant.id, auteurId: ctx.userId ?? null, origine: 'lumi', fr,
+        changements: {
+          ...(etapesChangees ? { steps: p.steps } : {}),
+          ...(declencheurChange ? { trigger_event: p.trigger_event } : {}),
+          ...(p.renomme ? { name: p.nom } : {}),
+        },
+      });
+      if (!ecrite.ok) throw new Error(`${fr ? 'Rien n’a été modifié.' : 'Nothing was changed.'} ${ecrite.erreur}`);
+      const relue = ecrite.regle;
+      const publiee = relue.is_active === true;
+      return {
+        updated: true,
+        rule_id: relue.id,
+        name: relue.name,
+        is_active: publiee,
+        ce_qui_a_change: p.resume,
+        automatisation: etatRelu(relue, langueTour),
+        recu: fr
+          ? `${p.resume}\n\nElle fait maintenant (${publiee ? 'publiée : ça s’applique dès le prochain déclenchement' : 'en brouillon : rien ne part tant qu’elle n’est pas activée'}) :\n${etapesPourRecu(relue, 'fr')}`
+          : `${p.resume}\n\nIt now does (${publiee ? 'published: this applies from the next trigger' : 'draft: nothing is sent until it is enabled'}):\n${etapesPourRecu(relue, 'en')}`,
+        note: publiee
+          ? 'Modifiée, et toujours PUBLIÉE : le nouveau parcours s’applique dès le prochain déclenchement.'
+          : 'Modifiée, toujours en brouillon : rien ne part tant qu’elle n’est pas activée.',
+      };
+    }),
+};
+
+/**
  * Réécrit le corps (et l'objet, pour un courriel) d'UN message d'envoi d'une
  * règle — lecture-modification-écriture, le reste est intact.
  *
@@ -584,41 +831,34 @@ const createAutomationFromText: AgentTool = {
  * « c'est fait », et les clients recevaient l'ANCIEN texte. Il réécrivait aussi
  * TOUS les messages du même type avec le même texte. Maintenant : la bonne
  * liste, un seul message, et s'il y en a plusieurs, on demande lequel.
+ *
+ * Mission finale (2026-10-02) :
+ *  · A-08 : refus sur une automatisation à la corbeille ;
+ *  · A-06 : refus d'un texte aux variables inconnues (le client recevrait un trou) ;
+ *  · A-07 : `actions` est RE-DÉRIVÉ du parcours dans la même écriture — il ne
+ *    garde plus l'ancien texte quand le parcours porte plusieurs messages ;
+ *  · A-05 : la ligne est RELUE et le texte enregistré est rendu ;
+ *  · A-10 : l'objet d'un courriel se change seul (corps gardé tel quel) ;
+ *  · A-18 : un texto de plus d'un SMS est annoncé avec son coût ;
+ *  · A-21 : le corps d'un courriel est enregistré au format de l'éditeur (HTML).
  */
 async function reecrireMessageAutomation(
   ctx: ToolContext,
   ruleId: string,
   actionType: 'send_sms' | 'send_email',
-  body: string,
+  body: string | undefined,
   subject?: string,
   numero?: number,
+  /** L'utilisateur a demandé PLUS COURT : le nouveau texte est compté contre l'actuel. */
+  plusCourt = false,
 ): Promise<Record<string, any>> {
-  const { data: regle, error: lireErr } = await ctx.client
-    .from('automation_rules')
-    .select('id, name, actions, steps')
-    .eq('id', ruleId)
-    .eq('org_id', ctx.orgId)
-    .maybeSingle();
-  if (lireErr) throw lireErr;
-  if (!regle) throw new Error('Automatisation introuvable.');
+  const langue = langueDuTour();
+  const fr = langue === 'fr';
+  const regle = await lireAutomatisation(ctx, ruleId);
+  refuserCorbeille(regle);
   const quoi = actionType === 'send_sms' ? 'texto' : 'courriel';
-  const nouvelleConfig = (config: Record<string, any> | undefined) => ({
-    ...(config || {}), body, ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}),
-  });
 
-  // Une automatisation à ÉTAPES : le moteur exécute `steps` et ignore `actions`,
-  // qui n'en est qu'un reflet (constaté en prod le 2026-09-30, #799 ; audit des
-  // outils). On réécrit l'étape visée ; plusieurs messages du même type → Lumi
-  // demande lequel (message_number) au lieu de tout réécrire ou de refuser.
-  const etapes: any[] = Array.isArray(regle.steps) ? regle.steps : [];
-  const actions: any[] = Array.isArray(regle.actions) ? regle.actions : [];
-  const parcours = etapes.length > 0;
-  // Les messages de ce type, dans l'ordre du parcours (ou de la liste d'actions).
-  const cibles: Array<{ index: number; texte: string; nom: string | null }> = parcours
-    ? etapes.flatMap((e, index) => (e?.type === 'action' && e.action?.type === actionType
-      ? [{ index, texte: String(e.action?.config?.body ?? ''), nom: e.nom ?? null }] : []))
-    : actions.flatMap((a: any, index: number) => (a?.type === actionType
-      ? [{ index, texte: String(a?.config?.body ?? ''), nom: null }] : []));
+  const cibles = messagesDeLaRegle(regle).filter((m) => m.type === actionType);
   if (!cibles.length) throw new Error(`Cette automatisation n’envoie pas de ${quoi} : rien à réécrire.`);
   if (cibles.length > 1 && !numero) {
     const liste = cibles.map((c, i) => `${i + 1}. ${c.nom ? `${c.nom} — ` : ''}« ${c.texte.slice(0, 60)}${c.texte.length > 60 ? '…' : ''} »`).join(' ; ');
@@ -627,58 +867,105 @@ async function reecrireMessageAutomation(
   const cible = cibles[(numero ?? 1) - 1];
   if (!cible) throw new Error(`Il n’y a que ${cibles.length} ${quoi}(s) dans cette automatisation.`);
 
-  // Reflet `actions` tenu à jour quand il n'y a qu'un message de ce type (sans ambiguïté).
-  const refletUnique = parcours && cibles.length === 1 && actions.filter((a) => a?.type === actionType).length === 1;
-  const maj = parcours
-    ? {
-      steps: etapes.map((e, i) => (i === cible.index ? { ...e, action: { ...e.action, config: nouvelleConfig(e.action?.config) } } : e)),
-      ...(refletUnique ? { actions: actions.map((a) => (a?.type === actionType ? { ...a, config: nouvelleConfig(a.config) } : a)) } : {}),
-    }
-    : { actions: actions.map((a, i) => (i === cible.index ? { ...a, config: nouvelleConfig(a.config) } : a)) };
-  const { data, error } = await ctx.client
-    .from('automation_rules')
-    .update({ ...maj, updated_at: new Date().toISOString() })
-    .eq('id', ruleId)
-    .eq('org_id', ctx.orgId)
-    .select('id');
-  if (error) throw error;
-  ligneTouchee(data, 'L’automatisation');
+  refuserVariablesInconnues([body, subject], regle.trigger_event);
+  // Un modèle ne sait pas compter les caractères : « plus court » est vérifié ici (mesuré : 160 → 183).
+  if (plusCourt && body !== undefined && body.length >= cible.texte.length) {
+    throw new Error(`Rien n’a été enregistré : le nouveau ${quoi} (${body.length} caractères) n’est pas plus court que l’actuel (${cible.texte.length}). Réécris-le plus court.`);
+  }
+  const nouvelleConfig = (config: Record<string, any> | undefined) => ({
+    ...(config || {}),
+    ...(body !== undefined ? { body: actionType === 'send_email' ? corpsCourriel(body) : body } : {}),
+    ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}),
+  });
+
+  // Une automatisation à ÉTAPES : le moteur exécute `steps`. On réécrit l'étape
+  // visée, et `actions` est re-dérivé du parcours ENTIER. Au format d'origine
+  // (aucun parcours), `actions` est ce que le moteur exécute : c'est lui qu'on écrit.
+  const parcours = aUnParcours(regle);
+  const etapes: any[] = parcours ? (regle.steps as any[]) : [];
+  const actions: any[] = Array.isArray(regle.actions) ? regle.actions as any[] : [];
+  let changements: ChangementsRegle;
+  if (parcours) {
+    changements = { steps: etapes.map((e, i) => (i === cible.index ? { ...e, action: { ...e.action, config: nouvelleConfig(e.action?.config) } } : e)) };
+  } else {
+    // Le rang parmi les messages de ce type dans `actions` (la projection y ajoute parfois une attente en tête).
+    const rangs = actions.map((a, i) => (a?.type === actionType ? i : -1)).filter((i) => i >= 0);
+    const position = rangs[cible.numero - 1];
+    changements = { actions: actions.map((a, i) => (i === position ? { ...a, config: nouvelleConfig(a.config) } : a)) };
+  }
+  // UNE seule porte pour écrire (`ecrireRegle`) : contrôles de la route, `actions` remis en accord
+  // avec le parcours dans la même écriture (A-07), ligne RELUE — c'est CE texte que Lumi cite (A-05).
+  const ecrite = await ecrireRegle({ client: ctx.client, orgId: ctx.orgId, ruleId, changements, auteurId: ctx.userId ?? null, origine: 'lumi', fr });
+  if (!ecrite.ok) throw new Error(`${ecrite.erreur} ${fr ? 'Rien n’a été enregistré.' : 'Nothing was saved.'}`);
+  const relue = ecrite.regle;
+  const enregistre = messagesDeLaRegle(relue).filter((m) => m.type === actionType)[cible.numero - 1];
+  if (!enregistre) throw new Error('Le message n’a pas été retrouvé après l’enregistrement : vérifie l’automatisation dans Lume.');
+  const avis = actionType === 'send_sms' ? avisSegments(enregistre.texte, fr) : null;
+  const publiee = relue.is_active === true;
+  const cite = enregistre.texte.length > 700 ? `${enregistre.texte.slice(0, 700)}…` : enregistre.texte;
   return {
     updated: true,
-    rule_id: regle.id,
-    name: regle.name,
+    rule_id: relue.id,
+    name: relue.name,
     action_type: actionType,
+    is_active: publiee,
+    ...(actionType === 'send_email' ? { objet_enregistre: enregistre.objet ?? '' } : {}),
+    texte_enregistre: enregistre.texte,
+    caracteres: enregistre.texte.length,
     ancien_texte: cible.texte,
+    ...(avis ? { avis_sms: avis } : {}),
+    recu: (fr
+      ? `${actionType === 'send_sms' ? 'Texto enregistré' : `Courriel enregistré — objet « ${enregistre.objet ?? ''} »`} : « ${cite} »`
+      : `${actionType === 'send_sms' ? 'Text saved' : `Email saved — subject “${enregistre.objet ?? ''}”`}: “${cite}”`)
+      + (avis ? `\n${avis}` : '')
+      + (fr
+        ? (publiee ? '\nL’automatisation est publiée : ce texte part dès le prochain déclenchement.' : '\nL’automatisation est en brouillon : rien ne part tant qu’elle n’est pas activée.')
+        : (publiee ? '\nThe automation is published: this text goes out from the next trigger.' : '\nThe automation is a draft: nothing is sent until it is enabled.')),
     note: actionType === 'send_sms' ? 'Texte du texto de l’automatisation mis à jour.' : 'Texte du courriel de l’automatisation mis à jour.',
   };
 }
+
+/** Les variables à écrire dans un message d'automatisation — dites au modèle AVANT qu'il écrive (A-06). */
+const CONSIGNE_VARIABLES = 'Variables: square brackets, ONLY these - [client_first_name], [client_name], [company_name], [company_phone], '
+  + '[invoice_number], [invoice_total], [invoice_due_date], [invoice_link] (payment link), [quote_number], [quote_total], [quote_link], '
+  + '[appointment_date], [appointment_time], [appointment_address], [job_name], [review_link]. Anything else (e.g. {{lien_paiement}}, [montant]) is refused: the client would get a blank. '
+  + 'Wording: address the client formally (vous) unless asked otherwise, open with "Bonjour [client_first_name]," (or "Hi [client_first_name],"), no emoji, sign [company_name].';
 
 const updateAutomationMessage: AgentTool = {
   kind: 'write',
   needsIdentity: true,
   declaration: {
     name: 'update_automation_message',
-    description: 'Rewrite the text a rule sends to clients (SMS body, or email body and subject). Show the user the new text first. Other actions of the rule are untouched.',
+    description: 'Rewrite the text an automation sends to clients: an SMS body, or an email body and/or subject (subject alone: omit body, the body is kept). '
+      + 'Read the current text first with get_automation when the user says "shorter", "warmer", "change only...". Other steps are untouched. '
+      + 'The result carries the text AS SAVED (texte_enregistre): quote that, never your draft. '
+      + CONSIGNE_VARIABLES,
     parameters: {
       type: 'object',
       properties: {
         rule_id: { type: 'string', description: 'Automation rule id.' },
         action_type: { type: 'string', enum: ['send_sms', 'send_email'], description: 'Which message to rewrite.' },
-        body: { type: 'string', description: 'New message text.' },
+        body: { type: 'string', description: 'New message text (plain text; an SMS should stay short: about 20 words, two sentences). Never count characters yourself: the server counts them and tells you. When the user asks for a shorter text, set must_be_shorter. Optional for an email when only the subject changes.' },
         subject: { type: 'string', description: 'New subject (emails only).' },
         message_number: { type: 'integer', description: 'When the rule sends several messages of this type: which one (1 = first in the flow). Ask the user if unsure.' },
+        must_be_shorter: { type: 'boolean', description: 'true when the user asked for a SHORTER text: the new text is then counted against the current one and refused if not shorter.' },
       },
-      required: ['rule_id', 'action_type', 'body'],
+      required: ['rule_id', 'action_type'],
     },
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'update_automation_message', args, async () => {
       const id = champRequis(args.rule_id, 'L’automatisation');
       const type = args.action_type === 'send_email' ? 'send_email' : 'send_sms';
-      const body = champRequis(args.body, 'Le texte du message').slice(0, 5000);
       const subject = args.subject === undefined || args.subject === null ? undefined : String(args.subject).slice(0, 300);
+      const sansCorps = args.body === undefined || args.body === null || String(args.body).trim() === '';
+      // L'objet d'un courriel se change SEUL (A-10) : le corps reste tel qu'enregistré.
+      if (sansCorps && !(type === 'send_email' && subject !== undefined && subject.trim())) {
+        throw new Error('Le texte du message est requis — précise-le et réessaie.');
+      }
+      const body = sansCorps ? undefined : String(args.body).trim().slice(0, type === 'send_sms' ? 1600 : 5000);
       const numero = Number.isInteger(args.message_number) && Number(args.message_number) > 0 ? Number(args.message_number) : undefined;
-      return reecrireMessageAutomation(ctx, id, type, body, subject, numero);
+      return reecrireMessageAutomation(ctx, id, type, body, subject, numero, args.must_be_shorter === true);
     }),
 };
 
@@ -687,13 +974,16 @@ const updateAutomationSmsBody: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'update_automation_sms_body',
-    description: 'Rewrite only the SMS text of an automation rule. Shortcut for update_automation_message with action_type send_sms.',
+    description: 'Rewrite only the SMS text of an automation. Read the current text first with get_automation when the user says "shorter" or "warmer", then write the new text YOURSELF and call this tool right away: the card shows it and asks the OK. Never ask "what should it say?" or "do you want me to shorten it?": the user already asked, propose your best rewrite. '
+      + 'The result carries the text AS SAVED (texte_enregistre): quote that, never your draft. '
+      + CONSIGNE_VARIABLES,
     parameters: {
       type: 'object',
       properties: {
         rule_id: { type: 'string', description: 'Automation rule id.' },
-        body: { type: 'string', description: 'New SMS text.' },
+        body: { type: 'string', description: 'New SMS text. Keep it short: about 20 words, two sentences (beyond 160 characters each send is billed as several SMS). Never count characters yourself: the server counts them and tells you. When the user asks for a shorter text, set must_be_shorter.' },
         message_number: { type: 'integer', description: 'When the rule sends several SMS: which one (1 = first in the flow).' },
+        must_be_shorter: { type: 'boolean', description: 'true when the user asked for a SHORTER text: the new text is then counted against the current one and refused if not shorter.' },
       },
       required: ['rule_id', 'body'],
     },
@@ -703,7 +993,7 @@ const updateAutomationSmsBody: AgentTool = {
       const id = champRequis(args.rule_id, 'L’automatisation');
       const body = champRequis(args.body, 'Le texte du texto').slice(0, 1600);
       const numero = Number.isInteger(args.message_number) && Number(args.message_number) > 0 ? Number(args.message_number) : undefined;
-      return reecrireMessageAutomation(ctx, id, 'send_sms', body, undefined, numero);
+      return reecrireMessageAutomation(ctx, id, 'send_sms', body, undefined, numero, args.must_be_shorter === true);
     }),
 };
 
@@ -712,7 +1002,7 @@ const setAutomationLanguage: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'set_automation_language',
-    description: 'Set the language (fr or en) of the automatic SMS and emails the org sends to clients. Owner/admin only.',
+    description: 'Set the language (fr or en) of the automatic SMS and emails the org sends to clients - for the WHOLE company, not one automation. Owner/admin only.',
     parameters: {
       type: 'object',
       properties: { language: { type: 'string', enum: ['fr', 'en'], description: 'fr or en.' } },
@@ -730,8 +1020,131 @@ const setAutomationLanguage: AgentTool = {
         .select('org_id');
       if (error) throw error;
       if (!data || data.length === 0) throw new Error('Seuls le propriétaire ou un administrateur peuvent changer la langue des automatisations.');
-      return { updated: true, language: langue, note: langue === 'fr' ? 'Les messages automatiques partiront désormais en français.' : 'Les messages automatiques partiront désormais en anglais.' };
+      // RELU en base (A-05) : la langue annoncée est celle qui est enregistrée.
+      const { data: relu, error: eRelu } = await ctx.client.from('company_settings').select('default_language').eq('org_id', ctx.orgId).maybeSingle();
+      if (eRelu) throw eRelu;
+      const enregistree = relu?.default_language === 'en' ? 'en' : 'fr';
+      if (enregistree !== langue) throw new Error('La langue n’a pas été enregistrée — réessaie.');
+      const fr = langueDuTour() === 'fr';
+      return {
+        updated: true,
+        language: enregistree,
+        recu: enregistree === 'fr'
+          ? (fr ? 'Les messages automatiques partent maintenant en français, pour toute l’entreprise.' : 'Automatic messages now go out in French, for the whole company.')
+          : (fr ? 'Les messages automatiques partent maintenant en anglais, pour toute l’entreprise.' : 'Automatic messages now go out in English, for the whole company.'),
+        note: enregistree === 'fr' ? 'Les messages automatiques partiront désormais en français.' : 'Les messages automatiques partiront désormais en anglais.',
+      };
     }),
+};
+
+/**
+ * LIRE une automatisation (A-10, F-15). `list_automations` ne rend que le nom,
+ * le déclencheur et l'état : « explique-moi ce qu'elle fait » recevait « elle
+ * envoie le texto qu'on vient de peaufiner », « plus court » recevait « je
+ * n'ai pas accès au texte actuel ». Ici : le résumé écrit par du code
+ * (`resumeDeLaRegle`) — déclencheur dans les mots de l'écran, filtres, chaque
+ * étape dans l'ordre, chaque message tel qu'ENREGISTRÉ.
+ *
+ * Par identifiant, ou par NOM (partiel, sans accents) : une demande qui nomme
+ * l'automatisation n'a plus besoin de lire toute la liste d'abord (F-12).
+ * Introuvable : l'outil le dit ET rend les noms qui existent — Lumi ne dit plus
+ * « je n'ai pas trouvé » sans avoir cherché.
+ */
+const getAutomation: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'get_automation',
+    description:
+      'Read ONE automation in full: published or draft, its trigger in plain words, its filters, every step in order (waits, conditions, actions) and the EXACT text of each message as saved, plus `portee` (who is reached when it is enabled). '
+      + 'Find it by rule_id, or by name - a partial name is fine ("relance facture"). ALWAYS call it before explaining an automation, rewording one of its messages, changing it or enabling it: never answer from memory, and never say an automation does not exist without having called this.',
+    parameters: {
+      type: 'object',
+      properties: {
+        rule_id: { type: 'string', description: 'Automation rule id, when known.' },
+        name: { type: 'string', description: 'Its name, or part of it, as the user said it.' },
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const langue = langueDuTour();
+    const fr = langue === 'fr';
+    const plat = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’'«»"“”]/g, ' ').toLowerCase().replace(/\s+/g, ' ').trim();
+    try {
+      let id = typeof args.rule_id === 'string' && UUID.test(args.rule_id) ? args.rule_id : null;
+      if (!id) {
+        const cherche = plat(String(args.name ?? ''));
+        const { data, error } = await ctx.client
+          .from('automation_rules')
+          .select('id, name, trigger_event, is_active, preset_key')
+          .eq('org_id', ctx.orgId).is('deleted_at', null)
+          .order('name', { ascending: true }).limit(200);
+        if (error) return erreurLecture('get_automation', error);
+        const toutes = ((data ?? []) as Array<{ id: string; name: string; trigger_event: string; is_active: boolean; preset_key: string | null }>)
+          .filter((r) => !estPrereglageRetire(r));
+        const ligne = (r: typeof toutes[number]) => ({
+          rule_id: r.id, nom: localizeAutomationName(r.name, langue),
+          declencheur: declencheurEnClair(r.trigger_event, fr),
+          etat: r.is_active ? (fr ? 'publiée' : 'published') : (fr ? 'brouillon' : 'draft'),
+        });
+        if (!cherche) {
+          return { introuvable: true, automatisations: toutes.slice(0, 40).map(ligne), note: 'Précise laquelle : voici celles qui existent.' };
+        }
+        // Le nom tel qu'affiché (un préréglage est rangé sous son nom anglais) ET tel que rangé ; le déclencheur aide (« celle des factures en retard »).
+        const texteDe = (r: typeof toutes[number]) => plat(`${r.name} ${localizeAutomationName(r.name, 'fr')} ${localizeAutomationName(r.name, 'en')}`);
+        const exactes = toutes.filter((r) => plat(r.name) === cherche || plat(localizeAutomationName(r.name, langue)) === cherche);
+        let trouvees = exactes.length ? exactes : toutes.filter((r) => texteDe(r).includes(cherche));
+        if (!trouvees.length) {
+          // Mot à mot (« relance factures retard » trouve « Relance facture en retard ») : chaque mot utile, au pluriel près.
+          const mots = cherche.split(' ').filter((m) => m.length > 2 && !['les', 'des', 'mes', 'une', 'the', 'pour', 'automatisation', 'automation', 'celle'].includes(m)).map((m) => m.replace(/(s|x)$/, ''));
+          if (mots.length) {
+            trouvees = toutes.filter((r) => {
+              const t = `${texteDe(r)} ${plat(declencheurEnClair(r.trigger_event, true))} ${plat(declencheurEnClair(r.trigger_event, false))}`;
+              return mots.every((m) => t.includes(m));
+            });
+          }
+        }
+        if (!trouvees.length) {
+          return {
+            introuvable: true,
+            cherche: String(args.name ?? ''),
+            automatisations: toutes.slice(0, 40).map(ligne),
+            note: 'Aucune automatisation de ce nom dans cette entreprise. Dis-le simplement et propose celles qui existent (ci-dessus) — n’invente rien.',
+          };
+        }
+        if (trouvees.length > 1) {
+          return {
+            plusieurs: true,
+            automatisations: trouvees.slice(0, 12).map(ligne),
+            note: 'Plusieurs automatisations correspondent : demande LAQUELLE en UNE question, en les distinguant par leur déclencheur — sans rien modifier.',
+          };
+        }
+        id = trouvees[0].id;
+      }
+      const regle = await lireAutomatisation(ctx as ToolContext, id);
+      const r = resumeDeLaRegle(regle, langue, { maxMessage: 1_500 });
+      return {
+        rule_id: regle.id,
+        nom: r.nom,
+        etat: r.etat,
+        fournie_par_lume: regle.is_preset === true,
+        declencheur: r.declencheur,
+        ...(r.quand ? { quand: r.quand } : {}),
+        ...(r.filtres.length ? { filtres: r.filtres } : {}),
+        etapes: r.etapes.length ? r.etapes : [fr ? '(aucune étape pour l’instant)' : '(no step yet)'],
+        ...(r.reglages.length ? { reglages: r.reglages } : {}),
+        ...(regleAtteintLeClient(regle) ? { portee: await porteeALActivation(getServiceClient(), ctx.orgId, regle, langue) } : {}),
+        // Ce que le bouton « Publier » refuserait : à dire AVANT de proposer l'activation (C12).
+        ...(obstaclesAPublication(regle, fr).length ? { ne_peut_pas_etre_activee_telle_quelle: obstaclesAPublication(regle, fr) } : {}),
+        variables_valides: variablesPourDeclencheur(regle.trigger_event).map((v) => `[${v}]`).join(' '),
+        note: 'Cite les messages mot pour mot, entre guillemets. Les étapes sont dans l’ordre d’exécution.',
+      };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (/introuvable/i.test(message)) return { introuvable: true, note: message };
+      return erreurLecture('get_automation', e);
+    }
+  },
 };
 
 /* ════════════════════════════════════════════════════════════════
@@ -1577,6 +1990,8 @@ export const OUTILS_REGLAGES: AgentTool[] = [
   listEmailTemplates, createEmailTemplate, updateEmailTemplate, setDefaultEmailTemplate, deleteEmailTemplate, duplicateEmailTemplate,
   // Automatisations
   createAutomationFromText, toggleAutomationRule, updateAutomationMessage, updateAutomationSmsBody, setAutomationLanguage,
+  // Automatisations — mission finale (2026-10-02) : lire le contenu, modifier la structure d'une règle existante.
+  getAutomation, updateAutomationFromText,
   // Taxes
   getTaxConfig, setupTaxes, createTaxConfig, updateTaxConfig, deleteTaxConfig, setDefaultTaxGroup,
   // Catalogue
@@ -1611,6 +2026,8 @@ export const REGISTRE_REGLAGES: Record<string, { sensible: boolean; reversible: 
   update_automation_message:   { sensible: true,  reversible: true,  vers_client: false },
   update_automation_sms_body:  { sensible: true,  reversible: true,  vers_client: false },
   set_automation_language:     { sensible: true,  reversible: true,  vers_client: false },
+  // Modifie ce que les clients recevront (toujours une carte) ; n'active rien.
+  update_automation_from_text: { sensible: true,  reversible: true,  vers_client: false },
   setup_taxes:                 { sensible: true,  reversible: true,  vers_client: false },
   create_tax_config:           { sensible: true,  reversible: true,  vers_client: false },
   update_tax_config:           { sensible: true,  reversible: true,  vers_client: false },
@@ -1644,6 +2061,8 @@ export const PERMISSIONS_REGLAGES: Record<string, { cle: PermissionKey; capacite
   update_automation_message:   { cle: 'automations.update',     capacite: 'la modification des automatisations' },
   update_automation_sms_body:  { cle: 'automations.update',     capacite: 'la modification des automatisations' },
   set_automation_language:     { cle: 'automations.update',     capacite: 'la langue des automatisations' },
+  get_automation:              { cle: 'automations.read',       capacite: 'la consultation des automatisations' },
+  update_automation_from_text: { cle: 'automations.update',     capacite: 'la modification des automatisations' },
   get_tax_config:              { cle: 'settings.read',          capacite: 'la consultation des taxes' },
   setup_taxes:                 { cle: 'settings.update',        capacite: 'la configuration des taxes' },
   create_tax_config:           { cle: 'settings.update',        capacite: 'la configuration des taxes' },
@@ -1679,6 +2098,7 @@ export const TOPICS_REGLAGES: Partial<Record<IdTopic, string[]>> = {
   ],
   rapports: [
     'create_automation_from_text', 'toggle_automation_rule', 'update_automation_message', 'update_automation_sms_body', 'set_automation_language',
+    'get_automation', 'update_automation_from_text',
     'list_goals', 'set_goal', 'delete_goal',
     'list_scheduled_reports', 'create_scheduled_report', 'update_scheduled_report', 'delete_scheduled_report', 'send_scheduled_report_now',
     'list_notifications', 'mark_notifications_read', 'delete_notification',
