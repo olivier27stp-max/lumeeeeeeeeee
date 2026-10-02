@@ -37,11 +37,17 @@ const LECTURES: Array<[string, Record<string, unknown> | null]> = [
   ['list_time_entries', { from: jour(-30), to: jour(0) }],
   ['list_commissions', {}],
   ['get_team_schedule', { date: jour(1) }],
+  // Une semaine en un appel, avec les visites de jobs par équipe (2026-10-02).
+  ['get_team_schedule', { date: jour(-7), date_to: jour(6) }],
   ['get_taxes_collected', periode],
   ['list_automation_templates', { language: 'fr' }],
   ['get_quote_win_rate', periode],
   ['get_payment_methods_breakdown', periode],
   ['get_team_performance', periode],
+  // Sans période : le mois en cours, élargi aux 12 derniers mois quand il est encore vide (2026-10-02).
+  ['get_quote_win_rate', {}],
+  ['get_payment_methods_breakdown', {}],
+  ['get_team_performance', {}],
   ['list_stripe_payouts', periode],
 ];
 
@@ -55,7 +61,7 @@ for (const [nom, args] of LECTURES) {
     if (r && typeof r === 'object' && 'error' in r) throw new Error(String((r as { error: unknown }).error));
     const taille = JSON.stringify(r).length;
     // Un résultat au-delà de 20 000 caractères est tronqué avant d'aller au modèle (compress.ts) : le signaler ici.
-    console.log(`  OK   ${nom.padEnd(30)} ${String(taille).padStart(6)} car.${taille > 20_000 ? ' (> 20 000 : sera tronqué)' : ''}  ${JSON.stringify(r).slice(0, 130)}`);
+    console.log(`  OK   ${nom.padEnd(30)} ${String(taille).padStart(6)} car.${taille > 20_000 ? ' (> 20 000 : sera tronqué)' : ''}  ${JSON.stringify(r).slice(0, Number(process.env.QA_APERCU) || 130)}`);
   } catch (err) {
     erreurs += 1;
     console.log(`  ERR  ${nom.padEnd(30)} ${err instanceof Error ? err.message : String(err)}`);
