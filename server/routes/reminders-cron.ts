@@ -308,6 +308,42 @@ async function insertReminderLog(
   }
 }
 
+/** Une facture candidate à la relance (les colonnes lues par le cron). */
+interface FactureARelancer {
+  id: string; org_id: string; client_id: string | null; invoice_number: string | null;
+  total_cents: number | null; balance_cents: number | null; currency: string | null;
+  due_date: string | null; status: string; subject: string | null;
+}
+
+/** Factures lues par page (PostgREST plafonne une réponse à 1 000 lignes). */
+export const PAGE_FACTURES = 500;
+/** Garde-fou d'un passage : au plus 40 pages — 20 000 factures — par palier et par entreprise. */
+export const PAGES_MAX_PAR_PALIER = 40;
+
+/**
+ * Lit une requête page après page, jusqu'à la dernière (une page incomplète).
+ *
+ * `lirePage(de, a)` doit rendre les lignes `de`…`a` d'une requête ORDONNÉE de
+ * façon stable (sinon deux pages peuvent rendre la même ligne et en oublier
+ * une autre). Une erreur arrête la lecture : les lignes déjà lues sont
+ * rendues avec l'erreur — à l'appelant de dire quoi en faire.
+ */
+export async function lireToutesLesPages<T>(
+  lirePage: (de: number, a: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+  taille: number = PAGE_FACTURES,
+  pagesMax: number = PAGES_MAX_PAR_PALIER,
+): Promise<{ lignes: T[]; erreur: string | null; tronque: boolean }> {
+  const lignes: T[] = [];
+  for (let page = 0; page < pagesMax; page++) {
+    const { data, error } = await lirePage(page * taille, page * taille + taille - 1);
+    if (error) return { lignes, erreur: error.message, tronque: false };
+    const lot = (Array.isArray(data) ? data : []) as T[];
+    lignes.push(...lot);
+    if (lot.length < taille) return { lignes, erreur: null, tronque: false };
+  }
+  return { lignes, erreur: null, tronque: true };
+}
+
 /**
  * Un passage des relances de factures. Exporté pour la suite d'intégration :
  * `orgId` borne le passage à UNE entreprise (bureau de test), comme
@@ -409,23 +445,41 @@ export async function executerRelancesPaiement(opts: {
 
       const fenetre = fenetreRelance(today, daysAfter, plafond);
 
-      let requete = svc
-        .from('invoices')
-        .select('id, org_id, client_id, invoice_number, total_cents, balance_cents, currency, due_date, status, subject')
-        .eq('org_id', orgId)
-        .in('status', ['sent', 'partial'])
-        .lte('due_date', fenetre.max)
-        .gt('balance_cents', 0);
-      // Borne basse : au-delà du plafond, on ne relance plus (voir
-      // PLAFOND_RELANCE_JOURS_DEFAUT).
-      if (fenetre.min) requete = requete.gte('due_date', fenetre.min);
-      const { data: invoices, error: invErr } = await requete.limit(500);
-      if (invErr) {
-        errors.push({ error: `load invoices org=${orgId}: ${invErr.message}` });
-        continue;
+      /*
+       * TOUTES les factures du palier, page par page, dans un ordre STABLE
+       * (B-22). Avant : `.limit(500)` sans ordre — toujours les mêmes 500
+       * lignes. Une fois celles-ci relancées, chaque passage les relisait,
+       * les sautait (déjà au journal), et la 501e facture en retard n'était
+       * jamais lue : son client n'était jamais relancé.
+       */
+      const lirePage = (de: number, a: number) => {
+        let requete = svc
+          .from('invoices')
+          .select('id, org_id, client_id, invoice_number, total_cents, balance_cents, currency, due_date, status, subject')
+          .eq('org_id', orgId)
+          .in('status', ['sent', 'partial'])
+          .lte('due_date', fenetre.max)
+          .gt('balance_cents', 0);
+        // Borne basse : au-delà du plafond, on ne relance plus (voir
+        // PLAFOND_RELANCE_JOURS_DEFAUT).
+        if (fenetre.min) requete = requete.gte('due_date', fenetre.min);
+        return requete.order('due_date', { ascending: true }).order('id', { ascending: true }).range(de, a);
+      };
+      const lecture = await lireToutesLesPages<FactureARelancer>(lirePage);
+      const invoices = lecture.lignes;
+      if (lecture.erreur) {
+        // Ce qui a été lu avant l'erreur est traité (le journal porte
+        // l'idempotence) ; le reste le sera au passage suivant.
+        errors.push({ error: `load invoices org=${orgId}: ${lecture.erreur}` });
+        if (!invoices.length) continue;
+      }
+      if (lecture.tronque) {
+        logger.warn('[cron/reminders] palier tronqué : plus de factures en retard que le plafond d’un passage', {
+          orgId, daysAfter, lues: invoices.length,
+        });
       }
 
-      for (const inv of invoices || []) {
+      for (const inv of invoices) {
         // Un palier plus haut a déjà traité cette facture pendant ce passage
         // (relancée, déjà relancée un autre jour, ou couverte par une automatisation).
         const dejaAtteint = palierAtteint.get(inv.id);
