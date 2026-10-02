@@ -97,9 +97,9 @@ function saisir(el: Element | null | undefined, v: string) {
   Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(el, v);
   act(() => { el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true })); });
 }
-/** Déplie le bloc « Version anglaise (…) » d'un texte (replié par défaut depuis l'ajustement de la ligne 2). */
-function deplierVersionAnglaise(libelleDuChamp: string) {
-  cliquer(boutons().find((b) => b.textContent?.includes(`Version anglaise (${libelleDuChamp})`)));
+/** Déplie le bloc « Version anglaise — … » de l'étape (replié par défaut depuis l'ajustement de la ligne 2). */
+function deplierVersionAnglaise() {
+  cliquer(boutons().find((b) => b.textContent?.includes('Version anglaise — utilisée seulement si vos messages partent en anglais')));
 }
 const configEnregistree = () => {
   const e = enregistrees.at(-1);
@@ -314,7 +314,7 @@ describe('ligne 3 — le courriel d’une automatisation fournie s’ouvre en te
     await monter('send_email', fourni, { declencheur: 'lead.created' });
     const message = champ<HTMLTextAreaElement>('Message *');
     expect(message?.value).toBe('Bonjour [client_first_name],\nVous nous avez contactés récemment.\nMerci,\n[company_name]');
-    deplierVersionAnglaise('Message');
+    deplierVersionAnglaise();
     expect(champ<HTMLTextAreaElement>('Message — version anglaise')?.value).toBe('Hi [client_first_name],\nYou reached out to us recently.\nThank you,\n[company_name]');
     for (const zone of Array.from(conteneur.querySelectorAll('textarea'))) expect(zone.value).not.toMatch(/<div|<p>|<h2>|style=/);
   });
@@ -346,7 +346,7 @@ describe('ligne 3 — le courriel d’une automatisation fournie s’ouvre en te
 
   it('un seul des deux textes corrigé : l’autre garde son HTML d’origine, inchangé', async () => {
     await monter('send_email', fourni, { declencheur: 'lead.created' });
-    deplierVersionAnglaise('Message');
+    deplierVersionAnglaise();
     saisir(champ('Message — version anglaise'), 'Hi [client_first_name],\nShort version.');
     cliquer(enregistrer());
     expect(configEnregistree()?.body).toBe(HTML_FR);
@@ -365,7 +365,7 @@ describe('ligne 3 — le courriel d’une automatisation fournie s’ouvre en te
     await monter('send_email', fourni, { declencheur: 'lead.created' });
     saisir(champ<HTMLSelectElement>('Quoi faire'), 'send_sms');
     expect(champ<HTMLTextAreaElement>('Texte du message *')?.value).toBe('Bonjour [client_first_name],\nVous nous avez contactés récemment.\nMerci,\n[company_name]');
-    deplierVersionAnglaise('Texte du message');
+    deplierVersionAnglaise();
     saisir(champ('Texte du message — version anglaise'), '');
     cliquer(enregistrer());
     expect(configEnregistree()).toEqual({ body: 'Bonjour [client_first_name],\nVous nous avez contactés récemment.\nMerci,\n[company_name]' });
@@ -378,8 +378,9 @@ describe('ligne 2 — un texte en deux langues (`body` / `body_en`, `subject` / 
   const FR = 'Rabais de 10 % jusqu’au 1er mai.';
   const EN = '10% off until May 1st.';
   const NOUVEAU = 'Rabais de 20 % jusqu’au 1er juin.';
-  const TITRE_ANGLAISE = 'Version anglaise (Texte du message) — utilisée seulement si vos messages partent en anglais';
-  const TITRE_FRANCAISE = 'Version française (Texte du message) — utilisée seulement si vos messages partent en français';
+  // L'intitulé, les constats et les choix sont ceux du composant PARTAGÉ `AutreVersionMessage` (liste, courriel, Réglages).
+  const TITRE_ANGLAISE = 'Version anglaise — utilisée seulement si vos messages partent en anglais';
+  const TITRE_FRANCAISE = 'Version française — utilisée seulement si vos messages partent en français';
   /** Le bouton qui déplie le bloc de l'autre langue. */
   const bloc = (titre: string) => boutons().find((b) => b.textContent?.trim().endsWith(titre));
   const deplie = (titre: string) => bloc(titre)?.getAttribute('aria-expanded') === 'true';
@@ -417,10 +418,10 @@ describe('ligne 2 — un texte en deux langues (`body` / `body_en`, `subject` / 
       expect(texte()).not.toContain('Version anglaise');
     });
 
-    it('courriel : l’objet et le message ont chacun leur bloc', async () => {
+    it('courriel : UN seul bloc, qui porte l’objet et le message de l’autre langue', async () => {
       await monter('send_email', { subject: 'Votre devis', subject_en: 'Your quote', body: 'Bonjour', body_en: 'Hello' });
-      cliquer(bloc('Version anglaise (Objet) — utilisée seulement si vos messages partent en anglais'));
-      cliquer(bloc('Version anglaise (Message) — utilisée seulement si vos messages partent en anglais'));
+      expect(conteneur.querySelectorAll('[data-testid="autre-version"]')).toHaveLength(1);
+      cliquer(bloc(TITRE_ANGLAISE));
       expect(champ('Objet — version anglaise')?.value).toBe('Your quote');
       expect(champ<HTMLTextAreaElement>('Message — version anglaise')?.value).toBe('Hello');
     });
@@ -488,13 +489,62 @@ describe('ligne 2 — un texte en deux langues (`body` / `body_en`, `subject` / 
       expect(configEnregistree()).toEqual({ body: FR, body_en: EN });
     });
 
-    it('courriel : corriger l’OBJET seul ne touche qu’à la version anglaise de l’objet', async () => {
+    // (d) — `subject_en` : la même règle que le corps, éprouvée à l'écran.
+    it('courriel : corriger l’OBJET seul périme la version anglaise ENTIÈRE — retirée d’office, objet et message (jamais un courriel moitié anglais, moitié français)', async () => {
       await monter('send_email', { subject: 'Votre devis', subject_en: 'Your quote', body: 'Bonjour', body_en: 'Hello' });
       saisir(champ('Objet *'), 'Votre soumission');
-      expect(deplie('Version anglaise (Objet) — utilisée seulement si vos messages partent en anglais')).toBe(true);
-      expect(deplie('Version anglaise (Message) — utilisée seulement si vos messages partent en anglais')).toBe(false);
+      expect(enregistrer().disabled).toBe(false);
+      expect(deplie(TITRE_ANGLAISE)).toBe(true);
+      expect(texte()).toContain('Cette version n’est plus à jour.');
+      expect(radio(RETIRER)?.checked).toBe(true);
+      expect(champ('Objet — version anglaise')?.value).toBe('Your quote');
       cliquer(enregistrer());
-      expect(configEnregistree()).toEqual({ subject: 'Votre soumission', body: 'Bonjour', body_en: 'Hello' });
+      expect(configEnregistree()).toEqual({ subject: 'Votre soumission', body: 'Bonjour' });
+    });
+
+    it('courriel : … « La garder telle quelle » garde l’objet et le message anglais', async () => {
+      await monter('send_email', { subject: 'Votre devis', subject_en: 'Your quote', body: 'Bonjour', body_en: 'Hello' });
+      saisir(champ('Objet *'), 'Votre soumission');
+      cliquer(radio(GARDER));
+      cliquer(enregistrer());
+      expect(configEnregistree()).toEqual({ subject: 'Votre soumission', subject_en: 'Your quote', body: 'Bonjour', body_en: 'Hello' });
+    });
+
+    it('courriel : corriger l’objet ET sa version anglaise (`subject_en`) : plus de choix, les deux objets partent, le message anglais reste', async () => {
+      await monter('send_email', { subject: 'Votre devis', subject_en: 'Your quote', body: 'Bonjour', body_en: 'Hello' });
+      saisir(champ('Objet *'), 'Votre soumission');
+      saisir(champ('Objet — version anglaise'), 'Your estimate');
+      expect(texte()).not.toContain('Cette version n’est plus à jour.');
+      expect(radio(RETIRER)).toBeUndefined();
+      cliquer(enregistrer());
+      expect(configEnregistree()).toEqual({ subject: 'Votre soumission', subject_en: 'Your estimate', body: 'Bonjour', body_en: 'Hello' });
+    });
+
+    it('courriel : corriger SEULEMENT `subject_en` : enregistré, sans question', async () => {
+      await monter('send_email', { subject: 'Votre devis', subject_en: 'Your quote', body: 'Bonjour', body_en: 'Hello' });
+      cliquer(bloc(TITRE_ANGLAISE));
+      saisir(champ('Objet — version anglaise'), 'Your estimate');
+      expect(texte()).not.toContain('Cette version n’est plus à jour.');
+      cliquer(enregistrer());
+      expect(configEnregistree()).toEqual({ subject: 'Votre devis', subject_en: 'Your estimate', body: 'Bonjour', body_en: 'Hello' });
+    });
+
+    it('courriel : vider `subject_en` : la clé disparaît, le message anglais reste', async () => {
+      await monter('send_email', { subject: 'Votre devis', subject_en: 'Your quote', body: 'Bonjour', body_en: 'Hello' });
+      cliquer(bloc(TITRE_ANGLAISE));
+      saisir(champ('Objet — version anglaise'), '');
+      cliquer(enregistrer());
+      expect(configEnregistree()).toEqual({ subject: 'Votre devis', body: 'Bonjour', body_en: 'Hello' });
+    });
+
+    it('courriel, bureau ANGLAIS : le champ « Objet » montre `subject_en` ; le corriger retire la version française — objet et message passent sous les clés de base', async () => {
+      await monter('send_email', { subject: 'Votre devis', subject_en: 'Your quote', body: 'Bonjour', body_en: 'Hello' }, { langueEnvoi: 'en' });
+      expect(champ('Objet *')?.value).toBe('Your quote');
+      saisir(champ('Objet *'), 'Your estimate');
+      expect(deplie(TITRE_FRANCAISE)).toBe(true);
+      expect(champ('Objet — version française')?.value).toBe('Votre devis');
+      cliquer(enregistrer());
+      expect(configEnregistree()).toEqual({ subject: 'Your estimate', body: 'Hello' });
     });
 
     it('une variable inconnue dans la version anglaise est signalée, même bloc replié', async () => {
@@ -506,18 +556,18 @@ describe('ligne 2 — un texte en deux langues (`body` / `body_en`, `subject` / 
       await monter('send_sms', { body: FR, body_en: EN });
       saisir(champ<HTMLSelectElement>('Quoi faire'), 'send_email');
       expect(champ<HTMLTextAreaElement>('Message *')?.value).toBe(FR);
-      cliquer(bloc('Version anglaise (Message) — utilisée seulement si vos messages partent en anglais'));
+      cliquer(bloc(TITRE_ANGLAISE));
       expect(champ<HTMLTextAreaElement>('Message — version anglaise')?.value).toBe(EN);
     });
 
     it('interface en anglais : titre, constat et choix en anglais', async () => {
       await monter('send_sms', { body: FR, body_en: EN }, { fr: false });
-      expect(bloc('English version (Message text) — only used if your messages go out in English')).toBeDefined();
+      expect(bloc('English version — used only if your messages are sent in English')).toBeDefined();
       saisir(champ('Message text *'), '20 %');
       expect(champ<HTMLTextAreaElement>('Message text — English version')?.value).toBe(EN);
-      expect(texte()).toContain('This version is out of date.');
-      expect(radio('Remove it (your clients will get the text above)')?.checked).toBe(true);
-      expect(radio('Keep it as it is')).toBeDefined();
+      expect(texte()).toContain('This version is no longer up to date.');
+      expect(radio('Remove it (your clients will receive the text above)')?.checked).toBe(true);
+      expect(radio('Keep it as is')).toBeDefined();
       expect(enregistrer().disabled).toBe(false);
     });
   });
@@ -589,7 +639,7 @@ describe('ligne 2 — un texte en deux langues (`body` / `body_en`, `subject` / 
       const htmlEn = '<div style="font-family:sans-serif;"><p>Hello [client_first_name],</p></div>';
       await monter('send_email', { subject: 'Votre devis', body: htmlFr, body_en: htmlEn }, anglais);
       expect(champ<HTMLTextAreaElement>('Message *')?.value).toBe('Hello [client_first_name],');
-      cliquer(bloc('Version française (Message) — utilisée seulement si vos messages partent en français'));
+      cliquer(bloc(TITRE_FRANCAISE));
       saisir(champ('Message — version française'), '');
       cliquer(enregistrer());
       expect(configEnregistree()).toEqual({ subject: 'Votre devis', body: htmlEn });

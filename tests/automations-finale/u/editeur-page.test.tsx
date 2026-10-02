@@ -1653,7 +1653,7 @@ describe('ligne 2 (ajustement) — le panneau montre dans son champ principal le
     cliquer(carteEtape('Envoyer un texto'));
     await attendre(2);
     expect(principal()).toBe(FR);
-    expect(panneauEtape()?.textContent).toContain('Version anglaise (Texte du message) — utilisée seulement si vos messages partent en anglais');
+    expect(panneauEtape()?.textContent).toContain('Version anglaise — utilisée seulement si vos messages partent en anglais');
   });
 
   it('bureau qui envoie en ANGLAIS : le champ principal montre l’anglais ; corriger et enregistrer ne laisse qu’un texte, celui qui part', async () => {
@@ -1666,7 +1666,7 @@ describe('ligne 2 (ajustement) — le panneau montre dans son champ principal le
     cliquer(carteEtape('Envoyer un texto'));
     await attendre(2);
     expect(principal()).toBe(EN);
-    expect(panneauEtape()?.textContent).toContain('Version française (Texte du message) — utilisée seulement si vos messages partent en français');
+    expect(panneauEtape()?.textContent).toContain('Version française — utilisée seulement si vos messages partent en français');
     vi.useFakeTimers();
     saisir(panneauEtape()?.querySelector('textarea'), '20% off until June 1st.');
     cliquer(bouton('Enregistrer', panneauEtape() ?? undefined));

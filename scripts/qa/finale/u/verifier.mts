@@ -528,8 +528,8 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       if (error) throw new Error(`langue du bureau : ${error.message}`);
     };
     const configDe = async (id: string) => ((await etapes(id))[0]?.action?.config ?? {}) as Record<string, string>;
-    const TITRE_EN = 'Version anglaise (Texte du message) — utilisée seulement si vos messages partent en anglais';
-    const TITRE_FR = 'Version française (Texte du message) — utilisée seulement si vos messages partent en français';
+    const TITRE_EN = 'Version anglaise — utilisée seulement si vos messages partent en anglais';
+    const TITRE_FR = 'Version française — utilisée seulement si vos messages partent en français';
     try {
       // ── Bureau qui envoie en FRANÇAIS ──
       await mettreLangue('fr');
