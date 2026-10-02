@@ -47,12 +47,16 @@ describe('P2-13 — quitter l’éditeur ne perd rien', () => {
     const i = ed.indexOf('const quitterEditeur');
     const bloc = ed.slice(i, i + 2500);
     // `ecrire` : modifie la règle, ou la crée si c'est un brouillon neuf.
-    expect(bloc).toMatch(/await ecrire\(\{ name: nom\.trim\(\) \|\| regle\.name, steps \}\)/);
+    // (Depuis 4e29c110, les étapes partent avec leur reflet `actions` :
+    // `contenuParcours(steps)`. Le COMPORTEMENT est éprouvé sur la vraie page
+    // dans tests/automations-finale/u/editeur-page.test.tsx « P2-13 ».)
+    expect(bloc).toMatch(/await ecrire\(\{ name: nom\.trim\(\) \|\| regle\.name, \.\.\.contenuParcours\(steps\) \}\)/);
   });
 
   it('« en cours d’enregistrement » compte aussi comme travail non enregistré', () => {
     // Fermer l'onglet pendant l'envoi peut couper la requête.
-    expect(ed).toMatch(/etatSauvegarde === 'en_cours';/);
+    // (Depuis 27939ff8, un enregistrement REFUSÉ compte aussi : la ligne continue.)
+    expect(ed).toMatch(/const travailNonEnregistre = [^;]*etatSauvegarde === 'en_cours'[^;]*;/);
   });
 });
 

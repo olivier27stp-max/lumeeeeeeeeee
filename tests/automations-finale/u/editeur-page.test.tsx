@@ -1682,3 +1682,85 @@ describe('ligne 2 (ajustement) — le panneau montre dans son champ principal le
     expect(principal()).toBe(FR);
   });
 });
+
+// ─── P2-13 (QA du 2026-09-25) — quitter l'éditeur ne perd rien ──
+// Les deux cas de tests/qa-2026-09-25-p2-fin.test.ts lisaient le SOURCE de
+// `quitterEditeur`. Les mêmes promesses, éprouvées sur la vraie page.
+
+describe('P2-13 — quitter l’éditeur ne perd rien (comportement de la vraie page)', () => {
+  const avancer = async (ms: number) => {
+    await act(async () => { vi.advanceTimersByTime(ms); });
+    await attendre();
+  };
+  async function reecrire(texte: string) {
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    saisir(panneauEtape()?.querySelector('textarea'), texte);
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+  }
+  const texteEcrit = (appel: number) => ((api.modifier.mock.calls[appel]?.[1] as { steps?: Array<{ action?: { config?: { body?: string } } }> })?.steps ?? [])[0]?.action?.config?.body;
+  /** Fermer l'onglet : le navigateur demande-t-il confirmation ? */
+  const fermetureRetenue = () => {
+    const e = new Event('beforeunload', { cancelable: true });
+    act(() => { window.dispatchEvent(e); });
+    return e.defaultPrevented;
+  };
+
+  it('des étapes complètes sont ENREGISTRÉES avant de partir — même dans les 3 s d’attente de l’enregistrement automatique, sans question', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    await reecrire('Texto réécrit juste avant de partir');
+    expect(api.modifier).not.toHaveBeenCalled();
+    cliquer(bouton('Mes automatisations'));
+    await attendre(12);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(texteEcrit(0)).toBe('Texto réécrit juste avant de partir');
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(lieu()).toBe('/automations');
+  });
+
+  it('« modifié, pas encore enregistré » retient la fermeture de l’onglet ; à jour, rien ne la retient', async () => {
+    await ouvrir();
+    vi.useFakeTimers();
+    expect(fermetureRetenue()).toBe(false);
+    await reecrire('Texto réécrit');
+    expect(fermetureRetenue()).toBe(true);
+    await avancer(3000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(fermetureRetenue()).toBe(false);
+  });
+
+  it('« en cours d’enregistrement » compte aussi comme travail non enregistré : la fermeture de l’onglet est retenue tant que le serveur n’a pas répondu', async () => {
+    let repondre: (v: unknown) => void = () => {};
+    api.modifier.mockImplementationOnce(() => new Promise((ok) => { repondre = ok; }));
+    await ouvrir();
+    vi.useFakeTimers();
+    await reecrire('Texto en cours d’envoi');
+    await avancer(3000);
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Enregistrement');
+    expect(fermetureRetenue()).toBe(true);
+    await act(async () => { repondre({ ...regle(), updated_at: '2026-10-01T23:59:00Z' }); });
+    await attendre(12);
+    expect(fermetureRetenue()).toBe(false);
+  });
+
+  it('quitter PENDANT un enregistrement en cours : on ne part qu’une fois le travail écrit', async () => {
+    let repondre: (v: unknown) => void = () => {};
+    api.modifier.mockImplementationOnce(() => new Promise((ok) => { repondre = ok; }));
+    await ouvrir();
+    vi.useFakeTimers();
+    await reecrire('Texto en cours d’envoi');
+    await avancer(3000);
+    cliquer(bouton('Mes automatisations'));
+    await attendre(12);
+    // L'envoi n'a pas abouti : on est toujours dans l'éditeur.
+    expect(lieu()).toBe(`/automations/${ID}`);
+    await act(async () => { repondre({ ...regle(), updated_at: '2026-10-01T23:59:00Z' }); });
+    await attendre(20);
+    expect(lieu()).toBe('/automations');
+    expect(texteEcrit(api.modifier.mock.calls.length - 1)).toBe('Texto en cours d’envoi');
+    expect(confirmerMock).not.toHaveBeenCalled();
+  });
+});
