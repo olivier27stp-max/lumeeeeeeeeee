@@ -26,6 +26,17 @@ async function outil(name: string, args: Record<string, unknown>): Promise<Recor
   return r.result as Record<string, any>;
 }
 
+/**
+ * La boucle de 15 s du serveur (server/lib/evenementsBase.ts), pour NOTRE bureau : c'est elle qui passe au bus
+ * les événements écrits par la base. Le harnais ne la démarre pas ; depuis le correctif B-14 (agent M), « Note
+ * ajoutée » et « Tâche terminée » viennent d'un trigger (migration proposée M-02), donc de cette file.
+ */
+async function boucleDeLaBase(attenteMs = 0): Promise<void> {
+  const { traiterEvenementsBase } = await import('../../../server/lib/evenementsBase');
+  if (attenteMs) await new Promise((r) => setTimeout(r, attenteMs));
+  await traiterEvenementsBase(b.admin, { orgId: b.orgA });
+}
+
 /** Les événements d'un type consignés pour une fiche depuis `depuis` (on laisse 6 s aux écouteurs). */
 async function evenements(type: string, entityId: string, depuis: string) {
   return attendre(
@@ -36,6 +47,12 @@ async function evenements(type: string, entityId: string, depuis: string) {
 
 beforeAll(async () => {
   b = await preparerBureau();
+  // File des événements de la base : on part d'une file VIDE pour notre bureau. Les passes de charge y laissent
+  // des centaines de « facture envoyée » jamais lues (le harnais ne fait pas tourner la boucle de 15 s), et la
+  // boucle lit 100 lignes par passage, dans l'ordre : nos deux événements attendraient derrière.
+  await ok(b.admin.from('automation_evenements_base')
+    .update({ traite_at: new Date().toISOString(), last_error: 'Arriéré de test : clos avant la passe B-02' })
+    .eq('org_id', b.orgA).is('traite_at', null).select('id'), 'arriéré');
   const { jeton } = await sessionDe(b.admin, COMPTES.proprioA.email);
   const { buildSupabaseWithAuth } = await import('../../../server/lib/supabase');
   client = buildSupabaseWithAuth(`Bearer ${jeton}`, b.orgA);
@@ -48,6 +65,7 @@ describe('point 2 — « Note ajoutée » : la note écrite ailleurs que dans le
     const depuis = new Date(Date.now() - 5_000).toISOString();
     const r = await outil('add_note', { entity_type: 'client', entity_id: c.id, note: `Le client veut un rappel ${m}` });
     expect(r.added).toBe(true);
+    await boucleDeLaBase();
     const ev = await evenements('note.added', c.id, depuis);
     expect(ev.length, 'aucun événement note.added : une automatisation « Note ajoutée » ne part pas').toBeGreaterThan(0);
   });
@@ -64,6 +82,9 @@ describe('point 2 — « Tâche terminée » : la tâche terminée ailleurs que 
     const depuis = new Date(Date.now() - 5_000).toISOString();
     const r = await outil('update_task_status', { task_id: t.id, status: 'done' });
     expect(r.updated).toBe(true);
+    // « Tâche terminée » attend 10 s l'appel éventuel du navigateur avant d'émettre (pas de doublon avec l'écran).
+    const { DELAI_GRACE_TACHE_MS } = await import('../../../server/lib/evenementsBase');
+    await boucleDeLaBase(DELAI_GRACE_TACHE_MS + 1_000);
     const ev = await evenements('task.completed', c.id, depuis);
     expect(ev.length, 'aucun événement task.completed : une automatisation « Tâche terminée » ne part pas').toBeGreaterThan(0);
   });

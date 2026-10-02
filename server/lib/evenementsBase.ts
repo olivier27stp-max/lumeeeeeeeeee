@@ -103,6 +103,101 @@ async function enrichir(supabase: SupabaseClient, ev: LigneBase): Promise<Record
   return meta;
 }
 
+/**
+ * Événements dont l'entité du DÉCLENCHEUR est le client, alors que la base
+ * consigne la note ou la tâche elle-même (B-14) : « Note ajoutée » depuis
+ * l'onglet Notes d'une fiche (`specific_notes`), « Tâche terminée » quel que
+ * soit le chemin (écran, Lumi, import).
+ */
+const TYPES_VIA_CLIENT = new Set(['note.added', 'task.completed']);
+
+/**
+ * « Tâche terminée » est AUSSI émise par un appel du navigateur juste après
+ * l'écriture (POST /api/automations/events/task-completed). On lui laisse le
+ * temps d'arriver, puis on ne réémet pas ce qu'il a déjà émis : sans ça, une
+ * tâche terminée à l'écran déclencherait deux fois.
+ */
+export const DELAI_GRACE_TACHE_MS = 10_000;
+
+/** La fiche client d'une entité (même carte des liens que la route « task-completed »). */
+async function clientDe(supabase: SupabaseClient, orgId: string, type: unknown, id: unknown): Promise<string | null> {
+  if (typeof type !== 'string' || typeof id !== 'string' || !type || !id) return null;
+  if (type === 'client' || type === 'lead') return id;
+  const cible: Record<string, { table: string; colonnes: string }> = {
+    job: { table: 'jobs', colonnes: 'client_id' },
+    invoice: { table: 'invoices', colonnes: 'client_id' },
+    quote: { table: 'quotes', colonnes: 'client_id, lead_id' },
+    deal: { table: 'deals', colonnes: 'client_id' },
+  };
+  const c = cible[type];
+  if (!c) return null;
+  const { data, error } = await supabase.from(c.table).select(c.colonnes).eq('id', id).eq('org_id', orgId).maybeSingle();
+  if (error) throw new Error(`lecture de ${c.table} : ${error.message}`);
+  const l = data as { client_id?: string | null; lead_id?: string | null } | null;
+  return l?.client_id ?? l?.lead_id ?? null;
+}
+
+type Emission =
+  | { entityType: string; entityId: string; metadata: Record<string, unknown> }
+  | { ignorer: string };
+
+/**
+ * Ce qu'il faut ÉMETTRE pour une ligne de la file. Pour la plupart des types,
+ * la ligne telle quelle (enrichie). Pour une note ou une tâche : le client
+ * rattaché — sans client, rien à qui écrire, la ligne est close avec son motif.
+ */
+async function preparerEmission(supabase: SupabaseClient, ev: LigneBase): Promise<Emission> {
+  if (!TYPES_VIA_CLIENT.has(ev.type)) {
+    return { entityType: ev.entity_type, entityId: ev.entity_id, metadata: await enrichir(supabase, ev) };
+  }
+  const meta = (ev.metadata ?? {}) as Record<string, unknown>;
+  const base = { evenement_base_id: String(ev.id) };
+
+  if (ev.type === 'note.added') {
+    const clientId = await clientDe(supabase, ev.org_id, ev.entity_type, ev.entity_id);
+    if (!clientId) return { ignorer: 'Note sans client rattaché : rien à déclencher' };
+    return {
+      entityType: 'client',
+      entityId: clientId,
+      metadata: { ...base, note_sur: meta.note_sur ?? ev.entity_type, texte: String(meta.texte ?? '').slice(0, 500), note_id: meta.note_id ?? null },
+    };
+  }
+
+  // task.completed
+  const taskId = String(meta.task_id ?? ev.entity_id);
+  const clientId = await clientDe(supabase, ev.org_id, meta.linked_entity_type, meta.linked_entity_id)
+    ?? await clientDe(supabase, ev.org_id, meta.job_id ? 'job' : null, meta.job_id);
+  if (!clientId) return { ignorer: 'Tâche sans client rattaché : rien à déclencher' };
+
+  // Le navigateur a-t-il déjà émis cet événement pour cette tâche ?
+  const { data: deja, error: errDeja } = await supabase
+    .from('domain_events').select('id')
+    .eq('org_id', ev.org_id).eq('type', 'task.completed').eq('entity_id', clientId)
+    .eq('metadata->>task_id', taskId)
+    .is('metadata->>evenement_base_id', null)
+    .gte('created_at', new Date(Date.parse(ev.created_at) - DELAI_GRACE_TACHE_MS).toISOString())
+    .limit(1);
+  if (errDeja) throw new Error(`lecture de l'outbox : ${errDeja.message}`);
+  if (deja?.length) return { ignorer: 'Déjà émis par l’écran des tâches' };
+
+  const { data: client, error: errClient } = await supabase
+    .from('clients').select('first_name, last_name, email, phone').eq('id', clientId).eq('org_id', ev.org_id).maybeSingle();
+  if (errClient) throw new Error(`lecture du client : ${errClient.message}`);
+  const c = client as { first_name?: string | null; last_name?: string | null; email?: string | null; phone?: string | null } | null;
+  return {
+    entityType: 'client',
+    entityId: clientId,
+    metadata: {
+      ...base,
+      task_id: taskId,
+      task_title: String(meta.task_title ?? ''),
+      client_name: c ? `${c.first_name || ''} ${c.last_name || ''}`.trim() : '',
+      email: c?.email || '',
+      phone: c?.phone || '',
+    },
+  };
+}
+
 async function marquer(supabase: SupabaseClient, id: number, champs: Record<string, unknown>): Promise<void> {
   const { error } = await supabase.from('automation_evenements_base').update(champs).eq('id', id);
   if (error) logger.error('[evenements-base] marquage impossible', { id, message: error.message });
@@ -144,6 +239,10 @@ export async function traiterEvenementsBase(supabase: SupabaseClient, options: {
 
   let emis = 0;
   for (const ev of (data ?? []) as LigneBase[]) {
+    // « Tâche terminée » : on laisse à l'appel du navigateur le temps
+    // d'arriver (voir DELAI_GRACE_TACHE_MS). La ligne reste telle quelle.
+    if (ev.type === 'task.completed' && Date.now() - Date.parse(ev.created_at) < DELAI_GRACE_TACHE_MS) continue;
+
     // Prise atomique : deux instances ne traitent jamais la même ligne.
     const { data: pris, error: errPrise } = await supabase
       .from('automation_evenements_base')
@@ -155,12 +254,21 @@ export async function traiterEvenementsBase(supabase: SupabaseClient, options: {
     if (errPrise || !pris?.length) continue;
 
     try {
+      // Ce qui sera émis : la ligne enrichie, ou — note, tâche — le client
+      // rattaché (B-14). Rien à émettre (pas de client, déjà émis par
+      // l'écran) : la ligne est close avec son motif, ce n'est pas un échec.
+      const emission = await preparerEmission(supabase, ev);
+      if ('ignorer' in emission) {
+        await marquer(supabase, ev.id, { traite_at: new Date().toISOString(), last_error: emission.ignorer });
+        continue;
+      }
+
       // Déjà tenté : l'émission a pu réussir juste avant un arrêt. Si
       // l'outbox l'a déjà, on marque sans réémettre (pas de double envoi).
       if (ev.attempts > 0) {
         const { data: deja, error: errDeja } = await supabase
           .from('domain_events').select('id')
-          .eq('org_id', ev.org_id).eq('type', ev.type).eq('entity_id', ev.entity_id)
+          .eq('org_id', ev.org_id).eq('type', ev.type).eq('entity_id', emission.entityId)
           .eq('metadata->>evenement_base_id', String(ev.id))
           .limit(1);
         if (errDeja) throw new Error(`lecture de l'outbox : ${errDeja.message}`);
@@ -170,14 +278,13 @@ export async function traiterEvenementsBase(supabase: SupabaseClient, options: {
         }
       }
 
-      const metadata = await enrichir(supabase, ev);
       await eventBus.emit(ev.type as CRMEventType, {
         orgId: ev.org_id,
-        entityType: ev.entity_type,
-        entityId: ev.entity_id,
+        entityType: emission.entityType,
+        entityId: emission.entityId,
         ...(ev.related_entity_type && ev.related_entity_id
           ? { relatedEntityType: ev.related_entity_type, relatedEntityId: ev.related_entity_id } : {}),
-        metadata,
+        metadata: emission.metadata,
       });
       await marquer(supabase, ev.id, { traite_at: new Date().toISOString(), last_error: null });
       emis++;
