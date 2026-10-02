@@ -13,6 +13,7 @@ import { executerOutilGarde } from '../agent/garde';
 import { ECRITURES_SENSIBLES, JAMAIS_D_OFFICE } from '../agent/registre';
 import { ficheCreee, type Fiche } from './fiches';
 import { logger } from '../logger';
+import { regleAtteintLeClient, type RegleLue } from '../automations-etapes';
 
 export interface ReçuExecution {
   tool_use_id: string;
@@ -102,9 +103,6 @@ export function compterEcritures(msgs: Array<{ role: string; content: unknown }>
   return n;
 }
 
-/** Types d'action d'automatisation qui atteignent le CLIENT (texto, courriel, sondage d'avis). */
-const ACTIONS_VERS_LE_CLIENT: ReadonlySet<string> = new Set(['send_sms', 'send_email', 'request_review']);
-
 /**
  * Écritures sensibles POUR CETTE ORG : la liste fixe, plus `update_job_status`
  * quand une automatisation active sur « job terminée » envoie quelque chose au
@@ -117,10 +115,12 @@ export async function ecrituresSensiblesPour(admin: SupabaseClient, orgId: strin
   try {
     const { data, error } = await admin
       .from('automation_rules')
-      .select('actions')
-      .eq('org_id', orgId).eq('trigger_event', 'job.completed').eq('is_active', true);
+      .select('steps, actions, delay_seconds')
+      .eq('org_id', orgId).eq('trigger_event', 'job.completed').eq('is_active', true).is('deleted_at', null);
     if (error) throw error;
-    const versLeClient = (data ?? []).some((r: any) => Array.isArray(r.actions) && r.actions.some((a: any) => ACTIONS_VERS_LE_CLIENT.has(String(a?.type))));
+    // Par l'accès unique aux étapes (A-11) : `actions` seul ne voyait pas un PARCOURS
+    // (`steps`) — bâti dans l'éditeur ou par Lumi, il textait le client sans carte.
+    const versLeClient = (data ?? []).some((r) => regleAtteintLeClient(r as RegleLue));
     if (versLeClient) out.add('update_job_status');
   } catch (err: any) {
     // En doute, on demande : la carte de trop coûte un clic, l'inverse coûte un texto.
