@@ -30,10 +30,12 @@ export function fauxSupabase(
     const filtres: Array<(l: Ligne) => boolean> = [];
     let maj: Ligne | null = null;
     let limite = Infinity;
+    /** Les lignes insérées par CETTE requête, avec leur identifiant (comme `insert().select()`). */
+    const inserees: Ligne[] = [];
     const resoudre = () => {
       const erreur = options.erreurs?.[table];
       if (erreur) return { data: null, error: { message: erreur }, count: null };
-      if (req.op === 'insert') return { data: (Array.isArray(req.valeur) ? req.valeur : [req.valeur]) as Ligne[], error: null, count: null };
+      if (req.op === 'insert') return { data: inserees.map((l) => ({ ...l })), error: null, count: null };
       const trouvees = tables[table].filter((l) => filtres.every((f) => f(l))).slice(0, limite);
       if (maj) for (const l of trouvees) Object.assign(l, maj);
       if (req.op === 'delete') tables[table] = tables[table].filter((l) => !trouvees.includes(l));
@@ -59,7 +61,11 @@ export function fauxSupabase(
       update: (v: Ligne) => { req.op = 'update'; req.valeur = v; maj = v; return b; },
       insert: (v: Ligne | Ligne[]) => {
         req.op = 'insert'; req.valeur = v;
-        for (const l of Array.isArray(v) ? v : [v]) tables[table].push({ id: `${table}-${tables[table].length + 1}`, ...l });
+        for (const l of Array.isArray(v) ? v : [v]) {
+          const ligne = { id: `${table}-${tables[table].length + 1}`, ...l };
+          tables[table].push(ligne);
+          inserees.push(ligne);
+        }
         return b;
       },
       upsert: (v: Ligne) => b.insert(v),

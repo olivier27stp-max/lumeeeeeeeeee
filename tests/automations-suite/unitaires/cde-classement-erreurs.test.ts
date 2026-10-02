@@ -140,9 +140,11 @@ describe('E — action IMMÉDIATE en échec : laquelle est reprise (E-031)', () 
 describe('E — la reprise d’une action immédiate garde SA fenêtre d’envoi (E-031)', () => {
   const reprise = { reprise_immediate: true };
 
-  it('[E-038] courriel de confirmation repris : n’attend PAS 8 h (il était parti tout de suite)', () => {
-    expect(tacheAttendLaFenetre('send_email', reprise, null)).toBe(false);
-    expect(tacheAttendLaFenetre('envoyer_facture', reprise, null)).toBe(false);
+  // Mission finale, point 11 : un courriel au client attend la fenêtre comme un texto, déclenché à 22 h il ne
+  // part plus tout de suite — sa reprise non plus (avant : « n'attend PAS 8 h, il était parti tout de suite »).
+  it('[E-038] courriel repris : attend la fenêtre d’envoi, comme l’envoi d’origine', () => {
+    expect(tacheAttendLaFenetre('send_email', reprise, null)).toBe(true);
+    expect(tacheAttendLaFenetre('envoyer_facture', reprise, null)).toBe(true);
   });
 
   it('[E-038] texto et demande d’avis repris : attendent toujours la fenêtre', () => {

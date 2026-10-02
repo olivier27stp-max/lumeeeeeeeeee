@@ -748,6 +748,43 @@ async function balayerDatesSiDu(supabase: SupabaseClient, maintenant: number = D
 }
 
 // ---------------------------------------------------------------------------
+// Relances de paiement — filet horaire du cron quotidien (point 11, B-08)
+// ---------------------------------------------------------------------------
+
+let dernieresRelancesPaiement = 0;
+
+/**
+ * Une fois par heure, sous le MÊME verrou que la route du cron
+ * (`cron-payment-reminders`) : les entreprises dont c'est la première heure
+ * d'envoi (8 h chez elles) sont relancées. Le journal `reminder_log` porte
+ * l'idempotence : une facture déjà relancée à ce palier ne l'est pas deux fois.
+ */
+async function relancesDePaiementSiDu(maintenant: number = Date.now()): Promise<void> {
+  if (maintenant - dernieresRelancesPaiement < INTERVALLE_BALAYAGE_DATES_MS) return;
+  dernieresRelancesPaiement = maintenant;
+  const { resolvePublicBaseUrl } = await import('./helpers');
+  let publicBase = '';
+  try {
+    publicBase = resolvePublicBaseUrl();
+  } catch (e: unknown) {
+    // Sans adresse publique, le lien de paiement du courriel serait faux : on ne relance pas d'ici.
+    logger.warn('[scheduler] relances de paiement : adresse publique inconnue — filet horaire sauté', { message: e instanceof Error ? e.message : String(e) });
+    return;
+  }
+  const { executerRelancesPaiement } = await import('../routes/reminders-cron');
+  const { withAdvisoryLock } = await import('./advisory-lock');
+  const { acquired, result } = await withAdvisoryLock('cron-payment-reminders', () =>
+    executerRelancesPaiement({ publicBase, premiereHeureSeulement: true }));
+  if (!acquired) {
+    dernieresRelancesPaiement = 0;
+    return;
+  }
+  if (result && (result.sent > 0 || result.failed > 0)) {
+    logger.info('[scheduler] relances de paiement (filet horaire)', { processed: result.processed, sent: result.sent, failed: result.failed });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Auto-expire quotes past valid_until
 // ---------------------------------------------------------------------------
 
@@ -857,6 +894,15 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
       await balayerDatesSiDu(supabase);
     } catch (err: any) {
       console.error('[scheduler] balayage des dates échoué:', err.message);
+    }
+
+    // Relances de paiement : filet horaire du cron quotidien (point 11). Le
+    // cron part à 13:00 UTC pour tout le monde ; une entreprise pour qui il
+    // est alors la nuit est sautée, et relancée ici à sa première heure d'envoi.
+    try {
+      await relancesDePaiementSiDu();
+    } catch (err: any) {
+      console.error('[scheduler] relances de paiement (filet horaire) échouées:', err.message);
     }
 
     // Auto-expire quotes past valid_until

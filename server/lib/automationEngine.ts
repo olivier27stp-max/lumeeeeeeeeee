@@ -556,55 +556,65 @@ export function horsFenetre(
    (partagés avec les parcours, automationSequences.ts). */
 
 /**
- * Cette action doit-elle respecter la fenêtre 8h–20h ?
+ * Cette action doit-elle respecter la fenêtre d'envoi (8 h–20 h par défaut,
+ * heure de l'entreprise) ?
  *
- * Les SMS, toujours. Les courriels, seulement quand ils sont COMMERCIAUX.
+ * TOUT message au CLIENT, oui — texto, courriel, demande d'avis, envoi de
+ * facture ou de soumission —, que la règle ait un délai ou non (mission
+ * finale, point 11). Les notifications internes, les tâches, les étiquettes
+ * ne sont pas concernées.
  *
- * Le critère est le délai de la règle, et non une liste de déclencheurs à
- * maintenir : un message immédiat est une confirmation que le destinataire
- * attend (« rendez-vous confirmé », « dépôt reçu ») — le retarder jusqu'à 8h
- * lui ferait croire que sa demande n'est pas passée. Un message différé est
- * une relance ou un suivi : rien ne justifie qu'il parte à 3h du matin.
+ * Avant, le courriel d'une règle « à plat » sans délai était exempté, pensé
+ * comme une confirmation attendue (« rendez-vous confirmé »). Mais une
+ * facture devient « en retard » à minuit, heure de l'entreprise, et le
+ * balayage tourne jour et nuit : le courriel « votre facture est en retard »
+ * partait à 0 h 05 (B-08) — alors que la même automatisation faite dans
+ * l'éditeur (un parcours, donc par la file) attendait déjà 8 h. Une seule
+ * règle maintenant, quelle que soit la forme de l'automatisation.
  *
- * Corrige aussi une incohérence visible : une règle envoyant SMS + courriel
- * voyait ses deux moitiés partir à des heures différentes, le SMS étant seul
- * reporté.
+ * La fenêtre se règle par automatisation (`settings.fenetre`,
+ * `settings.jours_ouvrables`) : une entreprise qui veut ses confirmations à
+ * toute heure l'élargit là.
  */
 /** Les actions qui ENVOIENT un message au client. */
 const ACTIONS_MESSAGE = new Set(['send_sms', 'send_email', 'request_review', 'envoyer_facture', 'envoyer_soumission']);
 
-function shouldRespectQuietHours(actionType: string, delaySeconds: number, reglages?: ReglagesRegle | null): boolean {
-  if (!ACTIONS_MESSAGE.has(actionType)) return false;
-  // Le texto, et la demande d'avis (une SOLLICITATION, jamais attendue par
-  // le client) : toujours dans la fenêtre — une demande d'avis partait à
-  // 20 h 01 (audit V2, L4).
-  if (actionType === 'send_sms' || actionType === 'request_review') return true;
-  // Une fenêtre RÉGLÉE par l'entreprise vaut pour tous ses messages :
-  // l'écran promet « aucun message ne part en dehors de ces heures », et un
-  // courriel immédiat partait à 20 h 18 avec une fenêtre 9 h-17 h (D-13).
-  if (reglages?.fenetre || reglages?.jours_ouvrables) return true;
-  // Délai non nul (positif OU négatif, comme les rappels « X h avant ») =
-  // message programmé, donc pas une confirmation attendue dans l'instant.
-  return delaySeconds !== 0;
+function shouldRespectQuietHours(actionType: string): boolean {
+  return ACTIONS_MESSAGE.has(actionType);
 }
 
 /**
  * Cette tâche de la FILE doit-elle attendre la fenêtre d'envoi ?
  *
- * Tout message de la file, oui : il est par construction différé (relance,
- * suivi). SAUF la reprise d'une action immédiate en échec passager : elle
- * garde la règle de l'action d'origine — un courriel de confirmation qui a
- * échoué à 22 h repart à 22 h 05, pas le lendemain à 8 h ; un texto ou une
- * demande d'avis attend toujours la fenêtre.
+ * Tout message au client, oui — y compris la reprise d'une action immédiate
+ * en échec passager : un courriel qui a échoué à 22 h repart à 8 h, comme il
+ * serait parti s'il avait été déclenché à 22 h (point 11).
  */
 export function tacheAttendLaFenetre(
   actionType: string,
-  actionConfig: { reprise_immediate?: unknown } | null | undefined,
-  reglages?: ReglagesRegle | null,
+  _actionConfig?: { reprise_immediate?: unknown } | null,
+  _reglages?: ReglagesRegle | null,
 ): boolean {
-  if (!ACTIONS_MESSAGE.has(actionType)) return false;
-  if (actionConfig?.reprise_immediate === true) return shouldRespectQuietHours(actionType, 0, reglages);
-  return true;
+  return shouldRespectQuietHours(actionType);
+}
+
+/**
+ * Le prochain créneau d'envoi, dit en mots : « 2 oct., 08 h 00 » dans le
+ * fuseau de l'entreprise. Pour le journal du report (« reporté : hors heures
+ * d'envoi »), qui doit répondre à « pourquoi ce n'est pas parti, et quand ? ».
+ */
+export function creneauLisible(d: Date, tz: string = QUIET_TZ): string {
+  return new Intl.DateTimeFormat('fr-CA', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(d);
+}
+
+/** L'issue « reporté : hors heures d'envoi » d'un message qui attend le prochain créneau. */
+function issueHorsHeures(prochaine: Date, tz: string): IssueTache {
+  return {
+    code: 'hors_heures',
+    motif: `Reporté : hors heures d’envoi (prochain créneau : ${creneauLisible(prochaine, tz)}).`,
+    saute: `Reporté : hors heures d’envoi — partira au prochain créneau (${creneauLisible(prochaine, tz)})`,
+    detail: { prochain_creneau: prochaine.toISOString(), fuseau: tz },
+  };
 }
 
 /** Next moment inside the send window, stepping 30 min (DST-safe, no tz lib). */
@@ -1079,32 +1089,42 @@ async function executeRuleActions(
     const action = rule.actions[i];
     const executionKey = buildExecutionKey(rule.id, event.entityId, i, rule.settings?.reentree === true);
 
-    // Reporte à la prochaine fenêtre d'envoi les actions déclenchées en heures
-    // calmes. Une règle immédiate (délai 0) porte une confirmation attendue :
-    // seuls ses SMS sont reportés, jamais ses courriels.
-    if (shouldRespectQuietHours(action.type, rule.delay_seconds, rule.settings) && horsFenetre(rule.settings, new Date(), fuseau)) {
+    // Reporte à la prochaine fenêtre d'envoi tout message AU CLIENT déclenché
+    // hors des heures d'envoi — texto ou courriel, règle à délai ou non
+    // (point 11). Le report laisse une ligne au journal (B-09) : sans elle,
+    // « pourquoi mon message n'est pas parti ? » n'avait pas de réponse avant 8 h.
+    if (shouldRespectQuietHours(action.type) && horsFenetre(rule.settings, new Date(), fuseau)) {
+      // Dans le fuseau de l'ENTREPRISE, comme le test « hors fenêtre » juste
+      // au-dessus : sans lui, une entreprise hors Montréal voyait son envoi
+      // reporté à 8 h heure de Montréal (launch M10).
+      const prochaine = nextSendTime(new Date(), rule.settings, fuseau);
+      const issue = issueHorsHeures(prochaine, fuseau);
+      // Confirmation REPORTÉE : elle reste transactionnelle (launch M10).
+      const actionReportee = { ...action, trigger_event: event.type, event_metadata: event.metadata, report_heures_calmes: true, motif_code: issue.code };
       // supabase-js ne lève jamais : l'erreur (dont le doublon 23505) arrive
       // dans la réponse, pas dans un catch.
-      const { error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
+      const { data: reportee, error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
         org_id: event.orgId,
         automation_rule_id: rule.id,
         entity_type: event.entityType,
         entity_id: event.entityId,
-        // Confirmation REPORTÉE : elle reste transactionnelle (launch M10).
-        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata, report_heures_calmes: true },
-        // Dans le fuseau de l'ENTREPRISE, comme le test « hors fenêtre » juste
-        // au-dessus : sans lui, une entreprise hors Montréal voyait son envoi
-        // reporté à 8 h heure de Montréal (launch M10).
-        execute_at: nextSendTime(new Date(), rule.settings, fuseau).toISOString(),
+        action_config: actionReportee,
+        execute_at: prochaine.toISOString(),
         status: 'pending',
+        last_error: issue.motif,
         execution_key: executionKey,
-      });
+      }).select('id').maybeSingle();
       if (deferError) {
         if (deferError.code !== '23505') {
           console.error(`[automationEngine] failed to defer quiet-hours SMS (rule ${rule.id}, org ${event.orgId}):`, deferError.message);
         }
       } else {
         logger.info(`[automationEngine] ${action.type} deferred to send window (quiet hours) for rule "${rule.name}"`);
+        await journaliserIssueTache(config.supabase, {
+          id: (reportee as { id?: string } | null)?.id ?? null,
+          org_id: event.orgId, automation_rule_id: rule.id, entity_type: event.entityType, entity_id: event.entityId,
+          action_config: actionReportee,
+        }, issue);
       }
       continue;
     }
@@ -2041,7 +2061,7 @@ export interface IssueTache {
 }
 
 type TacheDeLaFile = {
-  id: string; org_id: string; automation_rule_id: string; entity_type: string; entity_id: string;
+  id: string | null; org_id: string; automation_rule_id: string; entity_type: string; entity_id: string;
   action_config?: Record<string, any> | null;
   automation_rules?: { trigger_event?: string | null } | null;
 };
@@ -2118,6 +2138,9 @@ async function arreterTache(
  * long week-end n'écrit pas une ligne à chaque passage.
  *
  * `champs` : autres colonnes à écrire (une `action_config` déjà recalée).
+ * `prise` : la tâche a déjà été prise (`running`, `attempts` incrémenté) — on
+ * la rend à la file telle qu'elle était. Non prise, son statut n'est pas
+ * réécrit : elle est déjà `pending`.
  */
 async function reporterTache(
   supabase: SupabaseClient,
@@ -2125,15 +2148,15 @@ async function reporterTache(
   issue: IssueTache,
   executeAt: Date,
   champs: Record<string, unknown> = {},
+  prise = true,
 ): Promise<boolean> {
   const dejaDit = task.action_config?.motif_code === issue.code;
   const { error } = await supabase
     .from('automation_scheduled_tasks')
     .update({
-      status: 'pending',
       execute_at: executeAt.toISOString(),
-      // La prise a pu incrémenter `attempts` en base : on remet la valeur lue.
-      attempts: Number(task.attempts || 0),
+      // La prise a incrémenté `attempts` en base : on remet la valeur lue.
+      ...(prise ? { status: 'pending', attempts: Number(task.attempts || 0) } : {}),
       last_error: issue.motif,
       action_config: { ...(task.action_config ?? {}), motif_code: issue.code },
       ...champs,
@@ -2239,7 +2262,7 @@ export async function recalerRappelsDeVisite(
     if (!Number.isFinite(planifie) || Math.abs(debut - planifie) <= 60_000) continue;
     // Déplacée plus tard → reportée ; plus tôt, et le rappel est déjà dû → il part au prochain passage.
     const executeAt = sort.sort === 'reporte' ? sort.executeAt : maintenant;
-    if (await reporterTache(supabase, task, issueRendezVousDeplace(executeAt, debut), new Date(executeAt), { action_config: actionConfigRecale(actionConfig, debut) })) touchees++;
+    if (await reporterTache(supabase, task, issueRendezVousDeplace(executeAt, debut), new Date(executeAt), { action_config: actionConfigRecale(actionConfig, debut) }, false)) touchees++;
   }
   return touchees;
 }
@@ -2424,13 +2447,9 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         continue;
       }
 
-      const { error: pushError } = await supabase
-        .from('automation_scheduled_tasks')
-        .update({ execute_at: prochaine.toISOString() })
-        .eq('id', task.id);
-      if (pushError) {
-        console.error(`[automationEngine] failed to push task ${task.id} out of quiet hours:`, pushError.message);
-      }
+      // Reportée au prochain créneau, sans consommer de tentative ; UNE ligne
+      // au journal au premier report (B-09), pas à chaque passage de la file.
+      await reporterTache(supabase, task, issueHorsHeures(prochaine, fuseauTache), prochaine, {}, false);
       continue;
     }
 

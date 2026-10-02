@@ -34,6 +34,8 @@ import { createPaymentRequest } from '../lib/stripe-connect';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { evaluateConditions } from '../lib/automationEngine';
 import { estParcours, regleSansRienAFaire } from '../lib/automationSequences';
+import { horsFenetre } from '../lib/automationEngine';
+import { fuseauOrg } from '../lib/automations-fuseau-org';
 import type { CRMEvent } from '../lib/eventBus';
 
 const router = Router();
@@ -313,8 +315,21 @@ async function insertReminderLog(
  * les factures de toutes les entreprises de staging. La route cron l'appelle
  * sans `orgId`, sous verrou.
  */
-export async function executerRelancesPaiement(opts: { publicBase: string; orgId?: string; aujourdHui?: Date }): Promise<{
+/** Première heure de la fenêtre d'envoi par défaut (8 h, heure de l'entreprise). */
+export const PREMIERE_HEURE_ENVOI = 8;
+
+function heureLocale(d: Date, fuseau: string): number {
+  return Number(new Intl.DateTimeFormat('en-GB', { timeZone: fuseau, hour: '2-digit', hour12: false }).format(d)) % 24;
+}
+
+export async function executerRelancesPaiement(opts: {
+  publicBase: string; orgId?: string; aujourdHui?: Date;
+  /** Passage horaire du planificateur : ne traiter une entreprise qu'à sa première heure d'envoi. */
+  premiereHeureSeulement?: boolean;
+}): Promise<{
   ok: true; processed: number; sent: number; failed: number; errors: Array<{ invoice_id?: string; error: string }>;
+  /** Entreprises sautées : hors de leur fenêtre d'envoi (elles seront relancées au passage horaire suivant). */
+  hors_fenetre: number;
 }> {
   const svc = getServiceClient();
   const publicBase = opts.publicBase;
@@ -336,11 +351,32 @@ export async function executerRelancesPaiement(opts: { publicBase: string; orgId
 
   const today = opts.aujourdHui ?? new Date();
   const plafond = plafondRelanceJours();
+  /** Entreprises sautées à ce passage : hors de leur fenêtre d'envoi. */
+  let horsFenetreEnvoi = 0;
 
   for (const settings of settingsRows || []) {
     const orgId: string = settings.org_id;
     const schedule = Array.isArray(settings.schedule) ? (settings.schedule as ScheduleEntry[]) : [];
     if (!schedule.length) continue;
+
+    /*
+     * Fenêtre d'envoi (mission finale, point 11) : une relance de paiement est
+     * un message AU CLIENT — elle ne part qu'entre 8 h et 20 h, heure de
+     * l'ENTREPRISE. Le cron tourne à 13:00 UTC pour tout le monde : 9 h à
+     * Montréal l'été, 8 h l'hiver… et 5 h à Vancouver (B-08). Hors fenêtre,
+     * l'entreprise est sautée à ce passage ; rien n'est perdu : le journal
+     * `reminder_log` porte l'idempotence, et le tick du planificateur
+     * repasse chaque heure (scheduler.ts) — elle est relancée à sa première
+     * heure ouvrable.
+     */
+    const fuseau = await fuseauOrg(svc, orgId);
+    if (horsFenetre(null, today, fuseau)) {
+      horsFenetreEnvoi++;
+      continue;
+    }
+    // Passage horaire du tick : une entreprise n'y est traitée qu'à sa
+    // PREMIÈRE heure d'envoi (8 h, chez elle) — une fois par jour, pas douze.
+    if (opts.premiereHeureSeulement && heureLocale(today, fuseau) !== PREMIERE_HEURE_ENVOI) continue;
 
     // Fetch company branding for templating
     const { data: orgSettings } = await svc
@@ -648,6 +684,7 @@ export async function executerRelancesPaiement(opts: { publicBase: string; orgId
     sent,
     failed,
     errors: errors.slice(0, 20),
+    hors_fenetre: horsFenetreEnvoi,
   };
 }
 

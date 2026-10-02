@@ -5,7 +5,7 @@
  * Mesuré sur staging : une facture en retard recevait la relance « en
  * retard » ET la relance J+1 du préréglage « Invoice Reminder » le même jour.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 vi.mock('../../server/lib/mailer', async () => (await import('../quarantaine/_simulations')).mailerSimule(vi.fn(async () => ({ sent: true, messageId: 'x' }))));
 vi.mock('../../server/routes/emails', async () => (await import('../quarantaine/_simulations')).emailsSimules());
@@ -17,7 +17,14 @@ const ORG = '11111111-1111-4111-8111-111111111111';
 const COURRIEL = { type: 'send_email', config: { subject: 'Relance', body: 'Votre facture est en retard' } };
 const regleRetard = { id: 'r-retard', org_id: ORG, name: 'Facture en retard', trigger_event: 'invoice.overdue', preset_key: null, conditions: {}, delay_seconds: 0, is_active: true, actions: [COURRIEL] };
 
+// En journée (midi à Toronto) : hors de la fenêtre d'envoi, le courriel serait reporté avant même d'être
+// comparé aux relances du jour (mission finale, point 11) — ce test dépendait de l'heure où il tournait.
+const MIDI = new Date('2026-10-01T16:00:00Z');
+afterEach(() => vi.useRealTimers());
+
 async function jouer(relancesDuJour: Array<{ id: string }>) {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(MIDI);
   const { initAutomationEngine } = await import('../../server/lib/automationEngine');
   const { eventBus } = await import('../../server/lib/eventBus');
   const { client, journal } = clientEnregistreur({
