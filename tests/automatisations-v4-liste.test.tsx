@@ -54,11 +54,22 @@ vi.mock('../src/lib/automationRulesApi', () => ({
   getAutomationRules: vi.fn(async () => reglesServies),
   toggleAutomationRule: (...a: any[]) => toggleMock(a[0], a[1]),
   getFailureCountsByRule: vi.fn(async () => ({})),
-  getRecentAutomationFailures: () => echecsMock(),
   getAutomationLanguage: vi.fn(async () => 'fr'),
   setAutomationLanguage: (l: 'fr' | 'en') => langueMock(l),
   avisActives: vi.fn(async () => true),
 }));
+
+// Depuis la mission du 2026-10-01, la liste lit TOUS ses chiffres (déclenchées, en cours, échecs)
+// par une seule route comptée en base. Les données de ces tests restent décrites comme avant
+// (compteurs d'un côté, lignes d'échec de l'autre) : `versStatistiques` les assemble.
+vi.mock('../src/lib/automationStatsApi', async () => {
+  const { versStatistiques } = await import('./aides/stats-automatisations');
+  return {
+    chargerStatistiquesBureau: async () => versStatistiques(await statsMock(), await echecsMock()),
+    lirePeriodeChoisie: () => 7,
+    retenirPeriode: () => undefined,
+  };
+});
 
 vi.mock('../src/lib/automationBuilderApi', () => ({
   chargerAutomatisations: () => catalogueMock(),
@@ -74,7 +85,6 @@ vi.mock('../src/lib/automationBuilderApi', () => ({
   chargerBureauxCibles: vi.fn(async () => []),
   changerPublication: (id: string, actif: boolean) => publierMock(id, actif),
   changerPublicationEnLot: (ids: string[], actif: boolean) => publierLotMock(ids, actif),
-  chargerStatistiques: () => statsMock(),
 }));
 
 vi.mock('../src/components/ui/ConfirmDialog', () => ({
@@ -246,7 +256,7 @@ function entete(texte: string) {
 }
 
 describe('A-17 — les colonnes de la liste se trient', () => {
-  it('Nom (A→Z puis Z→A), Créée le, Total déclenché ; l’en-tête dit le sens (aria-sort)', async () => {
+  it('Nom (A→Z puis Z→A), Créée le, Déclenchées ; l’en-tête dit le sens (aria-sort)', async () => {
     reglesServies = [
       regle({ id: 'b', name: 'Bravo', created_at: '2026-09-03T00:00:00Z', updated_at: '2026-09-03T00:00:00Z' }),
       regle({ id: 'a', name: 'Alpha', created_at: '2026-09-05T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' }),
@@ -266,7 +276,7 @@ describe('A-17 — les colonnes de la liste se trient', () => {
     expect(entete('Nom')?.closest('th')?.getAttribute('aria-sort')).toBe('descending');
     cliquer(entete('Créée le'));
     expect(ordre()).toEqual(['Charlie', 'Bravo', 'Alpha']);
-    cliquer(entete('Total déclenché'));
+    cliquer(entete('Déclenchées'));
     expect(ordre()).toEqual(['Alpha', 'Charlie', 'Bravo']);
     expect(entete('Nom')?.closest('th')?.getAttribute('aria-sort')).toBe('none');
   });

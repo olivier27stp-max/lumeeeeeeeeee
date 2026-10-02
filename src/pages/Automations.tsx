@@ -26,6 +26,10 @@ import { localizeAutomationName } from '../lib/automationNames';
 import { trouverDeclencheur } from '../lib/automationCatalogue';
 import { remplacerVariables } from '../lib/emailBodyText';
 import { raisonEchecListe as raisonLisible } from '../lib/automationJournauxApi';
+import { chargerStatistiquesBureau, lirePeriodeChoisie, retenirPeriode, type StatsRegle } from '../lib/automationStatsApi';
+import { PERIODES_JOURS, libelleGroupe, libelleIssue, libellePeriode, type PeriodeJours } from '../lib/automationIssues';
+import type { GroupeMotif } from '../lib/automationMotifs';
+import { useRafraichissementVisible } from '../hooks/useRafraichissementVisible';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
@@ -48,8 +52,6 @@ import {
   renommerDossier,
   changerPublication,
   changerPublicationEnLot,
-  chargerStatistiques,
-  type StatsRegle,
   type BureauCible,
   type DossierAutomatisation,
 } from '../lib/automationBuilderApi';
@@ -60,8 +62,6 @@ import { creerFileBascule } from '../lib/fileBascule';
 import {
   type AutomationRule,
   getAutomationRules,
-  getRecentAutomationFailures,
-  type AutomationFailure,
   getAutomationLanguage,
   setAutomationLanguage,
   avisActives,
@@ -397,11 +397,18 @@ export default function Automations() {
     },
   }));
   const [search, setSearch] = useState('');
-  const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
-  /** La cause brute du DERNIER échec (7 j), traduite par `raisonLisible`. */
-  const [derniereCause, setDerniereCause] = useState<Record<string, string | null>>({});
-  /** Chiffres réels par automatisation (60 j) — `null` = illisibles. */
+  /** La période des chiffres (7, 30 ou 90 jours) : choisie à l'écran, retenue d'une visite à l'autre. */
+  const [periode, setPeriode] = useState<PeriodeJours>(() => lirePeriodeChoisie());
+  /**
+   * Les chiffres réels par automatisation sur la période — déclenchées, en cours, échecs,
+   * ignorées, comptés EN BASE par une seule route. `null` = pas (encore) lus.
+   */
   const [stats, setStats] = useState<Record<string, StatsRegle> | null>(null);
+  /**
+   * La lecture des chiffres a ÉCHOUÉ : on le dit (constat D-17). Avant, des échecs illisibles
+   * laissaient « À vérifier (0) » à l'écran, comme si tout allait bien.
+   */
+  const [statsIllisibles, setStatsIllisibles] = useState(false);
   /** Le bureau a-t-il un numéro texto ? `false` = bandeau ; `null` = inconnu, rien. */
   const [textoConfigure, setTextoConfigure] = useState<boolean | null>(null);
   const [occupeId, setOccupeId] = useState<string | null>(null);
@@ -551,6 +558,39 @@ export default function Automations() {
    * plus ancienne arrivée après ramenait une liste périmée (launch 2026-09-28).
    */
   const dernierChargement = useRef(0);
+  /*
+   * Les chiffres de la liste. Avant, les échecs étaient lus à part, depuis le navigateur, sur
+   * les 200 lignes les plus récentes du bureau : au-delà, les pastilles étaient fausses et des
+   * automatisations en échec manquaient dans « À vérifier » (constat D-02).
+   * Seule la dernière lecture écrit l'écran (un changement de période pendant une lecture).
+   */
+  const derniersChiffres = useRef(0);
+  const periodeCourante = useRef(periode);
+  periodeCourante.current = periode;
+  const lireChiffres = useRef(async (jours?: PeriodeJours): Promise<void> => {
+    const numero = ++derniersChiffres.current;
+    try {
+      const s = await chargerStatistiquesBureau(jours ?? periodeCourante.current);
+      if (numero !== derniersChiffres.current) return;
+      setStats(s.par_regle);
+      setStatsIllisibles(false);
+      setTextoConfigure(s.texto_configure ?? null);
+    } catch (e: unknown) {
+      if (numero !== derniersChiffres.current) return;
+      console.error('[automations] statistiques illisibles', e instanceof Error ? e.message : String(e));
+      setStats(null);
+      setStatsIllisibles(true);
+    }
+  });
+  const changerPeriode = (jours: PeriodeJours) => {
+    retenirPeriode(jours);
+    setPeriode(jours);
+    void lireChiffres.current(jours);
+  };
+  // Une exécution arrivée pendant que la liste est ouverte y apparaît sans recharger la page
+  // (constat D-18) : au retour sur l'onglet, et toutes les 30 secondes tant qu'il est visible.
+  useRafraichissementVisible(() => { void lireChiffres.current(); });
+
   const load = useCallback(async () => {
     const numero = ++dernierChargement.current;
     const perime = () => numero !== dernierChargement.current;
@@ -578,33 +618,8 @@ export default function Automations() {
         return true;
       // Une bascule encore en vol garde l'état du dernier clic.
       }).map((r) => ({ ...r, is_active: fileBascule.etatAffiche(r.id, r.is_active) })));
-      try {
-        // Une seule lecture : le compte ET la dernière cause par automatisation
-        // (la liste est triée du plus récent au plus ancien).
-        const recents = await getRecentAutomationFailures(200);
-        if (perime()) return;
-        const compte: Record<string, number> = {};
-        const causes: Record<string, string | null> = {};
-        for (const f of recents) {
-          if (!f.automation_rule_id) continue;
-          compte[f.automation_rule_id] = (compte[f.automation_rule_id] ?? 0) + 1;
-          if (!(f.automation_rule_id in causes)) causes[f.automation_rule_id] = f.result_error;
-        }
-        setFailureCounts(compte);
-        setDerniereCause(causes);
-      } catch (e: any) {
-        console.error('Failed to load automation failures:', e.message);
-      }
-      // « Total déclenché », « En cours » et le détail › : la route agrégée.
-      try {
-        const s = await chargerStatistiques();
-        if (perime()) return;
-        setStats(s.par_regle);
-        setTextoConfigure(s.texto_configure ?? null);
-      } catch (e: unknown) {
-        console.error('[automations] statistiques illisibles', e instanceof Error ? e.message : String(e));
-        setStats(null);
-      }
+      // « Déclenchées », « En cours », les échecs et le détail › : UNE route, comptée en base.
+      await lireChiffres.current();
     } catch (e: any) {
       if (perime()) return;
       console.error('Failed to load rules:', e.message);
@@ -996,8 +1011,8 @@ export default function Automations() {
   const vivantes = rules.filter((r) => !r.deleted_at);
   const supprimees = rules.filter((r) => r.deleted_at);
 
-  /** « À vérifier » = ce qui a échoué ces 7 derniers jours. */
-  const aVerifier = vivantes.filter((r) => (failureCounts[r.id] ?? 0) > 0);
+  /** « À vérifier » = ce qui a un échec DÉFINITIF sur la période choisie. */
+  const aVerifier = vivantes.filter((r) => (stats?.[r.id]?.echouees ?? 0) > 0);
   const mesAutos = vivantes.filter((r) => !r.is_preset || r.is_active);
   const modeles = vivantes.filter((r) => r.is_preset && !r.is_active);
 
@@ -1048,7 +1063,7 @@ export default function Automations() {
     switch (cle) {
       case 'nom': return localizeAutomationName(r.name, language).toLocaleLowerCase(langueTri);
       case 'statut': return r.deleted_at ? 0 : r.is_active ? 2 : 1;
-      case 'declenches': return stats?.[r.id]?.declenches ?? 0;
+      case 'declenches': return stats?.[r.id]?.declenchees ?? 0;
       case 'en_cours': return stats?.[r.id]?.en_cours ?? 0;
       case 'modifiee': return Date.parse(r.updated_at) || 0;
       case 'creee': return Date.parse(r.created_at) || 0;
@@ -1279,7 +1294,8 @@ export default function Automations() {
 
   const ONGLETS = [
     { cle: 'toutes' as const, fr: 'Toutes', en: 'All workflows', n: mesAutos.length },
-    { cle: 'verifier' as const, fr: 'À vérifier', en: 'Needs review', n: aVerifier.length },
+    // Chiffres illisibles : « ? », jamais un « 0 » qui dirait que tout va bien.
+    { cle: 'verifier' as const, fr: 'À vérifier', en: 'Needs review', n: statsIllisibles ? '?' : aVerifier.length },
     // « Prêtes à publier », plus « Modèles » : ce mot désigne la bibliothèque du menu Créer (copies en
     // brouillon). Ici, ce sont les automatisations fournies pas encore publiées, qu'on publie en place.
     { cle: 'modeles' as const, fr: 'Prêtes à publier', en: 'Ready to publish', n: modeles.length },
@@ -1334,6 +1350,20 @@ export default function Automations() {
                 ? 'Les étapes texto sont sautées tant qu’aucun numéro n’est configuré.'
                 : 'Text message steps are skipped until a number is set up.'}
             </span>
+          </div>
+        )}
+
+        {statsIllisibles && (
+          <div role="alert" className="flex flex-wrap items-center gap-2.5 rounded-xl border border-warning/40 bg-warning-light px-3 py-2.5 text-[13px] text-text-primary">
+            <AlertTriangle size={15} className="shrink-0 text-warning" aria-hidden="true" />
+            <span>
+              {fr
+                ? 'Les chiffres et les échecs n’ont pas pu être lus : l’onglet « À vérifier » ne peut pas être établi pour le moment.'
+                : 'The numbers and failures could not be read: the “Needs review” tab cannot be worked out right now.'}
+            </span>
+            <button type="button" onClick={() => void lireChiffres.current()} className="glass-button text-[12px]">
+              {fr ? 'Réessayer' : 'Try again'}
+            </button>
           </div>
         )}
 
@@ -1603,6 +1633,17 @@ export default function Automations() {
             {fr ? 'Filtres avancés' : 'Advanced filters'}
           </button>
 
+          {/* La période de TOUS les chiffres de la liste (colonnes, pastilles, « À vérifier », détail ›). */}
+          <label htmlFor="periode-automations" className="ml-1 text-[12px] text-text-secondary">{fr ? 'Période' : 'Period'}</label>
+          <select
+            id="periode-automations"
+            value={periode}
+            onChange={(e) => changerPeriode(Number(e.target.value) as PeriodeJours)}
+            className="glass-input py-1.5 text-[12px]"
+          >
+            {PERIODES_JOURS.map((j) => <option key={j} value={j}>{libellePeriode(j, fr)}</option>)}
+          </select>
+
           <div className="ml-auto flex items-center gap-2">
             <div className="relative w-[260px]">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden="true" />
@@ -1783,8 +1824,9 @@ export default function Automations() {
                     {([
                       ['nom', fr ? 'Nom' : 'Name', ''],
                       ['statut', fr ? 'Statut' : 'Status', ''],
-                      ['declenches', fr ? 'Total déclenché' : 'Total enrolled', 'hidden lg:table-cell'],
-                      ['en_cours', fr ? 'En cours' : 'Active enrolled', 'hidden lg:table-cell'],
+                      // La période est écrite dans l'en-tête : le chiffre ne vaut que pour elle.
+                      ['declenches', fr ? `Déclenchées (${periode} j)` : `Triggered (${periode} d)`, 'hidden lg:table-cell'],
+                      ['en_cours', fr ? 'En cours' : 'In progress', 'hidden lg:table-cell'],
                       ['modifiee', fr ? 'Modifiée le' : 'Last updated', 'hidden xl:table-cell'],
                       ['creee', fr ? 'Créée le' : 'Created on', 'hidden xl:table-cell'],
                     ] as const).map(([cle, libelle, classe]) => {
@@ -1840,7 +1882,8 @@ export default function Automations() {
                     </tr>
                   ) : visibles.map((r) => {
                     const rule = r;
-                    const echecs = failureCounts[rule.id] ?? 0;
+                    const echecs = stats?.[rule.id]?.echouees ?? 0;
+                    const causeEchec = raisonLisible(stats?.[rule.id]?.dernier_echec?.erreur ?? null, fr);
                     // Le libellé du CATALOGUE d'abord — celui de l'éditeur :
                     // « Lead créé » ici, « Nouveau prospect » là-bas, pour le
                     // même déclencheur (audit V2, A-16). La table locale ne
@@ -1905,9 +1948,9 @@ export default function Automations() {
                                 {echecs > 0 && (
                                   <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-danger">
                                     <AlertTriangle size={11} aria-hidden="true" />
-                                    {echecs} {fr ? 'échec(s) dans les 7 derniers jours' : 'failure(s) in the last 7 days'}
+                                    {echecs} {fr ? `échec(s) dans les ${periode} derniers jours` : `failure(s) in the last ${periode} days`}
                                     {/* POURQUOI, en mots du métier — jamais le message technique brut. */}
-                                    {raisonLisible(derniereCause[rule.id] ?? null, fr) && ` — ${raisonLisible(derniereCause[rule.id] ?? null, fr)}`}
+                                    {causeEchec && ` — ${causeEchec}`}
                                   </span>
                                 )}
                               </span>
@@ -1930,9 +1973,9 @@ export default function Automations() {
                             </span>
                           </td>
 
-                          {/* Total déclenché / En cours : les vrais chiffres (60 j),
+                          {/* Déclenchées (sur la période) / En cours (maintenant) : les vrais chiffres,
                               « — » seulement si la lecture a échoué. */}
-                          <td className="hidden px-3 py-3 tabular-nums text-primary lg:table-cell">{stats ? (stats[rule.id]?.declenches ?? 0) : '—'}</td>
+                          <td className="hidden px-3 py-3 tabular-nums text-primary lg:table-cell">{stats ? (stats[rule.id]?.declenchees ?? 0) : '—'}</td>
                           <td className="hidden px-3 py-3 tabular-nums text-primary lg:table-cell">{stats ? (stats[rule.id]?.en_cours ?? 0) : '—'}</td>
 
                           <td className="hidden px-3 py-3 text-text-secondary xl:table-cell">{dateCourte(rule.updated_at)}</td>
@@ -2152,29 +2195,57 @@ export default function Automations() {
                             <td colSpan={9} className="px-6 py-4">
                               {(() => {
                                 const s = stats?.[rule.id];
+                                if (!stats) {
+                                  return (
+                                    <p className="text-[12px] text-text-secondary">
+                                      {fr ? 'Les chiffres n’ont pas pu être lus.' : 'The numbers could not be read.'}
+                                    </p>
+                                  );
+                                }
+                                const n = (v: number | undefined) => v ?? 0;
+                                const ORDRE: GroupeMotif[] = ['doublon', 'desabonne', 'hors_ciblage', 'donnee_manquante', 'condition_plus_valide', 'plafond', 'autre'];
+                                const raisons = ORDRE.filter((g) => n(s?.ignorees_par_groupe[g]) > 0);
+                                const reports = Object.entries(s?.reportees_par_code ?? {}).filter(([, c]) => c > 0);
+                                const dernierIgnore = s?.dernier_ignore ?? null;
                                 return (
-                                  <p className="text-[12px] text-text-secondary">
-                                    {!stats
-                                      ? (fr ? 'Les chiffres n’ont pas pu être lus.' : 'The numbers could not be read.')
-                                      : fr
-                                        ? `60 derniers jours : ${s?.declenches ?? 0} déclenchement(s), ${s?.envoyes ?? 0} envoi(s), ${s?.sautes ?? 0} étape(s) sautée(s), ${s?.echecs ?? 0} échec(s). ${s?.en_cours ?? 0} en cours.`
-                                        : `Last 60 days: ${s?.declenches ?? 0} enrolled, ${s?.envoyes ?? 0} sent, ${s?.sautes ?? 0} skipped step(s), ${s?.echecs ?? 0} failure(s). ${s?.en_cours ?? 0} active.`}
-                                    {raisonLisible(derniereCause[rule.id] ?? null, fr) && (
-                                      <span className="mt-1 block">
-                                        {fr ? 'Dernier échec : ' : 'Last failure: '}{raisonLisible(derniereCause[rule.id] ?? null, fr)}
-                                      </span>
+                                  <div className="space-y-1 text-[12px] text-text-secondary">
+                                    <p>
+                                      {fr
+                                        ? `${libellePeriode(periode, true)} : ${n(s?.declenchees)} déclenchée(s), ${n(s?.envoyees)} message(s) envoyé(s), ${n(s?.echouees)} échec(s), ${n(s?.ignorees)} ignorée(s), ${n(s?.reportees)} reportée(s), ${n(s?.actions)} action(s) interne(s) faite(s). ${n(s?.en_cours)} en cours.`
+                                        : `${libellePeriode(periode, false)}: ${n(s?.declenchees)} triggered, ${n(s?.envoyees)} message(s) sent, ${n(s?.echouees)} failure(s), ${n(s?.ignorees)} skipped, ${n(s?.reportees)} postponed, ${n(s?.actions)} internal action(s) done. ${n(s?.en_cours)} in progress.`}
+                                    </p>
+                                    {/* Les envois ignorés, PAR RAISON — pas seulement un total (constat D-25). */}
+                                    {raisons.length > 0 && (
+                                      <p>
+                                        {fr ? 'Ignorées, par raison : ' : 'Skipped, by reason: '}
+                                        {raisons.map((g) => `${libelleGroupe(g, fr)} (${n(s?.ignorees_par_groupe[g])})`).join(' · ')}
+                                      </p>
                                     )}
-                                    {/* Une étape sautée n'est pas un échec : son motif est
-                                        déjà en français (moteur), affiché tel quel. */}
-                                    {s?.dernier_saut && (
-                                      <span className="mt-1 block">
-                                        {fr ? 'Dernière étape sautée : ' : 'Last skipped step: '}{s.dernier_saut}
-                                      </span>
+                                    {reports.length > 0 && (
+                                      <p>
+                                        {fr ? 'Reportées : ' : 'Postponed: '}
+                                        {reports.map(([code, c]) => `${libelleIssue(code, fr)} (${c})`).join(' · ')}
+                                      </p>
                                     )}
-                                    <span className="mt-1 block">
-                                      {fr ? 'Le détail est dans l’onglet « Journaux » de l’automatisation.' : 'Details are in the automation’s “Logs” tab.'}
-                                    </span>
-                                  </p>
+                                    {causeEchec && (
+                                      <p>{fr ? 'Dernier échec : ' : 'Last failure: '}{causeEchec}</p>
+                                    )}
+                                    {/* Un envoi ignoré n'est pas un échec : sa raison, dans la langue de l'écran. */}
+                                    {dernierIgnore && (
+                                      <p>
+                                        {fr ? 'Dernier envoi ignoré : ' : 'Last skipped send: '}
+                                        {libelleIssue(dernierIgnore.issue, fr, dernierIgnore.detail)}
+                                      </p>
+                                    )}
+                                    <p>
+                                      <Link
+                                        to={`/automations/activite?regle=${rule.id}`}
+                                        className="font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        {fr ? 'Voir l’historique, client par client' : 'See the history, client by client'}
+                                      </Link>
+                                    </p>
+                                  </div>
                                 );
                               })()}
                             </td>

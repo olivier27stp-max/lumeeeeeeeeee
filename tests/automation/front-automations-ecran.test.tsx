@@ -56,6 +56,20 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // ── Mocks (hissés) ─────────────────────────────────────────────
+// Les chiffres de la liste : UNE route comptée en base (mission du 2026-10-01). Les données de ces
+// tests restent décrites comme avant — compteurs d'un côté, lignes d'échec de l'autre.
+const { echecsMock, statsMock } = vi.hoisted(() => ({
+  echecsMock: vi.fn(async (): Promise<any[]> => []),
+  statsMock: vi.fn(async (): Promise<any> => ({ par_regle: {}, par_etape: null, texto_configure: true })),
+}));
+vi.mock('../../src/lib/automationStatsApi', async () => {
+  const { versStatistiques } = await import('../aides/stats-automatisations');
+  return {
+    chargerStatistiquesBureau: async () => versStatistiques(await statsMock(), await echecsMock()),
+    lirePeriodeChoisie: () => 7,
+    retenirPeriode: () => undefined,
+  };
+});
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 
 vi.mock('../../src/hooks/usePermissions', () => ({
@@ -67,7 +81,6 @@ vi.mock('../../src/hooks/usePermissions', () => ({
 
 vi.mock('../../src/lib/automationRulesApi', () => ({
   getAutomationRules: vi.fn(async () => []),
-  getRecentAutomationFailures: vi.fn(async () => []),
   getFailureCountsByRule: vi.fn(async () => ({})),
   getAutomationLanguage: vi.fn(async () => 'fr'),
   setAutomationLanguage: vi.fn(async () => undefined),
@@ -78,7 +91,6 @@ vi.mock('../../src/lib/automationRulesApi', () => ({
 }));
 
 vi.mock('../../src/lib/automationBuilderApi', () => ({
-  chargerStatistiques: vi.fn(async () => ({ par_regle: {}, par_etape: null, texto_configure: true })),
   changerPublication: vi.fn(async () => undefined),
   changerPublicationEnLot: vi.fn(async (ids: string[]) => ids.map((id) => ({ id, ok: true }))),
   chargerDossiers: vi.fn(async () => []),
@@ -159,7 +171,7 @@ function regle(partiel: Partial<api.AutomationRule> = {}): api.AutomationRule {
   };
 }
 
-function echec(cause: string, n = 1): api.AutomationFailure {
+function echec(cause: string, n = 1) {
   return {
     id: `l${n}`, automation_rule_id: RULE_ID, action_type: 'send_email',
     result_error: cause, entity_type: 'job', created_at: '2026-09-29T15:00:00Z',
@@ -209,12 +221,12 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('lume-language', 'fr');
   vi.mocked(api.getAutomationRules).mockResolvedValue([regle()]);
-  vi.mocked(api.getRecentAutomationFailures).mockResolvedValue([]);
+  echecsMock.mockResolvedValue([]);
   vi.mocked(api.getAutomationLanguage).mockResolvedValue('fr');
   vi.mocked(api.setAutomationLanguage).mockResolvedValue(undefined);
   vi.mocked(api.updateRuleMessage).mockResolvedValue(undefined);
   vi.mocked(builder.changerPublication).mockResolvedValue(undefined);
-  vi.mocked(builder.chargerStatistiques).mockResolvedValue({ par_regle: {}, par_etape: null, texto_configure: true });
+  statsMock.mockResolvedValue({ par_regle: {}, par_etape: null, texto_configure: true });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(async () => {
@@ -298,16 +310,20 @@ describe('T13.3 — erreur de chargement', () => {
     expect(bouton(/^Créer$/)).toBeDefined();
   });
 
-  it('les échecs illisibles n’empêchent pas la liste, et ne crient pas', async () => {
-    vi.mocked(api.getRecentAutomationFailures).mockRejectedValue(new Error('rls'));
+  it('les échecs illisibles n’empêchent pas la liste — et l’écran le DIT, sans toast (constat D-17)', async () => {
+    echecsMock.mockRejectedValue(new Error('rls'));
     await rendre();
     expect(conteneur.querySelector('table')).not.toBeNull();
     expect(texte()).toContain(NOM_FR);
     expect(toast.error).not.toHaveBeenCalled();
+    // Avant : « À vérifier (0) », comme si rien n'avait échoué.
+    expect(texte()).toContain('Les chiffres et les échecs n’ont pas pu être lus');
+    expect(bouton(/^À vérifier \(\?\)$/)).toBeDefined();
+    expect(texte()).not.toContain('À vérifier (0)');
   });
 
   it('les statistiques illisibles : la liste reste, les colonnes chiffrées montrent « — » au lieu d’un faux 0', async () => {
-    vi.mocked(builder.chargerStatistiques).mockRejectedValue(new Error('500'));
+    statsMock.mockRejectedValue(new Error('500'));
     await rendre();
     expect(texte()).toContain(NOM_FR);
     const cellules = Array.from(conteneur.querySelectorAll('tbody td')).map((td) => td.textContent?.trim());
@@ -431,7 +447,7 @@ describe('T13.4 — bascule Brouillon / Publiée', () => {
 
 describe('T13.6 — échecs visibles', () => {
   it('3 échecs sur 7 jours : « 3 échec(s) dans les 7 derniers jours » sur la ligne, et l’onglet « À vérifier (1) »', async () => {
-    vi.mocked(api.getRecentAutomationFailures).mockResolvedValue([echec('boom', 1), echec('boom', 2), echec('boom', 3)]);
+    echecsMock.mockResolvedValue([echec('boom', 1), echec('boom', 2), echec('boom', 3)]);
     await rendre();
     expect(texte()).toContain('3 échec(s) dans les 7 derniers jours');
     expect(bouton(/^À vérifier \(1\)$/)).toBeDefined();
@@ -440,7 +456,7 @@ describe('T13.6 — échecs visibles', () => {
   });
 
   it('un échec d’une AUTRE règle ne compte pas pour celle-ci', async () => {
-    vi.mocked(api.getRecentAutomationFailures).mockResolvedValue([{ ...echec('boom'), automation_rule_id: 'autre' }]);
+    echecsMock.mockResolvedValue([{ ...echec('boom'), automation_rule_id: 'autre' }]);
     await rendre();
     expect(texte()).not.toMatch(/échec\(s\)/);
   });
@@ -583,7 +599,7 @@ describe('T13.9 — accessibilité', () => {
   });
 
   it('dans le DOM rendu (liste + messages dépliés) : chaque bouton a un nom, chaque champ une étiquette', async () => {
-    vi.mocked(api.getRecentAutomationFailures).mockResolvedValue([echec('SMTP not configured')]);
+    echecsMock.mockResolvedValue([echec('SMTP not configured')]);
     await rendre();
     await deplierMessages();
     const sansNom = boutons().filter((b) => !((b.textContent || '').trim() || b.getAttribute('aria-label') || b.getAttribute('title')));
@@ -597,17 +613,19 @@ describe('T13.9 — accessibilité', () => {
 
 describe('T13.10 — pourquoi ça n’a pas marché (F22 corrigé)', () => {
   it('la cause du dernier échec est dite en français sur la ligne, jamais le texte technique anglais', async () => {
-    vi.mocked(api.getRecentAutomationFailures).mockResolvedValue([
+    // (Le plafond de fréquence n'est plus un échec : la base le range sous « ignorées ». Le second
+    // échec de ce test est donc un autre vrai échec, dont le texte porte aussi un numéro.)
+    echecsMock.mockResolvedValue([
       echec('SMTP not configured', 1),
-      echec('Frequency cap reached for +15145550101', 2),
+      echec('Twilio 21211: invalid To number +15145550101', 2),
     ]);
     await rendre();
-    expect(texte()).not.toMatch(/SMTP not configured|Frequency cap|\+1514/);
+    expect(texte()).not.toMatch(/SMTP not configured|Twilio 21211|\+1514/);
     expect(texte()).toContain('2 échec(s) dans les 7 derniers jours — Courriel non configuré : impossible d’envoyer.');
   });
 
   it('le panneau « › » répète la cause : « Dernier échec : … »', async () => {
-    vi.mocked(api.getRecentAutomationFailures).mockResolvedValue([echec('No recipient phone for client')]);
+    echecsMock.mockResolvedValue([echec('No recipient phone for client')]);
     await rendre();
     await cliquer(bouton(new RegExp(`^Statistiques de ${NOM_FR}$`)));
     expect(texte()).toContain('Dernier échec : Ce client n’a pas de numéro de téléphone.');
@@ -615,7 +633,7 @@ describe('T13.10 — pourquoi ça n’a pas marché (F22 corrigé)', () => {
   });
 
   it('une cause inconnue : le compteur seul, plutôt qu’un jargon anglais', async () => {
-    vi.mocked(api.getRecentAutomationFailures).mockResolvedValue([echec('ECONNRESET socket hang up')]);
+    echecsMock.mockResolvedValue([echec('ECONNRESET socket hang up')]);
     await rendre();
     expect(texte()).toContain('1 échec(s) dans les 7 derniers jours');
     expect(texte()).not.toContain('ECONNRESET');

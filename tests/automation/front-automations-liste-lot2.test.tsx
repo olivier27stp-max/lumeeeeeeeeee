@@ -15,6 +15,21 @@ import { resolve } from 'node:path';
 // ── Mocks (hissés) ─────────────────────────────────────────────
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 
+// Les chiffres de la liste : UNE route comptée en base (mission du 2026-10-01). Les données de ces
+// tests restent décrites comme avant — compteurs d'un côté, lignes d'échec de l'autre.
+const { echecsMock, statsMock } = vi.hoisted(() => ({
+  echecsMock: vi.fn(async (): Promise<any[]> => []),
+  statsMock: vi.fn(async (): Promise<any> => ({ par_regle: {}, par_etape: null, texto_configure: true })),
+}));
+vi.mock('../../src/lib/automationStatsApi', async () => {
+  const { versStatistiques } = await import('../aides/stats-automatisations');
+  return {
+    chargerStatistiquesBureau: async () => versStatistiques(await statsMock(), await echecsMock()),
+    lirePeriodeChoisie: () => 7,
+    retenirPeriode: () => undefined,
+  };
+});
+
 vi.mock('../../src/hooks/usePermissions', () => ({
   usePermissions: () => ({
     permissions: null, role: 'owner', scope: 'company', userId: 'u-owner',
@@ -24,7 +39,6 @@ vi.mock('../../src/hooks/usePermissions', () => ({
 
 vi.mock('../../src/lib/automationRulesApi', () => ({
   getAutomationRules: vi.fn(async () => []),
-  getRecentAutomationFailures: vi.fn(async () => []),
   getFailureCountsByRule: vi.fn(async () => ({})),
   getAutomationLanguage: vi.fn(async () => 'fr'),
   setAutomationLanguage: vi.fn(async () => undefined),
@@ -35,7 +49,6 @@ vi.mock('../../src/lib/automationRulesApi', () => ({
 }));
 
 vi.mock('../../src/lib/automationBuilderApi', () => ({
-  chargerStatistiques: vi.fn(async () => ({ par_regle: {}, par_etape: null, texto_configure: true })),
   changerPublication: vi.fn(async () => undefined),
   changerPublicationEnLot: vi.fn(async (ids: string[]) => ids.map((id) => ({ id, ok: true }))),
   chargerDossiers: vi.fn(async () => []),
@@ -145,9 +158,9 @@ beforeEach(() => {
   localStorage.clear();
   compteurRegles = 0;
   vi.mocked(api.getAutomationRules).mockResolvedValue([regle()]);
-  vi.mocked(api.getRecentAutomationFailures).mockResolvedValue([]);
+  echecsMock.mockResolvedValue([]);
   vi.mocked(api.getAutomationLanguage).mockResolvedValue('fr');
-  vi.mocked(builder.chargerStatistiques).mockResolvedValue({ par_regle: {}, par_etape: null, texto_configure: true });
+  statsMock.mockResolvedValue({ par_regle: {}, par_etape: null, texto_configure: true });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(async () => {
@@ -412,7 +425,7 @@ describe('liste-11 / modeles-09 — un seul mot pour le même envoi : « Texto �
 
   it('en français : l’éditeur de l’ancien format dit « Texto envoyé au client », comme l’aperçu d’un parcours et le bandeau', async () => {
     vi.mocked(api.getAutomationRules).mockResolvedValue(deuxFormats());
-    vi.mocked(builder.chargerStatistiques).mockResolvedValue({ par_regle: {}, par_etape: null, texto_configure: false });
+    statsMock.mockResolvedValue({ par_regle: {}, par_etape: null, texto_configure: false });
     await rendre('fr');
     expect(texte()).toContain('Les étapes texto sont sautées');
 
@@ -552,7 +565,7 @@ describe('tablette — l’interrupteur et le menu « ⋮ » restent à l’écr
     await rendre();
     const { enTetes } = colonnes();
     const parNom = Object.fromEntries(enTetes.map((th) => [(th.textContent || '').trim(), palier(th)]));
-    expect(parNom['Total déclenché']).toBe('lg');
+    expect(parNom['Déclenchées (7 j)']).toBe('lg');
     expect(parNom['En cours']).toBe('lg');
     expect(parNom['Modifiée le']).toBe('xl');
     expect(parNom['Créée le']).toBe('xl');

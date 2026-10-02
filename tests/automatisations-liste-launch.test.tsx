@@ -51,11 +51,22 @@ vi.mock('../src/lib/automationRulesApi', () => ({
   getAutomationRules: vi.fn(async () => reglesServies),
   toggleAutomationRule: (...a: any[]) => toggleMock(a[0], a[1]),
   getFailureCountsByRule: vi.fn(async () => ({})),
-  getRecentAutomationFailures: () => echecsMock(),
   getAutomationLanguage: vi.fn(async () => 'fr'),
   setAutomationLanguage: vi.fn(async () => undefined),
   avisActives: vi.fn(async () => true),
 }));
+
+// Depuis la mission du 2026-10-01, la liste lit TOUS ses chiffres (déclenchées, en cours, échecs)
+// par une seule route comptée en base. Les données de ces tests restent décrites comme avant
+// (compteurs d'un côté, lignes d'échec de l'autre) : `versStatistiques` les assemble.
+vi.mock('../src/lib/automationStatsApi', async () => {
+  const { versStatistiques } = await import('./aides/stats-automatisations');
+  return {
+    chargerStatistiquesBureau: async () => versStatistiques(await statsMock(), await echecsMock()),
+    lirePeriodeChoisie: () => 7,
+    retenirPeriode: () => undefined,
+  };
+});
 
 vi.mock('../src/lib/automationBuilderApi', () => ({
   chargerAutomatisations: vi.fn(async () => ({ rules: [], catalogue: { declencheurs: [], actions: [] } })),
@@ -71,7 +82,6 @@ vi.mock('../src/lib/automationBuilderApi', () => ({
   chargerBureauxCibles: vi.fn(async () => []),
   changerPublication: (id: string, actif: boolean) => publierMock(id, actif),
   changerPublicationEnLot: (ids: string[], actif: boolean) => publierLotMock(ids, actif),
-  chargerStatistiques: () => statsMock(),
 }));
 
 vi.mock('../src/components/ui/ConfirmDialog', () => ({
@@ -290,7 +300,7 @@ function cellules(nom: string): string[] {
   return Array.from(ligne.querySelectorAll('td')).map((td) => td.textContent?.trim() ?? '');
 }
 
-describe('statistiques — « Total déclenché » et « En cours » sur de vraies données', () => {
+describe('statistiques — « Déclenchées » et « En cours » sur de vraies données', () => {
   it('les colonnes affichent les chiffres de la route agrégée, plus « — »', async () => {
     reglesServies = [regle({ id: 'a', name: 'Relance A' }), regle({ id: 'b', name: 'Relance B' })];
     statsMock.mockImplementation(async () => ({
@@ -299,13 +309,13 @@ describe('statistiques — « Total déclenché » et « En cours » sur de vrai
     }));
     await rendre();
     await attendre();
-    // Colonnes : ☑ · Nom · Statut · Total déclenché · En cours · …
+    // Colonnes : ☑ · Nom · Statut · Déclenchées (7 j) · En cours · …
     expect(cellules('Relance A').slice(3, 5)).toEqual(['7', '2']);
     // Jamais déclenchée : un vrai zéro, pas un tiret.
     expect(cellules('Relance B').slice(3, 5)).toEqual(['0', '0']);
   });
 
-  it('le détail › dit les envois, les étapes sautées (à part) et les échecs', async () => {
+  it('le détail › dit les messages envoyés, les envois ignorés (à part) et les échecs, sur la période choisie', async () => {
     reglesServies = [regle({ id: 'a', name: 'Relance A' })];
     statsMock.mockImplementation(async () => ({
       par_regle: { a: { declenches: 7, en_cours: 2, envoyes: 5, sautes: 1, echecs: 1 } },
@@ -314,7 +324,7 @@ describe('statistiques — « Total déclenché » et « En cours » sur de vrai
     await rendre();
     await attendre();
     cliquer(container.querySelector('button[aria-label="Statistiques de Relance A"]'));
-    expect(container.textContent).toContain('5 envoi(s), 1 étape(s) sautée(s), 1 échec(s)');
+    expect(container.textContent).toContain('7 derniers jours : 7 déclenchée(s), 5 message(s) envoyé(s), 1 échec(s), 1 ignorée(s)');
   });
 });
 
@@ -334,7 +344,7 @@ describe('raisonLisible — la cause d’un échec et le motif d’un saut, en c
     expect(texte).not.toContain('Organization has no SMS number');
   });
 
-  it('le détail › donne la dernière cause d’échec et le motif de la dernière étape sautée', async () => {
+  it('le détail › donne la dernière cause d’échec et le motif du dernier envoi ignoré', async () => {
     reglesServies = [regle({ id: 'a', name: 'Relance A' })];
     echecsMock.mockImplementation(async () => [
       { id: 'l1', automation_rule_id: 'a', action_type: 'send_email', result_error: 'No recipient email', entity_type: 'lead', created_at: '2026-09-27T10:00:00Z' },
@@ -348,7 +358,7 @@ describe('raisonLisible — la cause d’un échec et le motif d’un saut, en c
     cliquer(container.querySelector('button[aria-label="Statistiques de Relance A"]'));
     const texte = container.textContent ?? '';
     expect(texte).toContain('Dernier échec : Ce client n’a pas d’adresse courriel.');
-    expect(texte).toContain('Dernière étape sautée : Déjà envoyé lors d’une tentative précédente');
+    expect(texte).toContain('Dernier envoi ignoré : Déjà envoyé lors d’une tentative précédente');
   });
 });
 

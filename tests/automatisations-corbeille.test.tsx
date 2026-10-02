@@ -60,11 +60,16 @@ vi.mock('../src/lib/automationRulesApi', () => ({
   getAutomationRules: vi.fn(async () => reglesServies),
   toggleAutomationRule: (...a: any[]) => toggleMock(a[0], a[1]),
   getFailureCountsByRule: vi.fn(async () => ({})),
-  getRecentAutomationFailures: vi.fn(async () => []),
   getAutomationLanguage: vi.fn(async () => 'fr'),
   setAutomationLanguage: vi.fn(async () => undefined),
   avisActives: vi.fn(async () => true),
 }));
+
+// Les chiffres de la liste viennent d'une seule route (mission du 2026-10-01) : ici, aucun.
+vi.mock('../src/lib/automationStatsApi', async () => {
+  const { versStatistiques } = await import('./aides/stats-automatisations');
+  return { chargerStatistiquesBureau: async () => versStatistiques(), lirePeriodeChoisie: () => 7, retenirPeriode: () => undefined };
+});
 
 vi.mock('../src/lib/automationBuilderApi', () => ({
   chargerAutomatisations: vi.fn(async () => ({ declencheurs: [], actions: [] })),
