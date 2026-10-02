@@ -84,8 +84,8 @@ export default function AutomationsReglages() {
             <Carte
               titre={fr ? 'Langue des messages' : 'Message language'}
               aide={fr
-                ? 'Celle que vos clients reçoivent, définie une fois pour toute l’entreprise dans Paramètres → Paramètres entreprise. Les automatisations la suivent.'
-                : 'The one your clients receive, set once for the whole company in Settings → Company. Automations follow it.'}
+                ? 'Celle que vos clients reçoivent, définie une fois pour toute l’entreprise dans Paramètres → Paramètres entreprise. Les automatisations la suivent. Le sélecteur « FR / EN » de la liste des automatisations change ce même réglage.'
+                : 'The one your clients receive, set once for the whole company in Settings → Company. Automations follow it. The “FR / EN” switch in the workflows list changes this same setting.'}
             >
               {/* Le réglage VIT dans Paramètres → Langue : il décide aussi
                   de la langue des factures, des soumissions et des pages
