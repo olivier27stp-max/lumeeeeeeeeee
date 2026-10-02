@@ -1756,6 +1756,51 @@ describe('12-permissions:86 et :102 — « voir » sans « modifier » : la list
     expect(langues[0].getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('CHAQUE commande d’écriture restée à l’écran est désactivée et dit pourquoi ; les autres sont absentes — aucune ne peut écrire', async () => {
+    lectureSeule();
+    vi.mocked(builder.chargerDossiers).mockResolvedValue([{ id: 'd1', name: 'Factures', position: 0, created_at: '' }] as never);
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Rappel', is_active: true })]);
+    await rendre();
+    // Désactivées, avec la raison au survol.
+    const interrupteur = conteneur.querySelector('[role="switch"]') as HTMLButtonElement;
+    expect(interrupteur.disabled).toBe(true);
+    expect(interrupteur.parentElement?.closest('[title]')?.getAttribute('title')).toBe(RAISON);
+    // …et pour un lecteur d'écran, à côté de l'interrupteur.
+    expect(interrupteur.parentElement?.closest('[title]')?.textContent).toContain(RAISON);
+    const commandes = [
+      ...Array.from(conteneur.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')),
+      ...Array.from(conteneur.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Langue des messages"] button')),
+    ];
+    expect(commandes.length).toBe(4);
+    for (const c of commandes) expect([c.disabled, c.title]).toEqual([true, RAISON]);
+    // Absentes : créer, Lumi, dossiers (créer, renommer, supprimer), menu « ⋮ » (modifier, dupliquer, copier, déplacer,
+    // corbeille), « Tout arrêter », le lien vers les Réglages globaux.
+    for (const absent of [/^Créer$/, /^Construire avec Lumi$/, /^Nouveau dossier$/, /^Renommer le dossier/, /^Supprimer le dossier/, /^Actions pour /, /^Tout arrêter$/]) {
+      expect(bouton(absent), String(absent)).toBeUndefined();
+    }
+    expect(conteneur.querySelector('a[href="/automations/reglages"]')).toBeNull();
+    // Ce qui reste cliquable ne fait que LIRE : onglets, période, filtres, recherche, dossiers, panneaux › et messages.
+    const actifs = Array.from(conteneur.querySelectorAll<HTMLButtonElement>('button:not([disabled])')).map((b) => (b.getAttribute('aria-label') || b.textContent || '').replace(/\s+/g, ' ').trim());
+    expect(actifs.sort()).toEqual([
+      'Corbeille (0)', 'Factures0', 'Filtres avancés', 'Nom', 'Prêtes à publier (0)', 'Sans dossier', 'Statistiques de Rappel',
+      'Statut', 'Tout', 'Toutes', 'Voir les messages de Rappel', 'À vérifier (0)', 'Créée le', 'Déclenchées (7 j)', 'En cours', 'Modifiée le',
+    ].sort());
+    // Et un clic forcé sur l'interrupteur n'écrit rien.
+    await cliquer(interrupteur);
+    expect(builder.changerPublication).not.toHaveBeenCalled();
+    expect(api.setAutomationLanguage).not.toHaveBeenCalled();
+  });
+
+  it('avec le droit de modifier, l’interrupteur d’une automatisation vivante ne porte aucune raison ; à la corbeille il dit de restaurer', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Vivante' }), regle({ name: 'Jetée', deleted_at: '2026-09-30T00:00:00Z' })]);
+    await rendre();
+    expect((conteneur.querySelector('[role="switch"]') as HTMLElement).parentElement?.closest('[title]')).toBeNull();
+    await cliquer(onglet(/^Corbeille/));
+    const jete = conteneur.querySelector('[role="switch"]') as HTMLButtonElement;
+    expect(jete.disabled).toBe(true);
+    expect(jete.parentElement?.closest('[title]')?.getAttribute('title')).toBe('À la corbeille : restaurez-la pour la publier.');
+  });
+
   it('le nom n’ouvre pas l’éditeur (il exige le droit de modifier) ; les messages se lisent, sans champ ni « Enregistrer »', async () => {
     lectureSeule();
     vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Rappel' })]);

@@ -2579,6 +2579,14 @@ export default function Automations() {
                               {/* À la corbeille, l'interrupteur est ÉTEINT quoi que dise `is_active` en base :
                                   « Supprimée » à gauche et un interrupteur vert à droite se contredisaient
                                   (triage `05-lignes:78`). */}
+                              {/* Grisé, l'interrupteur DIT POURQUOI : au survol (`title`) et à un lecteur d'écran
+                                  (texte masqué) — rôle en lecture seule, ou automatisation à la corbeille. */}
+                              <span
+                                className="inline-flex"
+                                title={!peutModifier ? raisonLectureSeule
+                                  : rule.deleted_at ? (fr ? 'À la corbeille : restaurez-la pour la publier.' : 'In the bin: restore it to publish it.')
+                                  : undefined}
+                              >
                               <InterrupteurPublication
                                 actif={rule.is_active && !rule.deleted_at}
                                 onBascule={() => handleToggle(rule)}
@@ -2589,6 +2597,12 @@ export default function Automations() {
                                   : (fr ? `Publier ${localizeAutomationName(rule.name, language)}` : `Publish ${localizeAutomationName(rule.name, language)}`)}
                                 fr={fr}
                               />
+                              {(!peutModifier || rule.deleted_at) && (
+                                <span className="sr-only">
+                                  {!peutModifier ? raisonLectureSeule : (fr ? 'À la corbeille : restaurez-la pour la publier.' : 'In the bin: restore it to publish it.')}
+                                </span>
+                              )}
+                              </span>
 
                               <button
                                 type="button"
