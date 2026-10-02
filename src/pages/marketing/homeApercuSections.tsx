@@ -105,11 +105,10 @@ function LogoMarquee({ fr }: { fr: boolean }) {
    sont propres à l'accueil (formulaire de demande intégré au site du client,
    pipeline et ses automatisations par étape, demande d'avis) ; la dernière
    reprend fonctionsData (mêmes textes et captures que les pages « En savoir plus »). ── */
-type FeatureRow = { slug: string; job: Bi; title: Bi; lead: Bi; shot: string; alt: Bi; w: number; h: number };
+type FeatureRow = { slug: string; job: Bi; lead: Bi; shot: string; alt: Bi; w: number; h: number };
 const REQUEST_FORM_ROW: FeatureRow = {
   slug: 'clients',
   job: { fr: 'Formulaire de demande', en: 'Request form' },
-  title: { fr: 'Ton formulaire de demande, branché sur ton site.', en: 'Your request form, plugged into your own website.' },
   lead: {
     fr: "Garde ton site actuel. Colle le code d'intégration dans ta page et le formulaire Lume y apparaît. Chaque demande crée le client et le lead dans ton pipeline, sans rien retaper.",
     en: 'Keep your current website. Paste the embed code into your page and the Lume form shows up there. Every request creates the client and the lead in your pipeline, with nothing retyped.',
@@ -125,7 +124,6 @@ const REQUEST_FORM_ROW: FeatureRow = {
 const PIPELINE_ROW: FeatureRow = {
   slug: 'pipeline',
   job: { fr: 'Pipeline de vente', en: 'Sales pipeline' },
-  title: { fr: 'Ton pipeline, tes étapes, tes automatisations.', en: 'Your pipeline, your stages, your automations.' },
   lead: {
     fr: "Monte ton pipeline comme tu vends : tes étapes, dans ton ordre. Chaque étape a ses propres automatisations : un texto, un courriel ou une tâche part quand un lead y entre, en sort ou y dort trop longtemps.",
     en: 'Build your pipeline the way you sell: your stages, in your order. Each stage has its own automations: a text, an email or a task goes out when a lead enters it, leaves it or sits there too long.',
@@ -141,7 +139,6 @@ const PIPELINE_ROW: FeatureRow = {
 const REVIEWS_ROW: FeatureRow = {
   slug: 'avis',
   job: { fr: 'Avis clients', en: 'Client reviews' },
-  title: { fr: 'Les avis Google et Facebook rentrent tout seuls.', en: 'Google and Facebook reviews come in on their own.' },
   lead: {
     fr: "Quand la job est terminée, ton client reçoit un texto et un courriel avec un lien. Il choisit Google ou Facebook et laisse son avis en 30 secondes. Toi, tu n'as plus rien à demander.",
     en: "When the job is done, your client gets a text and an email with a link. They pick Google or Facebook and leave a review in 30 seconds. You don't have to ask anymore.",
@@ -164,7 +161,7 @@ const FEATURE_ROWS: FeatureRow[] = [
   REVIEWS_ROW,
   ...['finances'].flatMap((slug) => {
     const f = FONCTIONS.find((x) => x.slug === slug);
-    return f ? [{ slug, job: f.job, title: f.title, lead: f.lead, ...ZOOM_SHOTS[slug] }] : [];
+    return f ? [{ slug, job: f.job, lead: f.lead, ...ZOOM_SHOTS[slug] }] : [];
   }),
 ];
 
@@ -176,8 +173,7 @@ export function FeatureRows({ fr }: { fr: boolean }) {
       {FEATURE_ROWS.map((f) => (
         <div key={f.slug} className="hs-frow">
           <div className="hs-ftxt">
-            <em>{pick(fr, f.job)}</em>
-            <h3>{pick(fr, f.title)}</h3>
+            <h3>{pick(fr, f.job)}</h3>
             <p>{pick(fr, f.lead)}</p>
           </div>
           <img src={f.shot} alt={pick(fr, f.alt)} loading="lazy" decoding="async" width={f.w} height={f.h} />
@@ -395,8 +391,7 @@ export const SECTIONS_CSS = `
 .hs-feat > .ha-kicker, .hs-feat > h2 { text-align:center; } .hs-feat > h2 { margin-left:auto; margin-right:auto; }
 .hs-frow { display:grid; grid-template-columns:.85fr 1.15fr; gap:56px; align-items:center; margin-top:56px; }
 .hs-frow:nth-of-type(even) { grid-template-columns:1.15fr .85fr; } .hs-frow:nth-of-type(even) .hs-ftxt { order:2; }
-.hs-ftxt em { font-style:normal; font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:800; color:var(--forest); }
-.hs-ftxt h3 { margin:8px 0 0; font-size:clamp(24px,2.4vw,32px); font-weight:800; letter-spacing:-.025em; line-height:1.12; color:#111; }
+.hs-ftxt h3 { margin:0; font-size:clamp(24px,2.4vw,32px); font-weight:800; letter-spacing:-.025em; line-height:1.12; color:#111; }
 .hs-ftxt p { margin:12px 0 0; font-size:15.5px; line-height:1.55; color:#171717; max-width:48ch; }
 .hs-frow img { width:100%; height:auto; border-radius:14px; border:1px solid rgba(11,92,173,.12); box-shadow:0 30px 60px -30px rgba(0,0,0,.35); }
 .hs-rtabs { display:flex; gap:4px; background:#f1f1ef; border-radius:999px; padding:4px; width:max-content; max-width:100%; margin-top:18px; overflow:auto; }
