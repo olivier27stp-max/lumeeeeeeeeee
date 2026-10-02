@@ -3888,7 +3888,8 @@ const convertQuoteToJobTool: AgentTool = {
       "The client accepted a quote → turn it into a job, through the app's own conversion route "
       + '(line items carried, quote marked converted). Get the quote id from the quotes list. '
       + 'Pass scheduled_at (and optionally end_at) to put the first visit on the calendar IN THE SAME STEP — '
-      + 'always do that when the date is known instead of converting first and scheduling after (one confirmation, not two).',
+      + 'always do that when the date is known instead of converting first and scheduling after (one confirmation, not two). '
+      + 'No date in the request → convert WITHOUT scheduling, right away: never ask whether to schedule first.',
     parameters: {
       type: 'object',
       properties: {
