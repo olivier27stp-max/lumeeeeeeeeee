@@ -781,6 +781,61 @@ describe('05-lignes:119 — un déclencheur hors catalogue n’affiche pas sa cl
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('04-filtres-recherche-tri:205 — une automatisation personnelle est rangée d’après son déclencheur', () => {
+  const filtrer = async (categorie: string) => {
+    if (!conteneur.querySelector('#f-categorie')) await cliquer(bouton(/^Filtres avancés/));
+    await act(async () => {
+      const liste = conteneur.querySelector('#f-categorie') as HTMLSelectElement;
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(liste, categorie);
+      liste.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await laisser();
+    return Array.from(conteneur.querySelectorAll('tbody tr td:nth-child(2) span.font-medium')).map((n) => n.textContent);
+  };
+
+  it('créée sur « Devis envoyé », elle est sous « Devis » — plus sous « Suivi »', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Relance de devis maison', trigger_event: 'quote.sent' })]);
+    await rendre();
+    expect(await filtrer('Quotes')).toEqual(['Relance de devis maison']);
+    expect(await filtrer('Follow-up')).toEqual([]);
+  });
+
+  it('chaque famille de déclencheur a sa catégorie ; une famille sans catégorie reste dans « Suivi »', async () => {
+    const cas: Array<[string, string]> = [
+      ['lead.created', 'Leads'], ['quote.approved', 'Quotes'], ['appointment.created', 'Jobs'], ['job.completed', 'Jobs'],
+      ['agreement.signed', 'Jobs'], ['invoice.paid', 'Invoices'], ['payment.failed', 'Payments'], ['client.inactive', 'Client'],
+      ['task.completed', 'Follow-up'], ['webhook.received', 'Follow-up'],
+    ];
+    vi.mocked(api.getAutomationRules).mockResolvedValue(cas.map(([t]) => regle({ name: `Sur ${t}`, trigger_event: t })));
+    await rendre();
+    await cliquer(bouton(/^Filtres avancés/));
+    await act(async () => {
+      const parPage = conteneur.querySelector('#par-page') as HTMLSelectElement;
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(parPage, '50');
+      parPage.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    let somme = 0;
+    for (const categorie of ['Leads', 'Quotes', 'Jobs', 'Invoices', 'Payments', 'Follow-up', 'Reviews', 'Client']) {
+      const attendues = cas.filter(([, c]) => c === categorie).map(([t]) => `Sur ${t}`).sort();
+      const vues = (await filtrer(categorie)).map(String).sort();
+      expect(vues, categorie).toEqual(attendues);
+      somme += vues.length;
+    }
+    // Chaque automatisation est dans UNE catégorie : la somme redonne le tout.
+    expect(somme).toBe(cas.length);
+  });
+
+  it('un préréglage garde SA catégorie, quel que soit son déclencheur', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([
+      regle({ name: 'Avis Google', is_preset: true, is_active: true, preset_key: 'google_review', trigger_event: 'job.completed' }),
+    ]);
+    await rendre();
+    expect((await filtrer('Reviews')).length).toBe(1);
+    expect(await filtrer('Jobs')).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 

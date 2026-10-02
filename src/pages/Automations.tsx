@@ -326,6 +326,17 @@ function getActionLabel(type: string, fr: boolean): string {
 }
 
 /** Les colonnes triables de la liste (A-17). */
+/** La catégorie d'une automatisation sans préréglage, d'après la famille de son déclencheur (`quote.sent` → `quote`). */
+const CATEGORIE_PAR_FAMILLE: Record<string, CategoryKey> = {
+  lead: 'Leads',
+  quote: 'Quotes', estimate: 'Quotes',
+  job: 'Jobs', appointment: 'Jobs', agreement: 'Jobs',
+  invoice: 'Invoices',
+  payment: 'Payments', deposit: 'Payments',
+  review: 'Reviews',
+  client: 'Client',
+};
+
 type CleTri = 'nom' | 'statut' | 'declenches' | 'en_cours' | 'modifiee' | 'creee';
 
 // ═════════════════════════════════════════════════════════════
@@ -1210,8 +1221,15 @@ export default function Automations() {
     }
   };
 
+  /*
+   * La catégorie d'une automatisation : celle de son préréglage, sinon celle de son DÉCLENCHEUR.
+   * Toute automatisation créée par l'utilisateur tombait dans « Suivi » : une relance bâtie sur
+   * « Devis envoyé » n'apparaissait pas sous le filtre « Devis » (triage `04-filtres-recherche-tri:205`).
+   */
   const getCategory = (r: AutomationRule): CategoryKey =>
-    (PRESET_META[r.preset_key || '']?.category as CategoryKey) || 'Follow-up';
+    (PRESET_META[r.preset_key || '']?.category as CategoryKey | undefined)
+    ?? CATEGORIE_PAR_FAMILLE[(r.trigger_event || '').split('.')[0]]
+    ?? 'Follow-up';
 
   /*
    * La corbeille se sépare AVANT tout le reste.
