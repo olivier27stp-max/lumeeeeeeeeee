@@ -37,6 +37,12 @@ const VOCABULAIRE: Array<[IdTopic, RegExp]> = [
 ];
 
 /**
+ * « l'automatisation X », « mes automatisations », « un rappel automatique », "my automation".
+ * PAS « relances automatiques » : ce sont les relances de paiement (un autre réglage, sujet facturation).
+ */
+const AUTOMATISATION = /\b(automatisations?|automations?|parcours automatiques?|(?:rappels?|suivis?|textos?|courriels?|messages?|reponses?) automatiques?|automatic (?:reminders?|follow-?ups?|texts?|emails?|messages?|repl(?:y|ies)))\b/;
+
+/**
  * Le sujet d'un ordre quand un seul vocabulaire est touché, sinon null.
  * Jamais appelé pour une question : voir la route.
  */
@@ -44,6 +50,12 @@ export function sujetParRegle(message: string): IdTopic | null {
   if (process.env.LUMI_SUJET_PAR_REGLE === '0') return null;
   const e = plat(message).trim();
   if (e.length < 8 || e.length > 400) return null;
+  // Une AUTOMATISATION parle toujours aussi d'autre chose — devis, factures, textos, clients :
+  // « change le texto de l'automatisation Relance de soumission » touchait trois vocabulaires,
+  // la règle se taisait, et le routeur payant était appelé à CHAQUE message d'automatisation
+  // (12 sur 12 mesurés, 8 % du coût, 1,1 à 1,7 s — constat F-11). Le mot tranche : c'est le
+  // sujet qui charge les outils d'automatisation.
+  if (AUTOMATISATION.test(e)) return 'rapports';
   const touches = VOCABULAIRE.filter(([, re]) => re.test(e)).map(([t]) => t);
   return touches.length === 1 ? touches[0] : null;
 }
