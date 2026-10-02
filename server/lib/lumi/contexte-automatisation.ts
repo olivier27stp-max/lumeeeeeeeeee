@@ -24,7 +24,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Anthropic from '@anthropic-ai/sdk';
 import { masquerIds } from '../agent/refs';
-import { COLONNES_REGLE_LUE, declencheurEnClair, resumeDeLaRegle, texteDuResume, type RegleLue } from '../automations-etapes';
+import { COLONNES_REGLE_LUE, declencheurEnClair, obstaclesAPublication, resumeDeLaRegle, texteDuResume, type RegleLue } from '../automations-etapes';
 import { estPrereglageRetire } from '../../../src/lib/automationCatalogue';
 import { localizeAutomationName } from '../../../src/lib/automationNames';
 import { topicDeLOutil, type IdTopic } from './topics';
@@ -70,8 +70,7 @@ export async function contexteDeLaPage(page: ContextePageAutomatisation, o: Opti
     const regle = data as unknown as RegleLue;
     const fr = o.langue === 'fr';
     const ref = String(masquerIds(o.espaceRefs, page.rule_id));
-    // Compact : les textos en entier (c'est ce qu'on cite), un courriel borné — `get_automation` rend le texte complet.
-    const resume = texteDuResume(resumeDeLaRegle(regle, o.langue, { maxMessage: 400 }), o.langue);
+    const resume = resumeCompact(regle, o.langue);
     const lignes = fr
       ? [
         `PAGE OUVERTE — l'utilisateur vient de l'éditeur de cette automatisation (rule_id « ${ref} »). « l'automatisation », « elle », « la », « le message », « le texto », « le courriel » désignent CELLE-CI : ne demande pas laquelle, ne la cherche pas dans la liste.`,
@@ -96,6 +95,74 @@ const MOTS_VIDES: ReadonlySet<string> = new Set(['de', 'des', 'du', 'la', 'le', 
 // Les chiffres comptent (« Rappel — 1 jour » n'est pas « Rappel — 7 jours ») ; un pluriel ne compte pas.
 const mots = (s: string): string[] => plat(s).split(/[^a-z0-9]+/).filter((m) => (m.length > 1 || /\d/.test(m)) && !MOTS_VIDES.has(m)).map((m) => (m.length > 3 ? m.replace(/(s|x)$/, '') : m));
 
+/**
+ * Le contenu ENREGISTRÉ, en compact : les textos en entier (c'est ce qu'on cite),
+ * un courriel borné — `get_automation` rend le texte complet. Et ce qui empêche
+ * de l'activer telle quelle, pour que Lumi le DISE au lieu de proposer.
+ */
+function resumeCompact(regle: RegleLue, langue: Langue): string {
+  const fr = langue === 'fr';
+  const obstacles = obstaclesAPublication(regle, fr);
+  return [
+    texteDuResume(resumeDeLaRegle(regle, langue, { maxMessage: 400 }), langue),
+    ...(obstacles.length
+      ? [fr
+        ? `NE PEUT PAS être activée telle quelle : ${obstacles.join(' · ')} Si on te demande de l’activer, dis-le clairement et propose de corriger d’abord — ne propose pas l’activation.`
+        : `CANNOT be enabled as is: ${obstacles.join(' · ')} If asked to enable it, say so plainly and offer to fix it first — do not propose enabling.`]
+      : []),
+  ].join('\n');
+}
+
+type Ligne = { id: string; name: string; trigger_event: string; is_active: boolean; preset_key: string | null };
+// Sous son nom rangé, ou sous le nom que l'écran affiche (un préréglage est rangé en anglais).
+const nomsDe = (r: Ligne): string[] => [r.name, localizeAutomationName(r.name, 'fr'), localizeAutomationName(r.name, 'en')];
+
+/** Les automatisations dont le nom figure dans la phrase (voir `automatisationsCitees`). */
+async function trouverParNom(message: string, o: Options): Promise<Ligne[]> {
+  const e = plat(message);
+  if (e.length < 8 || e.length > 600 || numerosCites(message).length > 0) return [];
+  const dansLeMessage = new Set(mots(message));
+  if (dansLeMessage.size === 0) return [];
+  const indice = INDICE.test(e);
+  const { data, error } = await o.client
+    .from('automation_rules').select('id, name, trigger_event, is_active, preset_key')
+    .eq('org_id', o.orgId).is('deleted_at', null).order('name', { ascending: true }).limit(200);
+  if (error || !data) return [];
+  const toutes = (data as Ligne[]).filter((r) => !estPrereglageRetire(r));
+  // 1. Un nom cité ENTRE GUILLEMETS l'emporte : « Relance facture en retard » ne désigne pas
+  //    aussi « Rappel de facture — 7 jours » parce que la phrase contient « rappel » et « 7 jours ».
+  const entreGuillemets = [...message.matchAll(/«\s*([^»]{2,120}?)\s*»|"([^"]{2,120})"|“([^”]{2,120})”/g)].map((m) => plat(m[1] ?? m[2] ?? m[3] ?? ''));
+  let trouvees = entreGuillemets.length ? toutes.filter((r) => nomsDe(r).some((nom) => entreGuillemets.includes(plat(nom)))) : [];
+  // 2. Sinon le nom écrit tel quel dans la phrase.
+  if (!trouvees.length) {
+    trouvees = toutes.filter((r) => nomsDe(r).some((nom) => {
+      const n = plat(nom);
+      return n.length >= 5 && ` ${e} `.includes(` ${n} `) && (n.includes(' ') || indice);
+    }));
+  }
+  // 3. Sinon tous les mots utiles du nom, dans le désordre (« ma relance de factures en retard »).
+  if (!trouvees.length) {
+    trouvees = toutes.filter((r) => nomsDe(r).some((nom) => {
+      const m = [...new Set(mots(nom))];
+      if (!m.length || !m.every((x) => dansLeMessage.has(x))) return false;
+      return m.length >= 2 || indice;
+    }));
+  }
+  return trouvees;
+}
+
+/** Le dernier message écrit par l'utilisateur dans l'historique (texte seulement). */
+function dernierMessageUtilisateur(historique: Anthropic.Messages.MessageParam[]): string | null {
+  for (let i = historique.length - 1; i >= 0; i--) {
+    const m = historique[i];
+    if (m.role !== 'user') continue;
+    if (typeof m.content === 'string') return m.content;
+    const texte = m.content.filter((b): b is Anthropic.Messages.TextBlockParam => b.type === 'text').map((b) => b.text).join(' ').trim();
+    if (texte) return texte;
+  }
+  return null;
+}
+
 export interface AutomatisationsCitees {
   /** Le bloc à donner au modèle, ou null. */
   contexte: string | null;
@@ -109,52 +176,61 @@ export interface AutomatisationsCitees {
  * (« Relance ») ne compte que si la phrase porte sur un message, un délai, une
  * activation… — « relance mes retards » reste une relance de paiement. Jamais
  * quand la phrase cite un numéro de devis, de facture ou de job : elle parle de
- * cette fiche-là. Ne lève jamais.
+ * cette fiche-là.
+ *
+ * UNE seule trouvée : son contenu enregistré est joint (les textos en entier) —
+ * Lumi n'a plus à payer un appel pour la retrouver, puis un autre pour la lire
+ * (F-12), et il a le texte actuel sous les yeux pour le réécrire.
+ *
+ * `historique` : quand le message ne cite rien mais RÉPOND à une question
+ * « laquelle ? » (« celle des factures »), on reprend les homonymes du message
+ * précédent et on garde celle que la réponse désigne, par son déclencheur ou son
+ * nom. Sans ça, Lumi relisait la liste, relisait la règle, puis redemandait une
+ * confirmation au lieu de proposer (C08).
+ *
+ * Ne lève jamais.
  */
-export async function automatisationsCitees(message: string, o: Options): Promise<AutomatisationsCitees> {
+export async function automatisationsCitees(message: string, o: Options, historique: Anthropic.Messages.MessageParam[] = []): Promise<AutomatisationsCitees> {
   const rien: AutomatisationsCitees = { contexte: null, nombre: 0 };
   try {
-    const e = plat(message);
-    if (e.length < 8 || e.length > 600 || numerosCites(message).length > 0) return rien;
-    const dansLeMessage = new Set(mots(message));
-    if (dansLeMessage.size === 0) return rien;
-    const indice = INDICE.test(e);
-    const { data, error } = await o.client
-      .from('automation_rules').select('id, name, trigger_event, is_active, preset_key')
-      .eq('org_id', o.orgId).is('deleted_at', null).order('name', { ascending: true }).limit(200);
-    if (error || !data) return rien;
     const fr = o.langue === 'fr';
-    type Ligne = { id: string; name: string; trigger_event: string; is_active: boolean; preset_key: string | null };
-    const toutes = (data as Ligne[]).filter((r) => !estPrereglageRetire(r));
-    // Sous son nom rangé, ou sous le nom que l'écran affiche (un préréglage est rangé en anglais).
-    const nomsDe = (r: Ligne): string[] => [r.name, localizeAutomationName(r.name, 'fr'), localizeAutomationName(r.name, 'en')];
-    // 1. Un nom cité ENTRE GUILLEMETS l'emporte : « Relance facture en retard » ne désigne pas
-    //    aussi « Rappel de facture — 7 jours » parce que la phrase contient « rappel » et « 7 jours ».
-    const entreGuillemets = [...message.matchAll(/«\s*([^»]{2,120}?)\s*»|"([^"]{2,120})"|“([^”]{2,120})”/g)].map((m) => plat(m[1] ?? m[2] ?? m[3] ?? ''));
-    let trouvees = entreGuillemets.length ? toutes.filter((r) => nomsDe(r).some((nom) => entreGuillemets.includes(plat(nom)))) : [];
-    // 2. Sinon le nom écrit tel quel dans la phrase.
-    if (!trouvees.length) {
-      trouvees = toutes.filter((r) => nomsDe(r).some((nom) => {
-        const n = plat(nom);
-        return n.length >= 5 && ` ${e} `.includes(` ${n} `) && (n.includes(' ') || indice);
-      }));
-    }
-    // 3. Sinon tous les mots utiles du nom, dans le désordre (« ma relance de factures en retard »).
-    if (!trouvees.length) {
-      trouvees = toutes.filter((r) => nomsDe(r).some((nom) => {
-        const m = [...new Set(mots(nom))];
-        if (!m.length || !m.every((x) => dansLeMessage.has(x))) return false;
-        return m.length >= 2 || indice;
-      }));
+    let trouvees = await trouverParNom(message, o);
+    let designee = false;
+    if (!trouvees.length && historique.length > 0 && estUneSuite(message)) {
+      const precedent = dernierMessageUtilisateur(historique);
+      const candidates = precedent ? await trouverParNom(precedent, o) : [];
+      if (candidates.length > 1) {
+        const dit = new Set(mots(message));
+        const gardees = candidates.filter((r) => [declencheurEnClair(r.trigger_event, true), declencheurEnClair(r.trigger_event, false)]
+          .some((libelle) => mots(libelle).some((m) => dit.has(m))));
+        // Les mots communs à TOUTES les candidates (leur nom) ne départagent rien : seul le déclencheur le fait.
+        if (gardees.length === 1) { trouvees = gardees; designee = true; }
+      }
     }
     if (!trouvees.length) return rien;
-    const lignes = trouvees.slice(0, 6).map((r) => `- « ${localizeAutomationName(r.name, o.langue)} » → rule_id « ${String(masquerIds(o.espaceRefs, r.id))} » · ${fr ? 'déclencheur' : 'trigger'} : ${declencheurEnClair(r.trigger_event, fr)} · ${r.is_active ? (fr ? 'publiée' : 'published') : (fr ? 'en brouillon' : 'draft')}`);
-    const tete = trouvees.length === 1
-      ? (fr ? 'Automatisation dont le nom est cité dans la demande (déjà trouvée : pas besoin de lire la liste ; son contenu → get_automation) :' : 'Automation named in the request (already found: no need to read the list; its content → get_automation):')
-      : (fr
+    const ligne = (r: Ligne): string => `- « ${localizeAutomationName(r.name, o.langue)} » → rule_id « ${String(masquerIds(o.espaceRefs, r.id))} » · ${fr ? 'déclencheur' : 'trigger'} : ${declencheurEnClair(r.trigger_event, fr)} · ${r.is_active ? (fr ? 'publiée' : 'published') : (fr ? 'en brouillon' : 'draft')}`;
+    if (trouvees.length > 1) {
+      const tete = fr
         ? `${trouvees.length} automatisations portent le nom cité : ne choisis pas à la place de l'utilisateur. Demande LAQUELLE en UNE question, en les distinguant par leur déclencheur, sans rien modifier :`
-        : `${trouvees.length} automations carry the name mentioned: do not pick for the user. Ask WHICH ONE in ONE question, telling them apart by their trigger, without changing anything:`);
-    return { contexte: `${tete}\n${lignes.join('\n')}`, nombre: trouvees.length };
+        : `${trouvees.length} automations carry the name mentioned: do not pick for the user. Ask WHICH ONE in ONE question, telling them apart by their trigger, without changing anything:`;
+      return { contexte: `${tete}\n${trouvees.slice(0, 6).map(ligne).join('\n')}`, nombre: trouvees.length };
+    }
+    const seule = trouvees[0];
+    const { data: complete } = await o.client
+      .from('automation_rules').select(COLONNES_REGLE_LUE)
+      .eq('id', seule.id).eq('org_id', o.orgId).is('purged_at', null).maybeSingle();
+    const contenu = complete ? resumeCompact(complete as unknown as RegleLue, o.langue) : null;
+    const tete = designee
+      ? (fr
+        ? 'Automatisation que l’utilisateur vient de DÉSIGNER en répondant à ta question (c’est celle-ci : ne redemande pas, ne relis pas la liste — fais maintenant ce qu’il avait demandé au départ) :'
+        : 'Automation the user just POINTED AT by answering your question (this is the one: do not ask again, do not read the list — now do what they first asked for):')
+      : (fr
+        ? 'Automatisation dont le nom est cité dans la demande (déjà trouvée : pas besoin de lire la liste) :'
+        : 'Automation named in the request (already found: no need to read the list):');
+    const suite = contenu
+      ? `${fr ? 'Ce qui est ENREGISTRÉ (un courriel long est abrégé : get_automation rend le texte complet)' : 'What is SAVED (a long email is shortened: get_automation returns the full text)'} :\n${contenu}`
+      : (fr ? 'Son contenu → get_automation.' : 'Its content → get_automation.');
+    return { contexte: `${tete}\n${ligne(seule)}\n${suite}`, nombre: 1 };
   } catch (e: unknown) {
     logger.warn('[lumi] repérage des automatisations illisible', { message: e instanceof Error ? e.message : String(e) });
     return rien;

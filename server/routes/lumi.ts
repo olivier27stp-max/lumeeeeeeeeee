@@ -687,6 +687,18 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       language: langueTour, fuseau: ctx.fuseau,
       prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
     };
+    // ── De QUELLE automatisation parle-t-on ? (mission finale, P1-3 : contexte-automatisation.ts) ──
+    // La page ouverte (l'éditeur), un nom d'automatisation cité dans le message, ou la suite
+    // d'une conversation qui portait déjà sur une automatisation. Lu par du code, sans modèle ;
+    // donné au tour APRÈS le point de cache. Fait AVANT les étages sans modèle : une question sur UNE
+    // automatisation nommée (« what does my Quote follow-up automation do? ») recevait un article d'aide
+    // sur les modèles de devis (C15).
+    const optionsAuto = { client: ctx.auth.client, orgId: ctx.auth.orgId, espaceRefs: espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId), langue: ctx.language === 'en' ? 'en' as const : 'fr' as const };
+    const [pageOuverte, citees] = await Promise.all([
+      contexte_page?.type === 'automatisation' ? contexteDeLaPage(contexte_page, optionsAuto) : Promise.resolve(null),
+      automatisationsCitees(message, optionsAuto, historique),
+    ]);
+    const contexteAutomatisation = [pageOuverte, citees.contexte].filter((x): x is string => !!x).join('\n\n') || null;
     // Étage « aide » : une question SUR LE PRODUIT (« comment je change de
     // plan », « mon paiement a échoué ») a une réponse écrite à la main, la
     // même pour tout le monde. Elle était déjà gratuite dans le chat de
@@ -707,7 +719,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // avant lui, répondait « aucune limite, dans tous les forfaits » (passe de
     // référence du 2026-10-01). Une lecture reconnue passe avant un article.
     const raccourciReconnu = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
-    if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message) && !raccourciReconnu) {
+    if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message) && !raccourciReconnu && !contexteAutomatisation) {
       const aide = reponseFaqPour(message, langueTour, 'tu') ?? null;
       const article = aide ? null : reponseAideDirecte(message, langueTour, { premierMessage: true, voix: 'tu' });
       // Plusieurs questions collées d'un coup : chacune a sa réponse écrite,
@@ -819,10 +831,11 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     const premierMessage = historique.length === 0 && !enAttente.length && !repli;
     const vecteur = premierMessage ? embed(message) : null;
     // Jamais de cache pour une demande de document ou de mémoire (voir enonceCachable).
-    // Jamais avec une page ouverte : « explique-moi ce qu'elle fait » dépend de l'automatisation à
-    // l'écran — la réponse mémorisée pour une autre serait servie à tort.
-    const sansPageOuverte = !contexte_page;
-    if (premierMessage && sansPageOuverte && enonceCachable(message)) {
+    // Jamais quand une automatisation est visée (page ouverte, nom cité) : « explique-moi ce qu'elle
+    // fait » dépend de CE qui est enregistré maintenant — l'éditeur l'a peut-être changé depuis, et
+    // la réponse mémorisée serait servie à tort.
+    const sansAutomatisationVisee = !contexte_page && !contexteAutomatisation;
+    if (premierMessage && sansAutomatisationVisee && enonceCachable(message)) {
       const debut = Date.now();
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: message };
       let hit: { texte: string; fiches: Fiche[]; outils: string[] } | null = await lireReponse(p);
@@ -884,16 +897,6 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // l'énoncé, et « il a-tu des factures pas payées ? » après une fiche
     // client était routé vers TOUS les retards (sondage du 2026-09-16).
     // Jamais après un repli ni avec une proposition en attente.
-    // ── De QUELLE automatisation parle-t-on ? (mission finale, P1-3 : contexte-automatisation.ts) ──
-    // La page ouverte (l'éditeur), un nom d'automatisation cité dans le message, ou la suite
-    // d'une conversation qui portait déjà sur une automatisation. Lu par du code, sans modèle ;
-    // donné au tour APRÈS le point de cache.
-    const optionsAuto = { client: ctx.auth.client, orgId: ctx.auth.orgId, espaceRefs: espaceRefsDe(ctx.auth.orgId, ctx.auth.user.id, conversationId), langue: ctx.language === 'en' ? 'en' as const : 'fr' as const };
-    const [pageOuverte, citees] = await Promise.all([
-      contexte_page?.type === 'automatisation' ? contexteDeLaPage(contexte_page, optionsAuto) : Promise.resolve(null),
-      automatisationsCitees(message, optionsAuto),
-    ]);
-    const contexteAutomatisation = [pageOuverte, citees.contexte].filter((x): x is string => !!x).join('\n\n') || null;
     const sujetPrecedent = sujetDeLaConversation(historique);
     // Le sujet est IMPOSÉ quand on sait qu'il s'agit d'une automatisation : ses outils sont chargés
     // d'office. Avant, « change le message de la relance » partait vers les relances de PAIEMENT.
