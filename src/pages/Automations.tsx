@@ -2335,30 +2335,44 @@ export default function Automations() {
                                     {fr ? 'Description : ' : 'Description: '}{extrait}
                                   </span>
                                 )}
-                                {avisOk === false && rule.is_active && !rule.deleted_at && demandeUnAvis(rule) && (
-                                  <span className="mt-0.5 inline-flex items-start gap-1 text-[11px] text-amber-700 dark:text-amber-400">
-                                    <AlertTriangle size={11} className="mt-px shrink-0" aria-hidden="true" />
-                                    {fr
-                                      ? 'Les demandes d’avis sont désactivées : rien ne part. Activez-les dans Paramètres › Avis clients.'
-                                      : 'Review requests are turned off: nothing goes out. Turn them on in Settings › Customer reviews.'}
-                                  </span>
-                                )}
-                                {rule.modele_id && (
-                                  <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-text-tertiary" title={fr ? 'Suit l’automatisation d’un autre bureau ; la modifier ici la détache.' : 'Follows an automation from another office; editing it here detaches it.'}>
-                                    <Link2 size={11} aria-hidden="true" />
-                                    {fr ? 'Copie liée à un autre bureau' : 'Linked copy from another office'}
-                                  </span>
-                                )}
-                                {echecs > 0 && (
-                                  <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-danger">
-                                    <AlertTriangle size={11} aria-hidden="true" />
-                                    {echecs} {fr ? `échec(s) dans les ${periode} derniers jours` : `failure(s) in the last ${periode} days`}
-                                    {/* POURQUOI, en mots du métier — jamais le message technique brut. */}
-                                    {causeEchec && ` — ${causeEchec}`}
-                                  </span>
-                                )}
                               </span>
                             </NomDeLigne>
+                            {/*
+                              Les mentions de la ligne, HORS du bouton du nom. Elles étaient dedans :
+                              cliquer « Activez-les dans Paramètres › Avis clients. » ouvrait l'éditeur de
+                              l'automatisation (triage `05-lignes:148`). L'avertissement mène maintenant
+                              aux réglages d'avis. `pl-[34px]` : sous le nom, après l'icône.
+                            */}
+                            {avisOk === false && rule.is_active && !rule.deleted_at && demandeUnAvis(rule) && (
+                              <p className="mt-0.5 flex items-start gap-1 pl-[34px] text-[11px] text-amber-700 dark:text-amber-400">
+                                <AlertTriangle size={11} className="mt-px shrink-0" aria-hidden="true" />
+                                <span>
+                                  {fr ? 'Les demandes d’avis sont désactivées : rien ne part. ' : 'Review requests are turned off: nothing goes out. '}
+                                  <Link
+                                    to="/settings/reviews"
+                                    className="font-medium underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                  >
+                                    {fr ? 'Activez-les dans Paramètres › Avis clients.' : 'Turn them on in Settings › Customer reviews.'}
+                                  </Link>
+                                </span>
+                              </p>
+                            )}
+                            {rule.modele_id && (
+                              <p className="mt-0.5 flex items-center gap-1 pl-[34px] text-[11px] text-text-tertiary" title={fr ? 'Suit l’automatisation d’un autre bureau ; la modifier ici la détache.' : 'Follows an automation from another office; editing it here detaches it.'}>
+                                <Link2 size={11} aria-hidden="true" />
+                                {fr ? 'Copie liée à un autre bureau' : 'Linked copy from another office'}
+                              </p>
+                            )}
+                            {echecs > 0 && (
+                              <p className="mt-0.5 flex items-center gap-1 pl-[34px] text-[11px] text-danger">
+                                <AlertTriangle size={11} className="shrink-0" aria-hidden="true" />
+                                <span>
+                                  {echecs} {fr ? `échec(s) dans les ${periode} derniers jours` : `failure(s) in the last ${periode} days`}
+                                  {/* POURQUOI, en mots du métier — jamais le message technique brut. */}
+                                  {causeEchec && ` — ${causeEchec}`}
+                                </span>
+                              </p>
+                            )}
                           </td>
 
                           <td className="px-3 py-3">

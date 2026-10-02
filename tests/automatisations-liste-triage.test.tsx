@@ -896,6 +896,50 @@ describe('04-filtres-recherche-tri:264 et :413 — un seul tri affiché à la fo
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('05-lignes:148 — l’avertissement d’avis mène aux réglages d’avis, pas à l’éditeur', () => {
+  const avis = () => regle({ name: 'Demande d’avis', is_active: true, trigger_event: 'job.completed', actions: [{ type: 'request_review', config: {} }] as never });
+  const AVERTISSEMENT = 'Les demandes d’avis sont désactivées : rien ne part. Activez-les dans Paramètres › Avis clients.';
+
+  it('« Activez-les dans Paramètres › Avis clients. » est un LIEN vers /settings/reviews, hors du bouton du nom', async () => {
+    vi.mocked(api.avisActives).mockResolvedValue(false);
+    vi.mocked(api.getAutomationRules).mockResolvedValue([avis()]);
+    await rendre();
+    const cellule = conteneur.querySelector('tbody tr td:nth-child(2)') as HTMLElement;
+    expect(cellule.textContent).toContain(AVERTISSEMENT);
+    const lien = Array.from(cellule.querySelectorAll('a')).find((a) => a.textContent === 'Activez-les dans Paramètres › Avis clients.');
+    expect(lien?.getAttribute('href')).toBe('/settings/reviews');
+    // Avant : le texte était DANS le bouton du nom, qui ouvre l'éditeur.
+    expect(lien?.closest('button')).toBeNull();
+    expect(cellule.querySelector('button')?.textContent).not.toContain('Activez-les');
+    await cliquer(lien);
+    expect(adresse).toBe('/settings/reviews');
+  });
+
+  it('le bouton du nom ne porte que le nom et le sous-titre ; il ouvre toujours l’éditeur', async () => {
+    vi.mocked(api.avisActives).mockResolvedValue(false);
+    const r = avis();
+    vi.mocked(api.getAutomationRules).mockResolvedValue([r]);
+    statsMock.mockResolvedValue({ par_regle: { [r.id]: { echecs: 2 } }, texto_configure: true });
+    await rendre();
+    const nom = conteneur.querySelector('tbody tr td:nth-child(2) button') as HTMLElement;
+    expect((nom.textContent || '').replace(/\s+/g, ' ').trim()).toBe('Demande d’avisJob terminé · Immédiat');
+    // Les échecs restent sur la ligne, à côté.
+    expect(conteneur.querySelector('tbody tr td:nth-child(2)')?.textContent).toContain('2 échec(s) dans les 7 derniers jours');
+    await cliquer(nom);
+    expect(adresse).toBe(`/automations/${r.id}`);
+  });
+
+  it('en anglais : « Turn them on in Settings › Customer reviews. »', async () => {
+    vi.mocked(api.avisActives).mockResolvedValue(false);
+    vi.mocked(api.getAutomationRules).mockResolvedValue([avis()]);
+    await rendre('en');
+    const lien = Array.from(conteneur.querySelectorAll('tbody a')).find((a) => /Turn them on/.test(a.textContent || ''));
+    expect(lien?.textContent).toBe('Turn them on in Settings › Customer reviews.');
+    expect(lien?.getAttribute('href')).toBe('/settings/reviews');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
