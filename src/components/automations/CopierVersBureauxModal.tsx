@@ -7,7 +7,7 @@
  * bureau. Ce qui n'existe pas dans un bureau (étape, champ, personne) est
  * signalé et la copie y reste en brouillon.
  */
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Building2, Check, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { copierVersBureaux, type BureauCible, type ResultatCopie } from '../../lib/automationBuilderApi';
@@ -27,6 +27,50 @@ export default function CopierVersBureauxModal({
   const [lier, setLier] = useState(true);
   const [envoi, setEnvoi] = useState(false);
   const [resultats, setResultats] = useState<ResultatCopie[] | null>(null);
+
+  /*
+   * LA FENÊTRE SE TIENT COMME UNE FENÊTRE (triage de la liste, `09-copier-bureaux:221`, `:231`, `:241`).
+   *  - Le focus y ENTRE à l'ouverture (il restait dans la liste derrière : au clavier, on tabulait
+   *    dans la page) et Tab y circule ; à la fermeture il revient d'où il est parti.
+   *  - Échap la ferme.
+   *  - PENDANT LA COPIE, rien ne la ferme — ni Échap, ni un clic sur le fond, ni « Annuler » : la
+   *    copie se faisait quand même, et le compte rendu par bureau n'était jamais vu.
+   */
+  const fenetre = useRef<HTMLDivElement>(null);
+  const envoiEnCours = useRef(false);
+  envoiEnCours.current = envoi;
+  const fermer = () => { if (!envoiEnCours.current) onClose(); };
+  const fermerRef = useRef(fermer);
+  fermerRef.current = fermer;
+  useEffect(() => {
+    const avant = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    fenetre.current?.focus({ preventScroll: true });
+    const auClavier = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); fermerRef.current(); return; }
+      if (e.key !== 'Tab' || !fenetre.current) return;
+      const atteignables = Array.from(fenetre.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), a[href]'));
+      if (atteignables.length === 0) return;
+      const premier = atteignables[0];
+      const dernier = atteignables[atteignables.length - 1];
+      const actif = document.activeElement;
+      if (!fenetre.current.contains(actif) || actif === fenetre.current) {
+        e.preventDefault();
+        (e.shiftKey ? dernier : premier).focus();
+      } else if (!e.shiftKey && actif === dernier) {
+        e.preventDefault();
+        premier.focus();
+      } else if (e.shiftKey && actif === premier) {
+        e.preventDefault();
+        dernier.focus();
+      }
+    };
+    document.addEventListener('keydown', auClavier, true);
+    return () => {
+      document.removeEventListener('keydown', auClavier, true);
+      // (Ouverte depuis un menu qui se referme, il n'y a plus rien d'où revenir : la page s'en charge.)
+      if (avant && avant !== document.body && avant.isConnected) avant.focus({ preventScroll: true });
+    };
+  }, []);
 
   const basculer = (org: string) => setChoisis((s) => {
     const n = new Set(s);
@@ -60,20 +104,22 @@ export default function CopierVersBureauxModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" tabIndex={-1} onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" tabIndex={-1} onClick={fermer}>
       <div
+        ref={fenetre}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-titre`}
+        aria-busy={envoi}
         tabIndex={-1}
-        className="w-full max-w-md rounded-2xl border border-border bg-surface shadow-xl"
+        className="w-full max-w-md rounded-2xl border border-border bg-surface shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h3 id={`${id}-titre`} className="text-[15px] font-bold text-text-primary">
             {fr ? 'Copier vers d’autres bureaux' : 'Copy to other offices'}
           </h3>
-          <button type="button" onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="rounded-lg p-1 text-text-tertiary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          <button type="button" onClick={fermer} disabled={envoi} aria-label={fr ? 'Fermer' : 'Close'} className="rounded-lg p-1 text-text-tertiary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50">
             <X size={16} />
           </button>
         </div>
@@ -132,7 +178,7 @@ export default function CopierVersBureauxModal({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
-          <button type="button" onClick={onClose} className="glass-button px-4 py-2 text-[13px]">
+          <button type="button" onClick={fermer} disabled={envoi} className="glass-button px-4 py-2 text-[13px] disabled:opacity-50">
             {resultats ? (fr ? 'Fermer' : 'Close') : (fr ? 'Annuler' : 'Cancel')}
           </button>
           {!resultats && (

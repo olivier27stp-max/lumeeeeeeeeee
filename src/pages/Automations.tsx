@@ -2991,7 +2991,8 @@ export default function Automations() {
           ruleName={localizeAutomationName(copieVers.name, language)}
           bureaux={bureauxCibles}
           fr={fr}
-          onClose={() => setCopieVers(null)}
+          // La modale s'ouvre depuis le menu « ⋮ », qui a disparu : le focus revient à son bouton.
+          onClose={() => { setCopieVers(null); ouvreurMenu.current?.focus({ preventScroll: true }); }}
           onFini={() => { void load(); }}
         />
       )}

@@ -1341,6 +1341,82 @@ describe('02-dossiers:354 — dossiers illisibles : l’écran le dit, et ne pr�
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('09-copier-bureaux:221, :231, :241 — la modale « Copier vers d’autres bureaux » se tient comme une fenêtre', () => {
+  const modale = () => document.body.querySelector('[role="dialog"]') as HTMLElement | null;
+  const ouvrir = async () => {
+    const b = bouton(/^Actions pour Relance 1$/) as HTMLButtonElement;
+    b.focus();
+    await cliquer(b);
+    await cliquer(Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((m) => m.textContent === 'Copier vers d’autres bureaux'));
+    await laisser();
+    expect(modale()).not.toBeNull();
+    return b;
+  };
+  const dansLaModale = (motif: RegExp) => Array.from(modale()!.querySelectorAll('button')).find((b) => motif.test((b.textContent || '').trim())) as HTMLButtonElement;
+  beforeEach(() => {
+    vi.mocked(builder.chargerBureauxCibles).mockResolvedValue([{ org_id: 'org-b', name: 'Bureau B' }] as never);
+  });
+
+  it('à l’ouverture, le focus est DANS la modale ; Tab y circule sans en sortir', async () => {
+    await rendre();
+    await ouvrir();
+    expect(modale()!.contains(document.activeElement)).toBe(true);
+    for (let i = 0; i < 8; i += 1) {
+      const actif = document.activeElement as HTMLElement;
+      const empeche = await touche(actif, 'Tab');
+      // jsdom ne déplace pas le focus sur Tab : on ne vérifie que les deux bords, que la modale gère elle-même.
+      if (empeche) expect(modale()!.contains(document.activeElement)).toBe(true);
+    }
+    // Depuis le dernier bouton, Tab revient au premier ; depuis le premier, Maj+Tab va au dernier.
+    const boutons = Array.from(modale()!.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])'));
+    boutons[boutons.length - 1].focus();
+    expect(await touche(document.activeElement, 'Tab')).toBe(true);
+    expect(document.activeElement).toBe(boutons[0]);
+    expect(await touche(document.activeElement, 'Tab', { shiftKey: true })).toBe(true);
+    expect(document.activeElement).toBe(boutons[boutons.length - 1]);
+  });
+
+  it('Échap ferme la modale, et le focus revient au bouton « ⋮ » de la ligne', async () => {
+    await rendre();
+    const b = await ouvrir();
+    await touche(document.activeElement, 'Escape');
+    expect(modale()).toBeNull();
+    expect(document.activeElement).toBe(b);
+  });
+
+  it('PENDANT la copie, ni le fond, ni Échap, ni « Annuler », ni la croix ne la ferment : le compte rendu sera vu', async () => {
+    let liberer: (v: unknown) => void = () => undefined;
+    vi.mocked(builder.copierVersBureaux).mockReturnValue(new Promise((ok) => { liberer = ok; }) as never);
+    await rendre();
+    await ouvrir();
+    await cliquer(dansLaModale(/^Copier$/));
+    expect(dansLaModale(/^Copier$/).disabled).toBe(true);
+    expect(modale()!.getAttribute('aria-busy')).toBe('true');
+    // Un clic sur le fond (hors de la fenêtre).
+    await cliquer(modale()!.parentElement);
+    expect(modale()).not.toBeNull();
+    await touche(document.activeElement ?? document.body, 'Escape');
+    expect(modale()).not.toBeNull();
+    expect(dansLaModale(/^Annuler$/).disabled).toBe(true);
+    expect((modale()!.querySelector('button[aria-label="Fermer"]') as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => { liberer([{ org_id: 'org-b', name: 'Bureau B', statut: 'copiee', active: false }]); });
+    await laisser();
+    expect(modale()!.textContent).toContain('Copiée en brouillon');
+    // La copie finie, la fenêtre se referme normalement.
+    await cliquer(modale()!.parentElement);
+    expect(modale()).toBeNull();
+  });
+
+  it('hors copie, un clic sur le fond ferme toujours', async () => {
+    await rendre();
+    await ouvrir();
+    await cliquer(modale()!.parentElement);
+    expect(modale()).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
