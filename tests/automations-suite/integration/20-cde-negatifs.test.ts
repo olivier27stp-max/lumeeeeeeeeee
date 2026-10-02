@@ -402,13 +402,24 @@ describe('C — automatisation modifiée pendant un parcours en cours', () => {
     return { client, regle };
   }
 
-  it('[C-030] RÈGLE DU CODE : le texte d’une étape DÉJÀ planifiée est figé (copie dans la tâche) — l’ancien texte part', async () => {
+  /*
+   * Mission finale, point 15 (B-12) — la règle a été DÉCIDÉE, et c'est l'inverse de ce que ce test
+   * documentait (« le texte d'une étape déjà planifiée est figé, l'ancien texte part ») : une exécution en
+   * cours suit la version COURANTE de l'automatisation à sa prochaine étape. Sinon le client recevait
+   * l'ancien message de l'étape en attente puis le nouveau de la suivante — un mélange des deux versions.
+   * L'échéance déjà fixée, elle, ne bouge pas.
+   */
+  it('[C-030] RÈGLE DÉCIDÉE (point 15) : une étape DÉJÀ planifiée part dans sa version COURANTE — le nouveau texte, à l’échéance déjà fixée', async () => {
     const m = marque('C-030');
     const { regle } = await demarrer(m);
+    const [avant] = await taches(b, regle);
     await b.admin.from('automation_rules').update({ steps: parcours(m, 'v2') }).eq('id', regle);
+    // Modifier le texte ne déplace pas l'étape qui attend.
+    const [apres] = await taches(b, regle);
+    expect([apres.step_id, apres.status, apres.execute_at]).toEqual(['s2', 'pending', avant.execute_at]);
     await avancer(b, regle);
     const notes = await notesMarquees(b, m);
-    expect(notes.map((n) => n.content)).toEqual([`s2-v1 ${m}`]);
+    expect(notes.map((n) => n.content)).toEqual([`s2-v2 ${m}`]);
   });
 
   it('[C-031] RÈGLE DU CODE : une étape PAS ENCORE planifiée est relue — le nouveau texte part', async () => {

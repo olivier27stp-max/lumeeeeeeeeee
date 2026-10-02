@@ -29,7 +29,7 @@ Déclencheur de travail : `note.added` sur un client (aucun préréglage ne l'é
 | C-026 | note.added | 1re action en échec (étiquette vide) | échec journalisé, action suivante faite | PASS |
 | C-027 | note.added | client sans aucun nom | « Bonjour, » propre, pas de `undefined` | PASS |
 | C-028 | tâche différée texto | client à la corbeille + drapeau `auto_desabonnement_canal` | rien ne part, tâche `cancelled` | PASS après correctif `cad85cf8` (avant : texto transactionnel ENVOYÉ au client supprimé) |
-| C-030 | parcours en cours | texte d'une étape DÉJÀ planifiée modifié | l'ANCIEN texte part (copie dans `action_config`) | PASS — règle du code documentée |
+| C-030 | parcours en cours | texte d'une étape DÉJÀ planifiée modifié | le NOUVEAU texte part, à l'échéance déjà fixée (point 15 de la mission finale : version courante) | PASS — règle décidée (avant : l'ancien texte partait, copie dans `action_config`) |
 | C-031 | parcours en cours | texte d'une étape PAS ENCORE planifiée modifié | le NOUVEAU texte part (relu à la planification) | PASS — règle du code |
 | C-032 | parcours en cours | étape planifiée supprimée | `cancelled` « Étape supprimée du parcours : envoi annulé. » | PASS |
 | C-033 | parcours en cours | règle dépubliée | étape en attente `cancelled`, parcours arrêté | PASS |

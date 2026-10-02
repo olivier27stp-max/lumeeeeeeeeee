@@ -271,11 +271,14 @@ describe('D — réglages de ré-entrée', () => {
     await emettreNote(b, client);
     await attendreJournaux(b, temoin, 2);
     await attendreTraitement(b, client, 'note.added', DEBUT, 2);
-    expect(await journaux(b, avec)).toHaveLength(1);
+    // Le 2e passage est sauté — et, depuis la mission finale, le journal le DIT : une ligne
+    // « une_fois_par_client » (avant : rien, « pourquoi ce client n'a rien reçu ? » restait sans réponse).
+    const lignes = await attendre(() => journaux(b, avec), (l) => l.length >= 2);
+    expect(lignes.map((l) => (l.result_data as { saute_code?: string } | null)?.saute_code ?? 'action').sort()).toEqual(['action', 'une_fois_par_client']);
     // Deux jours plus tard : la règle repart.
     await vieillirJournaux(avec, 2 * 24 * 60);
     await emettreNote(b, client);
-    await attendreJournaux(b, avec, 2);
+    await attendreJournaux(b, avec, 3);
     const contenus = (await notesMarquees(b, m)).map((n) => n.content.split(' ')[0]).sort();
     expect(contenus).toEqual(['avec', 'avec', 'temoin', 'temoin']);
   });
