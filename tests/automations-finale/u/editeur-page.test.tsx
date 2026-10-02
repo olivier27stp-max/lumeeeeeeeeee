@@ -1904,4 +1904,62 @@ describe('Lumi ↔ éditeur — ce que la route de génération répond est appl
       expect(JSON.stringify(dernierPatch()?.steps)).toContain('Texto de LUMI');
     });
   });
+
+  describe('`publiee` — après « active-la » puis « oui » (ou « mets-la en pause »), l’état Publiée / Brouillon suit sans rechargement', () => {
+    const interrupteur = () => container.querySelector<HTMLButtonElement>('button[role="switch"]');
+    /** Lumi vient de demander « veux-tu que je la publie ? » : « oui » est une réponse, pas une première demande. */
+    const FIL = [{ role: 'user', content: 'active-la' }, { role: 'assistant', content: 'Voici ce qui partira. Veux-tu que je la publie ?' }];
+    const reponse = (publiee: boolean, resume: string) => api.lumi.mockImplementation(async () => ({
+      nom: 'Relance devis', trigger_event: 'quote.sent', resume, steps: regle().steps, autre: null,
+      modifie: false, renomme: false, publiee, updated_at: '2026-10-02T12:00:00.000001+00:00',
+    }));
+
+    it('brouillon → `publiee: true` : l’interrupteur passe à « publiée », sans que l’éditeur publie lui-même', async () => {
+      etat.regles = [regle({ lumi_conversation: FIL })];
+      reponse(true, 'C’est fait : « Relance devis » est publiée.');
+      await ouvrir();
+      vi.useFakeTimers();
+      expect(interrupteur()?.getAttribute('aria-checked')).toBe('false');
+      await demander('oui');
+      expect(interrupteur()?.getAttribute('aria-checked')).toBe('true');
+      expect(container.textContent).toContain('C’est fait : « Relance devis » est publiée.');
+      // C'est le serveur qui a publié : l'éditeur n'envoie ni publication ni enregistrement.
+      expect(api.publier).not.toHaveBeenCalled();
+      await avancer(3000);
+      expect(api.modifier).not.toHaveBeenCalled();
+    });
+
+    it('publiée → `publiee: false` (« mets-la en pause ») : l’interrupteur revient à « brouillon »', async () => {
+      etat.regles = [regle({ is_active: true })];
+      reponse(false, 'C’est fait : « Relance devis » est en brouillon, plus rien ne part.');
+      await ouvrir();
+      vi.useFakeTimers();
+      expect(interrupteur()?.getAttribute('aria-checked')).toBe('true');
+      await demander('mets-la en pause');
+      expect(interrupteur()?.getAttribute('aria-checked')).toBe('false');
+      expect(api.publier).not.toHaveBeenCalled();
+    });
+
+    it('une réponse sans `publiee` (une simple question) ne touche pas à l’état', async () => {
+      etat.regles = [regle({ is_active: true })];
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Elle est publiée.', steps: regle().steps, autre: null, modifie: false }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('est-elle publiée ?');
+      expect(interrupteur()?.getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('après la publication par Lumi, une proposition de Lumi demande l’accord (elle est EN LIGNE maintenant)', async () => {
+      etat.regles = [regle({ lumi_conversation: FIL })];
+      reponse(true, 'C’est fait : « Relance devis » est publiée.');
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('oui');
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Texto réécrit.', steps: TEXTO_DE_LUMI, autre: null, modifie: true }));
+      confirmerMock.mockImplementationOnce(async () => false);
+      await demander();
+      expect(confirmerMock).toHaveBeenCalledTimes(1);
+      expect((confirmerMock.mock.calls[0][0] as { title: string }).title).toBe('Appliquer les changements de Lumi ?');
+    });
+  });
 });

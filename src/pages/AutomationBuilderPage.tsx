@@ -921,6 +921,18 @@ export default function AutomationBuilderPage() {
        * « Appliquer les changements de Lumi ? » pour aucun changement.
        * Seule la réponse de Lumi rejoint le fil.
        */
+      /*
+       * … ET L'ÉTAT « PUBLIÉE / BROUILLON » SUIT (`publiee`). Après « active-la »
+       * puis « oui », ou « mets-la en pause », c'est le SERVEUR qui vient de
+       * publier ou de dépublier. Sans ceci, l'interrupteur et le badge
+       * gardaient l'ancien état jusqu'au rechargement — et l'éditeur, se
+       * croyant sur un brouillon, appliquait ensuite une proposition de Lumi
+       * à une automatisation en ligne sans demander.
+       */
+      if (typeof propose.publiee === 'boolean') {
+        const publiee = propose.publiee;
+        setRegle((r) => (r ? { ...r, is_active: publiee } : r));
+      }
       if (propose.modifie === false) {
         setEchangesLumi((e) => [
           ...e,
