@@ -1807,6 +1807,14 @@ const resendPaymentRequestTool: AgentTool = {
     }),
 };
 
+const MODE_PAIEMENT_FR: Record<string, string> = { check: 'par chèque', cash: 'comptant', 'e-transfer': 'par virement Interac', card: 'par carte, hors Stripe' };
+/** Pourquoi un paiement reçu hors Stripe ne se rembourse pas dans Lume, et quoi faire à la place. */
+export function refusRemboursementManuel(mode: unknown): string {
+  const comment = MODE_PAIEMENT_FR[String(mode ?? '')] ?? 'hors Stripe';
+  return `Ce paiement a été reçu ${comment} : Lume ne peut rembourser que les paiements par carte passés par Stripe. `
+    + 'Rends l’argent au client par le même moyen, hors de Lume. N’annule pas et ne modifie pas la facture à la place : ce ne serait pas un remboursement.';
+}
+
 const refundPaymentTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -1815,7 +1823,9 @@ const refundPaymentTool: AgentTool = {
     description:
       'REFUND a Stripe payment to the client (full by default, or a partial amount in CENTS) — IRREVERSIBLE, money '
       + 'actually leaves the account, owner/admin only. A full refund reopens the invoice balance. Get the payment '
-      + 'id from list_payments. ALWAYS show payment, client and amount and get an explicit OK first.',
+      + 'id from list_payments. ALWAYS show payment, client and amount and get an explicit OK first. '
+      + 'CARD (Stripe) payments ONLY: a payment received by cheque, cash or e-transfer cannot be refunded in Lume. '
+      + 'Say so plainly (the money goes back outside Lume) and stop: NEVER void, edit or re-open the invoice as a substitute.',
     parameters: {
       type: 'object',
       properties: {
@@ -1829,6 +1839,11 @@ const refundPaymentTool: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'refund_payment', args, async () => {
       const paymentId = champRequis(args.payment_id, 'Le paiement');
+      // Seul un paiement par carte (Stripe) se rembourse ici : la route refuse les autres en anglais
+      // (« Only Stripe payments can be refunded through this endpoint »). On le dit avant, et clairement —
+      // un chèque ou du comptant se rend hors de Lume, et annuler la facture n'est PAS un remboursement.
+      const { data: paiement } = await ctx.client.from('payments').select('provider, method').eq('org_id', ctx.orgId).eq('id', paymentId).maybeSingle();
+      if (paiement && paiement.provider !== 'stripe') throw new Error(refusRemboursementManuel(paiement.method));
       const corps: Record<string, any> = { paymentId };
       if (args.amount_cents !== undefined) {
         const m = Math.round(Number(args.amount_cents));

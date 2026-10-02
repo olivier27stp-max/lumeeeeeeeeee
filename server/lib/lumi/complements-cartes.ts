@@ -197,8 +197,18 @@ const resumeAvantActivation: Complement = async (args, ctx) => {
 const COMPLEMENTS: Record<string, Complement> = {
   refund_payment: async (args, ctx) => {
     if (!estUuid(args.payment_id)) return [];
-    const { data: p } = await ctx.client.from('payments').select('amount_cents, refunded_cents').eq('org_id', ctx.orgId).eq('id', args.payment_id).maybeSingle();
+    const { data: p } = await ctx.client.from('payments').select('amount_cents, refunded_cents, provider, method').eq('org_id', ctx.orgId).eq('id', args.payment_id).maybeSingle();
     if (!p) return [];
+    // Paiement reçu hors Stripe (chèque, comptant, virement) : la carte ne promet pas un remboursement qui sera refusé.
+    if (p.provider && p.provider !== 'stripe') {
+      const mode: Record<string, [string, string]> = { check: ['par chèque', 'by cheque'], cash: ['comptant', 'in cash'], 'e-transfer': ['par virement Interac', 'by e-transfer'] };
+      const [fr, en] = mode[txt(p.method)] ?? ['hors Stripe', 'outside Stripe'];
+      return [{
+        libelle: L('Remboursement impossible ici', 'Refund not possible here'),
+        valeur: `ce paiement a été reçu ${fr} : Lume ne rembourse que les paiements par carte (Stripe). Confirmer sera refusé — l’argent se rend au client hors de Lume`,
+        valeur_en: `this payment was received ${en}: Lume only refunds card (Stripe) payments. Confirming will be refused — the money goes back to the client outside Lume`,
+      }];
+    }
     const total = Number(p.amount_cents) || 0;
     const reste = Math.max(0, total - (Number(p.refunded_cents) || 0));
     const demande = typeof args.amount_cents === 'number' ? Math.round(args.amount_cents) : null;
