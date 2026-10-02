@@ -1259,6 +1259,42 @@ describe('07-lot:97 — cocher une ligne ne fait pas descendre le tableau', () =
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('02-dossiers:283 — supprimer un dossier le confirme à l’écran', () => {
+  beforeEach(() => {
+    vi.mocked(builder.chargerDossiers).mockResolvedValue([{ id: 'd1', name: 'Muet', position: 0, created_at: '' }] as never);
+  });
+
+  it('« Dossier « Muet » supprimé », une fois la suppression faite', async () => {
+    await rendre();
+    await cliquer(bouton(/^Supprimer le dossier Muet$/));
+    await laisser();
+    expect(builder.supprimerDossier).toHaveBeenCalledWith('d1');
+    expect(toast.success).toHaveBeenCalledWith('Dossier « Muet » supprimé');
+    expect(bouton(/^Supprimer le dossier Muet$/)).toBeUndefined();
+  });
+
+  it('suppression refusée (confirmation annulée, ou panne) : pas de message de succès', async () => {
+    vi.mocked(confirmer).mockResolvedValue(false);
+    await rendre();
+    await cliquer(bouton(/^Supprimer le dossier Muet$/));
+    expect(toast.success).not.toHaveBeenCalled();
+    vi.mocked(confirmer).mockResolvedValue(true);
+    vi.mocked(builder.supprimerDossier).mockRejectedValueOnce(new Error('Impossible de supprimer le dossier.'));
+    await cliquer(bouton(/^Supprimer le dossier Muet$/));
+    await laisser();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith('Impossible de supprimer le dossier.');
+  });
+
+  it('en anglais : « Folder “Muet” deleted »', async () => {
+    await rendre('en');
+    await cliquer(bouton(/^Delete folder Muet$/));
+    await laisser();
+    expect(toast.success).toHaveBeenCalledWith('Folder “Muet” deleted');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 

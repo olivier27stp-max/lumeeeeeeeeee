@@ -953,6 +953,8 @@ export default function Automations() {
       await supprimerDossier(id);
       setDossiers((prev) => prev.filter((d) => d.id !== id));
       if (dossierActif === id) setDossierActif(null);
+      // Créer un dossier disait « Dossier créé » ; le supprimer ne disait rien (triage `02-dossiers:283`).
+      toast.success(fr ? `Dossier « ${nom} » supprimé` : `Folder “${nom}” deleted`);
       await load();
     } catch (e: unknown) {
       toast.error(messageDErreur(e, fr));
