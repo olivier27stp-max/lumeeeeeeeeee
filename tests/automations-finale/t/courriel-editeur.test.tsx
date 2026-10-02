@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vites
 
 const toasts = vi.hoisted(() => ({ succes: [] as string[], erreurs: [] as string[] }));
 const confirmerMock = vi.hoisted(() => vi.fn(async (_o: unknown) => true));
-const apercu = vi.hoisted(() => ({ appels: [] as unknown[][], essais: [] as unknown[][] }));
+const apercu = vi.hoisted(() => ({ appels: [] as unknown[][], essais: [] as unknown[][], refusEssai: null as string | null }));
 
 vi.mock('../../../src/lib/supabase', async () => (await import('./faux-supabase')).moduleSupabase());
 vi.mock('../../../src/lib/orgApi', () => ({ getCurrentOrgId: async () => 'org-1', getCurrentOrgIdOrThrow: async () => 'org-1' }));
@@ -21,7 +21,11 @@ vi.mock('../../../src/hooks/useChampsPersoActifs', () => ({ useChampsPersoActifs
 vi.mock('../../../src/lib/champsPersoApi', () => ({ listerChamps: async () => ({ fields: [] }) }));
 vi.mock('../../../src/lib/emailTemplatesApi', () => ({
   apercuCourriel: async (...a: unknown[]) => { apercu.appels.push(a); return '<p>aperçu</p>'; },
-  envoyerEssaiCourriel: async (...a: unknown[]) => { apercu.essais.push(a); return 'proprio@lume-qa.test'; },
+  envoyerEssaiCourriel: async (...a: unknown[]) => {
+    apercu.essais.push(a);
+    if (apercu.refusEssai) throw new Error(apercu.refusEssai);
+    return 'proprio@lume-qa.test';
+  },
 }));
 vi.mock('sonner', () => {
   const toast = Object.assign((m: string) => { toasts.succes.push(m); }, {
@@ -70,7 +74,7 @@ const objet = () => champ<HTMLInputElement>('Objet du courriel');
 beforeEach(async () => {
   localStorage.setItem('lume-language', 'fr');
   toasts.succes.length = 0; toasts.erreurs.length = 0;
-  apercu.appels.length = 0; apercu.essais.length = 0;
+  apercu.appels.length = 0; apercu.essais.length = 0; apercu.refusEssai = null;
   confirmerMock.mockClear();
   await brancherServeur();
 });
@@ -507,6 +511,22 @@ describe('04-courriel:683 — les onglets disent lequel est affiché', () => {
     await cliquer(bouton('Aperçu réel'));
     expect(bouton('Modifier').getAttribute('aria-pressed')).toBe('false');
     expect(bouton('Aperçu réel').getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('04-courriel:793 — échec de « M’envoyer un essai » : l’écran dit pourquoi', () => {
+  it('la raison donnée par le serveur est montrée, pas seulement « Envoi impossible »', async () => {
+    const C = { subject: OBJET, body: CORPS };
+    poser([{ type: 'send_email', config: C }]);
+    await ouvrir(C);
+    await cliquer(bouton('Aperçu réel'));
+    apercu.refusEssai = 'Aucun service de courriel n’est configuré pour votre entreprise.';
+    await cliquer(bouton('M’envoyer un essai'));
+    await jusqua(() => toasts.erreurs.length === 1);
+    expect(toasts.erreurs).toEqual(['Aucun service de courriel n’est configuré pour votre entreprise.']);
+    expect(toasts.succes).toEqual([]);
+    // Le bouton est de nouveau utilisable : on peut réessayer.
+    expect(bouton('M’envoyer un essai').disabled).toBe(false);
   });
 });
 

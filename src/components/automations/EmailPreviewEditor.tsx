@@ -371,6 +371,9 @@ export default function EmailPreviewEditor({
       const adresse = await envoyerEssaiCourriel(blocsVersHtml(blocs), objet, typeCourriel, declencheur);
       if (adresse) toast.success(fr ? `Essai envoyé à ${adresse}` : `Test sent to ${adresse}`);
       else toast.error(fr ? 'Envoi impossible' : 'Could not send');
+    } catch (e: unknown) {
+      // Le serveur a dit POURQUOI l'essai n'est pas parti : on le dit (04-courriel:793).
+      toast.error(e instanceof Error && e.message ? e.message : (fr ? 'Envoi impossible' : 'Could not send'));
     } finally {
       setEssaiEnCours(false);
     }

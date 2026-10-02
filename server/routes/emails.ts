@@ -893,7 +893,16 @@ router.post('/emails/apercu', async (req, res) => {
         // Pas de `suivi` : un essai qu'on s'envoie à soi n'a pas à compter
         // dans les statistiques d'ouverture d'un vrai client.
       });
-      if (!envoi.sent) return res.status(502).json({ error: envoi.error || 'Send failed.' });
+      /* L'écran montre cette raison telle quelle : une phrase, pas « Send
+         failed. ». Le détail du fournisseur suit, pour qui doit dépanner. */
+      if (!envoi.sent) {
+        const detail = String(envoi.error || '').trim();
+        return res.status(502).json({
+          error: fr
+            ? `L’essai n’a pas pu partir${detail ? ` : ${detail}` : ' : le service de courriel n’a pas répondu'}. Rien n’a été envoyé.`
+            : `The test could not be sent${detail ? `: ${detail}` : ': the email service did not respond'}. Nothing was sent.`,
+        });
+      }
       return res.json({ html, envoye: destinataire });
     }
 

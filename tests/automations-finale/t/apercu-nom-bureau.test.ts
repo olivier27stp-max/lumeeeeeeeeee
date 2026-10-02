@@ -14,7 +14,7 @@ import express from 'express';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 
-const etat = vi.hoisted(() => ({ nom: 'Nettoyage Test A' as string | null, langue: 'fr', envoye: [] as Array<{ to: string; subject: string; html: string }> }));
+const etat = vi.hoisted(() => ({ nom: 'Nettoyage Test A' as string | null, langue: 'fr', echecEnvoi: null as string | null, envoye: [] as Array<{ to: string; subject: string; html: string }> }));
 
 vi.mock('../../../server/lib/supabase', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
@@ -27,7 +27,11 @@ vi.mock('../../../server/lib/companyBranding', () => ({
 }));
 vi.mock('../../../server/lib/mailer', () => ({
   isMailerConfigured: () => true,
-  sendEmail: async (p: { to: string; subject: string; html: string }) => { etat.envoye.push(p); return { sent: true, messageId: 'm1' }; },
+  sendEmail: async (p: { to: string; subject: string; html: string }) => {
+    if (etat.echecEnvoi !== null) return { sent: false, error: etat.echecEnvoi };
+    etat.envoye.push(p);
+    return { sent: true, messageId: 'm1' };
+  },
 }));
 
 import router from '../../../server/routes/emails';
@@ -42,7 +46,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${(serveur.address() as AddressInfo).port}`;
 });
 afterAll(async () => { await new Promise((ok) => serveur.close(ok)); });
-beforeEach(() => { etat.nom = 'Nettoyage Test A'; etat.langue = 'fr'; etat.envoye.length = 0; });
+beforeEach(() => { etat.nom = 'Nettoyage Test A'; etat.langue = 'fr'; etat.echecEnvoi = null; etat.envoye.length = 0; });
 
 async function apercu(corps: Record<string, unknown>): Promise<string> {
   const r = await fetch(`${base}/api/emails/apercu`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corps) });
@@ -99,5 +103,26 @@ describe('04-courriel:725 — `[company_name]` dans l’aperçu réel est le nom
     // L'objet est du texte : le nom y est écrit tel quel, sans « &amp; ».
     expect(etat.envoye[0].subject).toBe('[Essai] Des nouvelles de Dupont & Fils');
     expect(etat.envoye[0].html).toContain('Merci, Dupont &amp; Fils');
+  });
+});
+
+describe('04-courriel:793 — l’essai qui ne part pas : le serveur répond une phrase, que l’écran montre', () => {
+  const essai = () => fetch(`${base}/api/emails/apercu`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ corpsHtml: '<p>Bonjour</p>', objet: 'Essai', declencheur: 'lead.created', envoyer: true }),
+  });
+
+  it('502, avec la raison du fournisseur dans une phrase — jamais « Send failed. »', async () => {
+    etat.echecEnvoi = 'Aucun service de courriel n’est configuré pour votre entreprise';
+    const r = await essai();
+    expect(r.status).toBe(502);
+    expect(await r.json()).toEqual({ error: 'L’essai n’a pas pu partir : Aucun service de courriel n’est configuré pour votre entreprise. Rien n’a été envoyé.' });
+  });
+
+  it('sans raison du fournisseur, ou pour un bureau qui écrit en anglais : une phrase quand même', async () => {
+    etat.echecEnvoi = '';
+    expect(((await (await essai()).json()) as { error: string }).error).toBe('L’essai n’a pas pu partir : le service de courriel n’a pas répondu. Rien n’a été envoyé.');
+    etat.langue = 'en';
+    expect(((await (await essai()).json()) as { error: string }).error).toBe('The test could not be sent: the email service did not respond. Nothing was sent.');
   });
 });
