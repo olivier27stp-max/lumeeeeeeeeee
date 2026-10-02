@@ -2106,8 +2106,30 @@ export default function Automations() {
           </div>
         )}
 
-        {/* ══ 5. Fil d'Ariane ══ */}
-        <p className="text-[13px] text-text-secondary">{fr ? 'Accueil' : 'Home'}</p>
+        {/* ══ 5. Fil d'Ariane ══
+            C'était « Accueil », texte fixe : il ne disait pas où l'on est et ne ramenait nulle part
+            (triage `02-dossiers:150`). Il nomme le dossier ouvert, et « Accueil » en fait sortir. */}
+        <nav aria-label={fr ? 'Fil d’Ariane' : 'Breadcrumb'} className="flex items-center gap-1.5 text-[13px] text-text-secondary">
+          {dossierActif === null ? (
+            <span aria-current="page">{fr ? 'Accueil' : 'Home'}</span>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setDossierActif(null)}
+                className="rounded underline hover:text-text-primary hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                {fr ? 'Accueil' : 'Home'}
+              </button>
+              <ChevronRight size={12} aria-hidden="true" />
+              <span aria-current="page" className="font-medium text-text-primary">
+                {dossierActif === 'racine'
+                  ? (fr ? 'Sans dossier' : 'No folder')
+                  : (dossiers.find((d) => d.id === dossierActif)?.name ?? '…')}
+              </span>
+            </>
+          )}
+        </nav>
 
         {/*
           La barre d'actions groupées — elle n'apparaît QUE s'il y a une

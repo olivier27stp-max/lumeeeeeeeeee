@@ -1194,6 +1194,43 @@ describe('10-volume:164 — avec plus d’une page, on peut tout sélectionner d
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('02-dossiers:150 — le fil d’Ariane dit le dossier ouvert et permet d’en sortir', () => {
+  const fil = () => conteneur.querySelector('nav[aria-label="Fil d’Ariane"]') as HTMLElement;
+  beforeEach(() => {
+    vi.mocked(builder.chargerDossiers).mockResolvedValue([{ id: 'd1', name: 'Factures', position: 0, created_at: '' }] as never);
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Rangée', folder_id: 'd1' }), regle({ name: 'Libre' })]);
+  });
+
+  it('aucun dossier ouvert : « Accueil », la page courante — rien à cliquer', async () => {
+    await rendre();
+    expect(fil().textContent).toBe('Accueil');
+    expect(fil().querySelector('button')).toBeNull();
+    expect(fil().querySelector('[aria-current="page"]')?.textContent).toBe('Accueil');
+  });
+
+  it('un dossier ouvert : « Accueil › Factures » ; « Accueil » en fait sortir', async () => {
+    await rendre();
+    await cliquer(bouton(/^Factures/));
+    expect(fil().textContent).toBe('AccueilFactures');
+    expect(fil().querySelector('[aria-current="page"]')?.textContent).toBe('Factures');
+    expect(texte()).not.toContain('Libre');
+    await cliquer(fil().querySelector('button'));
+    expect(fil().textContent).toBe('Accueil');
+    expect(texte()).toContain('Libre');
+  });
+
+  it('« Sans dossier » est nommé aussi ; en anglais : « Home »', async () => {
+    await rendre();
+    await cliquer(bouton(/^Sans dossier$/));
+    expect(fil().textContent).toBe('AccueilSans dossier');
+    await act(async () => racine!.unmount());
+    conteneur.remove();
+    await rendre('en');
+    expect(conteneur.querySelector('nav[aria-label="Breadcrumb"]')?.textContent).toBe('Home');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('03-onglets-etats:184 — un compteur d’onglet ne s’affiche que s’il est connu', () => {
   const libelles = () => Array.from(conteneur.querySelectorAll('[role="tab"]')).map((o) => (o.textContent || '').trim());
 
