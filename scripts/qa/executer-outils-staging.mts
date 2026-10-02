@@ -401,6 +401,9 @@ await ex('update_course', () => S.cours && { course_id: S.cours, description: 'E
 await ex('publish_course', () => S.cours && { course_id: S.cours, publish: true });
 await ex('assign_course', () => S.cours && S.tech && { course_id: S.cours, user_ids: [S.tech] });
 
+// ── Mission finale (agent L, 2026-10-02) : modifier la STRUCTURE d'une automatisation en une phrase ──
+await ex('update_automation_from_text', () => S.regle && { rule_id: S.regle, instruction: 'Ajoute à la fin une attente de 2 jours, puis une tâche interne « Rappeler le client ».' });
+
 // ── Ménage : le client de test, ses jobs, les prospects (convertis ou non) — sinon les évaluations tombent dessus ──
 if (S.jobDuLead) await ex('delete_job', { job_id: S.jobDuLead });
 if (S.clientDuLead) await ex('delete_client', { client_id: S.clientDuLead });
