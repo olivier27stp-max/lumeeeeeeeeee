@@ -911,6 +911,26 @@ export default function AutomationBuilderPage() {
       // Garder la conversation a touché la règle : sa version est celle-ci.
       noterVersion(idReel.current, propose.updated_at);
       /*
+       * RIEN N'A CHANGÉ (`modifie: false`) : une question, un refus,
+       * « active-la ». Le serveur rend le parcours de l'écran tel quel. On
+       * n'en fait RIEN : avant, il était remis dans le canevas comme une
+       * proposition — une étape d'historique pour rien, un enregistrement
+       * automatique du même parcours trois secondes plus tard (« Enregistré »
+       * alors que rien n'avait bougé), le toast « Lumi a construit le
+       * parcours », et sur une automatisation en ligne la question
+       * « Appliquer les changements de Lumi ? » pour aucun changement.
+       * Seule la réponse de Lumi rejoint le fil.
+       */
+      if (propose.modifie === false) {
+        setEchangesLumi((e) => [
+          ...e,
+          { role: 'user' as const, content: demande },
+          { role: 'assistant' as const, content: propose.resume || (fr ? 'Rien n’a changé.' : 'Nothing changed.') },
+        ]);
+        setPrompt('');
+        return;
+      }
+      /*
        * EN LIGNE : ON DEMANDE AVANT D'APPLIQUER (triage éditeur, S-03). Sur une
        * automatisation PUBLIÉE, la proposition entrait dans le parcours comme
        * sur un brouillon, et l'enregistrement automatique la mettait en ligne

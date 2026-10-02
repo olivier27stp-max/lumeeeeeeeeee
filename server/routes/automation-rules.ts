@@ -439,7 +439,18 @@ router.post('/automations/rules/generer', async (req, res) => {
     panneau, parcours: resultat.parcours, parcoursALEcran: corps?.parcours_actuel, demande, langue,
     client: auth.client, admin: getServiceClient(), orgId: auth.orgId, userId: auth.user.id,
   });
-  if (sansChangement) return res.json(sansChangement);
+  if (sansChangement) {
+    // Garder le fil — ou publier, mettre en pause — a touché la règle : l'éditeur,
+    // qui envoie la version qu'il a lue (garde A-09), doit connaître celle-ci.
+    // Sans elle, sa prochaine écriture serait refusée « modifiée ailleurs ».
+    let version: string | null = null;
+    if (panneau.id) {
+      const { data: relue } = await auth.client.from('automation_rules').select('updated_at')
+        .eq('id', panneau.id).eq('org_id', auth.orgId).maybeSingle();
+      version = relue?.updated_at ? String(relue.updated_at) : null;
+    }
+    return res.json({ ...sansChangement, ...(version ? { updated_at: version } : {}) });
+  }
 
   // Le garde-fou : ce que Lumi propose doit passer la validation humaine.
   const verdict = sequenceEtapes.safeParse(resultat.parcours.steps);

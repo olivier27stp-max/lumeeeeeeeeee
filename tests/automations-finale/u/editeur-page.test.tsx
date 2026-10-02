@@ -1834,4 +1834,74 @@ describe('Lumi ↔ éditeur — ce que la route de génération répond est appl
       expect(nomAffiche()).toBe('Relance de devis');
     });
   });
+
+  describe('`modifie: false` (une question, un refus, « active-la ») — l’éditeur n’enregistre RIEN', () => {
+    const question = (plus: Record<string, unknown> = {}) => api.lumi.mockImplementation(async () => ({
+      nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Le texto part dès que le devis est envoyé.', steps: regle().steps, autre: null,
+      modifie: false, renomme: false, ...plus,
+    }));
+
+    it('la réponse rejoint le fil ; aucune écriture, ni tout de suite ni après le délai de l’enregistrement automatique', async () => {
+      question();
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('quand part le texto ?');
+      expect(container.textContent).toContain('Le texto part dès que le devis est envoyé.');
+      await avancer(3000);
+      await avancer(60_000);
+      expect(api.modifier).not.toHaveBeenCalled();
+      expect(container.textContent).not.toContain('Modifié');
+    });
+
+    it('pas de « Lumi a construit le parcours » : rien n’a été construit', async () => {
+      question();
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('quand part le texto ?');
+      expect(toasts.succes).toEqual([]);
+      expect(toasts.erreur).toEqual([]);
+    });
+
+    it('le canevas n’est pas touché : « Annuler » reste grisé (aucune étape d’historique pour rien)', async () => {
+      question();
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('quand part le texto ?');
+      expect(container.querySelector<HTMLButtonElement>('button[aria-label="Annuler"]')?.disabled).toBe(true);
+    });
+
+    it('automatisation EN LIGNE : pas de « Appliquer les changements de Lumi ? » — il n’y a aucun changement', async () => {
+      etat.regles = [regle({ is_active: true })];
+      question();
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('quand part le texto ?');
+      expect(confirmerMock).not.toHaveBeenCalled();
+      expect(toasts.info).toEqual([]);
+    });
+
+    it('garder le fil a touché la règle : la version rendue est notée, et la prochaine écriture de l’éditeur la renvoie (pas de faux « modifiée ailleurs »)', async () => {
+      question({ updated_at: '2026-10-02T12:00:00.000001+00:00' });
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander('quand part le texto ?');
+      cliquer(carteEtape('Envoyer un texto'));
+      await attendre(2);
+      saisir(panneauEtape()?.querySelector('textarea'), 'Texto corrigé à la main');
+      cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+      await attendre(2);
+      await avancer(3000);
+      expect(api.modifier).toHaveBeenCalledTimes(1);
+      expect(api.modifier.mock.calls[0][2]).toBe('2026-10-02T12:00:00.000001+00:00');
+    });
+
+    it('une réponse sans `modifie` (ancien serveur) reste une proposition : appliquée et enregistrée comme avant', async () => {
+      api.lumi.mockImplementation(async () => ({ nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Texto réécrit.', steps: TEXTO_DE_LUMI, autre: null }));
+      await ouvrir();
+      vi.useFakeTimers();
+      await demander();
+      await avancer(3000);
+      expect(JSON.stringify(dernierPatch()?.steps)).toContain('Texto de LUMI');
+    });
+  });
 });
