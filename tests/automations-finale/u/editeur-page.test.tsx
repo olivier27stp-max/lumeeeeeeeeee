@@ -136,6 +136,7 @@ vi.mock('../../../src/components/automations/OngletJournaux', () => ({
 import AutomationBuilderPage from '../../../src/pages/AutomationBuilderPage';
 import { LanguageProvider } from '../../../src/i18n';
 import { ACTIONS, DECLENCHEURS } from '../../../src/lib/automationCatalogue';
+import { actionsDuParcours } from '../../../src/lib/publicationAutomatisation';
 
 function Lieu() {
   const l = useLocation();
@@ -2197,5 +2198,51 @@ describe('étape en cours d’ajout (choisie dans le tiroir, pas encore enregist
     await attendre(2);
     expect(container.textContent).toContain('Being added — not saved yet');
     expect(barreDuHaut()).toContain('Step not saved');
+  });
+});
+
+// ─── `actions` = reflet du parcours : la 2e automatisation créée par l'éditeur (carte des automatisations, 2026-10-02) ───
+
+describe('la 2e automatisation que Lumi fait créer par l’éditeur porte dans `actions` le reflet COMPLET de son parcours', () => {
+  const message = (id: string, body: string, suivant: string | null) => ({ id, type: 'action', action: { type: 'send_sms', config: { body } }, suivant });
+  const AUTRE = [
+    message('a1', 'Merci de votre réponse', 'a2'),
+    { id: 'a2', type: 'attendre', delai_secondes: 86400, suivant: 'a3' },
+    message('a3', 'Voici mon lien de réservation', 'a4'),
+    { id: 'a4', type: 'attendre', delai_secondes: 172800, suivant: 'a5' },
+    message('a5', 'Dernier rappel', null),
+  ];
+  const lumiProposeDeux = () => api.lumi.mockImplementation(async () => ({
+    nom: 'Relance devis', trigger_event: 'quote.sent', resume: 'Relance.', steps: regle().steps, modifie: true,
+    autre: { nom: 'Quand il répond', trigger_event: 'client.replied', resume: 'Trois messages.', steps: AUTRE },
+  }));
+  async function demander() {
+    saisir(container.querySelector('textarea[id$="-prompt"]'), 'relance mon devis, et crée une autre chaîne quand il répond');
+    cliquer(boutonExact('Construire') ?? boutonExact('Envoyer'));
+    await attendre(12);
+  }
+  const corps = (actions: unknown) => (actions as Array<{ config: { body?: string } }>).map((a) => a.config.body);
+
+  it('création : trois messages dans le parcours → trois dans `actions`, dans l’ordre de `actionsDuParcours` (avant : le premier seulement)', async () => {
+    lumiProposeDeux();
+    await ouvrir();
+    await demander();
+    expect(api.creer).toHaveBeenCalledTimes(1);
+    const envoye = api.creer.mock.calls[0][0] as { actions: unknown; steps: unknown; is_active: boolean };
+    expect(corps(envoye.actions)).toEqual(['Merci de votre réponse', 'Voici mon lien de réservation', 'Dernier rappel']);
+    expect(envoye.actions).toEqual(actionsDuParcours(AUTRE));
+    expect(envoye.steps).toEqual(AUTRE);
+    expect(envoye.is_active).toBe(false);
+  });
+
+  it('mise à jour (Lumi la retouche au tour suivant) : le reflet complet aussi', async () => {
+    lumiProposeDeux();
+    await ouvrir();
+    await demander();
+    await demander();
+    const autreId = (await api.creer.mock.results[0].value as { id: string }).id;
+    const appel = api.modifier.mock.calls.find((c) => c[0] === autreId);
+    expect(appel).toBeDefined();
+    expect((appel?.[1] as { actions: unknown }).actions).toEqual(actionsDuParcours(AUTRE));
   });
 });

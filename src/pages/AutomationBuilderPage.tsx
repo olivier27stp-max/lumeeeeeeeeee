@@ -1039,14 +1039,14 @@ export default function AutomationBuilderPage() {
       let noteAutre = '';
       if (propose.autre) {
         try {
-          const premiere = (propose.autre.steps as Etape[]).find((e) => e.type === 'action');
           const contenu = {
             name: propose.autre.nom,
             trigger_event: propose.autre.trigger_event,
             delay_seconds: 0,
-            // Reflet de la première action : le serveur exige au moins une
-            // action ; le moteur, lui, suit les étapes.
-            actions: premiere && premiere.type === 'action' ? [premiere.action as never] : [],
+            // `actions` = le reflet COMPLET du parcours (`actionsDuParcours`, la
+            // fonction de référence) — avant, seulement sa première action : un
+            // lecteur d'`actions` voyait un message là où le parcours en porte N.
+            actions: actionsDuParcours(propose.autre.steps, fr) as never,
             steps: propose.autre.steps,
             settings: propose.autre.une_fois_par_client_jours
               ? { delai_entre_passages_jours: propose.autre.une_fois_par_client_jours }
